@@ -1,0 +1,20 @@
+.git
+.github
+**/node_modules
+**/__pycache__
+**/*.pyc
+.venv
+venv
+.env
+.env.*
+dumps
+tests
+.pytest_cache
+*.md
+Dockerfile*
+docker-compose*.yml
+
+# Credenciales y documentos: no deben quedar dentro de la imagen
+*.pdf
+docs/
+context/
