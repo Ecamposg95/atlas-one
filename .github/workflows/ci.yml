@@ -11,7 +11,9 @@ on:
 # Cancel any in-progress run on the same ref to save CI minutes
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # En `main` nunca se cancela: una corrida cancelada a mitad de despliegue deja
+  # el contenedor a medias. En ramas de trabajo sí, para no gastar minutos.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   backend-tests:
@@ -63,6 +65,29 @@ jobs:
         working-directory: frontend
         run: npx tsc --noEmit
 
+  frontend-tests:
+    name: Frontend tests (vitest)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run vitest
+        working-directory: frontend
+        run: npx vitest run
+
   frontend-build:
     name: Frontend build (vite)
     runs-on: ubuntu-latest
@@ -85,3 +110,85 @@ jobs:
       - name: Build frontend
         working-directory: frontend
         run: npm run build
+
+  deploy-ionos:
+    name: Deploy a IONOS
+    runs-on: ubuntu-latest
+    # Solo al aterrizar en main, y solo si TODO lo anterior pasó. El despliegue
+    # es el último eslabón, no un paso en paralelo con las pruebas.
+    needs: [backend-tests, frontend-tests, frontend-typecheck, frontend-build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Un solo despliegue a la vez. Dos empujones seguidos no pueden pisarse a
+    # mitad de construcción; el segundo espera en vez de cancelar al primero.
+    concurrency:
+      group: deploy-ionos
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configurar el acceso SSH
+        env:
+          LLAVE: ${{ secrets.IONOS_SSH_KEY }}
+          HOSTS_CONOCIDOS: ${{ secrets.IONOS_KNOWN_HOSTS }}
+        run: |
+          test -n "$LLAVE" || { echo "Falta el secreto IONOS_SSH_KEY"; exit 1; }
+          test -n "$HOSTS_CONOCIDOS" || { echo "Falta el secreto IONOS_KNOWN_HOSTS"; exit 1; }
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$LLAVE" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          # Huella fijada, no `ssh-keyscan` en caliente: descubrir la huella en
+          # el momento acepta a quien conteste, que es justo lo que un ataque
+          # de intermediario necesita.
+          printf '%s\n' "$HOSTS_CONOCIDOS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Enviar el código al servidor
+        env:
+          DESTINO: root@${{ secrets.IONOS_HOST }}
+        run: |
+          # El commit desplegado viaja dentro del árbol para poder verificarlo
+          # después DENTRO del contenedor. Sin esto, "se desplegó" es un acto de fe.
+          echo "${{ github.sha }}" > .commit_desplegado
+          tar --exclude=.git --exclude=node_modules -cf - . \
+            | ssh -i ~/.ssh/id_deploy -o BatchMode=yes "$DESTINO" \
+                'tar -x -C /srv/apps/atlas-one-prod/src'
+
+      - name: Construir y levantar
+        env:
+          DESTINO: root@${{ secrets.IONOS_HOST }}
+        run: |
+          ssh -i ~/.ssh/id_deploy -o BatchMode=yes "$DESTINO" \
+            'cd /srv/apps/atlas-one-prod && docker compose build && docker compose up -d'
+
+      - name: Verificar que el contenedor corre el commit nuevo
+        env:
+          DESTINO: root@${{ secrets.IONOS_HOST }}
+        run: |
+          # Dos veces nos pasó que la construcción no tomaba y el contenedor
+          # seguía con la imagen vieja sin avisar. Comparar el commit dentro del
+          # contenedor es lo único que distingue "desplegado" de "creí que sí".
+          for i in $(seq 1 30); do
+            DESPLEGADO=$(ssh -i ~/.ssh/id_deploy -o BatchMode=yes "$DESTINO" \
+              'docker exec atlas-one-prod cat /app/.commit_desplegado 2>/dev/null' || true)
+            [ "$DESPLEGADO" = "${{ github.sha }}" ] && break
+            sleep 5
+          done
+          if [ "$DESPLEGADO" != "${{ github.sha }}" ]; then
+            echo "El contenedor NO corre ${{ github.sha }} (dice: '${DESPLEGADO:-nada}')"
+            ssh -i ~/.ssh/id_deploy -o BatchMode=yes "$DESTINO" \
+              'docker logs --tail 40 atlas-one-prod' || true
+            exit 1
+          fi
+          echo "Contenedor corriendo ${{ github.sha }}"
+
+      - name: Verificar que la API responde
+        run: |
+          for i in $(seq 1 30); do
+            CODIGO=$(curl -s -o /dev/null -w '%{http_code}' https://app.atlasone.com.mx/health || echo 000)
+            [ "$CODIGO" = "200" ] && break
+            sleep 5
+          done
+          test "$CODIGO" = "200" || { echo "La API no respondió 200 (último: $CODIGO)"; exit 1; }
+          echo "API respondiendo"
