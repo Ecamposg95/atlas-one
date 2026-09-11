@@ -8,12 +8,10 @@ from decimal import Decimal
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
-try:
-    from zoneinfo import ZoneInfo
-except ImportError:
-    from backports.zoneinfo import ZoneInfo
 
-MX_TZ = ZoneInfo("America/Mexico_City")
+# La zona del negocio vive en un solo lugar (app/core/fechas.py); aquí se
+# conserva el nombre MX_TZ porque lo usan decenas de líneas de este módulo.
+from app.core.fechas import ZONA_NEGOCIO as MX_TZ
 
 from app.core.database import get_db
 from app.models import CashSession, CashSessionStatus, Payment, PaymentMethod, SalesDocument, DocumentStatus, CashMovement
