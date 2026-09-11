@@ -41,6 +41,7 @@ from app.models import (
 from app.models.crm import Customer
 from app.models.products import Brand, Department
 from app.models.returns import SaleReturn, SaleReturnItem
+from app.services.report_compare import COMPARE_MODES, compare_window, decorate_with_previous
 
 router = APIRouter()
 
@@ -181,6 +182,44 @@ def _order_by_with_nulls_last(direction: str, *cols):
     return out
 
 
+def _validate_compare(compare: str) -> str:
+    if compare not in COMPARE_MODES:
+        raise HTTPException(422, f"compare inválido: {compare}. Permitidos: {sorted(COMPARE_MODES)}")
+    return compare
+
+
+# Campos que ganan `prev_*`/`delta_*_pct` en cada pivote (spec §5.1).
+_COMPARE_FIELDS = {
+    "products":  ("revenue", "units_sold", "aov"),
+    "branches":  ("revenue", "transactions", "avg_ticket"),
+    "sellers":   ("revenue", "transactions", "avg_ticket"),
+    "customers": ("total_revenue", "ticket_count", "avg_ticket"),
+}
+_COMPARE_KEYS = {
+    "products": "product_id",
+    "branches": "branch_id",
+    "sellers": "user_id",
+    "customers": "customer_id",
+}
+
+
+def _rows_for_window(db, s, e, org_id, branch_id, *, pivot: str) -> list[dict]:
+    """Filas agregadas de un pivote para una ventana, sin ordenar ni paginar.
+
+    Es el mismo cuerpo que consume el listado; se factoriza para poder correrlo
+    una segunda vez sobre la ventana de comparación sin duplicar la consulta.
+    """
+    if pivot == "products":
+        return _products_rows(db, s, e, org_id, branch_id)
+    if pivot == "branches":
+        return _branches_rows(db, s, e, org_id, branch_id)
+    if pivot == "sellers":
+        return _sellers_rows(db, s, e, org_id, branch_id)
+    if pivot == "customers":
+        return _customers_rows(db, s, e, org_id, branch_id)
+    raise ValueError(f"pivote desconocido: {pivot}")
+
+
 # ------------------------------------------------------------------ #
 # Returned-quantity subquery (per variant + per document)            #
 # ------------------------------------------------------------------ #
@@ -278,6 +317,55 @@ def _build_products_query(
     return base
 
 
+def _products_rows(db, s, e, org_id, branch_id) -> list[dict]:
+    """Filas agregadas del pivote products para una ventana, sin ordenar ni paginar."""
+    q = _build_products_query(db, s, e, org_id, branch_id)
+    # Returns subquery: returned qty per variant -> aggregate to product_id.
+    ret_sub = _returned_qty_per_variant(db, s, e, org_id, branch_id)
+    # Re-aggregate returned qty by product via variant->product join.
+    ret_per_product = (
+        db.query(
+            ProductVariant.product_id.label("product_id"),
+            func.coalesce(func.sum(ret_sub.c.returned_qty), 0).label("returned_qty"),
+        )
+        .outerjoin(ret_sub, ret_sub.c.variant_id == ProductVariant.id)
+        .group_by(ProductVariant.product_id)
+        .subquery()
+    )
+
+    rows = q.all()
+    # Build map of returned qty by product_id for in-Python join (rows already aggregated).
+    returns_map = {
+        r.product_id: r.returned_qty
+        for r in db.query(ret_per_product.c.product_id, ret_per_product.c.returned_qty).all()
+    }
+
+    # Decorate in Python (results are already aggregated; cardinality bounded
+    # by # of products in time window).
+    items = []
+    for r in rows:
+        units = float(r.units_sold or 0)
+        rev = Decimal(str(r.revenue or 0))
+        aov = (rev / Decimal(str(units))) if units > 0 else Decimal("0")
+        returned_qty = float(returns_map.get(r.product_id, 0) or 0)
+        return_rate = (returned_qty / units * 100) if units > 0 else 0.0
+        items.append(
+            {
+                "product_id": r.product_id,
+                "sku": r.sku,
+                "name": r.name,
+                "brand": r.brand,
+                "department": r.department,
+                "units_sold": units,
+                "revenue": _dec_str(rev),
+                "aov": _dec_str(aov),
+                "return_rate_pct": _dec_str(return_rate),
+                "estimated_margin_pct": _dec_str_or_none(r.avg_margin),
+            }
+        )
+    return items
+
+
 @router.get("/reports/products")
 def report_products(
     start: Optional[str] = None,
@@ -287,6 +375,7 @@ def report_products(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     sort: str = "revenue:desc",
+    compare: str = "none",
     db: Session = Depends(get_db),
 ):
     s, e = _parse_dates(start, end)
@@ -294,54 +383,12 @@ def report_products(
     if branch_id is not None and org_id is not None:
         _validate_branch_in_org(db, branch_id, org_id)
     field, direction = _parse_sort(sort, PRODUCT_SORT_FIELDS)
+    _validate_compare(compare)
 
-    cache_key = f"products:{s.isoformat()}:{e.isoformat()}:{org_id}:{branch_id}:{limit}:{offset}:{sort}"
+    cache_key = f"products:{s.isoformat()}:{e.isoformat()}:{org_id}:{branch_id}:{limit}:{offset}:{sort}:{compare}"
 
     def _run():
-        q = _build_products_query(db, s, e, org_id, branch_id)
-        # Returns subquery: returned qty per variant -> aggregate to product_id.
-        ret_sub = _returned_qty_per_variant(db, s, e, org_id, branch_id)
-        # Re-aggregate returned qty by product via variant->product join.
-        ret_per_product = (
-            db.query(
-                ProductVariant.product_id.label("product_id"),
-                func.coalesce(func.sum(ret_sub.c.returned_qty), 0).label("returned_qty"),
-            )
-            .outerjoin(ret_sub, ret_sub.c.variant_id == ProductVariant.id)
-            .group_by(ProductVariant.product_id)
-            .subquery()
-        )
-
-        rows = q.all()
-        # Build map of returned qty by product_id for in-Python join (rows already aggregated).
-        returns_map = {
-            r.product_id: r.returned_qty
-            for r in db.query(ret_per_product.c.product_id, ret_per_product.c.returned_qty).all()
-        }
-
-        # Decorate + sort + paginate in Python (results are already aggregated;
-        # cardinality bounded by # of products in time window).
-        items = []
-        for r in rows:
-            units = float(r.units_sold or 0)
-            rev = Decimal(str(r.revenue or 0))
-            aov = (rev / Decimal(str(units))) if units > 0 else Decimal("0")
-            returned_qty = float(returns_map.get(r.product_id, 0) or 0)
-            return_rate = (returned_qty / units * 100) if units > 0 else 0.0
-            items.append(
-                {
-                    "product_id": r.product_id,
-                    "sku": r.sku,
-                    "name": r.name,
-                    "brand": r.brand,
-                    "department": r.department,
-                    "units_sold": units,
-                    "revenue": _dec_str(rev),
-                    "aov": _dec_str(aov),
-                    "return_rate_pct": _dec_str(return_rate),
-                    "estimated_margin_pct": _dec_str_or_none(r.avg_margin),
-                }
-            )
+        items = _products_rows(db, s, e, org_id, branch_id)
 
         # Sort
         def _sort_key(it):
@@ -358,6 +405,21 @@ def report_products(
         items.sort(key=_sort_key, reverse=(direction == "desc"))
         total = len(items)
         page = items[offset : offset + limit]
+
+        prev_window = compare_window(s, e, compare)
+        if prev_window is not None:
+            prev_s, prev_e = prev_window
+            # Cache propia para la ventana previa, sin limit/offset/sort:
+            # así páginas y ordenamientos distintos de la MISMA ventana
+            # comparten un único cómputo en vez de re-agregar la ventana
+            # anterior en cada combinación.
+            prev_key = f"prevwin:products:{prev_s.isoformat()}:{prev_e.isoformat()}:{org_id}:{branch_id}"
+            prev_items = _cached(prev_key, lambda: _rows_for_window(db, prev_s, prev_e, org_id, branch_id, pivot="products"))
+            page = decorate_with_previous(
+                page, prev_items,
+                key=_COMPARE_KEYS["products"], fields=_COMPARE_FIELDS["products"],
+            )
+
         return {"items": page, "total": total, "offset": offset, "limit": limit}
 
     return _cached(cache_key, _run)
@@ -377,6 +439,63 @@ BRANCH_SORT_FIELDS = {
 }
 
 
+def _branches_rows(db, s, e, org_id, branch_id) -> list[dict]:
+    """Filas agregadas del pivote branches para una ventana, sin ordenar ni paginar."""
+    transactions = func.count(distinct(SalesDocument.id)).label("transactions")
+    revenue = func.coalesce(func.sum(SalesDocument.total_amount), 0).label("revenue")
+    active_cashiers = func.count(distinct(SalesDocument.seller_id)).label("active_cashiers")
+
+    q = (
+        db.query(
+            Branch.id.label("branch_id"),
+            Branch.name.label("name"),
+            Branch.city.label("city"),
+            Organization.id.label("org_id"),
+            Organization.name.label("org_name"),
+            transactions,
+            revenue,
+            active_cashiers,
+        )
+        .select_from(SalesDocument)
+        .join(Branch, SalesDocument.branch_id == Branch.id)
+        .join(Organization, Branch.organization_id == Organization.id)
+    )
+    q = _apply_doc_filters(q, s, e, org_id, branch_id, db)
+    q = q.group_by(Branch.id, Branch.name, Branch.city, Organization.id, Organization.name)
+    q = q.having(func.count(distinct(SalesDocument.id)) > 0)
+    rows = q.all()
+
+    # Returns count per branch
+    ret_sub = _returned_qty_per_branch(db, s, e, org_id)
+    returns_map = {
+        r.branch_id: r.return_count
+        for r in db.query(ret_sub.c.branch_id, ret_sub.c.return_count).all()
+    }
+
+    items = []
+    for r in rows:
+        txn = int(r.transactions or 0)
+        rev = Decimal(str(r.revenue or 0))
+        avg_ticket = (rev / Decimal(txn)) if txn > 0 else Decimal("0")
+        ret_count = int(returns_map.get(r.branch_id, 0) or 0)
+        return_rate = (ret_count / txn * 100) if txn > 0 else 0.0
+        items.append(
+            {
+                "branch_id": r.branch_id,
+                "name": r.name,
+                "org_id": r.org_id,
+                "org_name": r.org_name,
+                "city": r.city,
+                "transactions": txn,
+                "revenue": _dec_str(rev),
+                "avg_ticket": _dec_str(avg_ticket),
+                "active_cashiers": int(r.active_cashiers or 0),
+                "return_rate_pct": _dec_str(return_rate),
+            }
+        )
+    return items
+
+
 @router.get("/reports/branches")
 def report_branches(
     start: Optional[str] = None,
@@ -386,6 +505,7 @@ def report_branches(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     sort: str = "revenue:desc",
+    compare: str = "none",
     db: Session = Depends(get_db),
 ):
     s, e = _parse_dates(start, end)
@@ -393,62 +513,12 @@ def report_branches(
     if branch_id is not None and org_id is not None:
         _validate_branch_in_org(db, branch_id, org_id)
     field, direction = _parse_sort(sort, BRANCH_SORT_FIELDS)
+    _validate_compare(compare)
 
-    cache_key = f"branches:{s.isoformat()}:{e.isoformat()}:{org_id}:{branch_id}:{limit}:{offset}:{sort}"
+    cache_key = f"branches:{s.isoformat()}:{e.isoformat()}:{org_id}:{branch_id}:{limit}:{offset}:{sort}:{compare}"
 
     def _run():
-        transactions = func.count(distinct(SalesDocument.id)).label("transactions")
-        revenue = func.coalesce(func.sum(SalesDocument.total_amount), 0).label("revenue")
-        active_cashiers = func.count(distinct(SalesDocument.seller_id)).label("active_cashiers")
-
-        q = (
-            db.query(
-                Branch.id.label("branch_id"),
-                Branch.name.label("name"),
-                Branch.city.label("city"),
-                Organization.id.label("org_id"),
-                Organization.name.label("org_name"),
-                transactions,
-                revenue,
-                active_cashiers,
-            )
-            .select_from(SalesDocument)
-            .join(Branch, SalesDocument.branch_id == Branch.id)
-            .join(Organization, Branch.organization_id == Organization.id)
-        )
-        q = _apply_doc_filters(q, s, e, org_id, branch_id, db)
-        q = q.group_by(Branch.id, Branch.name, Branch.city, Organization.id, Organization.name)
-        q = q.having(func.count(distinct(SalesDocument.id)) > 0)
-        rows = q.all()
-
-        # Returns count per branch
-        ret_sub = _returned_qty_per_branch(db, s, e, org_id)
-        returns_map = {
-            r.branch_id: r.return_count
-            for r in db.query(ret_sub.c.branch_id, ret_sub.c.return_count).all()
-        }
-
-        items = []
-        for r in rows:
-            txn = int(r.transactions or 0)
-            rev = Decimal(str(r.revenue or 0))
-            avg_ticket = (rev / Decimal(txn)) if txn > 0 else Decimal("0")
-            ret_count = int(returns_map.get(r.branch_id, 0) or 0)
-            return_rate = (ret_count / txn * 100) if txn > 0 else 0.0
-            items.append(
-                {
-                    "branch_id": r.branch_id,
-                    "name": r.name,
-                    "org_id": r.org_id,
-                    "org_name": r.org_name,
-                    "city": r.city,
-                    "transactions": txn,
-                    "revenue": _dec_str(rev),
-                    "avg_ticket": _dec_str(avg_ticket),
-                    "active_cashiers": int(r.active_cashiers or 0),
-                    "return_rate_pct": _dec_str(return_rate),
-                }
-            )
+        items = _branches_rows(db, s, e, org_id, branch_id)
 
         def _sort_key(it):
             v = it.get(field)
@@ -464,6 +534,17 @@ def report_branches(
         items.sort(key=_sort_key, reverse=(direction == "desc"))
         total = len(items)
         page = items[offset : offset + limit]
+
+        prev_window = compare_window(s, e, compare)
+        if prev_window is not None:
+            prev_s, prev_e = prev_window
+            prev_key = f"prevwin:branches:{prev_s.isoformat()}:{prev_e.isoformat()}:{org_id}:{branch_id}"
+            prev_items = _cached(prev_key, lambda: _rows_for_window(db, prev_s, prev_e, org_id, branch_id, pivot="branches"))
+            page = decorate_with_previous(
+                page, prev_items,
+                key=_COMPARE_KEYS["branches"], fields=_COMPARE_FIELDS["branches"],
+            )
+
         return {"items": page, "total": total, "offset": offset, "limit": limit}
 
     return _cached(cache_key, _run)
@@ -482,6 +563,72 @@ SELLER_SORT_FIELDS = {
 }
 
 
+def _sellers_rows(db, s, e, org_id, branch_id) -> list[dict]:
+    """Filas agregadas del pivote sellers para una ventana, sin ordenar ni paginar."""
+    transactions = func.count(distinct(SalesDocument.id)).label("transactions")
+    revenue = func.coalesce(func.sum(SalesDocument.total_amount), 0).label("revenue")
+    active_days = func.count(
+        distinct(func.date(SalesDocument.created_at))
+    ).label("active_days")
+
+    q = (
+        db.query(
+            User.id.label("user_id"),
+            User.full_name.label("full_name"),
+            User.username.label("username"),
+            User.role.label("role"),
+            Branch.id.label("branch_id"),
+            Branch.name.label("branch_name"),
+            Organization.id.label("org_id"),
+            Organization.name.label("org_name"),
+            transactions,
+            revenue,
+            active_days,
+        )
+        .select_from(SalesDocument)
+        .join(User, SalesDocument.seller_id == User.id)
+        .join(Branch, SalesDocument.branch_id == Branch.id)
+        .join(Organization, Branch.organization_id == Organization.id)
+    )
+    q = _apply_doc_filters(q, s, e, org_id, branch_id, db)
+    q = q.group_by(
+        User.id,
+        User.full_name,
+        User.username,
+        User.role,
+        Branch.id,
+        Branch.name,
+        Organization.id,
+        Organization.name,
+    )
+    q = q.having(func.count(distinct(SalesDocument.id)) > 0)
+    rows = q.all()
+
+    items = []
+    for r in rows:
+        txn = int(r.transactions or 0)
+        rev = Decimal(str(r.revenue or 0))
+        avg_ticket = (rev / Decimal(txn)) if txn > 0 else Decimal("0")
+        role_val = r.role.value if hasattr(r.role, "value") else (r.role or "")
+        full_name = r.full_name or r.username or f"user_{r.user_id}"
+        items.append(
+            {
+                "user_id": r.user_id,
+                "full_name": full_name,
+                "role": role_val,
+                "branch_id": r.branch_id,
+                "branch_name": r.branch_name,
+                "org_id": r.org_id,
+                "org_name": r.org_name,
+                "transactions": txn,
+                "revenue": _dec_str(rev),
+                "avg_ticket": _dec_str(avg_ticket),
+                "active_days": int(r.active_days or 0),
+            }
+        )
+    return items
+
+
 @router.get("/reports/sellers")
 def report_sellers(
     start: Optional[str] = None,
@@ -491,6 +638,7 @@ def report_sellers(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     sort: str = "revenue:desc",
+    compare: str = "none",
     db: Session = Depends(get_db),
 ):
     s, e = _parse_dates(start, end)
@@ -498,71 +646,12 @@ def report_sellers(
     if branch_id is not None and org_id is not None:
         _validate_branch_in_org(db, branch_id, org_id)
     field, direction = _parse_sort(sort, SELLER_SORT_FIELDS)
+    _validate_compare(compare)
 
-    cache_key = f"sellers:{s.isoformat()}:{e.isoformat()}:{org_id}:{branch_id}:{limit}:{offset}:{sort}"
+    cache_key = f"sellers:{s.isoformat()}:{e.isoformat()}:{org_id}:{branch_id}:{limit}:{offset}:{sort}:{compare}"
 
     def _run():
-        transactions = func.count(distinct(SalesDocument.id)).label("transactions")
-        revenue = func.coalesce(func.sum(SalesDocument.total_amount), 0).label("revenue")
-        active_days = func.count(
-            distinct(func.date(SalesDocument.created_at))
-        ).label("active_days")
-
-        q = (
-            db.query(
-                User.id.label("user_id"),
-                User.full_name.label("full_name"),
-                User.username.label("username"),
-                User.role.label("role"),
-                Branch.id.label("branch_id"),
-                Branch.name.label("branch_name"),
-                Organization.id.label("org_id"),
-                Organization.name.label("org_name"),
-                transactions,
-                revenue,
-                active_days,
-            )
-            .select_from(SalesDocument)
-            .join(User, SalesDocument.seller_id == User.id)
-            .join(Branch, SalesDocument.branch_id == Branch.id)
-            .join(Organization, Branch.organization_id == Organization.id)
-        )
-        q = _apply_doc_filters(q, s, e, org_id, branch_id, db)
-        q = q.group_by(
-            User.id,
-            User.full_name,
-            User.username,
-            User.role,
-            Branch.id,
-            Branch.name,
-            Organization.id,
-            Organization.name,
-        )
-        q = q.having(func.count(distinct(SalesDocument.id)) > 0)
-        rows = q.all()
-
-        items = []
-        for r in rows:
-            txn = int(r.transactions or 0)
-            rev = Decimal(str(r.revenue or 0))
-            avg_ticket = (rev / Decimal(txn)) if txn > 0 else Decimal("0")
-            role_val = r.role.value if hasattr(r.role, "value") else (r.role or "")
-            full_name = r.full_name or r.username or f"user_{r.user_id}"
-            items.append(
-                {
-                    "user_id": r.user_id,
-                    "full_name": full_name,
-                    "role": role_val,
-                    "branch_id": r.branch_id,
-                    "branch_name": r.branch_name,
-                    "org_id": r.org_id,
-                    "org_name": r.org_name,
-                    "transactions": txn,
-                    "revenue": _dec_str(rev),
-                    "avg_ticket": _dec_str(avg_ticket),
-                    "active_days": int(r.active_days or 0),
-                }
-            )
+        items = _sellers_rows(db, s, e, org_id, branch_id)
 
         def _sort_key(it):
             v = it.get(field)
@@ -578,6 +667,17 @@ def report_sellers(
         items.sort(key=_sort_key, reverse=(direction == "desc"))
         total = len(items)
         page = items[offset : offset + limit]
+
+        prev_window = compare_window(s, e, compare)
+        if prev_window is not None:
+            prev_s, prev_e = prev_window
+            prev_key = f"prevwin:sellers:{prev_s.isoformat()}:{prev_e.isoformat()}:{org_id}:{branch_id}"
+            prev_items = _cached(prev_key, lambda: _rows_for_window(db, prev_s, prev_e, org_id, branch_id, pivot="sellers"))
+            page = decorate_with_previous(
+                page, prev_items,
+                key=_COMPARE_KEYS["sellers"], fields=_COMPARE_FIELDS["sellers"],
+            )
+
         return {"items": page, "total": total, "offset": offset, "limit": limit}
 
     return _cached(cache_key, _run)
@@ -597,6 +697,56 @@ CUSTOMER_SORT_FIELDS = {
 }
 
 
+def _customers_rows(db, s, e, org_id, branch_id) -> list[dict]:
+    """Filas agregadas del pivote customers para una ventana, sin ordenar ni paginar."""
+    ticket_count = func.count(distinct(SalesDocument.id)).label("ticket_count")
+    total_rev = func.coalesce(func.sum(SalesDocument.total_amount), 0).label(
+        "total_revenue"
+    )
+    last_purchase = func.max(SalesDocument.created_at).label("last_purchase")
+    first_purchase = func.min(SalesDocument.created_at).label("first_purchase")
+
+    q = (
+        db.query(
+            Customer.id.label("customer_id"),
+            Customer.name.label("customer_name"),
+            ticket_count,
+            total_rev,
+            last_purchase,
+            first_purchase,
+        )
+        .select_from(SalesDocument)
+        .join(Customer, SalesDocument.customer_id == Customer.id)
+    )
+    q = _apply_doc_filters(q, s, e, org_id, branch_id, db)
+    q = q.filter(SalesDocument.customer_id.isnot(None))
+    q = q.group_by(Customer.id, Customer.name)
+    q = q.having(func.count(distinct(SalesDocument.id)) > 0)
+    rows = q.all()
+
+    items = []
+    for r in rows:
+        tc = int(r.ticket_count or 0)
+        rev = Decimal(str(r.total_revenue or 0))
+        avg_ticket = (rev / Decimal(tc)) if tc > 0 else Decimal("0")
+        avg_gap = None
+        if tc >= 2 and r.first_purchase and r.last_purchase:
+            delta_seconds = (r.last_purchase - r.first_purchase).total_seconds()
+            avg_gap = round(delta_seconds / 86400 / (tc - 1), 2)
+        items.append(
+            {
+                "customer_id": r.customer_id,
+                "customer_name": r.customer_name,
+                "ticket_count": tc,
+                "total_revenue": _dec_str(rev),
+                "avg_ticket": _dec_str(avg_ticket),
+                "last_purchase": r.last_purchase.isoformat() if r.last_purchase else None,
+                "avg_days_between_purchases": avg_gap,
+            }
+        )
+    return items
+
+
 @router.get("/reports/customers")
 def report_customers(
     start: Optional[str] = None,
@@ -606,6 +756,7 @@ def report_customers(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     sort: str = "total_revenue:desc",
+    compare: str = "none",
     db: Session = Depends(get_db),
 ):
     s, e = _parse_dates(start, end)
@@ -616,55 +767,12 @@ def report_customers(
     if sort and sort.split(":")[0] == "revenue":
         sort = "total_revenue:" + (sort.split(":")[1] if ":" in sort else "desc")
     field, direction = _parse_sort(sort, CUSTOMER_SORT_FIELDS)
+    _validate_compare(compare)
 
-    cache_key = f"customers:{s.isoformat()}:{e.isoformat()}:{org_id}:{branch_id}:{limit}:{offset}:{sort}"
+    cache_key = f"customers:{s.isoformat()}:{e.isoformat()}:{org_id}:{branch_id}:{limit}:{offset}:{sort}:{compare}"
 
     def _run():
-        ticket_count = func.count(distinct(SalesDocument.id)).label("ticket_count")
-        total_rev = func.coalesce(func.sum(SalesDocument.total_amount), 0).label(
-            "total_revenue"
-        )
-        last_purchase = func.max(SalesDocument.created_at).label("last_purchase")
-        first_purchase = func.min(SalesDocument.created_at).label("first_purchase")
-
-        q = (
-            db.query(
-                Customer.id.label("customer_id"),
-                Customer.name.label("customer_name"),
-                ticket_count,
-                total_rev,
-                last_purchase,
-                first_purchase,
-            )
-            .select_from(SalesDocument)
-            .join(Customer, SalesDocument.customer_id == Customer.id)
-        )
-        q = _apply_doc_filters(q, s, e, org_id, branch_id, db)
-        q = q.filter(SalesDocument.customer_id.isnot(None))
-        q = q.group_by(Customer.id, Customer.name)
-        q = q.having(func.count(distinct(SalesDocument.id)) > 0)
-        rows = q.all()
-
-        items = []
-        for r in rows:
-            tc = int(r.ticket_count or 0)
-            rev = Decimal(str(r.total_revenue or 0))
-            avg_ticket = (rev / Decimal(tc)) if tc > 0 else Decimal("0")
-            avg_gap = None
-            if tc >= 2 and r.first_purchase and r.last_purchase:
-                delta_seconds = (r.last_purchase - r.first_purchase).total_seconds()
-                avg_gap = round(delta_seconds / 86400 / (tc - 1), 2)
-            items.append(
-                {
-                    "customer_id": r.customer_id,
-                    "customer_name": r.customer_name,
-                    "ticket_count": tc,
-                    "total_revenue": _dec_str(rev),
-                    "avg_ticket": _dec_str(avg_ticket),
-                    "last_purchase": r.last_purchase.isoformat() if r.last_purchase else None,
-                    "avg_days_between_purchases": avg_gap,
-                }
-            )
+        items = _customers_rows(db, s, e, org_id, branch_id)
 
         def _sort_key(it):
             v = it.get(field)
@@ -682,6 +790,17 @@ def report_customers(
         items.sort(key=_sort_key, reverse=(direction == "desc"))
         total = len(items)
         page = items[offset : offset + limit]
+
+        prev_window = compare_window(s, e, compare)
+        if prev_window is not None:
+            prev_s, prev_e = prev_window
+            prev_key = f"prevwin:customers:{prev_s.isoformat()}:{prev_e.isoformat()}:{org_id}:{branch_id}"
+            prev_items = _cached(prev_key, lambda: _rows_for_window(db, prev_s, prev_e, org_id, branch_id, pivot="customers"))
+            page = decorate_with_previous(
+                page, prev_items,
+                key=_COMPARE_KEYS["customers"], fields=_COMPARE_FIELDS["customers"],
+            )
+
         return {"items": page, "total": total, "offset": offset, "limit": limit}
 
     return _cached(cache_key, _run)
