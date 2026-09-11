@@ -580,8 +580,13 @@ def get_session_audit_data(db: Session, session_id: int):
 
     # 3b. Devoluciones aprobadas en esta sesión (para UI / counts; el efecto
     # monetario sobre `expected` se calcula vía CashMovement OUT en el helper).
+    from sqlalchemy.orm import joinedload
     from app.models.returns import SaleReturn as SaleReturnModel
-    session_returns = db.query(SaleReturnModel).filter(
+    # `joinedload(sale)`: el detalle del corte lee `r.sale` de cada devolución
+    # para armar el folio — sin esto son N consultas extra por corte.
+    session_returns = db.query(SaleReturnModel).options(
+        joinedload(SaleReturnModel.sale)
+    ).filter(
         SaleReturnModel.cash_session_id == session.id,
         SaleReturnModel.status == "APPROVED"
     ).all()
@@ -638,7 +643,17 @@ def get_session_audit_data(db: Session, session_id: int):
     # perderse — `by_method` tiene que sumar EXACTAMENTE `total`, ni un peso
     # más ni uno menos: es un desglose, no una segunda fuente.
     _by_method_totals = {"cash": 0.0, "card": 0.0, "transfer": 0.0, "other": 0.0}
-    _returns_list = []
+    # `(_event_time, item)` para poder ordenar por la hora REAL del evento al
+    # final: la PK de `sale_returns` es un UUID aleatorio y Postgres devuelve
+    # las filas en el orden físico del heap (que cambia con cada UPDATE), así
+    # que sin ORDER BY dos reimpresiones del MISMO corte pueden listar las
+    # devoluciones en orden distinto. El orden no se puede pedir en SQL
+    # porque la hora sale del audit log, no de una columna de esta tabla.
+    _returns_sortable = []
+    _session_day = (
+        session.opened_at if session.opened_at.tzinfo
+        else session.opened_at.replace(tzinfo=timezone.utc)
+    ).astimezone(MX_TZ).date()
     for r in session_returns:
         _audit_ts = _approved_ts_by_return_id.get(r.id)
         if _audit_ts is not None:
@@ -667,13 +682,33 @@ def get_session_audit_data(db: Session, session_id: int):
             _method_key = "other"
         _by_method_totals[_method_key] += float(r.total_refunded or 0)
 
-        _returns_list.append({
-            "time": _event_time.astimezone(MX_TZ).strftime("%H:%M"),
+        _event_mx = _event_time.astimezone(MX_TZ)
+        # Una devolución aprobada en OTRA fecha (ruta `[POST-CLOSE]` de
+        # `approve_return`: el gerente aprueba hoy una devolución cuya caja
+        # cerró ayer) imprimiría una hora suelta como si fuera de esta
+        # jornada. `cross_day` deja constancia y el ticket la marca.
+        _cross_day = _event_mx.date() != _session_day
+        # `is_cash` sale del MISMO `_method_key` que alimenta `by_method`: si
+        # se derivaran por separado, una fila legada con `refund_method` NULL
+        # caería en el bucket "cash" (por el `or "CASH"` de arriba) pero se
+        # imprimiría sin la marca de efectivo — el renglón contradiría al
+        # subtotal que él mismo alimentó.
+        _returns_sortable.append((_event_time, {
+            "time": _event_mx.strftime("%H:%M"),
+            "date": _event_mx.strftime("%d/%m"),
+            "cross_day": _cross_day,
             "folio": _folio or "-",
             "amount": float(r.total_refunded or 0),
-            "is_cash": r.refund_method == PaymentMethod.CASH,
+            "is_cash": _method_key == "cash",
             "method": _method_key,
-        })
+        }))
+
+    # Orden estable y cronológico: el detalle es un relato, y un relato que
+    # cambia de orden entre dos impresiones del mismo corte no se puede
+    # auditar. Desempate por folio para que dos eventos con la misma marca de
+    # tiempo tampoco bailen.
+    _returns_sortable.sort(key=lambda it: (it[0], it[1]["folio"]))
+    _returns_list = [item for _ts, item in _returns_sortable]
 
     # 4. Cálculo de KPIs
     # Ventas Totales NETAS post-refund — sale.total_amount está actualizado
