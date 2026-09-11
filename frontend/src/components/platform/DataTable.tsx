@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 
 import { TablaDesplazable } from '../ui/TablaDesplazable'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
-import { cardColumns } from './dataTableCards'
+import { cardColumns, cardKeyActivatesRow } from './dataTableCards'
 
 export interface DataTableColumn<T> {
   key: string
@@ -306,7 +306,11 @@ export function DataTable<T>({
                 role={onRowClick ? 'button' : undefined}
                 tabIndex={onRowClick ? 0 : undefined}
                 onClick={() => onRowClick?.(r)}
-                onKeyDown={onRowClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick(r) } } : undefined}
+                onKeyDown={onRowClick ? (e) => {
+                  if (!cardKeyActivatesRow(e.key, e.target === e.currentTarget)) return
+                  e.preventDefault()
+                  onRowClick(r)
+                } : undefined}
               >
                 <div className="pv2-dt-card-head">
                   {selectable && (
@@ -316,6 +320,7 @@ export function DataTable<T>({
                       checked={selectedSet.has(id)}
                       onChange={() => toggleRow(id)}
                       onClick={e => e.stopPropagation()}
+                      onKeyDown={e => e.stopPropagation()}
                       style={checkboxStyle}
                     />
                   )}
@@ -332,7 +337,11 @@ export function DataTable<T>({
                   </dl>
                 )}
                 {actions && (
-                  <div className="pv2-dt-card-actions" onClick={e => e.stopPropagation()}>
+                  <div
+                    className="pv2-dt-card-actions"
+                    onClick={e => e.stopPropagation()}
+                    onKeyDown={e => e.stopPropagation()}
+                  >
                     {actions.accessor(r)}
                   </div>
                 )}

@@ -60,7 +60,7 @@ const labelStyle: React.CSSProperties = {
 
 const buttonPrimary: React.CSSProperties = {
   background: 'var(--p-teal)',
-  color: '#000',
+  color: 'var(--dax-on-accent)',
   fontWeight: 700,
   border: 'none',
   padding: '8px 14px',
@@ -167,7 +167,7 @@ function SimpleConfirm({
             onClick={onConfirm}
             disabled={busy}
             style={{
-              background: accent, color: destructive ? '#fff' : '#000',
+              background: accent, color: destructive ? '#fff' : 'var(--dax-on-accent)',
               fontWeight: 700, border: 'none', padding: '8px 16px',
               borderRadius: 4, fontSize: 12, cursor: 'pointer',
               opacity: busy ? 0.5 : 1,
@@ -815,7 +815,7 @@ export function PlatformOrgDetail() {
                     disabled={busy}
                     style={{
                       background: 'var(--p-teal)',
-                      color: '#000',
+                      color: 'var(--dax-on-accent)',
                       fontWeight: 700,
                       border: 'none',
                       padding: '6px 12px',

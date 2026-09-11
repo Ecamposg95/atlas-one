@@ -29,6 +29,9 @@
     --dax-accent:      var(--p-accent);            /* sigue el vertical */
     --dax-accent-glow: var(--p-accent-soft);
     --dax-accent-soft: color-mix(in srgb, var(--dax-accent) 14%, transparent);
+    /* Texto/icono encima del acento. No puede ser fijo: el acento es el del
+       vertical y en oscuro se aclara con color-mix hacia blanco. */
+    --dax-on-accent:   #ffffff;
     --dax-violet-glow: rgba(63, 63, 214, 0.08);
     --dax-border:      #e2e1e6;   /* neutro con sesgo índigo */
     --dax-border-dim:  #ebeaee;
@@ -208,6 +211,7 @@
     --dax-accent:      color-mix(in srgb, var(--p-accent) 62%, #ffffff);
     --dax-accent-glow: color-mix(in srgb, var(--p-accent) 35%, transparent);
     --dax-accent-soft: color-mix(in srgb, var(--dax-accent) 14%, transparent);
+    --dax-on-accent:   #0b0b22;   /* el acento se aclara aquí: encima va tinta */
     --dax-violet-glow: rgba(108, 108, 255, 0.22);
     --dax-border:      rgba(237, 237, 248, 0.14);
     --dax-border-dim:  rgba(237, 237, 248, 0.08);
