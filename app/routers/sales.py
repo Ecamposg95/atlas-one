@@ -59,6 +59,7 @@ from app.utils.folios import get_next_folio
 from app.core.events import EventBus, SalesDocumentCreated # [NEW] Event Bus Integration
 from app.core.tenant_context import get_current_active_organization
 from app.models.organization import Organization
+from app.services.tax import compute_line_tax, resolve_org_tax_mode
 from app.crud.products import get_variant_if_visible
 try:
     from zoneinfo import ZoneInfo
@@ -483,6 +484,12 @@ def create_sale(
     accumulated_tax = Decimal("0.00")
     db_lines = []
 
+    # Modo de precio de la organización (neto vs. precio con IVA incluido). Se
+    # resuelve una sola vez y lo consume compute_line_tax por renglón.
+    price_includes_tax = resolve_org_tax_mode(
+        db.query(Organization).filter(Organization.id == org_id).first()
+    )
+
     # --- BATCH RESOLVE (perf 2026-05-07) ---
     # Antes: 4 queries × N items (variant lookup + eager re-fetch + stock + PBS).
     # Ahora: 3 queries totales (variants con eager-load + visibilidad, stock bulk, PBS bulk).
@@ -605,18 +612,20 @@ def create_sale(
         discount_factor = Decimal(1) - Decimal(str(item.discount or 0)) / Decimal(100)
         line_total = unit_price * qty_dec * discount_factor
         
-        if sale_in.requires_invoice and variant.has_iva:
-            rate = variant.tax_rate / Decimal("100.0")
-            line_tax = line_total * rate
-            accumulated_subtotal += line_total
-            accumulated_tax += line_tax
-            total_sale += (line_total + line_tax)
-            line_total_gross = line_total + line_tax
-        else:
-            total_sale += line_total
-            accumulated_subtotal += line_total
-            line_tax = Decimal("0.00")
-            line_total_gross = line_total
+        # IVA: fuente única (app/services/tax.py). Antes la fórmula vivía aquí
+        # en línea y repetida en el ticket reemitido y en la devolución, cada
+        # copia con su propio redondeo (auditoría Rmazh §3).
+        desglose = compute_line_tax(
+            line_gross=line_total,
+            tax_rate=variant.tax_rate,
+            has_iva=bool(variant.has_iva),
+            price_includes_tax=price_includes_tax,
+            requires_invoice=bool(sale_in.requires_invoice),
+        )
+        accumulated_subtotal += desglose.subtotal
+        accumulated_tax += desglose.tax
+        total_sale += desglose.total
+        line_total_gross = desglose.total
 
         new_line = SalesLineItem(
             variant_id=variant.id,

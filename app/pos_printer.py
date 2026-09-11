@@ -404,10 +404,23 @@ class PosPrinter:
         raw += sep
 
         # --- Recomputed totals ---
-        orig_subtotal = float(sale.subtotal)
-        tax_rate = float(sale.tax_amount) / orig_subtotal if orig_subtotal > 0 else 0.0
-        new_tax = new_subtotal * tax_rate
-        new_final = new_subtotal + new_tax
+        # IVA: fuente única (app/services/tax.py). `new_subtotal` viene de sumar
+        # `qty * unit_price`, que es neto o bruto según el modo de precio de la
+        # organización; sumarle el IVA encima en modo "precio con IVA incluido"
+        # inflaba el ticket reemitido ~16% (auditoría Rmazh §3).
+        from app.services.tax import compute_line_tax, effective_tax_rate, resolve_org_tax_mode
+
+        tasa_pct = effective_tax_rate(sale.subtotal, sale.tax_amount) * Decimal("100")
+        totales = compute_line_tax(
+            line_gross=new_subtotal,
+            tax_rate=tasa_pct,
+            has_iva=True,
+            price_includes_tax=resolve_org_tax_mode(organization),
+            requires_invoice=True,
+        )
+        new_subtotal = float(totales.subtotal)
+        new_tax = float(totales.tax)
+        new_final = float(totales.total)
 
         raw += self._total_line("SUBTOTAL", new_subtotal)
         raw += self._total_line("IVA", new_tax)

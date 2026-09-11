@@ -92,6 +92,11 @@ def run_migrations():
         # Gastro 2026-07-09 — propina cobrada y atribución al mesero (ventas por mesero)
         ("sales_documents", "tip_amount",     "ALTER TABLE sales_documents ADD COLUMN tip_amount NUMERIC(10,2) DEFAULT 0;"),
         ("sales_documents", "server_user_id", "ALTER TABLE sales_documents ADD COLUMN server_user_id INTEGER REFERENCES users(id);"),
+        # IVA — fuente única 2026-09-11 (auditoría Rmazh §3). Modo de precio por
+        # organización, consumido por app/services/tax.py. DEFAULT FALSE a
+        # propósito: es el comportamiento histórico (precio neto + IVA encima);
+        # ponerlo en TRUE cambiaría el total cobrado a clientes vivos.
+        ("organization", "price_includes_tax", "ALTER TABLE organization ADD COLUMN price_includes_tax BOOLEAN NOT NULL DEFAULT FALSE;"),
     ]
 
     # Track 1 — Audit + cleanup de Payment huérfanos antes de NOT NULL.
