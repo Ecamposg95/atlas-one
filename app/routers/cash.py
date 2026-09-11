@@ -57,16 +57,45 @@ def _lock_cash_session_query(query):
     return query.with_for_update()
 
 
-def _sesion_abierta(db: Session, user_id: int, branch_id: int, *, bloquear: bool = False):
-    """Sesion de caja ABIERTA de un usuario en una sucursal, o None."""
+def _sesion_abierta(
+    db: Session, user_id: int, branch_id: int, *,
+    organization_id: Optional[int] = None, bloquear: bool = False,
+):
+    """Sesion de caja ABIERTA de un usuario en una sucursal, o None.
+
+    `organization_id` cumple la regla de aislamiento por tenant. Es opcional
+    porque `cash_sessions.organization_id` es nullable y las filas anteriores al
+    backfill de Sprint 2 lo tienen en NULL: filtrar siempre dejaria a esos
+    cajeros abriendo una segunda caja sobre una sesion vieja que el filtro no ve.
+    """
     q = db.query(CashSession).filter(
         CashSession.user_id == user_id,
         CashSession.branch_id == branch_id,
         CashSession.status == CashSessionStatus.OPEN,
     )
+    if organization_id is not None:
+        q = q.filter(CashSession.organization_id == organization_id)
     if bloquear:
         q = _lock_cash_session_query(q)
     return q.first()
+
+
+# Indice unico parcial "una sola sesion OPEN por (usuario, sucursal)".
+# Ver app/models/cash.py y scripts/railway_init.py.
+INDICE_CAJA_ABIERTA = "uq_cash_sessions_open_user_branch"
+
+
+def _es_choque_de_caja_abierta(exc: IntegrityError) -> bool:
+    """¿El IntegrityError viene de ese indice y no de otra cosa?
+
+    Postgres nombra el indice en el mensaje; SQLite (las pruebas) solo lista las
+    columnas ("UNIQUE constraint failed: cash_sessions.user_id,
+    cash_sessions.branch_id"), asi que hay que reconocer las dos formas.
+    """
+    mensaje = str(getattr(exc, "orig", exc))
+    if INDICE_CAJA_ABIERTA in mensaje:
+        return True
+    return "cash_sessions.user_id" in mensaje and "cash_sessions.branch_id" in mensaje
 
 
 def _mensaje_caja_ya_abierta(active: Optional[CashSession]) -> str:
@@ -177,21 +206,28 @@ def open_session(
     # quedan expirados y volver a leerlos dispara otra consulta.
     usuario_id, sucursal_id = current_user.id, current_user.branch_id
 
+    # La sucursal se resuelve antes del chequeo: su organización es la que
+    # acota la búsqueda de la sesión abierta (multi-tenancy) y la que se
+    # guarda en la sesión nueva.
+    from app.models.organization import Branch as _Branch
+    branch = db.query(_Branch).filter(_Branch.id == sucursal_id).first()
+    if not branch:
+        raise HTTPException(400, "Sucursal inválida.")
+    organizacion_id = branch.organization_id
+
     # Si ya hay sesión OPEN del usuario en esta sucursal, 409. Una sola sesión
     # soporta el modelo "1 cajero opera 1-3 PCs simultáneamente, todas comparten
     # la misma sesión de caja porque el efectivo va a una sola caja física"
     # (Track 1 bug-fix).
-    active = _sesion_abierta(db, usuario_id, sucursal_id, bloquear=True)
+    active = _sesion_abierta(
+        db, usuario_id, sucursal_id, organization_id=organizacion_id, bloquear=True
+    )
     if active:
         raise HTTPException(status_code=409, detail=_mensaje_caja_ya_abierta(active))
 
     # 3. Crear Sesión — organization_id derivado del branch para cumplir multi-tenancy
-    from app.models.organization import Branch as _Branch
-    branch = db.query(_Branch).filter(_Branch.id == current_user.branch_id).first()
-    if not branch:
-        raise HTTPException(400, "Sucursal inválida.")
     new_session = CashSession(
-        organization_id=branch.organization_id,
+        organization_id=organizacion_id,
         branch_id=current_user.branch_id,
         user_id=current_user.id,
         status=CashSessionStatus.OPEN,
@@ -201,14 +237,22 @@ def open_session(
     db.add(new_session)
     try:
         db.commit()
-    except IntegrityError:
-        # El indice unico parcial uq_cash_sessions_open_user_branch gano la
-        # carrera: otra peticion abrio primero. Es el mismo conflicto de estado
-        # que el chequeo de arriba, asi que responde igual (409) y no un 500.
+    except IntegrityError as exc:
         db.rollback()
+        # Solo el indice unico parcial es un conflicto de estado (otra peticion
+        # abrio primero) y merece un 409. Cualquier otra violacion de integridad
+        # —una FK rota, por ejemplo— es un fallo real que no hay que disfrazar
+        # de "ya tienes una caja abierta": se relanza y sale como 500.
+        if not _es_choque_de_caja_abierta(exc):
+            logger.exception(
+                "CASH_OPEN_INTEGRITY_ERROR: user_id=%s branch_id=%s", usuario_id, sucursal_id
+            )
+            raise
         raise HTTPException(
             status_code=409,
-            detail=_mensaje_caja_ya_abierta(_sesion_abierta(db, usuario_id, sucursal_id)),
+            detail=_mensaje_caja_ya_abierta(
+                _sesion_abierta(db, usuario_id, sucursal_id, organization_id=organizacion_id)
+            ),
         )
     db.refresh(new_session)
 

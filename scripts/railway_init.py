@@ -8,6 +8,7 @@ Ejecuta la secuencia completa de inicialización:
 """
 import sys
 import os
+import logging
 import secrets
 
 # Add project root to path
@@ -268,10 +269,14 @@ def run_migrations():
             )).fetchall()
             if duplicados:
                 detalle = ", ".join(f"user={d[0]} branch={d[1]} ({d[2]})" for d in duplicados)
-                print(
-                    f"  ⚠ uq_cash_sessions_open_user_branch NO se crea: hay sesiones "
+                aviso = (
+                    f"uq_cash_sessions_open_user_branch NO se crea: hay sesiones "
                     f"abiertas duplicadas — {detalle}. Cierra las sobrantes y vuelve a desplegar."
                 )
+                print(f"  ⚠ {aviso}")
+                # El print se pierde en el scroll del arranque; el warning queda
+                # en el log estructurado, que es donde se busca despues.
+                logging.getLogger(__name__).warning("RAILWAY_INIT: %s", aviso)
             else:
                 conn.execute(text(
                     "CREATE UNIQUE INDEX IF NOT EXISTS uq_cash_sessions_open_user_branch "

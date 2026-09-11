@@ -119,3 +119,26 @@ def test_el_indice_tambien_se_crea_en_bases_existentes():
     assert "uq_cash_sessions_open_user_branch" in fuente
     assert "CREATE UNIQUE INDEX IF NOT EXISTS" in fuente
     assert "WHERE status = 'OPEN'" in fuente
+
+
+class TestOtrosErroresDeIntegridad:
+    """Solo el choque con el indice es un 409; el resto no se disfraza."""
+
+    def test_reconoce_el_choque_en_las_dos_formas(self):
+        from sqlalchemy.exc import IntegrityError as IE
+        from app.routers.cash import _es_choque_de_caja_abierta
+
+        sqlite = IE("stmt", None, Exception(
+            "UNIQUE constraint failed: cash_sessions.user_id, cash_sessions.branch_id"))
+        postgres = IE("stmt", None, Exception(
+            'duplicate key value violates unique constraint "uq_cash_sessions_open_user_branch"'))
+        assert _es_choque_de_caja_abierta(sqlite)
+        assert _es_choque_de_caja_abierta(postgres)
+
+    def test_otra_violacion_no_se_confunde(self):
+        from sqlalchemy.exc import IntegrityError as IE
+        from app.routers.cash import _es_choque_de_caja_abierta
+
+        otra = IE("stmt", None, Exception(
+            'insert or update on table "cash_sessions" violates foreign key constraint "cash_sessions_branch_id_fkey"'))
+        assert not _es_choque_de_caja_abierta(otra)
