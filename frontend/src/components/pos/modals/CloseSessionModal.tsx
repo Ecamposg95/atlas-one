@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { cashApi } from '../../../api/cash'
 import { formatCurrency } from '../../../utils/currency'
+import { closeVerdict } from '../../../theme/verdict'
 
 interface Props {
   onClose: () => void
@@ -23,6 +24,12 @@ export function CloseSessionModal({ onClose, onConfirm }: Props) {
 
   const closingNum = parseFloat(closingAmount) || 0
   const diff = expectedCash !== null ? closingNum - expectedCash : null
+
+  // Veredicto de la diferencia (A6). Es presentación: el corte real lo calcula
+  // el backend al confirmar. Aquí NO se usa useCountUp: este importe cambia con
+  // cada tecla y el contador lo reiniciaría desde cero en cada pulsación. El
+  // contador va donde la diferencia ya es definitiva (CloseResultPanel).
+  const verdict = closeVerdict(diff ?? 0)
 
   const submit = async () => {
     setLoading(true)
@@ -74,12 +81,10 @@ export function CloseSessionModal({ onClose, onConfirm }: Props) {
             </div>
 
             {diff !== null && closingAmount && (
-              <div className={`rounded-xl p-3 text-center text-sm font-bold ${
-                diff >= 0
-                  ? 'bg-emerald-600/10 border border-emerald-600/30 text-emerald-400'
-                  : 'bg-red-600/10 border border-red-600/30 text-red-400'
-              }`}>
-                {diff >= 0 ? `Sobrante: ${formatCurrency(diff)}` : `Faltante: ${formatCurrency(Math.abs(diff))}`}
+              <div className={`anim-pop ${verdict.className} p-3 text-center text-sm font-bold`} role="status">
+                {verdict.kind === 'ok'
+                  ? verdict.label
+                  : `${verdict.label}: ${formatCurrency(Math.abs(diff))}`}
               </div>
             )}
 
