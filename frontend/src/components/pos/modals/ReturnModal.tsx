@@ -21,6 +21,29 @@ interface Props {
   initialSale?: SalesDocument        // pre-cargar desde /sales sin necesidad de buscar
 }
 
+// Mismos valores que `PaymentMethod` en app/models/sales.py (refund_method de
+// app/routers/returns.py). Reusa el patrón de MixedPaymentModal.tsx.
+type RefundMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'OTHER'
+
+const REFUND_METHOD_LABELS: Record<RefundMethod, { label: string; icon: string }> = {
+  CASH: { label: 'Efectivo', icon: 'fa-money-bill' },
+  CARD: { label: 'Tarjeta', icon: 'fa-credit-card' },
+  TRANSFER: { label: 'Transferencia', icon: 'fa-mobile-screen' },
+  OTHER: { label: 'Otro', icon: 'fa-ellipsis' },
+}
+
+// Por defecto el reembolso va por el mismo método con el que pagó el
+// cliente. Si el ticket tuvo pago mixto (varios métodos distintos), no hay
+// un "original" único — se cae a Efectivo, que el cajero puede cambiar.
+function defaultRefundMethod(sale: SalesDocument): RefundMethod {
+  const methods = new Set(sale.payments.map((p) => p.method))
+  if (methods.size === 1) {
+    const [m] = methods
+    if (m === 'CASH' || m === 'CARD' || m === 'TRANSFER' || m === 'OTHER') return m
+  }
+  return 'CASH'
+}
+
 function buildLines(sale: SalesDocument): ReturnLine[] {
   return sale.lines.map((line) => ({
     variant_id: line.variant_id,
@@ -36,6 +59,9 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
   const [folio, setFolio] = useState('')
   const [sale, setSale] = useState<SalesDocument | null>(initialSale ?? null)
   const [lines, setLines] = useState<ReturnLine[]>(initialSale ? buildLines(initialSale) : [])
+  const [refundMethod, setRefundMethod] = useState<RefundMethod>(
+    initialSale ? defaultRefundMethod(initialSale) : 'CASH'
+  )
   const [reason, setReason] = useState('')
   const [searching, setSearching] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -51,6 +77,7 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
     if (initialSale) {
       setSale(initialSale)
       setLines(buildLines(initialSale))
+      setRefundMethod(defaultRefundMethod(initialSale))
     }
   }, [initialSale?.id])
 
@@ -76,6 +103,7 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
   const pickSale = (s: SalesDocument) => {
     setSale(s)
     setLines(buildLines(s))
+    setRefundMethod(defaultRefundMethod(s))
     setError(null)
   }
 
@@ -85,12 +113,16 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
     setError(null)
     setSale(null)
     try {
-      const res = await salesApi.list({ search: folio.trim(), limit: 20 })
-      const found = res.items.find((s) => saleLabel(s).toUpperCase() === folio.trim().toUpperCase())
+      // Folio exacto: el backend ya tolera serie/ceros a la izquierda
+      // ("A-540" y "A-0540" encuentran el mismo ticket) y respeta el
+      // scoping de organización/sucursal — no hace falta re-filtrar aquí.
+      const res = await salesApi.list({ folio_search: folio.trim(), limit: 5 })
+      const found = res.items[0]
       if (!found) { setError('Ticket no encontrado'); return }
       if (found.status === 'CANCELLED') { setError('Este ticket fue cancelado'); return }
       setSale(found)
       setLines(buildLines(found))
+      setRefundMethod(defaultRefundMethod(found))
     } catch { setError('Error al buscar el ticket') } finally { setSearching(false) }
   }
 
@@ -124,6 +156,7 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
         sale_id: sale.id,
         reason,
         total_refunded: totalRefund,
+        refund_method: refundMethod,
         cash_session_id: activeSessionId ?? null,
         items: selectedLines.map((l) => ({
           variant_id: l.variant_id,
@@ -252,6 +285,22 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
               <div className="flex justify-between text-slate-400">
                 <span>Total original</span><span className="text-emerald-400 font-semibold">{formatCurrency(sale.total_amount)}</span>
               </div>
+            </div>
+
+            {/* Método de reembolso — por defecto el mismo con el que pagó el cliente */}
+            <div className="mb-4">
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                Método de reembolso
+              </label>
+              <select
+                value={refundMethod}
+                onChange={(e) => setRefundMethod(e.target.value as RefundMethod)}
+                className="dax-input text-sm w-full"
+              >
+                {(Object.keys(REFUND_METHOD_LABELS) as RefundMethod[]).map((m) => (
+                  <option key={m} value={m}>{REFUND_METHOD_LABELS[m].label}</option>
+                ))}
+              </select>
             </div>
 
             {/* Items */}

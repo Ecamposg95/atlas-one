@@ -57,6 +57,11 @@ export const salesApi = {
     return data ?? { total_sales: 0, total_transactions: 0, average_ticket: 0, payment_methods: {}, refund_count: 0, refund_total: 0, peak_hour: null }
   },
 
+  /**
+   * `params` acepta, entre otros, `folio_search` (folio exacto — tolera
+   * serie/ceros a la izquierda, ver `app/routers/sales.py::read_sales`), usado
+   * por `ReturnModal` para localizar el ticket a devolver.
+   */
   list: async (params?: Record<string, unknown>): Promise<SalesListResponse> => {
     const { data } = await client.get<SalesListResponse>('/sales/', { params })
     if (Array.isArray(data)) return { items: data, total: data.length, page: 0, pages: 1 }
