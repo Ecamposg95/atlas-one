@@ -12,6 +12,7 @@ from xml.sax.saxutils import escape
 import pytest
 
 from app.models.inventory import InventoryMovement, MovementType, StockOnHand
+from app.models.organization import Branch, Organization
 from app.models.products import (
     Department,
     Product,
@@ -165,6 +166,15 @@ class TestEscalones:
         nombres = {e.price_name for e in db.query(ProductPrice).filter(ProductPrice.variant_id == v.id)}
         assert nombres == {"Menudeo", "Mayoreo"}
 
+    def test_precio_aplicado_sin_monto_se_reporta(self, db, org, cargar):
+        r = cargar([{**FILA, "¿Aplica Precio 2?": "Sí", "Precio 2": "0"}])
+        v = db.query(ProductVariant).filter(ProductVariant.organization_id == org.id).one()
+        nombres = {e.price_name for e in db.query(ProductPrice).filter(ProductPrice.variant_id == v.id)}
+        assert nombres == {"Menudeo", "Volumen"}
+        assert any("Precio 2" in i and "sin monto" in i for i in r["incidencias"]), (
+            "descartar un escalon en silencio esconde un dato mal capturado en el POS de origen"
+        )
+
     def test_precio_4_aplicado_se_reporta_y_no_se_carga(self, db, org, cargar):
         r = cargar([{**FILA, "¿Aplica Precio 4?": "Sí", "Precio 4": "50.0"}])
         v = db.query(ProductVariant).filter(ProductVariant.organization_id == org.id).one()
@@ -261,6 +271,33 @@ class TestOmisiones:
         assert r["omitidos"] == 1
 
 
+class TestSinCodigo:
+    """Sin `Código` la unica identidad posible es la descripcion. Dos renglones
+    asi con el mismo nombre son, para el importador, el mismo producto."""
+
+    def test_dos_renglones_sin_codigo_y_mismo_nombre_se_funden(self, db, org, cargar):
+        r = cargar([
+            {**FILA, "Código": "", "Descripción": "LIGA SUELTA", "Precio 1": "10.0"},
+            {**FILA, "Código": "", "Descripción": "LIGA SUELTA", "Precio 1": "12.0"},
+        ])
+        assert r["creados"] == 1
+        assert r["actualizados"] == 1
+        v = db.query(ProductVariant).filter(ProductVariant.organization_id == org.id).one()
+        assert float(v.price) == 12.0, "el segundo renglon pisa al primero"
+        assert any("segundo renglon sin codigo" in i and "LIGA SUELTA" in i
+                   for i in r["incidencias"]), (
+            "fundir dos renglones distintos no puede pasar callado"
+        )
+
+    def test_dos_renglones_sin_codigo_y_distinto_nombre_son_dos_productos(self, db, org, cargar):
+        r = cargar([
+            {**FILA, "Código": "", "Descripción": "LIGA SUELTA"},
+            {**FILA, "Código": "", "Descripción": "LIGA GRUESA"},
+        ])
+        assert r["creados"] == 2
+        assert db.query(ProductVariant).filter(ProductVariant.organization_id == org.id).count() == 2
+
+
 class TestIdempotencia:
     def test_correrlo_dos_veces_no_duplica_nada(self, db, org, branch_a, tmp_path, admin_user):
         ruta = _xlsx(tmp_path, [FILA, {**FILA, "Código": "H-626", "Descripción": "OTRA"}])
@@ -327,6 +364,65 @@ class TestIdempotencia:
         assert r["codigos_generados"] == 1
         segunda = imp.import_datax_export(db, ruta, org.id, branch_a.id)
         assert segunda["creados"] == 0, "sin codigo, la identidad es el nombre del producto"
+
+
+class TestDestino:
+    """El importador escribe cientos de renglones sin vuelta atras: antes de
+    empezar tiene que estar seguro de a quien se los esta escribiendo."""
+
+    def test_el_resumen_dice_a_donde_se_cargo(self, db, org, branch_a, admin_user, cargar):
+        r = cargar([FILA])
+        assert r["organizacion"] == org.name
+        assert r["sucursal"] == branch_a.name
+
+    def test_aborta_si_la_organizacion_no_existe(self, db, org, branch_a, admin_user, tmp_path):
+        ruta = _xlsx(tmp_path, [FILA])
+        with pytest.raises(ValueError, match="organizacion 999999 no existe"):
+            imp.import_datax_export(db, ruta, 999999, branch_a.id)
+        assert db.query(Product).filter(Product.name == "CASCADA").count() == 0
+
+    def test_aborta_si_la_sucursal_no_existe(self, db, org, branch_a, admin_user, tmp_path):
+        ruta = _xlsx(tmp_path, [FILA])
+        with pytest.raises(ValueError, match="sucursal 999999 no existe"):
+            imp.import_datax_export(db, ruta, org.id, 999999)
+        assert db.query(Product).filter(Product.name == "CASCADA").count() == 0
+
+    def test_aborta_si_la_sucursal_es_de_otra_organizacion(self, db, org, admin_user, tmp_path):
+        otra = Organization(name="Organizacion ajena", is_active=True)
+        db.add(otra)
+        db.flush()
+        ajena = Branch(name="Sucursal ajena", organization_id=otra.id, is_active=True)
+        db.add(ajena)
+        db.flush()
+
+        ruta = _xlsx(tmp_path, [FILA])
+        with pytest.raises(ValueError, match="pertenece a la organizacion"):
+            imp.import_datax_export(db, ruta, org.id, ajena.id)
+
+        assert db.query(Product).count() == 0, "un --branch mal tecleado no puede escribir nada"
+        assert db.query(ProductBranchStatus).filter(
+            ProductBranchStatus.branch_id == ajena.id).count() == 0
+
+
+class TestAtomicidad:
+    def test_una_fila_rota_no_deja_nada_escrito(self, db, org, branch_a, admin_user, tmp_path):
+        # Las fixtures se confirman para que sobrevivan al rollback del importador.
+        db.commit()
+        ruta = _xlsx(tmp_path, [
+            FILA,
+            {**FILA, "Código": "H-626", "Descripción": "SEGUNDA"},
+            {**FILA, "Código": "H-627", "Descripción": "ROTA", "Precio 1": "no-es-un-numero"},
+            {**FILA, "Código": "H-628", "Descripción": "CUARTA"},
+        ])
+        with pytest.raises(ValueError, match="Precio 1"):
+            imp.import_datax_export(db, ruta, org.id, branch_a.id)
+
+        assert db.query(Product).filter(
+            Product.name.in_(["CASCADA", "SEGUNDA", "CUARTA"])).count() == 0, (
+            "las dos filas buenas previas a la rota no pueden quedar escritas"
+        )
+        assert db.query(InventoryMovement).count() == 0
+        assert db.query(Department).filter(Department.name == "Accesorio").count() == 0
 
 
 class TestSeguridad:
