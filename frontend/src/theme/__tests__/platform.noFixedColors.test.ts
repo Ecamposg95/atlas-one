@@ -15,6 +15,12 @@ import platformPageShell from '../../components/platform/PlatformPageShell.tsx?r
 import reportFilterBar from '../../components/platform/ReportFilterBar.tsx?raw'
 import reportDrillDownDrawer from '../../components/platform/ReportDrillDownDrawer.tsx?raw'
 import kpiCard from '../../components/platform/KPICard.tsx?raw'
+import orgBoard from '../../pages/platform/org/OrgBoard.tsx?raw'
+import orgKpis from '../../pages/platform/org/OrgKpis.tsx?raw'
+import orgTable from '../../pages/platform/org/OrgTable.tsx?raw'
+import attentionPanel from '../../pages/platform/org/AttentionPanel.tsx?raw'
+import unitDrawer from '../../pages/platform/org/UnitDrawer.tsx?raw'
+import orgFormat from '../../pages/platform/org/orgFormat.ts?raw'
 
 const FILES: [string, string][] = [
   ['pages/platform/PlatformLayout.tsx', platformLayout],
@@ -25,6 +31,12 @@ const FILES: [string, string][] = [
   ['components/platform/ReportFilterBar.tsx', reportFilterBar],
   ['components/platform/ReportDrillDownDrawer.tsx', reportDrillDownDrawer],
   ['components/platform/KPICard.tsx', kpiCard],
+  ['pages/platform/org/OrgBoard.tsx', orgBoard],
+  ['pages/platform/org/OrgKpis.tsx', orgKpis],
+  ['pages/platform/org/OrgTable.tsx', orgTable],
+  ['pages/platform/org/AttentionPanel.tsx', attentionPanel],
+  ['pages/platform/org/UnitDrawer.tsx', unitDrawer],
+  ['pages/platform/org/orgFormat.ts', orgFormat],
 ]
 const TAILWIND = /\b(hover:)?(text|bg|border)-(slate|gray|zinc|indigo)-[0-9]{2,3}\b|\btext-white\b(?!\/)|backdrop-blur/g
 const HEX = /#[0-9a-fA-F]{3,8}\b/g
