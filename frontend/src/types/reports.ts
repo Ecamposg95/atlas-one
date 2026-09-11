@@ -1,7 +1,11 @@
 // Types for Platform Reports module (F4 — 2026-04-30)
 // Mirrors the response shapes from /api/platform/reports/* endpoints.
 
-export type ReportTab = 'productos' | 'sucursales' | 'vendedores' | 'clientes'
+import type { CompareMode } from './reportsMoney'
+
+export type ReportTab =
+  | 'productos' | 'sucursales' | 'vendedores' | 'clientes'
+  | 'cortes' | 'devoluciones' | 'cancelaciones' | 'quincenal'
 
 export interface ReportFilters {
   range?: '7d' | '30d' | '90d' | '12m' | 'custom'
@@ -15,6 +19,7 @@ export interface ReportParams extends ReportFilters {
   limit?: number   // default 100, max 500
   offset?: number
   sort?: string    // e.g. "revenue:desc"
+  compare?: CompareMode
 }
 
 export interface PaginatedReport<T> {
@@ -37,6 +42,13 @@ export interface ProductRow {
   aov: string
   return_rate_pct: string
   estimated_margin_pct: string | null
+  // Presentes solo cuando la petición llevó `compare !== 'none'`.
+  prev_revenue?: string
+  delta_revenue_pct?: number | null
+  prev_units_sold?: string
+  delta_units_sold_pct?: number | null
+  prev_aov?: string
+  delta_aov_pct?: number | null
 }
 
 export interface BranchRow {
@@ -50,6 +62,13 @@ export interface BranchRow {
   avg_ticket: string
   active_cashiers: number
   return_rate_pct: string
+  // Presentes solo cuando la petición llevó `compare !== 'none'`.
+  prev_revenue?: string
+  delta_revenue_pct?: number | null
+  prev_transactions?: string
+  delta_transactions_pct?: number | null
+  prev_avg_ticket?: string
+  delta_avg_ticket_pct?: number | null
 }
 
 export interface SellerRow {
@@ -64,6 +83,13 @@ export interface SellerRow {
   revenue: string
   avg_ticket: string
   active_days: number
+  // Presentes solo cuando la petición llevó `compare !== 'none'`.
+  prev_revenue?: string
+  delta_revenue_pct?: number | null
+  prev_transactions?: string
+  delta_transactions_pct?: number | null
+  prev_avg_ticket?: string
+  delta_avg_ticket_pct?: number | null
 }
 
 export interface CustomerRow {
@@ -74,6 +100,13 @@ export interface CustomerRow {
   avg_ticket: string
   last_purchase: string                  // ISO datetime
   avg_days_between_purchases: number | null
+  // Presentes solo cuando la petición llevó `compare !== 'none'`.
+  prev_total_revenue?: string
+  delta_total_revenue_pct?: number | null
+  prev_ticket_count?: string
+  delta_ticket_count_pct?: number | null
+  prev_avg_ticket?: string
+  delta_avg_ticket_pct?: number | null
 }
 
 // ── Drill-down detail shapes ────────────────────────────────────────────────

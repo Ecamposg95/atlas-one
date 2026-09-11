@@ -1,0 +1,173 @@
+import type { ReactNode } from 'react'
+import type { CompareMode } from '../../../types/reportsMoney'
+import { fmtDeltaCell, deltaTone } from './compareFormat'
+
+export interface MoneyColumn<T> {
+  key: string
+  label: string
+  align?: 'left' | 'right'
+  render: (row: T) => ReactNode
+  /** Campo `delta_*_pct` de la fila; si viene y `compare !== 'none'` se pinta una columna Δ. */
+  deltaKey?: string
+  /** Para cifras donde crecer es malo (faltantes, devoluciones). */
+  lowerIsBetter?: boolean
+}
+
+interface Props<T> {
+  rows: T[]
+  columns: MoneyColumn<T>[]
+  rowKey: (row: T) => string | number
+  onRowClick?: (row: T) => void
+  emptyMessage?: string
+  compare?: CompareMode
+  /** Total de filas en el backend (sin paginar). Sin ella no hay control de página. */
+  total?: number
+  page?: number
+  onPageChange?: (p: number) => void
+  /** Debe coincidir con el `limit` mandado al backend. */
+  pageSize?: number
+}
+
+const DEFAULT_PAGE_SIZE = 50
+
+function MoneyPagination({
+  page, total, pageSize, onPageChange,
+}: {
+  page: number
+  total: number
+  pageSize: number
+  onPageChange: (p: number) => void
+}) {
+  const pages = Math.max(1, Math.ceil(total / pageSize))
+  return (
+    <div style={{
+      padding: '12px 14px',
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      borderTop: '1px solid var(--p-border)',
+    }}>
+      <button
+        type="button"
+        onClick={() => onPageChange(Math.max(0, page - 1))}
+        disabled={page === 0}
+        style={{
+          background: 'var(--p-surface)',
+          border: '1px solid var(--p-border)',
+          color: 'var(--p-text)',
+          padding: '6px 12px',
+          borderRadius: 8,
+          fontSize: 12,
+          cursor: page === 0 ? 'not-allowed' : 'pointer',
+          opacity: page === 0 ? 0.5 : 1,
+        }}
+      >
+        <i className="fa-solid fa-chevron-left" style={{ fontSize: 10 }} /> Anterior
+      </button>
+      <span style={{
+        color: 'var(--p-muted)',
+        fontSize: 11,
+        fontFamily: 'var(--font-mono)',
+        fontVariantNumeric: 'tabular-nums',
+      }}>
+        Pág. {page + 1} / {pages} · {total} registros
+      </span>
+      <button
+        type="button"
+        onClick={() => onPageChange(Math.min(pages - 1, page + 1))}
+        disabled={page >= pages - 1}
+        style={{
+          background: 'var(--p-surface)',
+          border: '1px solid var(--p-border)',
+          color: 'var(--p-text)',
+          padding: '6px 12px',
+          borderRadius: 8,
+          fontSize: 12,
+          cursor: page >= pages - 1 ? 'not-allowed' : 'pointer',
+          opacity: page >= pages - 1 ? 0.5 : 1,
+        }}
+      >
+        Siguiente <i className="fa-solid fa-chevron-right" style={{ fontSize: 10 }} />
+      </button>
+    </div>
+  )
+}
+
+const headStyle: React.CSSProperties = {
+  padding: '10px 14px', color: 'var(--p-hint)', fontSize: 10,
+  textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 500,
+  borderBottom: '1px solid var(--p-border)', background: 'transparent',
+}
+
+const cellStyle: React.CSSProperties = {
+  padding: '12px 14px', borderBottom: '1px solid var(--p-border-2)',
+  fontSize: 13, color: 'var(--p-text)',
+}
+
+export function MoneyTable<T>({
+  rows, columns, rowKey, onRowClick, emptyMessage = 'Sin datos en el periodo', compare = 'none',
+  total, page = 0, onPageChange, pageSize = DEFAULT_PAGE_SIZE,
+}: Props<T>) {
+  const withDelta = compare !== 'none'
+  if (rows.length === 0) {
+    return <div style={{ padding: 32, textAlign: 'center', color: 'var(--p-muted)', fontSize: 13 }}>{emptyMessage}</div>
+  }
+  const showPagination = total !== undefined && onPageChange && total > pageSize
+  return (
+    <div style={{
+      background: 'var(--p-surface)', border: '1px solid var(--p-border)',
+      borderRadius: 10, overflow: 'hidden',
+    }}>
+      <div className="pv2-scroll-x">
+        <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 13, minWidth: 640 }}>
+          <thead>
+            <tr>
+              {columns.map((c) => (
+                <th key={c.key} style={{ ...headStyle, textAlign: c.align ?? 'left' }}>{c.label}</th>
+              ))}
+              {withDelta && columns.filter((c) => c.deltaKey).map((c) => (
+                <th key={`d-${c.key}`} className="pv2-delta-col" style={{ ...headStyle, textAlign: 'right' }}>
+                  Δ {c.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr
+                key={rowKey(row)}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                style={{ cursor: onRowClick ? 'pointer' : 'default' }}
+              >
+                {columns.map((c) => (
+                  <td key={c.key} style={{
+                    ...cellStyle,
+                    textAlign: c.align ?? 'left',
+                    fontFamily: c.align === 'right' ? 'var(--font-mono)' : undefined,
+                  }}>
+                    {c.render(row)}
+                  </td>
+                ))}
+                {withDelta && columns.filter((c) => c.deltaKey).map((c) => {
+                  const pct = (row as unknown as Record<string, number | null>)[c.deltaKey as string]
+                  const d = fmtDeltaCell(pct)
+                  const tone = deltaTone(pct, c.lowerIsBetter)
+                  return (
+                    <td key={`d-${c.key}`} className={`pv2-delta-col pv2-tone-${tone}`} style={{
+                      ...cellStyle, textAlign: 'right', fontFamily: 'var(--font-mono)',
+                    }}>
+                      {d.text}
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {showPagination && (
+        <MoneyPagination page={page} total={total as number} pageSize={pageSize} onPageChange={onPageChange as (p: number) => void} />
+      )}
+    </div>
+  )
+}
