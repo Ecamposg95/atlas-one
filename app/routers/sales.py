@@ -59,7 +59,7 @@ from app.utils.folios import get_next_folio
 from app.core.events import EventBus, SalesDocumentCreated # [NEW] Event Bus Integration
 from app.core.tenant_context import get_current_active_organization
 from app.models.organization import Organization
-from app.services.tax import compute_line_tax, resolve_org_tax_mode
+from app.services.tax import compute_line_tax, quantize_amount, quantize_totals, resolve_org_tax_mode
 from app.crud.products import get_variant_if_visible
 try:
     from zoneinfo import ZoneInfo
@@ -615,12 +615,21 @@ def create_sale(
         # IVA: fuente única (app/services/tax.py). Antes la fórmula vivía aquí
         # en línea y repetida en el ticket reemitido y en la devolución, cada
         # copia con su propio redondeo (auditoría Rmazh §3).
+        #
+        # `quantize=False` a propósito: se acumula sin redondear y se redondea
+        # una sola vez al final (ver `quantize_totals` más abajo). Redondear
+        # renglón por renglón corre el total unos centavos respecto del que
+        # calcula el carrito del POS —`frontend/src/store/posStore.ts` suma sin
+        # redondeos intermedios— y la validación de pagos de esta misma función
+        # solo tolera un centavo: un carrito de cuatro renglones con descuento
+        # rebotaba con 422 al cobrar con tarjeta.
         desglose = compute_line_tax(
             line_gross=line_total,
             tax_rate=variant.tax_rate,
             has_iva=bool(variant.has_iva),
             price_includes_tax=price_includes_tax,
             requires_invoice=bool(sale_in.requires_invoice),
+            quantize=False,
         )
         accumulated_subtotal += desglose.subtotal
         accumulated_tax += desglose.tax
@@ -757,6 +766,15 @@ def create_sale(
                 ))
 
     # --- 3. Guardar / Actualizar Cabecera ---
+    # Redondeo a centavos UNA sola vez, ya pasada la validación de pagos, para
+    # que el total que se compara contra lo que cobró el cajero sea exactamente
+    # el que suma el carrito (ver `quantize=False` arriba). Antes esto lo hacía
+    # de forma implícita la columna NUMERIC(10,2) al guardar.
+    _totales_doc = quantize_totals(accumulated_subtotal, accumulated_tax)
+    accumulated_subtotal = _totales_doc.subtotal
+    accumulated_tax = _totales_doc.tax
+    total_sale = quantize_amount(total_sale)  # incluye la propina
+
     if existing_sale:
         sales_doc = existing_sale
         sales_doc.status = doc_status

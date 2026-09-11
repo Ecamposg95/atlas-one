@@ -47,6 +47,7 @@ def compute_line_tax(
     has_iva: bool,
     price_includes_tax: bool,
     requires_invoice: bool,
+    quantize: bool = True,
 ) -> TaxResult:
     """Desglose de una línea (o de un importe agregado con una sola tasa).
 
@@ -55,24 +56,48 @@ def compute_line_tax(
     (16, 8…), no la fracción.
 
     El IVA solo entra si hay factura, el producto está gravado y la tasa es > 0.
+
+    `quantize=False` devuelve los valores SIN redondear, para quien suma varias
+    líneas y redondea una sola vez al final con `quantize_totals`. No es un
+    detalle estético: redondear renglón por renglón corre el total unos centavos
+    contra el que calcula el carrito del POS (`frontend/src/store/posStore.ts`,
+    que suma sin redondeos intermedios), y el checkout compara ambos con una
+    tolerancia de un centavo antes de cobrar. Ver `create_sale`.
     """
+    redondear = _q if quantize else (lambda x: x)
     importe = _dec(line_gross)
     tasa = _dec(tax_rate) / Decimal("100")
 
     if not (requires_invoice and has_iva and tasa > 0):
-        bruto = _q(importe)
+        bruto = redondear(importe)
         return TaxResult(subtotal=bruto, tax=Decimal("0.00"), total=bruto)
 
     if price_includes_tax:
-        subtotal = _q(importe / (Decimal("1") + tasa))
-        total = _q(importe)
+        subtotal = redondear(importe / (Decimal("1") + tasa))
+        total = redondear(importe)
         # El IVA se deriva del total para que `subtotal + tax == total` exacto.
-        tax = _q(total - subtotal)
+        tax = redondear(total - subtotal)
     else:
-        subtotal = _q(importe)
-        tax = _q(importe * tasa)
-        total = _q(subtotal + tax)
+        subtotal = redondear(importe)
+        tax = redondear(importe * tasa)
+        total = redondear(subtotal + tax)
     return TaxResult(subtotal=subtotal, tax=tax, total=total)
+
+
+def quantize_amount(monto) -> Decimal:
+    """Redondea un importe a centavos (half-up), para persistirlo."""
+    return _q(_dec(monto))
+
+
+def quantize_totals(subtotal, tax) -> TaxResult:
+    """Redondea a centavos un subtotal y un IVA acumulados sin redondear.
+
+    Contraparte de `compute_line_tax(..., quantize=False)`: se llama UNA vez,
+    sobre la suma de todas las líneas, y no una vez por línea.
+    """
+    base = _q(_dec(subtotal))
+    impuesto = _q(_dec(tax))
+    return TaxResult(subtotal=base, tax=impuesto, total=base + impuesto)
 
 
 def effective_tax_rate(subtotal, tax) -> Decimal:
@@ -130,5 +155,13 @@ def resolve_org_tax_mode(org) -> bool:
     comportamiento histórico de Atlas ONE y el de toda organización que todavía
     no tenga la columna poblada. Invertirlo cambiaría el total cobrado a
     clientes vivos.
+
+    ⚠️ NO ENCENDER `price_includes_tax` EN NINGUNA ORGANIZACIÓN todavía. El
+    carrito del POS calcula su total con un 16% fijo sumado encima
+    (`frontend/src/store/posStore.ts`, `tax()` y `total()`): con el modo
+    encendido la pantalla mostraría un total inflado frente al que cobra el
+    backend, y el cajero cobraría de más o vería un descuadre en cada venta. El
+    backend ya está listo; falta portar el espejo del front
+    (`frontend/src/utils/tax.ts` en Atlas-Rmazh), que es trabajo aparte.
     """
     return bool(getattr(org, "price_includes_tax", False) or False)

@@ -144,3 +144,80 @@ class TestIvaEnElCobro:
         doc = _documento(db, org)
         assert doc.tax_amount == Decimal("0.00")
         assert doc.total_amount == Decimal("100.00")
+
+
+class TestTotalCuadraConElCarrito:
+    """El total del backend debe coincidir con el que suma el POS.
+
+    `frontend/src/store/posStore.ts` calcula `Σ subtotal × 1.16` sin redondeos
+    intermedios y manda ese monto como pago. La validacion de pagos de
+    `create_sale` solo tolera un centavo, asi que redondear el IVA renglon por
+    renglon rebota la venta con 422: cuatro renglones de $8.90 con 15% de
+    descuento dan 35.12 renglon a renglon contra los 35.10 que manda el front.
+    """
+
+    # 8.90 * (1 - 0.15) = 7.565 por renglon; cuatro renglones = 30.26 de base.
+    PRECIO = "8.90"
+    DESCUENTO = 15.0
+    SKUS = ["DESC-1", "DESC-2", "DESC-3", "DESC-4"]
+
+    def _carrito(self, db, org, branch_a, cajero_a, *, exento=None):
+        """Cuatro productos identicos; `exento` marca uno como no gravado."""
+        for sku in self.SKUS:
+            _producto(db, org, branch_a, sku, self.PRECIO, has_iva=(sku != exento))
+        _abrir_caja(db, org, branch_a, cajero_a)
+
+    def _cobrar(self, client, org, auth, monto, *, requires_invoice=True):
+        return client.post(
+            "/api/sales/",
+            json={
+                "doc_type": "ORDER",
+                "items": [
+                    {"sku": sku, "quantity": 1, "discount": self.DESCUENTO}
+                    for sku in self.SKUS
+                ],
+                "payments": [{"method": "CARD", "amount": str(monto)}],
+                "requires_invoice": requires_invoice,
+            },
+            headers={**auth, "X-Organization-ID": str(org.id)},
+        )
+
+    def test_el_total_del_front_no_rebota_con_422(self, client, db, org, branch_a, cajero_a, auth_cajero_a):
+        self._carrito(db, org, branch_a, cajero_a)
+        # Lo que manda el POS: 30.26 * 1.16 = 35.1016 → "35.10".
+        resp = self._cobrar(client, org, auth_cajero_a, "35.10")
+        assert resp.status_code in (200, 201), resp.text
+        assert Decimal(str(resp.json()["total"])) == Decimal("35.10")
+
+        doc = _documento(db, org)
+        assert doc.subtotal == Decimal("30.26")
+        assert doc.tax_amount == Decimal("4.84")
+        assert doc.total_amount == Decimal("35.10")
+        # 35.12 seria el total de redondear renglon por renglon.
+        assert doc.total_amount != Decimal("35.12")
+
+    def test_con_un_renglon_exento_el_total_baja_y_sigue_sin_rebotar(
+        self, client, db, org, branch_a, cajero_a, auth_cajero_a
+    ):
+        """El front aplica 1.16 a todo el carrito; el backend respeta el
+        catalogo, asi que con un exento cobra menos. El pago de mas se acepta
+        (no es sobrepago anomalo) y el documento guarda el total correcto."""
+        self._carrito(db, org, branch_a, cajero_a, exento="DESC-4")
+        resp = self._cobrar(client, org, auth_cajero_a, "35.10")
+        assert resp.status_code in (200, 201), resp.text
+
+        doc = _documento(db, org)
+        # 3 renglones gravados: 3 * 7.565 * 0.16 = 3.6312 → 3.63
+        assert doc.subtotal == Decimal("30.26")
+        assert doc.tax_amount == Decimal("3.63")
+        assert doc.total_amount == Decimal("33.89")
+
+    def test_sin_factura_el_total_es_la_base_descontada(self, client, db, org, branch_a, cajero_a, auth_cajero_a):
+        self._carrito(db, org, branch_a, cajero_a)
+        resp = self._cobrar(client, org, auth_cajero_a, "30.26", requires_invoice=False)
+        assert resp.status_code in (200, 201), resp.text
+
+        doc = _documento(db, org)
+        assert doc.subtotal == Decimal("30.26")
+        assert doc.tax_amount == Decimal("0.00")
+        assert doc.total_amount == Decimal("30.26")
