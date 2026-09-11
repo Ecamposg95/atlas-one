@@ -320,3 +320,81 @@ class TestRastroDeAuditoria:
         reciente = _crear_venta(db, org, branch_a, cajero_a, variante, hace_minutos=1, folio=6)
         assert _reimprimir(client, auth_cajero_a, org, reciente.id).status_code == 200
         assert self._filas(db, org, CashAuditEvent.TICKET_REPRINTED) == []
+
+
+class TestOrdenDelGate:
+    """El orden de las dos puertas sin PIN importa: mal puestas, la bitacora se
+    convierte en una copia del libro de ventas y el dueno deja de autorizar."""
+
+    def _duena(self, db, org, branch, *, username, password="test1234"):
+        from app.core.security import get_password_hash
+        from app.modules.users.models import Role, User, UserOrganization
+
+        u = User(
+            username=username, password_hash=get_password_hash(password),
+            role=Role.DUEÑO, branch_id=branch.id if branch else None, is_active=True,
+        )
+        db.add(u); db.flush()
+        db.add(UserOrganization(
+            user_id=u.id, organization_id=org.id, org_role="OWNER", is_active=True,
+        ))
+        db.flush()
+        return u
+
+    def test_el_dueno_que_cobra_no_ensucia_la_bitacora(
+        self, client, db, org, branch_a, products_setup
+    ):
+        """Un gerente o un dueno tambien cobran en caja. Si el rol se evalua
+        antes que "venta propia reciente", cada venta suya deja una fila."""
+        from app.models.cash_audit import CashAuditEvent, CashAuditLog
+
+        duena = self._duena(db, org, branch_a, username="duena_que_cobra")
+        _, variante = products_setup["product_a"]
+        propia = _crear_venta(db, org, branch_a, duena, variante, hace_minutos=1, folio=4)
+
+        from tests.conftest import _auth_header
+        resp = _reimprimir(client, _auth_header(duena), org, propia.id)
+        assert resp.status_code == 200, resp.text
+
+        filas = db.query(CashAuditLog).filter(
+            CashAuditLog.organization_id == org.id,
+            CashAuditLog.event_type == CashAuditEvent.TICKET_REPRINTED,
+        ).all()
+        assert filas == []
+
+    def test_una_venta_vieja_del_dueno_si_deja_fila(
+        self, client, db, org, branch_a, venta, products_setup
+    ):
+        """La puerta del rol sigue auditando lo que si es una reimpresion."""
+        from app.models.cash_audit import CashAuditEvent, CashAuditLog
+
+        duena = self._duena(db, org, branch_a, username="duena_que_reimprime")
+        from tests.conftest import _auth_header
+        assert _reimprimir(client, _auth_header(duena), org, venta.id).status_code == 200
+
+        filas = db.query(CashAuditLog).filter(
+            CashAuditLog.organization_id == org.id,
+            CashAuditLog.event_type == CashAuditEvent.TICKET_REPRINTED,
+        ).all()
+        assert len(filas) == 1
+        assert filas[0].payload_json["via"] == "rol_gerencial"
+
+    def test_el_dueno_de_hq_autoriza_aunque_la_sucursal_tenga_gerente(
+        self, client, db, org, branch_a, hq_branch, venta, auth_cajero_a, gerente_a
+    ):
+        """La sucursal tiene gerente propio (`gerente_a`), asi que su PIN se
+        prueba primero. El del dueno, que esta en HQ, tiene que seguir
+        funcionando: el segundo paso no puede estar condicionado a que la
+        sucursal se quede sin gerencial."""
+        self._duena(db, org, hq_branch, username="duena_hq", password="otra-clave-larga")
+        resp = _reimprimir(client, auth_cajero_a, org, venta.id, pin="otra-clave-larga")
+        assert resp.status_code == 200, resp.text
+
+    def test_un_supervisor_sin_sucursal_tambien_autoriza(
+        self, client, db, org, venta, auth_cajero_a, gerente_a
+    ):
+        """`User.branch_id` es nullable; un dueno sin sucursal asignada no
+        aparece en el primer paso y solo lo alcanza el segundo."""
+        self._duena(db, org, None, username="duena_sin_sucursal", password="clave-sin-sucursal")
+        resp = _reimprimir(client, auth_cajero_a, org, venta.id, pin="clave-sin-sucursal")
+        assert resp.status_code == 200, resp.text

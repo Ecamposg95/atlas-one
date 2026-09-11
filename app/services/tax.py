@@ -14,8 +14,14 @@ Dos modos de precio, resueltos por organización con `resolve_org_tax_mode`:
 * **Incluido** (`price_includes_tax=True`): el precio del catálogo ya trae el
   IVA y aquí se descompone; el total cobrado no cambia.
 
-En los dos modos vale la invariante `subtotal + tax == total`, con redondeo
-ROUND_HALF_UP a centavos.
+Redondeo ROUND_HALF_UP a centavos. La invariante `subtotal + tax == total` vale
+**por renglón, y solo con `quantize=True`** (es la razón de derivar el IVA del
+total en modo incluido). NO vale sobre los totales del documento guardado: ahí
+cada columna se redondea por separado y pueden quedar descuadradas un centavo
+—un renglón de $19.99 al 50 % da 10.00 / 1.60 / 11.59, no 11.60—. Es
+exactamente lo que ya hacía la columna `NUMERIC(10,2)` al guardar tres valores
+acumulados sin redondear, así que no es una regresión de W10 ni cambia el total
+que se cobra; simplemente no hay que prometer la invariante a nivel documento.
 """
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP

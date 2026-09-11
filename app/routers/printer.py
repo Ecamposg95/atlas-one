@@ -102,6 +102,14 @@ def _autorizar_impresion(
         verificar_pin_supervisor,
     )
 
+    # La venta propia reciente se evalua PRIMERO, antes que el rol: un gerente o
+    # un dueno tambien cobran en caja, y con el orden invertido cada venta suya
+    # dejaba una fila TICKET_REPRINTED. Eso no es auditoria, es una copia del
+    # libro de ventas. La impresion normal del POS tras cobrar no se audita; el
+    # PrintJob ya deja el rastro de ese caso.
+    if es_venta_propia_reciente(sale, current_user):
+        return None
+
     if es_rol_gerencial(current_user):
         _auditar_impresion(
             db, evento=CashAuditEvent.TICKET_REPRINTED, sale=sale,
@@ -112,11 +120,6 @@ def _autorizar_impresion(
             "TICKET_REPRINTED: org_id=%s user_id=%s sale_id=%s via=rol_gerencial",
             org_id, current_user.id, sale.id,
         )
-        return None
-
-    if es_venta_propia_reciente(sale, current_user):
-        # Impresion normal del POS tras cobrar: no se audita para no meter una
-        # fila por cada venta. El PrintJob ya deja el rastro de ese caso.
         return None
 
     restante = bloqueo_restante(org_id, current_user.id)

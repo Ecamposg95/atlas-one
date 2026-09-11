@@ -75,10 +75,10 @@ def es_venta_propia_reciente(sale, user: User) -> bool:
 def _supervisores_activos(db: Session, org_id: int, branch_id: Optional[int] = None) -> list[User]:
     """Usuarios con rol gerencial activos en la organizacion.
 
-    Con `branch_id` devuelve solo los de esa sucursal. El caller prueba primero
-    la sucursal y solo cae a la organizacion entera si ahi no hay ninguno: cada
-    candidato cuesta un bcrypt, y una organizacion de 29 sucursales no tiene por
-    que verificar el PIN contra los gerentes de las otras 28.
+    Con `branch_id` devuelve solo los de esa sucursal. El caller los prueba
+    primero y despues el resto de la organizacion: cada candidato cuesta un
+    bcrypt, y en el caso normal —el gerente de la sucursal autorizando— no hay
+    por que verificar el PIN contra los gerentes de las otras 28 sucursales.
     """
     q = (
         db.query(User)
@@ -95,23 +95,8 @@ def _supervisores_activos(db: Session, org_id: int, branch_id: Optional[int] = N
     return q.all()
 
 
-def verificar_pin_supervisor(
-    db: Session, org_id: int, pin: str, branch_id: Optional[int] = None
-) -> Optional[User]:
-    """Devuelve el supervisor cuyo PIN coincide, o None. Corta en el primero.
-
-    Prueba primero los supervisores de la sucursal de la venta y solo si esa
-    sucursal no tiene ninguno cae a los de la organizacion (hay sucursales sin
-    gerente propio; el dueno de la org tampoco tiene sucursal asignada). La
-    respuesta no revela cual existe ni cual hizo match: solo el resultado.
-    """
-    if not pin:
-        return None
-
-    candidatos = _supervisores_activos(db, org_id, branch_id) if branch_id is not None else []
-    if not candidatos:
-        candidatos = _supervisores_activos(db, org_id)
-
+def _primer_match(pin: str, candidatos: list[User]) -> Optional[User]:
+    """Primer supervisor de la lista cuyo PIN coincide, o None."""
     for supervisor in candidatos:
         if not supervisor.password_hash:
             continue
@@ -123,6 +108,37 @@ def verificar_pin_supervisor(
             # match; no debe tumbar la peticion.
             continue
     return None
+
+
+def verificar_pin_supervisor(
+    db: Session, org_id: int, pin: str, branch_id: Optional[int] = None
+) -> Optional[User]:
+    """Devuelve el supervisor cuyo PIN coincide, o None. Corta en el primero.
+
+    Dos pasos, en este orden: los supervisores de la sucursal de la venta y,
+    si ninguno coincide, el resto de la organizacion. El segundo paso NO esta
+    condicionado a que la sucursal no tenga gerente propio: el dueno suele
+    estar en HQ o sin sucursal asignada, y con esa condicion dejaria de poder
+    autorizar en cualquier sucursal que si tenga gerente. Lo que el orden
+    ahorra es el bcrypt de los gerentes de las otras 28 sucursales en el caso
+    normal, que es el gerente de la sucursal autorizando.
+
+    La respuesta no revela cual supervisor existe ni cual hizo match: solo el
+    resultado.
+    """
+    if not pin:
+        return None
+
+    de_sucursal: list[User] = (
+        _supervisores_activos(db, org_id, branch_id) if branch_id is not None else []
+    )
+    encontrado = _primer_match(pin, de_sucursal)
+    if encontrado is not None:
+        return encontrado
+
+    ya_probados = {u.id for u in de_sucursal}
+    resto = [u for u in _supervisores_activos(db, org_id) if u.id not in ya_probados]
+    return _primer_match(pin, resto)
 
 
 def _vigentes(marcas: list[float], ahora: float) -> list[float]:
