@@ -68,6 +68,7 @@ def query_visible_products(
     search: Optional[str] = None,
     branch_id_override: Optional[int] = None,
     eager_variants: bool = False,
+    join_variants: bool = False,
 ) -> Query:
     """
     Construye un Query[Product] aplicando la política de visibilidad.
@@ -83,6 +84,13 @@ def query_visible_products(
             sucursal específica. Ignorado para roles no-admin (siempre
             se usa `user.branch_id`).
         eager_variants: `selectinload(Product.variants)` para evitar N+1.
+        join_variants: pide el `outerjoin` a `ProductVariant` SIN aplicar
+            `search`, para callers que arman su propio predicado sobre la
+            variante (el scanner de tienda busca por igualdad y también
+            necesita alcanzar `PackagingUnit`, que cuelga de la variante).
+            Sin esto, un admin sin `branch_id_override` y sin `search` no
+            trae la tabla unida y el caller revienta con "ON clause
+            references tables to its right".
 
     Returns:
         `Query[Product]` con `.distinct()`. El caller añade `.order_by()`
@@ -142,6 +150,10 @@ def query_visible_products(
                 ),
             )
         )
+
+    # `join_variants` sin `search`: mismo join que abajo, pero sin filtrar.
+    if join_variants and not search and is_admin and branch_id_override is None:
+        q = q.outerjoin(ProductVariant, ProductVariant.product_id == Product.id)
 
     # Search tras los joins (admin sin override necesita joinear variants)
     if search:
