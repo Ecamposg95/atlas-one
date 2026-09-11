@@ -28,12 +28,17 @@
     --dax-card-solid:  #ffffff;
     --dax-accent:      var(--p-accent);            /* sigue el vertical */
     --dax-accent-glow: var(--p-accent-soft);
+    --dax-accent-soft: color-mix(in srgb, var(--dax-accent) 14%, transparent);
     --dax-violet-glow: rgba(63, 63, 214, 0.08);
     --dax-border:      #e2e1e6;   /* neutro con sesgo índigo */
     --dax-border-dim:  #ebeaee;
     --dax-text:        #101022;   /* tinta índigo */
     --dax-text-muted:  #62627a;
     --dax-text-faint:  #8f8fa3;
+    /* Estado (semánticos, NO decorativos) — fijos en ambos temas */
+    --dax-success:     #059669;
+    --dax-warning:     #D97706;
+    --dax-danger:      #DC2626;
     --dax-shadow:      0 1px 2px rgba(16,16,34,0.05), 0 6px 24px rgba(16,16,34,0.07);
     --dax-shadow-lg:   0 10px 36px rgba(16,16,34,0.12);
     --dax-modal-backdrop:  rgba(16, 16, 34, 0.45);
@@ -202,12 +207,16 @@
     /* Acento aclarado sobre fondo oscuro, siguiendo el vertical */
     --dax-accent:      color-mix(in srgb, var(--p-accent) 62%, #ffffff);
     --dax-accent-glow: color-mix(in srgb, var(--p-accent) 35%, transparent);
+    --dax-accent-soft: color-mix(in srgb, var(--dax-accent) 14%, transparent);
     --dax-violet-glow: rgba(108, 108, 255, 0.22);
     --dax-border:      rgba(237, 237, 248, 0.14);
     --dax-border-dim:  rgba(237, 237, 248, 0.08);
     --dax-text:        #ededf8;
     --dax-text-muted:  #b9b9d0;
     --dax-text-faint:  #8c8cab;
+    --dax-success:     #34D399;
+    --dax-warning:     #FBBF24;
+    --dax-danger:      #F87171;
     --dax-shadow:      0 4px 24px rgba(4,4,14,0.4);
     --dax-shadow-lg:   0 8px 32px rgba(4,4,14,0.55);
     --dax-modal-backdrop:  rgba(4, 4, 14, 0.72);

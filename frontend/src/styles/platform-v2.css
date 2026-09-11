@@ -1,13 +1,46 @@
 /* ─────────────────────────────────────────────────────────────
-   Atlas Platform · Design Pack v2 — mono-azul editorial
-   Portado desde context/Atlas API UI/styles.css (validated).
-   TODO: alcance limitado a `.pv2` para no colisionar con el resto
-   de la SPA. No tocar tokens en frontend/src/index.css (41-70).
+   Atlas Platform · piel C (spec 2026-09-09 §3.1)
+   Los tokens --p-* de index.css (:root) son el tema LEGACY del nivel
+   SUPERADMIN: azul, siempre oscuro, ajeno al tema de la app. Dentro de
+   `.pv2` se redefinen como alias de los --dax-* de Atlas ONE, así el
+   ThemeProvider global (clase .dark en <html>) y el acento por vertical
+   ([data-preset]) mandan también en /platform, sin código nuevo.
+   Densidad C: las tablas y los 14 px base se conservan; solo cambian
+   color y radios. NO tocar los --p-* de index.css: son el punto de
+   retorno si hubiera que revertir el alias.
    ───────────────────────────────────────────────────────────── */
 
 .pv2, .pv2 *, .pv2 *::before, .pv2 *::after { box-sizing: border-box; }
 
 .pv2 {
+  /* Superficies */
+  --p-bg:        var(--dax-bg);
+  --p-surface:   var(--dax-card-solid);
+  --p-surface-2: var(--dax-elevated);
+  --p-sidebar:   var(--dax-surface);
+  --p-border:    var(--dax-border);
+  --p-border-2:  var(--dax-border-dim);
+  /* Texto */
+  --p-text:      var(--dax-text);
+  --p-muted:     var(--dax-text-muted);
+  --p-hint:      var(--dax-text-faint);
+  /* Acento único: el del vertical (--p-accent de index.css, vía --dax-accent) */
+  --p-accent:        var(--dax-accent);
+  --p-accent-hover:  var(--dax-accent);
+  --p-accent-soft:   var(--dax-accent-soft);
+  --p-accent-line:   var(--dax-accent-glow);
+  /* Semánticos */
+  --p-success:   var(--dax-success);
+  --p-warning:   var(--dax-warning);
+  --p-danger:    var(--dax-danger);
+  --p-info:      var(--dax-accent);
+  /* Reservados y deprecados: todos al acento, nadie debe usarlos */
+  --p-magenta:   var(--dax-accent);
+  --p-purple:    var(--dax-accent);
+  --p-teal:      var(--dax-accent);
+  --p-cyan:      var(--dax-accent);
+  --p-gradient:  var(--dax-accent);
+
   background: var(--p-bg);
   color: var(--p-text);
   min-height: 100vh;
@@ -231,7 +264,10 @@
 .pv2 .btn.primary {
   background: var(--p-accent); border-color: var(--p-accent); color: #fff;
 }
-.pv2 .btn.primary:hover { background: var(--p-accent-hover); }
+.pv2 .btn.primary:hover {
+  background: var(--p-accent); border-color: var(--p-accent); color: #fff;
+  filter: brightness(0.88);
+}
 .pv2 .btn.primary i { color: #fff; }
 .pv2 .btn.ghost { background: transparent; }
 
@@ -239,7 +275,7 @@
 .pv2 .card {
   background: var(--p-surface);
   border: 1px solid var(--p-border);
-  border-radius: var(--r-lg);
+  border-radius: 10px;
   overflow: hidden;
 }
 .pv2 .card .head {
@@ -264,7 +300,7 @@
   position: relative;
   background: var(--p-surface);
   border: 1px solid var(--p-border);
-  border-radius: var(--r-lg);
+  border-radius: 10px;
   padding: 16px 18px 18px;
   display: flex; flex-direction: column; gap: 12px;
   min-width: 0;
@@ -406,34 +442,6 @@
   width: 3px; height: 3px; background: var(--p-hint); border-radius: 50%;
 }
 
-/* ── Industry list ───────────────────────────────────────────── */
-.pv2 .ind-list { display: flex; flex-direction: column; }
-.pv2 .ind-list .row {
-  display: grid; grid-template-columns: 22px 88px 1fr 44px;
-  gap: 14px; align-items: center;
-  padding: 11px 18px;
-  border-bottom: 1px solid var(--p-border-2);
-  font-size: 12px;
-}
-.pv2 .ind-list .row:last-child { border-bottom: none; }
-.pv2 .ind-list .rank { font-family: var(--font-mono); color: var(--p-hint); font-size: 11px; }
-.pv2 .ind-list .name { color: var(--p-text); font-weight: 500; font-size: 12px; }
-.pv2 .ind-list .bar {
-  height: 6px; background: var(--p-surface-2);
-  border-radius: 999px; overflow: hidden; position: relative;
-}
-.pv2 .ind-list .bar::after {
-  content: ""; position: absolute; inset: 0;
-  width: var(--w, 0%);
-  background: linear-gradient(90deg, var(--p-accent), rgba(59,130,246,0.55));
-  border-radius: 999px;
-}
-.pv2 .ind-list .count {
-  font-family: var(--font-mono);
-  color: var(--p-text); text-align: right;
-  font-size: 12px; font-variant-numeric: tabular-nums;
-}
-
 /* ── Tabs ────────────────────────────────────────────────────── */
 .pv2 .tabs {
   display: flex; gap: 2px; padding: 3px;
@@ -475,7 +483,7 @@
   background: linear-gradient(
     90deg,
     var(--p-surface-2) 0%,
-    #2A2A34 50%,
+    var(--p-border) 50%,
     var(--p-surface-2) 100%);
   background-size: 400px 100%;
   animation: pv2-shimmer 1.6s linear infinite;
@@ -622,26 +630,175 @@
   font-size: 11px; padding: 4px 10px;
 }
 
-/* ── Responsive: tablet ≤900px (handoff breakpoint) ──────────── */
-@media (max-width: 900px) {
+/* ── Página (padding responsive; PlatformPageShell y pv2-main) ── */
+.pv2 .pv2-page {
+  background: var(--p-bg);
+  min-height: 100vh;
+  padding: 28px 40px 56px;
+  font-family: var(--font-sans);
+  color: var(--p-text);
+}
+
+/* Filtros de reportes: fila con scroll horizontal en tablet vertical */
+.pv2 .pv2-filters { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; }
+
+/* Contenedor de tabla ancha: la página nunca hace scroll horizontal */
+.pv2 .pv2-scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.pv2 .pv2-scroll-x > table { min-width: 640px; }
+
+/* DataTable en modo tarjeta (≤640 px, ver components/platform/DataTable.tsx) */
+.pv2 .pv2-dt-cards { display: flex; flex-direction: column; gap: 8px; padding: 10px; }
+.pv2 .pv2-dt-card {
+  background: var(--p-surface-2); border: 1px solid var(--p-border);
+  border-radius: 8px; padding: 10px 12px;
+}
+.pv2 .pv2-dt-card[role="button"] { cursor: pointer; }
+.pv2 .pv2-dt-card.selected { box-shadow: inset 0 0 0 1px var(--p-accent); }
+.pv2 .pv2-dt-card-head { display: flex; align-items: center; gap: 10px; }
+.pv2 .pv2-dt-card-title { font-weight: 600; font-size: 14px; color: var(--p-text); min-width: 0; }
+.pv2 .pv2-dt-card-body { margin: 8px 0 0; display: grid; gap: 4px; }
+.pv2 .pv2-dt-card-row { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; }
+.pv2 .pv2-dt-card-row dt { color: var(--p-hint); text-transform: uppercase; letter-spacing: 0.08em; font-size: 10px; }
+.pv2 .pv2-dt-card-row dd { margin: 0; color: var(--p-text); text-align: right; min-width: 0; }
+.pv2 .pv2-dt-card-actions {
+  margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--p-border-2);
+  display: flex; gap: 8px; flex-wrap: wrap;
+}
+
+/* ── Tablero del grupo (spec 2026-09-09 §4.4) ──────────────────── */
+.pv2 .pv2-segmented {
+  display: inline-flex; padding: 3px; gap: 2px; border-radius: 999px;
+  background: var(--p-surface-2); border: 1px solid var(--p-border);
+}
+.pv2 .pv2-segmented button {
+  border: none; background: transparent; color: var(--p-muted); cursor: pointer;
+  font: inherit; font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: 999px; min-height: 32px;
+}
+.pv2 .pv2-segmented button.active { background: var(--p-accent); color: #fff; }
+
+.pv2 .pv2-group-layout {
+  display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: 20px; align-items: start;
+}
+.pv2 .pv2-group-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.pv2 .pv2-group-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.pv2 .pv2-stale { font-size: 12px; color: var(--p-warning); }
+
+.pv2 .pv2-attention { display: flex; flex-direction: column; gap: 8px; }
+.pv2 .pv2-attention-card {
+  background: var(--p-surface); border: 1px solid var(--p-border); border-radius: 10px; padding: 10px 12px;
+}
+.pv2 .pv2-attention-card .head { display: flex; justify-content: space-between; align-items: center; font-weight: 600; font-size: 13px; }
+.pv2 .pv2-attention-card .item { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; padding: 4px 0; border-top: 1px solid var(--p-border-2); }
+.pv2 .pv2-attention-card .item:first-of-type { border-top: 0; }
+.pv2 .pv2-attention-card .item .nm { color: var(--p-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pv2 .pv2-attention-card .item .val { color: var(--p-muted); font-family: var(--font-mono); white-space: nowrap; }
+.pv2 .pv2-attention-empty { color: var(--p-muted); font-size: 12px; padding: 6px 0; }
+
+.pv2 .pv2-attention-strip { display: flex; gap: 8px; flex-wrap: wrap; }
+.pv2 .pv2-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; border: 1px solid var(--p-border); background: var(--p-surface);
+  color: var(--p-text); cursor: pointer; min-height: 32px;
+}
+.pv2 .pv2-chip.warning { color: var(--p-warning); border-color: var(--p-warning); }
+.pv2 .pv2-chip.danger  { color: var(--p-danger);  border-color: var(--p-danger); }
+
+.pv2 .pv2-tone-up   { color: var(--p-success); }
+.pv2 .pv2-tone-down { color: var(--p-danger); }
+.pv2 .pv2-tone-flat { color: var(--p-muted); }
+.pv2 .pv2-badge-open   { color: var(--p-success); }
+.pv2 .pv2-badge-nocut  { color: var(--p-warning); }
+.pv2 .pv2-badge-diff   { color: var(--p-danger); }
+
+/* Barra inferior de teléfono (oculta salvo ≤480) */
+.pv2-bottombar {
+  display: none;
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+  height: 60px;
+  padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+  background: var(--p-sidebar);
+  border-top: 1px solid var(--p-border);
+}
+.pv2-bottombar .bb-item {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  color: var(--p-muted); font-size: 10px; text-decoration: none;
+  background: transparent; border: none; font-family: inherit; cursor: pointer;
+  border-radius: 8px; min-height: 44px;
+}
+.pv2-bottombar .bb-item i { font-size: 17px; }
+.pv2-bottombar .bb-item.active { color: var(--p-accent); }
+
+/* Hoja "Más" (resto de la navegación en teléfono) */
+.pv2-sheet-backdrop {
+  position: fixed; inset: 0; z-index: 50; background: var(--dax-modal-backdrop);
+}
+.pv2-sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 51;
+  max-height: 70vh; overflow-y: auto;
+  background: var(--p-surface); border-top: 1px solid var(--p-border);
+  border-radius: 14px 14px 0 0; padding: 12px 12px calc(12px + env(safe-area-inset-bottom));
+}
+.pv2-sheet .nav-item {
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+  border-radius: 8px; color: var(--p-muted); text-decoration: none;
+  background: transparent; border: none; width: 100%; text-align: left; font: inherit; cursor: pointer;
+}
+.pv2-sheet .nav-item.active { color: var(--p-text); background: var(--p-accent-soft); }
+.pv2-sheet .nav-item i { width: 18px; text-align: center; }
+
+/* La hoja "Más" es solo de teléfono: por encima de 480 no existe layout de
+   barra inferior que la abra, pero si queda montada (p.ej. resize) no debe
+   quedarse visible flotando sobre el layout de escritorio/tablet. */
+@media (min-width: 481px) {
+  .pv2-sheet, .pv2-sheet-backdrop { display: none; }
+}
+
+/* ── Responsive: tablet horizontal ≤1024px (referencia) ────── */
+@media (max-width: 1024px) {
   .pv2-layout { grid-template-columns: 64px 1fr; }
   .pv2-sidebar { padding: 16px 8px; }
   .pv2-sidebar .brand .name,
   .pv2-sidebar .brand .env,
   .pv2-sidebar .group-label,
   .pv2-sidebar .nav-item span,
+  .pv2-sidebar .nav-item kbd,
   .pv2-sidebar .footer .meta,
   .pv2-sidebar .footer .logout-btn { display: none; }
   .pv2-sidebar .nav-item { justify-content: center; padding: 10px; }
   .pv2-sidebar .nav-item i { width: auto; }
   .pv2-sidebar .footer { justify-content: center; padding: 8px; }
-  .pv2 .pv2-main { padding: 20px 20px 40px; gap: 20px; }
+  .pv2 .pv2-main, .pv2 .pv2-page { padding: 24px 24px 48px; }
+  .pv2 .grid-kpis-5 { grid-template-columns: repeat(4, 1fr); }
+  .pv2-hero-grid { grid-template-columns: 1fr 1fr !important; }
+}
+
+/* ── Responsive: tablet vertical ≤768px ─────────────────────── */
+@media (max-width: 768px) {
+  .pv2 .pv2-main, .pv2 .pv2-page { padding: 20px 16px 40px; gap: 20px; }
   .pv2 .grid-kpis-5 { grid-template-columns: repeat(2, 1fr); }
   .pv2 .grid-kpis-4 { grid-template-columns: repeat(2, 1fr); }
   .pv2 .grid-kpis-8 { grid-template-columns: repeat(2, 1fr); }
   .pv2 .row-split,
   .pv2 .row-thirds { grid-template-columns: 1fr; }
+  .pv2 .page-head { flex-wrap: wrap; align-items: flex-start; }
   .pv2 .page-head h1 { font-size: 24px; }
-  .pv2 .page-head .right { display: none; }
+  .pv2 .pv2-filters { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 6px; }
+  .pv2 .pv2-filters > * { flex: 0 0 auto; }
   .pv2-hero-grid { grid-template-columns: 1fr !important; }
+  .pv2 .pv2-group-layout { grid-template-columns: 1fr; }
+  .pv2 .pv2-group-kpis { grid-template-columns: repeat(2, 1fr); }
+  .pv2 .pv2-attention { flex-direction: row; overflow-x: auto; padding-bottom: 6px; }
+  .pv2 .pv2-attention-card { flex: 0 0 260px; }
+  .pv2 .pv2-delta-col { display: none; }
+}
+
+/* ── Responsive: teléfono ≤480px ────────────────────────────── */
+@media (max-width: 480px) {
+  .pv2-layout { grid-template-columns: 1fr; }
+  .pv2-sidebar { display: none; }
+  .pv2-bottombar { display: grid; grid-template-columns: repeat(5, 1fr); }
+  .pv2 .pv2-main, .pv2 .pv2-page { padding: 16px 12px calc(76px + env(safe-area-inset-bottom)); }
+  .pv2 .page-head { flex-direction: column; gap: 10px; }
+  .pv2 .page-head h1 { font-size: 22px; }
+  .pv2 .grid-kpis-5, .pv2 .grid-kpis-4, .pv2 .grid-kpis-8 { grid-template-columns: repeat(2, 1fr); gap: 10px; }
 }
