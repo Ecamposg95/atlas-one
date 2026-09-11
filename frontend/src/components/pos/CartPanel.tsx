@@ -7,6 +7,7 @@ import type { Product } from '../../types/products'
 import { ProductDetailModal } from './modals/ProductDetailModal'
 import { PricePickerPopover } from './PricePickerPopover'
 import { formatCurrency } from '../../utils/currency'
+import { autoTierTarget, forcedTierMap, cajaTierOf } from '../../pages/pos/cartTiers'
 
 type PaymentMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'MIXED'
 
@@ -60,37 +61,17 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
   // Only one popover is ever open at a time, so we don't need a ref-per-row.
   const activePriceTriggerRef = useRef<HTMLButtonElement | null>(null)
 
-  // Precios forzados manualmente (inmunes al auto-tier)
-  // clave = cart_key del ítem unidad; valor = nombre del tier forzado (o 'libre')
-  const [forcedPrices, setForcedPrices] = useState<Map<string, string>>(new Map())
-
-  // Hidrata el Map desde los flags persistidos en cada CartItem (sobreviven al
-  // park/resume porque van en cart_json). Re-evalúa cuando cambia el cart.
-  useEffect(() => {
-    setForcedPrices((prev) => {
-      const next = new Map(prev)
-      const validKeys = new Set<string>()
-      for (const item of cart) {
-        const key = ck(item)
-        validKeys.add(key)
-        if (item.forcedPriceTier && !next.has(key)) {
-          next.set(key, item.forcedPriceTier)
-        }
-      }
-      // Limpia entradas huérfanas (ítems removidos del carrito)
-      for (const key of next.keys()) {
-        if (!validKeys.has(key)) next.delete(key)
-      }
-      return next
-    })
-  }, [cart])
+  // Precios forzados (inmunes al auto-tier): derivados del flag persistido en cada
+  // ítem, que sobrevive al recargar y al park/resume porque va en cart_json. Antes
+  // era estado + efecto y, al remontar, el efecto de auto-tier corría en el mismo
+  // commit y leía el Map todavía vacío, así que pisaba el precio forzado (C-03).
+  const forcedPrices = useMemo(() => forcedTierMap(cart), [cart])
 
   // Detail modal
   const [detailProduct, setDetailProduct] = useState<Product | null>(null)
 
   // Tier de "Caja": el primer tier cuyo precio_name contiene "caja" (case-insensitive)
-  const getCajaTier = (item: CartItem) =>
-    item.prices?.find(p => p.price_name.toLowerCase().includes('caja'))
+  const getCajaTier = cajaTierOf
 
   // Agrupar ítems por product_id
   const groups = useMemo((): ProductGroup[] => {
@@ -107,30 +88,16 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
     return [...map.values()]
   }, [cart])
 
-  // Auto-precio escalonado según total de unidades combinadas
-  // Salta ítems con precio forzado manualmente
+  // Auto-precio escalonado según total de unidades combinadas.
+  // autoTierTarget salta los ítems con precio forzado leyendo el flag del propio
+  // ítem, así que no depende de ningún estado que deba hidratarse antes.
   useEffect(() => {
     for (const group of groups) {
       const unit = group.unit
-      if (!unit?.prices?.length) continue
-
-      const cartKey = unit.cart_key ?? unit.product_id
-      if (forcedPrices.has(cartKey)) continue  // precio forzado → no tocar
-      if (unit.cajaForcedByBulk) continue       // bulk-caja aplicó precio manual → no tocar
-
-      const cajaTier = getCajaTier(unit)
-      const unitsPerBox = cajaTier?.min_quantity ?? 1
-      const totalUnits = unit.quantity + group.cajas.reduce((sum, c) => {
-        return sum + c.quantity * unitsPerBox
-      }, 0)
-
-      const sorted = [...unit.prices].sort((a, b) => b.min_quantity - a.min_quantity)
-      const matched = sorted.find(t => totalUnits >= t.min_quantity)
-      const target = matched?.unit_price ?? (unit.base_price ?? unit.price)
-
-      if (Math.abs(unit.price - target) > 0.001) {
-        setPrice(cartKey, target)
-      }
+      if (!unit) continue
+      const cajasQty = group.cajas.reduce((sum, c) => sum + c.quantity, 0)
+      const target = autoTierTarget(unit, cajasQty)
+      if (target !== null) setPrice(unit.cart_key ?? unit.product_id, target)
     }
   }, [cart]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -158,7 +125,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
       const pricePerBox = linkedPkg?.package_price ?? cajaTier.unit_price * unitsPerBox
 
       if (remainder === 0) {
-        setForcedPrices(prev => { const m = new Map(prev); m.delete(cartKey); return m })
+        setForcedTier(cartKey, null)
       }
 
       updateQty(cartKey, remainder)
@@ -208,13 +175,11 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
   const applyPrice = (cartKey: string, price: number, tierName: string) => {
     setPrice(cartKey, price)
     setForcedTier(cartKey, tierName)
-    setForcedPrices(prev => new Map(prev).set(cartKey, tierName))
     setEditing(null)
   }
 
   // Vuelve al modo automático: limpia el forzado y deja que el auto-tier recalcule
   const resetToAuto = (cartKey: string) => {
-    setForcedPrices(prev => { const m = new Map(prev); m.delete(cartKey); return m })
     setForcedTier(cartKey, null)
     setEditing(null)
     // Forzar re-evaluación del auto-tier vaciando y reponiendo el precio al base
@@ -223,9 +188,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
 
   const removeGroup = (group: ProductGroup) => {
     if (group.unit) {
-      const key = ck(group.unit)
-      removeItem(key)
-      setForcedPrices(prev => { const m = new Map(prev); m.delete(key); return m })
+      removeItem(ck(group.unit))
     }
     group.cajas.forEach(c => removeItem(ck(c)))
   }
