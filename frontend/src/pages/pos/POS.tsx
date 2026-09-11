@@ -56,6 +56,7 @@ export function POS() {
   const [offlineQueue, setOfflineQueue] = useState<PendingSale[]>([])
   const [showOfflineModal, setShowOfflineModal] = useState(false)
   const barraRef = useRef<HTMLDivElement>(null)
+  const panelIzquierdoRef = useRef<HTMLDivElement>(null)
 
   const canEditProducts = !!user?.role && ['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO'].includes(user.role)
   const { branch } = useAuthStore()
@@ -81,19 +82,24 @@ export function POS() {
 
   useEffect(() => { checkSession() }, [checkSession])
 
-  // Durante el cobro la barra superior queda inerte: un clic o un Tab a las
-  // pestañas cambiaba de panel con el modal abierto y dejaba el ticket a medio
-  // cobrar. `inert` la saca del orden de tabulación y del árbol de
-  // accesibilidad, cosa que `pointer-events-none` no hace. Se aplica sobre el
-  // nodo porque react-dom 18 descarta el atributo si se pasa como prop de JSX
-  // (mismo motivo documentado en Layout.tsx para el cajón móvil).
+  // Durante el cobro, todo lo que hay detrás del modal queda inerte: la barra
+  // superior (un Tab a las pestañas cambiaba de panel con el ticket a medio
+  // cobrar) y el panel de productos (se llegaba a la rejilla con Tab y Enter
+  // agregaba al carrito una línea que el total del modal ya no contemplaba).
+  // `inert` los saca del orden de tabulación y del árbol de accesibilidad, cosa
+  // que `pointer-events-none` no hace. Se aplica sobre el nodo porque react-dom
+  // 18 descarta el atributo si se pasa como prop de JSX (mismo motivo
+  // documentado en Layout.tsx para el cajón móvil). Los modales se renderizan
+  // como hermanos de estos contenedores, así que no se vuelven inertes.
   useEffect(() => {
-    const el = barraRef.current
-    if (!el) return
-    if (payModal !== null) {
-      el.setAttribute('inert', '')
-    } else {
-      el.removeAttribute('inert')
+    const nodos = [barraRef.current, panelIzquierdoRef.current]
+    for (const el of nodos) {
+      if (!el) continue
+      if (payModal !== null) {
+        el.setAttribute('inert', '')
+      } else {
+        el.removeAttribute('inert')
+      }
     }
   }, [payModal])
 
@@ -308,8 +314,8 @@ export function POS() {
       // Refrescar lista inmediatamente
       parkedTicketsApi.list().then((l) => store.setParkedTickets(l)).catch(() => {})
     } catch (err: unknown) {
-      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      showToast(detail ?? 'Error al pausar el ticket', 'error')
+      const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+      showToast(errorDetailText(detail, 'Error al pausar el ticket'), 'error')
     } finally {
       store.setIsProcessing(false)
     }
@@ -374,8 +380,8 @@ export function POS() {
       setLeftTab('products')
       showToast('Ticket reanudado')
     } catch (err: unknown) {
-      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      showToast(detail ?? 'Error al reanudar el ticket', 'error')
+      const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+      showToast(errorDetailText(detail, 'Error al reanudar el ticket'), 'error')
     }
   }, [store])
 
@@ -559,8 +565,8 @@ export function POS() {
                   return
                 }
               } catch (e: unknown) {
-                const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-                showToast(detail ?? 'Error al reimprimir', 'error')
+                const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+                showToast(errorDetailText(detail, 'Error al reimprimir'), 'error')
                 return
               }
               try {
@@ -598,8 +604,13 @@ export function POS() {
 
       {/* Main layout: left | right — 40/60 split (cart dominant) */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left panel — productos + búsqueda */}
-        <div className="flex-[40] flex flex-col min-w-0 overflow-hidden">
+        {/* Left panel — productos + búsqueda. Inerte durante el cobro (ver efecto). */}
+        <div
+          ref={panelIzquierdoRef}
+          className={`flex-[40] flex flex-col min-w-0 overflow-hidden ${
+            payModal !== null ? 'opacity-50' : ''
+          }`}
+        >
           {/* Tab content — tabs live in the consolidated header above */}
           <div className="flex-1 overflow-hidden">
             {leftTab === 'products' ? (
@@ -680,9 +691,10 @@ export function POS() {
               // como cerrada en la UI ni cerrar el modal en falso.
               const detail = err?.response?.data?.detail
               showToast(
-                typeof detail === 'string' && detail.trim()
-                  ? detail
-                  : 'No se pudo cerrar el turno. Sigue abierto; verifica tu conexión e intenta de nuevo.',
+                errorDetailText(
+                  detail,
+                  'No se pudo cerrar el turno. Sigue abierto; verifica tu conexión e intenta de nuevo.',
+                ),
                 'error'
               )
               return

@@ -71,9 +71,6 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
   // Detail modal
   const [detailProduct, setDetailProduct] = useState<Product | null>(null)
 
-  // Tier de "Caja": el primer tier cuyo precio_name contiene "caja" (case-insensitive)
-  const getCajaTier = cajaTierOf
-
   // Agrupar ítems por product_id
   const groups = useMemo((): ProductGroup[] => {
     const map = new Map<string, ProductGroup>()
@@ -109,7 +106,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
       const unit = group.unit
       if (!unit || group.cajas.length > 0) continue  // solo cuando no hay cajas activas
       if (unit.cajaForcedByBulk) continue  // user explicitly bulk-applied → no auto-restructure
-      const cajaTier = getCajaTier(unit)
+      const cajaTier = cajaTierOf(unit)
       if (!cajaTier || cajaTier.min_quantity <= 0) continue
       if (unit.quantity < cajaTier.min_quantity) continue
 
@@ -125,10 +122,8 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
         : null
       const pricePerBox = linkedPkg?.package_price ?? cajaTier.unit_price * unitsPerBox
 
-      if (remainder === 0) {
-        setForcedTier(cartKey, null)
-      }
-
+      // remainder === 0 deja la línea de piezas en cero y updateQty la elimina
+      // del carrito, así que no hay flag que limpiar.
       updateQty(cartKey, remainder)
       addItem({
         product_id: unit.product_id,
@@ -240,7 +235,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
 
   const toggleCaja = (group: ProductGroup) => {
     const source = group.unit ?? group.cajas[0]
-    const cajaTier = getCajaTier(source)
+    const cajaTier = cajaTierOf(source)
     if (!cajaTier) return
 
     if (group.cajas.length > 0) {
@@ -375,7 +370,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
           <div>
             {[...groups].reverse().map((group) => {
               const displayItem = group.unit ?? group.cajas[0]
-              const cajaTier = getCajaTier(displayItem)
+              const cajaTier = cajaTierOf(displayItem)
               const hasCaja = !!cajaTier
               const cajaActive = group.cajas.length > 0
               const groupSubtotal = (group.unit?.subtotal ?? 0) + group.cajas.reduce((s, c) => s + c.subtotal, 0)
@@ -490,7 +485,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                       se muestra fila fantasma "0 piezas" con solo [+] para reactivar */}
                   {(() => {
                     // Ícono de caja: cuando piezas ≥ min_quantity del tier Caja
-                    const unitCajaTier = unitItem ? getCajaTier(unitItem) : cajaTier
+                    const unitCajaTier = unitItem ? cajaTierOf(unitItem) : cajaTier
                     const boxEquiv = unitCajaTier && unitItem && unitItem.quantity >= unitCajaTier.min_quantity
                       ? Math.floor(unitItem.quantity / unitCajaTier.min_quantity)
                       : 0

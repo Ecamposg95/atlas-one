@@ -23,7 +23,10 @@ describe('cashPaymentValidity — espejo del guard de sobrepago del backend (>10
   it('tolerancia de centavo, espejo de tolerance = Decimal("0.01") del backend: diferencia de redondeo no es falta', () => {
     expect(cashPaymentValidity(15, 15.000000001).short).toBe(false)
   })
-  it('tolerancia de centavo: un centavo completo de menos sigue siendo falta', () => {
-    expect(cashPaymentValidity(14.99, 15).short).toBe(true)
+  it('un centavo justo de menos NO es falta: el backend usa la misma tolerancia (total_paid < total - 0.01)', () => {
+    expect(cashPaymentValidity(14.99, 15).short).toBe(false)
+  })
+  it('dos centavos de menos ya salen de la tolerancia y son falta', () => {
+    expect(cashPaymentValidity(14.98, 15).short).toBe(true)
   })
 })

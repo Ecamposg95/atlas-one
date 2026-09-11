@@ -28,6 +28,31 @@ export function autoTierTarget(unit: CartItem, cajasQty: number): number | null 
   return Math.abs(unit.price - target) > 0.001 ? target : null
 }
 
+/**
+ * Precio que le toca a un ítem cuando cambia su cantidad.
+ *
+ * Es la contraparte de `autoTierTarget` para una sola línea: no mira cajas ni
+ * decide si hay cambio, solo responde "con esta cantidad, ¿a cuánto va?".
+ * Devuelve el precio intacto cuando no le corresponde tocarlo: ítem vendido por
+ * caja, o precio pactado a mano por la cajera (`forcedPriceTier`). Sin ese
+ * segundo guard, subir la cantidad de una línea con precio forzado recalculaba
+ * el escalón y pisaba el trato, dejando la fila marcada como "forzada" con otro
+ * precio.
+ */
+export function priceForQty(item: CartItem, qty: number): number {
+  if (item.unit_kind === 'package') return item.price
+  if (item.forcedPriceTier) return item.price
+
+  const base = item.base_price ?? item.price
+  if (!item.prices?.length) return base
+
+  const qualifying = item.prices
+    .filter((t) => t.min_quantity <= qty)
+    .sort((a, b) => b.min_quantity - a.min_quantity)
+
+  return qualifying.length ? qualifying[0].unit_price : base
+}
+
 /** Map clave → nombre del escalón forzado, derivado del carrito (fuente única). */
 export function forcedTierMap(cart: CartItem[]): Map<string, string> {
   const m = new Map<string, string>()

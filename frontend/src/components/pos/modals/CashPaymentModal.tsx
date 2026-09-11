@@ -82,14 +82,16 @@ export function CashPaymentModal({ total, onClose, onConfirm }: Props) {
           )}
         </div>
 
-        {/* Cambio */}
+        {/* Cambio — "falta" es lo que dice cashPaymentValidity, no el signo de
+            `change`: con la tolerancia de un centavo del backend un faltante de
+            $0.004 es un cobro válido y pintarlo en rojo confundía. */}
         <div className={`rounded-xl p-4 mb-4 text-center border-2 ${
-          change >= 0 ? 'bg-emerald-600/10 border-emerald-600/40' : 'bg-red-600/10 border-red-600/40'
+          !validity.short ? 'bg-emerald-600/10 border-emerald-600/40' : 'bg-red-600/10 border-red-600/40'
         }`}>
           <p className="text-[10px] font-bold uppercase tracking-wider mb-0.5" style={{ color: 'var(--dax-text-muted)' }}>
-            {change >= 0 ? 'Cambio a devolver' : 'Faltante'}
+            {!validity.short ? 'Cambio a devolver' : 'Faltante'}
           </p>
-          <p className={`text-4xl font-black tabular-nums ${change >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+          <p className={`text-4xl font-black tabular-nums ${!validity.short ? 'text-emerald-700' : 'text-red-600'}`}>
             {formatCurrency(Math.abs(change))}
           </p>
         </div>
