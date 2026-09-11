@@ -10,6 +10,7 @@ import { describe, it, expect } from 'vitest'
 import platformLayout from '../../pages/platform/PlatformLayout.tsx?raw'
 import platformNav from '../../pages/platform/platformNav.ts?raw'
 import dataTable from '../../components/platform/DataTable.tsx?raw'
+import dataTableCards from '../../components/platform/dataTableCards.ts?raw'
 import platformPageShell from '../../components/platform/PlatformPageShell.tsx?raw'
 import reportFilterBar from '../../components/platform/ReportFilterBar.tsx?raw'
 import reportDrillDownDrawer from '../../components/platform/ReportDrillDownDrawer.tsx?raw'
@@ -19,6 +20,7 @@ const FILES: [string, string][] = [
   ['pages/platform/PlatformLayout.tsx', platformLayout],
   ['pages/platform/platformNav.ts', platformNav],
   ['components/platform/DataTable.tsx', dataTable],
+  ['components/platform/dataTableCards.ts', dataTableCards],
   ['components/platform/PlatformPageShell.tsx', platformPageShell],
   ['components/platform/ReportFilterBar.tsx', reportFilterBar],
   ['components/platform/ReportDrillDownDrawer.tsx', reportDrillDownDrawer],

@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 
 import { TablaDesplazable } from '../ui/TablaDesplazable'
+import { useMediaQuery } from '../../hooks/useMediaQuery'
+import { cardColumns } from './dataTableCards'
 
 export interface DataTableColumn<T> {
   key: string
@@ -144,6 +146,9 @@ export function DataTable<T>({
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [page, setPage] = useState(0)
   const [runningKey, setRunningKey] = useState<string | null>(null)
+  // Bajo 640 px la tabla no cabe ni con scroll: cada fila se pinta como tarjeta.
+  const isCards = useMediaQuery('(max-width: 639px)')
+  const cardCols = useMemo(() => (isCards && columns.length > 0 ? cardColumns(columns) : null), [isCards, columns])
 
   const filtered = useMemo(() => {
     if (!search.trim() || !searchKeys) return data
@@ -286,6 +291,56 @@ export function DataTable<T>({
           )}
         </div>
       ))}
+      {cardCols ? (
+        <div className="pv2-dt-cards">
+          {pageRows.length === 0 ? (
+            <div style={{ padding: 32, textAlign: 'center', color: 'var(--p-muted)', fontSize: 13 }}>{emptyMessage}</div>
+          ) : pageRows.map((r) => {
+            const id = rowKey(r)
+            const isSelected = selectable && selectedSet.has(id)
+            const { primary, secondary, actions } = cardCols
+            return (
+              <div
+                key={id}
+                className={'pv2-dt-card' + (isSelected ? ' selected' : '')}
+                role={onRowClick ? 'button' : undefined}
+                tabIndex={onRowClick ? 0 : undefined}
+                onClick={() => onRowClick?.(r)}
+                onKeyDown={onRowClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick(r) } } : undefined}
+              >
+                <div className="pv2-dt-card-head">
+                  {selectable && (
+                    <input
+                      type="checkbox"
+                      aria-label="Seleccionar fila"
+                      checked={selectedSet.has(id)}
+                      onChange={() => toggleRow(id)}
+                      onClick={e => e.stopPropagation()}
+                      style={checkboxStyle}
+                    />
+                  )}
+                  <div className="pv2-dt-card-title">{primary.accessor(r)}</div>
+                </div>
+                {secondary.length > 0 && (
+                  <dl className="pv2-dt-card-body">
+                    {secondary.map(c => (
+                      <div key={c.key} className="pv2-dt-card-row">
+                        <dt>{c.label}</dt>
+                        <dd>{c.accessor(r)}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+                {actions && (
+                  <div className="pv2-dt-card-actions" onClick={e => e.stopPropagation()}>
+                    {actions.accessor(r)}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      ) : (
       <TablaDesplazable>
         <table style={{
           width: '100%',
@@ -407,6 +462,7 @@ export function DataTable<T>({
           </tbody>
         </table>
       </TablaDesplazable>
+      )}
       {pages > 1 && (
         <div style={{
           padding: '12px 18px',
