@@ -1319,8 +1319,9 @@ def cancel_sale(
     # Rastro append-only de la cancelación: es la ÚNICA fuente del pivote de
     # cancelaciones (`/api/platform/reports/cancellations`). `updated_at` no
     # sirve —cualquier UPDATE masivo lo pisa— y el estatus CANCELLED solo
-    # dice que pasó, no cuándo ni quién. `audit_cash_event` es failsafe: si
-    # el insert falla, la cancelación NO se revierte.
+    # dice que pasó, no cuándo ni quién. `audit_cash_event` escribe dentro de
+    # un SAVEPOINT y no propaga: si el insert falla, se deshace solo él y el
+    # `db.commit()` de abajo confirma igual la cancelación.
     from app.services.cash_audit import audit_cash_event
     from app.models.cash_audit import CashAuditEvent
     audit_cash_event(

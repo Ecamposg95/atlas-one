@@ -22,7 +22,6 @@ from collections import Counter
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Optional
-from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -38,21 +37,19 @@ from app.models.sales import Payment, SalesDocument
 from app.models.users import User
 from app.services.cash_reconciliation import CASH_INCLUDED_STATUSES
 from app.routers.platform.reports import (
+    MX_TZ,
     _cached,
     _csv_stream,
     _dec_str,
     _parse_dates,
     _today_stamp,
+    _validate_branch_in_org,
     _validate_filters,
 )
 
 router = APIRouter()
 
 _ZERO = Decimal("0")
-
-# El día del quincenal es el de México, no el UTC: una venta de las 23:30 del
-# día 15 pertenece a la primera quincena aunque en UTC ya sea día 16.
-MX_TZ = ZoneInfo("America/Mexico_City")
 
 
 def _paginate(items: list[dict], offset: int, limit: int) -> dict:
@@ -170,15 +167,17 @@ def report_cash_cuts_detail(
     branch_id: int,
     start: Optional[str] = None,
     end: Optional[str] = None,
+    org_id: Optional[int] = None,
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
     s, e = _parse_dates(start, end)
-    _validate_filters(s, e, None, limit)
-    branch = db.query(Branch).filter(Branch.id == branch_id).first()
-    if not branch:
-        raise HTTPException(404, f"Sucursal {branch_id} no encontrada")
+    _validate_filters(s, e, org_id, limit)
+    # Con `org_id` en el filtro, una sucursal de OTRA organización es un 404,
+    # no un detalle servido de más: el drawer manda los mismos filtros que la
+    # tabla y debe respetar el mismo recorte.
+    branch = _validate_branch_in_org(db, branch_id, org_id)
 
     sessions = (
         db.query(CashSession, User)
@@ -427,15 +426,17 @@ def report_returns_detail(
     branch_id: int,
     start: Optional[str] = None,
     end: Optional[str] = None,
+    org_id: Optional[int] = None,
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
     s, e = _parse_dates(start, end)
-    _validate_filters(s, e, None, limit)
-    branch = db.query(Branch).filter(Branch.id == branch_id).first()
-    if not branch:
-        raise HTTPException(404, f"Sucursal {branch_id} no encontrada")
+    _validate_filters(s, e, org_id, limit)
+    # Con `org_id` en el filtro, una sucursal de OTRA organización es un 404,
+    # no un detalle servido de más: el drawer manda los mismos filtros que la
+    # tabla y debe respetar el mismo recorte.
+    branch = _validate_branch_in_org(db, branch_id, org_id)
 
     rows = (
         db.query(SaleReturn, SalesDocument, User)
@@ -449,7 +450,7 @@ def report_returns_detail(
         .order_by(SaleReturn.created_at.desc())
         .all()
     )
-    approvals = _approval_ts_by_return(db, None, branch_id)
+    approvals = _approval_ts_by_return(db, org_id, branch_id)
     items = []
     for r, sale, user in rows:
         approved_at = approvals.get(str(r.id))
@@ -605,15 +606,17 @@ def report_cancellations_detail(
     branch_id: int,
     start: Optional[str] = None,
     end: Optional[str] = None,
+    org_id: Optional[int] = None,
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
     s, e = _parse_dates(start, end)
-    _validate_filters(s, e, None, limit)
-    branch = db.query(Branch).filter(Branch.id == branch_id).first()
-    if not branch:
-        raise HTTPException(404, f"Sucursal {branch_id} no encontrada")
+    _validate_filters(s, e, org_id, limit)
+    # Con `org_id` en el filtro, una sucursal de OTRA organización es un 404,
+    # no un detalle servido de más: el drawer manda los mismos filtros que la
+    # tabla y debe respetar el mismo recorte.
+    branch = _validate_branch_in_org(db, branch_id, org_id)
 
     events = _cancellation_events(db, s, e, None, branch_id)
     sale_ids = {str(log.related_id) for log, _ in events if log.related_id}
@@ -760,11 +763,20 @@ def _biweekly_rows(db: Session, s: datetime, e: datetime, org_id: Optional[int],
             bucket["tickets"] = int(tickets or 0)
             bucket["change"] = Decimal(str(change or 0))
 
-        grouped: dict[int, dict] = {}
+        grouped: dict[int | str, dict] = {}
         for bid, bucket in per_branch.items():
             name, oid, org_name = labels.get(bid, (f"Sucursal {bid}", None, "—"))
-            unit_id = oid if unit == "org" else bid
-            unit_name = org_name if unit == "org" else name
+            # `organization_id` es nullable (app/models/mixins.py) y `labels`
+            # hace inner join con Organization: una sucursal huérfana llega
+            # aquí con `oid = None`. Agrupar por None juntaría en UNA fila a
+            # huérfanas de orgs distintas — dinero de nadie sumado como si
+            # fuera de alguien. Cada huérfana se queda sola, con su nombre.
+            if unit == "org":
+                unit_id = oid if oid is not None else f"orphan-{bid}"
+                unit_name = org_name if oid is not None else f"{name} (sin organización)"
+            else:
+                unit_id = bid
+                unit_name = name
             g = grouped.setdefault(unit_id, {
                 "period": key, "period_label": label, "unit_id": unit_id,
                 "name": unit_name, "org_name": org_name,

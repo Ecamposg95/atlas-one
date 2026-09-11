@@ -91,9 +91,11 @@ class TestCashCuts:
     def test_el_corte_se_ubica_por_su_cierre_no_por_su_apertura(
         self, client, auth_superadmin, db, cajero_a, branch_a,
     ):
-        # Abre el 31 de agosto, cierra el 1 de septiembre: pertenece a septiembre.
+        # Abre el 31 de agosto 20:00 MX, cierra el 1 de septiembre 02:00 MX:
+        # pertenece a septiembre. Las horas van en UTC (MX = UTC−6), porque el
+        # día del reporte es el de México, no el de UTC.
         _session(db, cajero_a, branch_a, status=CashSessionStatus.CLOSED,
-                 opened_at=_dt(2026, 8, 31, 20), closed_at=_dt(2026, 9, 1, 2), difference=-10)
+                 opened_at=_dt(2026, 9, 1, 2), closed_at=_dt(2026, 9, 1, 8), difference=-10)
         r = client.get("/api/platform/reports/cash-cuts", params=PERIODO, headers=auth_superadmin)
         row = next(x for x in r.json()["items"] if x["branch_id"] == branch_a.id)
         assert row["sessions_closed"] == 1
@@ -432,3 +434,226 @@ class TestBiweekly:
             "period", "period_label", "unit_id", "name", "org_name",
             "cash_net", "card", "transfer", "other", "total", "tickets",
         ]
+
+
+# ================================================================== #
+# Aislamiento entre organizaciones                                   #
+# ================================================================== #
+
+from app.models.organization import Branch, BranchType, Organization
+from app.models.users import Role, User, UserOrganization
+from app.core.security import get_password_hash
+
+
+@pytest.fixture()
+def org_b(db):
+    """Una SEGUNDA organización: sin ella ningún test nota si el `org_id` filtra."""
+    o = Organization(name="Otra Org", status="ACTIVE")
+    db.add(o)
+    db.flush()
+    return o
+
+
+@pytest.fixture()
+def branch_c(db, org_b):
+    b = Branch(
+        name="Sucursal C", branch_type=BranchType.STORE,
+        can_sell=True, is_active=True, organization_id=org_b.id,
+    )
+    db.add(b)
+    db.flush()
+    return b
+
+
+@pytest.fixture()
+def cajero_c(db, org_b, branch_c):
+    u = User(
+        username="cajero_c", password_hash=get_password_hash("test1234"),
+        role=Role.CAJERO, branch_id=branch_c.id, is_active=True,
+    )
+    db.add(u)
+    db.flush()
+    db.add(UserOrganization(user_id=u.id, organization_id=org_b.id,
+                            org_role="MEMBER", is_active=True))
+    db.flush()
+    return u
+
+
+def _pago(db, venta, branch, monto, cuando, method=PaymentMethod.CASH):
+    db.add(Payment(sales_document_id=venta.id, method=method, amount=Decimal(str(monto)),
+                   organization_id=branch.organization_id, created_at=cuando))
+
+
+class TestAislamientoPorOrganizacion:
+    """Cross-org por diseño, pero `org_id` tiene que recortar de verdad."""
+
+    def test_cortes_sin_org_id_son_filas_separadas_sin_importes_cruzados(
+        self, client, auth_superadmin, db, cajero_a, branch_a, cajero_c, branch_c,
+    ):
+        _session(db, cajero_a, branch_a, status=CashSessionStatus.CLOSED,
+                 opened_at=_dt(2026, 9, 5, 8), closed_at=_dt(2026, 9, 5, 20), difference=-500)
+        _session(db, cajero_c, branch_c, status=CashSessionStatus.CLOSED,
+                 opened_at=_dt(2026, 9, 5, 8), closed_at=_dt(2026, 9, 5, 20), difference=-70)
+        r = client.get("/api/platform/reports/cash-cuts", params=PERIODO, headers=auth_superadmin)
+        assert r.status_code == 200, r.text
+        filas = {x["branch_id"]: x for x in r.json()["items"]}
+        assert filas[branch_a.id]["shortage_total"] == "500.00"
+        assert filas[branch_c.id]["shortage_total"] == "70.00"
+
+    def test_cortes_con_org_id_dejan_fuera_la_otra_organizacion(
+        self, client, auth_superadmin, db, org, cajero_a, branch_a, cajero_c, branch_c,
+    ):
+        _session(db, cajero_a, branch_a, status=CashSessionStatus.CLOSED,
+                 opened_at=_dt(2026, 9, 5, 8), closed_at=_dt(2026, 9, 5, 20), difference=-500)
+        _session(db, cajero_c, branch_c, status=CashSessionStatus.CLOSED,
+                 opened_at=_dt(2026, 9, 5, 8), closed_at=_dt(2026, 9, 5, 20), difference=-70)
+        r = client.get("/api/platform/reports/cash-cuts",
+                       params={**PERIODO, "org_id": org.id}, headers=auth_superadmin)
+        ids = {x["branch_id"] for x in r.json()["items"]}
+        assert branch_a.id in ids
+        assert branch_c.id not in ids
+
+    def test_detalle_de_una_sucursal_de_otra_org_es_404(
+        self, client, auth_superadmin, db, org, cajero_c, branch_c,
+    ):
+        _session(db, cajero_c, branch_c, status=CashSessionStatus.CLOSED,
+                 opened_at=_dt(2026, 9, 5, 8), closed_at=_dt(2026, 9, 5, 20), difference=-70)
+        r = client.get(f"/api/platform/reports/cash-cuts/{branch_c.id}/detail",
+                       params={**PERIODO, "org_id": org.id}, headers=auth_superadmin)
+        assert r.status_code == 404, r.text
+
+    def test_devoluciones_con_org_id_dejan_fuera_la_otra_organizacion(
+        self, client, auth_superadmin, db, org, cajero_a, branch_a, cajero_c, branch_c,
+    ):
+        v1 = _sale(db, cajero_a, branch_a, 500, _dt(2026, 9, 3), folio=1001)
+        _return(db, v1, cajero_a, branch_a, 100, _dt(2026, 9, 6))
+        v2 = _sale(db, cajero_c, branch_c, 500, _dt(2026, 9, 3), folio=1002)
+        _return(db, v2, cajero_c, branch_c, 300, _dt(2026, 9, 6))
+        r = client.get("/api/platform/reports/returns",
+                       params={**PERIODO, "org_id": org.id}, headers=auth_superadmin)
+        filas = r.json()["items"]
+        assert {x["branch_id"] for x in filas} == {branch_a.id}
+        assert filas[0]["pending_amount"] == "100.00"
+
+    def test_cancelaciones_con_org_id_dejan_fuera_la_otra_organizacion(
+        self, client, auth_superadmin, db, org, cajero_a, branch_a, cajero_c, branch_c,
+    ):
+        va = _sale(db, cajero_a, branch_a, 300, _dt(2026, 9, 5),
+                   status=DocumentStatus.CANCELLED, folio=1101)
+        _audit(db, branch_a, CashAuditEvent.SALE_CANCELLED, 300, _dt(2026, 9, 5, 14),
+               user_id=cajero_a.id, related_id=str(va.id), payload={"reason": "x"})
+        vc = _sale(db, cajero_c, branch_c, 900, _dt(2026, 9, 5),
+                   status=DocumentStatus.CANCELLED, folio=1102)
+        _audit(db, branch_c, CashAuditEvent.SALE_CANCELLED, 900, _dt(2026, 9, 5, 14),
+               user_id=cajero_c.id, related_id=str(vc.id), payload={"reason": "x"})
+        r = client.get("/api/platform/reports/cancellations",
+                       params={**PERIODO, "org_id": org.id}, headers=auth_superadmin)
+        filas = r.json()["items"]
+        assert {x["branch_id"] for x in filas} == {branch_a.id}
+        assert filas[0]["amount"] == "300.00"
+
+    def test_quincenal_unit_org_no_suma_organizaciones_distintas(
+        self, client, auth_superadmin, db, org, org_b, cajero_a, branch_a, cajero_c, branch_c,
+    ):
+        va = _sale(db, cajero_a, branch_a, 100, _dt(2026, 9, 5), folio=1201)
+        _pago(db, va, branch_a, 100, _dt(2026, 9, 5))
+        vc = _sale(db, cajero_c, branch_c, 700, _dt(2026, 9, 5), folio=1202)
+        _pago(db, vc, branch_c, 700, _dt(2026, 9, 5))
+        db.flush()
+        r = client.get(
+            "/api/platform/reports/payment-methods-biweekly",
+            params={"start": "2026-09-01", "end": "2026-09-15", "unit": "org"},
+            headers=auth_superadmin,
+        )
+        assert r.status_code == 200, r.text
+        filas = {x["unit_id"]: x for x in r.json()["items"]}
+        assert filas[org.id]["cash_net"] == "100.00"
+        assert filas[org_b.id]["cash_net"] == "700.00"
+
+    def test_quincenal_unit_org_con_org_id_deja_fuera_la_otra(
+        self, client, auth_superadmin, db, org, org_b, cajero_a, branch_a, cajero_c, branch_c,
+    ):
+        va = _sale(db, cajero_a, branch_a, 100, _dt(2026, 9, 5), folio=1301)
+        _pago(db, va, branch_a, 100, _dt(2026, 9, 5))
+        vc = _sale(db, cajero_c, branch_c, 700, _dt(2026, 9, 5), folio=1302)
+        _pago(db, vc, branch_c, 700, _dt(2026, 9, 5))
+        db.flush()
+        r = client.get(
+            "/api/platform/reports/payment-methods-biweekly",
+            params={"start": "2026-09-01", "end": "2026-09-15", "unit": "org", "org_id": org.id},
+            headers=auth_superadmin,
+        )
+        unidades = {x["unit_id"] for x in r.json()["items"]}
+        assert unidades == {org.id}
+
+    def test_quincenal_unit_org_no_junta_sucursales_huerfanas_de_orgs_distintas(
+        self, client, auth_superadmin, db, cajero_a, cajero_c,
+    ):
+        """`organization_id` es nullable: dos sucursales sin org NO son una unidad.
+
+        Antes se agrupaban bajo `unit_id: None` y sus importes se sumaban en
+        una sola fila — dinero de nadie presentado como el de alguien.
+        """
+        huerfanas = []
+        for nombre in ("Huérfana 1", "Huérfana 2"):
+            b = Branch(name=nombre, branch_type=BranchType.STORE,
+                       can_sell=True, is_active=True, organization_id=None)
+            db.add(b)
+            db.flush()
+            huerfanas.append(b)
+        for i, (b, monto) in enumerate(zip(huerfanas, (100, 700))):
+            v = SalesDocument(
+                seller_id=cajero_a.id, branch_id=b.id, organization_id=None,
+                total_amount=Decimal(str(monto)), subtotal=Decimal(str(monto)),
+                tax_amount=Decimal("0"), status=DocumentStatus.PAID,
+                doc_type=DocumentType.INVOICE, created_at=_dt(2026, 9, 5),
+                series="H", folio=1400 + i,
+            )
+            db.add(v)
+            db.flush()
+            db.add(Payment(sales_document_id=v.id, method=PaymentMethod.CASH,
+                           amount=Decimal(str(monto)), organization_id=None,
+                           created_at=_dt(2026, 9, 5)))
+        db.flush()
+        r = client.get(
+            "/api/platform/reports/payment-methods-biweekly",
+            params={"start": "2026-09-01", "end": "2026-09-15", "unit": "org"},
+            headers=auth_superadmin,
+        )
+        assert r.status_code == 200, r.text
+        filas = r.json()["items"]
+        assert None not in {x["unit_id"] for x in filas}, "las huérfanas se agruparon bajo None"
+        montos = sorted(x["cash_net"] for x in filas if str(x["unit_id"]).startswith("orphan-"))
+        assert montos == ["100.00", "700.00"]
+
+
+class TestDiaDeMexico:
+    """`?start=2026-09-11` es el 11 de septiembre en México, no en UTC."""
+
+    def test_un_corte_de_las_19_00_mx_pertenece_a_ese_dia_y_no_al_siguiente(
+        self, client, auth_superadmin, db, cajero_a, branch_a,
+    ):
+        # 11-sep 19:00 MX (UTC−6) = 12-sep 01:00 UTC. Anclando el día en UTC
+        # este corte caía en el 12 y desaparecía del reporte del 11.
+        _session(db, cajero_a, branch_a, status=CashSessionStatus.CLOSED,
+                 opened_at=datetime(2026, 9, 11, 14, tzinfo=timezone.utc),
+                 closed_at=datetime(2026, 9, 12, 1, tzinfo=timezone.utc), difference=-40)
+        r = client.get("/api/platform/reports/cash-cuts",
+                       params={"start": "2026-09-11", "end": "2026-09-11"},
+                       headers=auth_superadmin)
+        assert r.status_code == 200, r.text
+        fila = next(x for x in r.json()["items"] if x["branch_id"] == branch_a.id)
+        assert fila["sessions_closed"] == 1
+        assert fila["shortage_total"] == "40.00"
+
+    def test_ese_mismo_corte_no_aparece_en_el_dia_siguiente(
+        self, client, auth_superadmin, db, cajero_a, branch_a,
+    ):
+        _session(db, cajero_a, branch_a, status=CashSessionStatus.CLOSED,
+                 opened_at=datetime(2026, 9, 11, 14, tzinfo=timezone.utc),
+                 closed_at=datetime(2026, 9, 12, 1, tzinfo=timezone.utc), difference=-40)
+        r = client.get("/api/platform/reports/cash-cuts",
+                       params={"start": "2026-09-12", "end": "2026-09-12"},
+                       headers=auth_superadmin)
+        filas = [x for x in r.json()["items"] if x["branch_id"] == branch_a.id]
+        assert [x["sessions_closed"] for x in filas] in ([], [0])

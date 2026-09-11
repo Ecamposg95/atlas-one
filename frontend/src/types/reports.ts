@@ -43,9 +43,10 @@ export interface ProductRow {
   return_rate_pct: string
   estimated_margin_pct: string | null
   // Presentes solo cuando la petición llevó `compare !== 'none'`.
+  // El dinero llega como cadena con dos decimales; los conteos, como números.
   prev_revenue?: string
   delta_revenue_pct?: number | null
-  prev_units_sold?: string
+  prev_units_sold?: number
   delta_units_sold_pct?: number | null
   prev_aov?: string
   delta_aov_pct?: number | null
@@ -65,7 +66,7 @@ export interface BranchRow {
   // Presentes solo cuando la petición llevó `compare !== 'none'`.
   prev_revenue?: string
   delta_revenue_pct?: number | null
-  prev_transactions?: string
+  prev_transactions?: number
   delta_transactions_pct?: number | null
   prev_avg_ticket?: string
   delta_avg_ticket_pct?: number | null
@@ -86,7 +87,7 @@ export interface SellerRow {
   // Presentes solo cuando la petición llevó `compare !== 'none'`.
   prev_revenue?: string
   delta_revenue_pct?: number | null
-  prev_transactions?: string
+  prev_transactions?: number
   delta_transactions_pct?: number | null
   prev_avg_ticket?: string
   delta_avg_ticket_pct?: number | null
@@ -103,7 +104,7 @@ export interface CustomerRow {
   // Presentes solo cuando la petición llevó `compare !== 'none'`.
   prev_total_revenue?: string
   delta_total_revenue_pct?: number | null
-  prev_ticket_count?: string
+  prev_ticket_count?: number
   delta_ticket_count_pct?: number | null
   prev_avg_ticket?: string
   delta_avg_ticket_pct?: number | null

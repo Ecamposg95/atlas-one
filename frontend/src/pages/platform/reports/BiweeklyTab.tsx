@@ -62,7 +62,7 @@ export function BiweeklyTab({ params, unit, onUnitChange, page, onPageChange }: 
         <button type="button" role="tab" aria-selected={unit === 'branch'} className={unit === 'branch' ? 'active' : ''} onClick={() => onUnitChange('branch')}>Sucursal</button>
         <button type="button" role="tab" aria-selected={unit === 'org'} className={unit === 'org' ? 'active' : ''} onClick={() => onUnitChange('org')}>Org</button>
       </div>
-      <div style={{ opacity: loading ? 0.55 : 1, transition: 'opacity 0.15s ease' }}>
+      <div className={`pv2-money-loading${loading ? ' is-loading' : ''}`}>
         <MoneyTable
           rows={rows}
           columns={columns}

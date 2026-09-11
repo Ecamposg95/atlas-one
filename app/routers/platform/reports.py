@@ -20,6 +20,7 @@ import time
 from decimal import Decimal
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Optional
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -68,30 +69,58 @@ def _cached(key: str, fn: Callable[[], Any], ttl_seconds: int = _DEFAULT_TTL) ->
 # Helpers                                                            #
 # ------------------------------------------------------------------ #
 
+# El día del negocio es el de México. Vive aquí porque `_parse_dates` es el
+# único punto por el que entran las fechas de los ocho pivotes de plataforma;
+# `reports_money.py` lo importa de aquí para no tener dos verdades.
+MX_TZ = ZoneInfo("America/Mexico_City")
+
+
+def _has_time(value: str) -> bool:
+    return "T" in value or " " in value
+
+
+def _anchor_day(parsed: datetime, *, end_of_day: bool) -> datetime:
+    """Ancla una fecha SIN hora al día de México, no al de UTC.
+
+    `?start=2026-09-11` significa "el 11 de septiembre" para quien lo pide desde
+    México, no "de las 18:00 del 10 a las 18:00 del 11". Sin esto, un corte
+    cerrado el 11 a las 19:00 MX (= 12 a las 01:00 UTC) caía en el día
+    siguiente y desaparecía del reporte del 11. Se ancla aquí, en el único
+    punto por donde pasan los ocho pivotes, y no pivote por pivote.
+
+    Una cadena CON hora se respeta tal cual (y si no trae zona, se lee en UTC):
+    quien manda `2026-09-11T14:30:00` ya eligió su instante.
+    """
+    hour, minute, second, micro = (23, 59, 59, 999999) if end_of_day else (0, 0, 0, 0)
+    return datetime(
+        parsed.year, parsed.month, parsed.day,
+        hour, minute, second, micro, tzinfo=MX_TZ,
+    ).astimezone(timezone.utc)
+
 
 def _parse_dates(start_str: Optional[str], end_str: Optional[str]) -> tuple[datetime, datetime]:
-    """Parse ISO date/datetime params. Defaults: end=now, start=end-30d."""
-    end = datetime.now(timezone.utc).replace(hour=23, minute=59, second=59, microsecond=999999)
+    """Parse ISO date/datetime params. Defaults: end=now, start=end-30d.
+
+    Las cadenas sin hora se anclan al día de México (ver `_anchor_day`).
+    """
+    end = _anchor_day(datetime.now(MX_TZ), end_of_day=True)
     start = end - timedelta(days=30)
     if start_str:
         try:
             parsed = datetime.fromisoformat(start_str)
-            if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=timezone.utc)
-            # If only a date (no T) was supplied, anchor at start of day.
-            if "T" not in start_str and " " not in start_str:
-                parsed = parsed.replace(hour=0, minute=0, second=0, microsecond=0)
-            start = parsed
+            if _has_time(start_str):
+                start = parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+            else:
+                start = _anchor_day(parsed, end_of_day=False)
         except Exception:
             raise HTTPException(422, f"Fecha start inválida: {start_str}")
     if end_str:
         try:
             parsed = datetime.fromisoformat(end_str)
-            if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=timezone.utc)
-            if "T" not in end_str and " " not in end_str:
-                parsed = parsed.replace(hour=23, minute=59, second=59, microsecond=999999)
-            end = parsed
+            if _has_time(end_str):
+                end = parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+            else:
+                end = _anchor_day(parsed, end_of_day=True)
         except Exception:
             raise HTTPException(422, f"Fecha end inválida: {end_str}")
     if start > end:
@@ -201,6 +230,28 @@ _COMPARE_KEYS = {
     "sellers": "user_id",
     "customers": "customer_id",
 }
+
+
+def _decorate_page(db, page, s, e, compare, org_id, branch_id, *, pivot: str) -> list[dict]:
+    """Pega `prev_*`/`delta_*_pct` a la página, si el modo pide comparación.
+
+    La ventana previa se cachea SIN limit/offset/sort: páginas y ordenamientos
+    distintos de la MISMA ventana comparten un único cómputo, en vez de
+    re-agregar la ventana anterior en cada combinación.
+    """
+    prev_window = compare_window(s, e, compare)
+    if prev_window is None:
+        return page
+    prev_s, prev_e = prev_window
+    prev_key = f"prevwin:{pivot}:{prev_s.isoformat()}:{prev_e.isoformat()}:{org_id}:{branch_id}"
+    prev_items = _cached(
+        prev_key,
+        lambda: _rows_for_window(db, prev_s, prev_e, org_id, branch_id, pivot=pivot),
+    )
+    return decorate_with_previous(
+        page, prev_items,
+        key=_COMPARE_KEYS[pivot], fields=_COMPARE_FIELDS[pivot],
+    )
 
 
 def _rows_for_window(db, s, e, org_id, branch_id, *, pivot: str) -> list[dict]:
@@ -406,19 +457,7 @@ def report_products(
         total = len(items)
         page = items[offset : offset + limit]
 
-        prev_window = compare_window(s, e, compare)
-        if prev_window is not None:
-            prev_s, prev_e = prev_window
-            # Cache propia para la ventana previa, sin limit/offset/sort:
-            # así páginas y ordenamientos distintos de la MISMA ventana
-            # comparten un único cómputo en vez de re-agregar la ventana
-            # anterior en cada combinación.
-            prev_key = f"prevwin:products:{prev_s.isoformat()}:{prev_e.isoformat()}:{org_id}:{branch_id}"
-            prev_items = _cached(prev_key, lambda: _rows_for_window(db, prev_s, prev_e, org_id, branch_id, pivot="products"))
-            page = decorate_with_previous(
-                page, prev_items,
-                key=_COMPARE_KEYS["products"], fields=_COMPARE_FIELDS["products"],
-            )
+        page = _decorate_page(db, page, s, e, compare, org_id, branch_id, pivot="products")
 
         return {"items": page, "total": total, "offset": offset, "limit": limit}
 
@@ -535,15 +574,7 @@ def report_branches(
         total = len(items)
         page = items[offset : offset + limit]
 
-        prev_window = compare_window(s, e, compare)
-        if prev_window is not None:
-            prev_s, prev_e = prev_window
-            prev_key = f"prevwin:branches:{prev_s.isoformat()}:{prev_e.isoformat()}:{org_id}:{branch_id}"
-            prev_items = _cached(prev_key, lambda: _rows_for_window(db, prev_s, prev_e, org_id, branch_id, pivot="branches"))
-            page = decorate_with_previous(
-                page, prev_items,
-                key=_COMPARE_KEYS["branches"], fields=_COMPARE_FIELDS["branches"],
-            )
+        page = _decorate_page(db, page, s, e, compare, org_id, branch_id, pivot="branches")
 
         return {"items": page, "total": total, "offset": offset, "limit": limit}
 
@@ -668,15 +699,7 @@ def report_sellers(
         total = len(items)
         page = items[offset : offset + limit]
 
-        prev_window = compare_window(s, e, compare)
-        if prev_window is not None:
-            prev_s, prev_e = prev_window
-            prev_key = f"prevwin:sellers:{prev_s.isoformat()}:{prev_e.isoformat()}:{org_id}:{branch_id}"
-            prev_items = _cached(prev_key, lambda: _rows_for_window(db, prev_s, prev_e, org_id, branch_id, pivot="sellers"))
-            page = decorate_with_previous(
-                page, prev_items,
-                key=_COMPARE_KEYS["sellers"], fields=_COMPARE_FIELDS["sellers"],
-            )
+        page = _decorate_page(db, page, s, e, compare, org_id, branch_id, pivot="sellers")
 
         return {"items": page, "total": total, "offset": offset, "limit": limit}
 
@@ -791,15 +814,7 @@ def report_customers(
         total = len(items)
         page = items[offset : offset + limit]
 
-        prev_window = compare_window(s, e, compare)
-        if prev_window is not None:
-            prev_s, prev_e = prev_window
-            prev_key = f"prevwin:customers:{prev_s.isoformat()}:{prev_e.isoformat()}:{org_id}:{branch_id}"
-            prev_items = _cached(prev_key, lambda: _rows_for_window(db, prev_s, prev_e, org_id, branch_id, pivot="customers"))
-            page = decorate_with_previous(
-                page, prev_items,
-                key=_COMPARE_KEYS["customers"], fields=_COMPARE_FIELDS["customers"],
-            )
+        page = _decorate_page(db, page, s, e, compare, org_id, branch_id, pivot="customers")
 
         return {"items": page, "total": total, "offset": offset, "limit": limit}
 

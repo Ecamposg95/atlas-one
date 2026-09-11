@@ -55,7 +55,7 @@ export function ReturnsTab({ params, page, onPageChange, onRowClick }: Props) {
     return <div style={{ padding: 18, color: 'var(--p-danger)', fontSize: 13 }}>{error}</div>
   }
   return (
-    <div style={{ opacity: loading ? 0.55 : 1, transition: 'opacity 0.15s ease' }}>
+    <div className={`pv2-money-loading${loading ? ' is-loading' : ''}`}>
       <MoneyTable
         rows={rows}
         columns={columns}

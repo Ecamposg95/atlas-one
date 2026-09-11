@@ -134,8 +134,10 @@ function paramsForRequest(
   const out: ReportParams = {
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
-    sort,
   }
+  // Los endpoints de dinero no ordenan por parámetro: mandarles `sort=''` es
+  // ruido en la URL, en el CSV y en la llave del cache.
+  if (sort) out.sort = sort
   const { start, end } = resolveRange(filters)
   if (start) out.start = start
   if (end) out.end = end
@@ -220,7 +222,10 @@ export function PlatformReports() {
           try {
             // Las pestañas de dinero no soportan compare: un `compare`
             // heredado de otra pestaña no se manda en su CSV.
-            const params: ReportParams = paramsForRequest(filters, sort, 0, isMoneyTab(tab) ? undefined : compare)
+            const esDinero = isMoneyTab(tab)
+            const params: ReportParams = paramsForRequest(
+              filters, esDinero ? '' : sort, 0, esDinero ? undefined : compare,
+            )
             delete params.limit
             delete params.offset
             if (tab === 'productos') await reportApi.exportProductsCsv(params)
@@ -255,7 +260,7 @@ export function PlatformReports() {
           tab={tab}
           branchId={typeof selected?.id === 'number' ? selected.id : null}
           branchLabel={selected?.label ?? ''}
-          params={paramsForRequest(filters, sort, 0)}
+          params={paramsForRequest(filters, '', 0)}
           onClose={() => setSelected(null)}
         />
       ) : (
@@ -335,7 +340,7 @@ function ReportTabContent(props: TabContentProps) {
 
   // Las pestañas de dinero no soportan `compare` en el backend: nunca se
   // manda, aunque el usuario lo haya elegido antes en otra pestaña.
-  const moneyParams = paramsForRequest(props.filters, props.sort, props.page)
+  const moneyParams = paramsForRequest(props.filters, '', props.page)
   if (props.tab === 'cortes') {
     return (
       <CashCutsTab
@@ -451,12 +456,13 @@ function DeltaHeaderCell({ label }: { label: string }) {
   )
 }
 
-function DeltaCell({ pct, lowerIsBetter }: { pct: number | null | undefined; lowerIsBetter?: boolean }) {
-  const d = fmtDeltaCell(pct)
-  const tone = deltaTone(pct, lowerIsBetter)
+// Los cuatro pivotes clásicos solo comparan Revenue, donde crecer es bueno:
+// por eso `deltaTone` va sin `lowerIsBetter`. Si alguna vez se compara una
+// cifra donde crecer es malo (faltantes), se le pasa aquí.
+function DeltaCell({ pct }: { pct: number | null | undefined }) {
   return (
-    <td className={`pv2-delta-col pv2-tone-${tone}`} style={{ ...rightCell }}>
-      {d.text}
+    <td className={`pv2-delta-col pv2-tone-${deltaTone(pct)}`} style={{ ...rightCell }}>
+      {fmtDeltaCell(pct)}
     </td>
   )
 }

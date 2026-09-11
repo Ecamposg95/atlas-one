@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import {
-  COMPARE_OPTIONS, compareLabel, deltaTone, fmtDeltaCell, showDeltaColumns,
-} from '../compareFormat'
+import { COMPARE_OPTIONS, compareLabel, deltaTone, fmtDeltaCell } from '../compareFormat'
 
 // Spec 2026-09-09 §5.1: el delta va como columna junto a cada cifra; sin
-// referencia se pinta un guion, no un 0%. Bajo 768 px las columnas Δ se
-// ocultan y el delta baja debajo de la cifra.
+// referencia se pinta un guion, no un 0%. Ocultar la columna bajo 768 px es
+// cosa de CSS (`.pv2-delta-col`), no de JS.
 describe('compareLabel', () => {
   it('nombra los tres modos en español', () => {
     expect(compareLabel('none')).toBe('Sin comparar')
@@ -20,11 +18,11 @@ describe('compareLabel', () => {
 
 describe('fmtDeltaCell', () => {
   it('positivo, negativo, cero y sin referencia', () => {
-    expect(fmtDeltaCell(9)).toEqual({ text: '▲ 9.0%', tone: 'up' })
-    expect(fmtDeltaCell(-4.25)).toEqual({ text: '▼ 4.3%', tone: 'down' })
-    expect(fmtDeltaCell(0)).toEqual({ text: '=', tone: 'flat' })
-    expect(fmtDeltaCell(null)).toEqual({ text: '—', tone: 'flat' })
-    expect(fmtDeltaCell(undefined)).toEqual({ text: '—', tone: 'flat' })
+    expect(fmtDeltaCell(9)).toBe('▲ 9.0%')
+    expect(fmtDeltaCell(-4.25)).toBe('▼ 4.3%')
+    expect(fmtDeltaCell(0)).toBe('=')
+    expect(fmtDeltaCell(null)).toBe('—')
+    expect(fmtDeltaCell(undefined)).toBe('—')
   })
 })
 
@@ -39,14 +37,5 @@ describe('deltaTone', () => {
     expect(deltaTone(-5, true)).toBe('up')
     expect(deltaTone(0, true)).toBe('flat')
     expect(deltaTone(null, true)).toBe('flat')
-  })
-})
-
-describe('showDeltaColumns', () => {
-  it('se ocultan por debajo de 768 px', () => {
-    expect(showDeltaColumns(1366)).toBe(true)
-    expect(showDeltaColumns(768)).toBe(true)
-    expect(showDeltaColumns(767)).toBe(false)
-    expect(showDeltaColumns(375)).toBe(false)
   })
 })

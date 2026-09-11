@@ -642,6 +642,14 @@
 /* Filtros de reportes: fila con scroll horizontal en tablet vertical */
 .pv2 .pv2-filters { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; }
 
+/* Pestañas de dinero: la tabla se atenúa mientras recarga.
+   El movimiento es opcional — quien pide menos movimiento no lo ve. */
+.pv2 .pv2-money-loading { transition: opacity 0.15s ease; }
+.pv2 .pv2-money-loading.is-loading { opacity: 0.55; }
+@media (prefers-reduced-motion: reduce) {
+  .pv2 .pv2-money-loading { transition: none; }
+}
+
 /* Contenedor de tabla ancha: la página nunca hace scroll horizontal */
 .pv2 .pv2-scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .pv2 .pv2-scroll-x > table { min-width: 640px; }

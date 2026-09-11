@@ -36,6 +36,16 @@ const rowStyle: React.CSSProperties = {
   padding: '8px 0', borderBottom: '1px solid var(--p-border-2)', fontSize: 12,
 }
 
+/** El drawer pide una sola página. Callarlo hacía creer que eso era todo. */
+function Truncado({ mostrados, total }: { mostrados: number; total: number }) {
+  if (total <= mostrados) return null
+  return (
+    <p className="hint" style={{ margin: '10px 0 0', fontSize: 11 }}>
+      Mostrando los primeros {mostrados} de {total}. Usa el CSV para la lista completa.
+    </p>
+  )
+}
+
 export function MoneyDetailDrawer({ tab, branchId, branchLabel, params, onClose }: Props) {
   const [payload, setPayload] = useState<Payload | null>(null)
   const [loading, setLoading] = useState(false)
@@ -80,20 +90,31 @@ export function MoneyDetailDrawer({ tab, branchId, branchLabel, params, onClose 
               <span className="mono">{money(s.difference)}</span>
             </div>
           ))}
+          <Truncado mostrados={payload.data.sessions.length} total={payload.data.total} />
         </>
       )}
-      {payload?.kind === 'devoluciones' && payload.data.items.map((r) => (
-        <div key={r.return_id} style={rowStyle}>
-          <span>{r.folio} · {r.status} <span className="hint">{r.reason}</span></span>
-          <span className="mono">{money(r.amount)}</span>
-        </div>
-      ))}
-      {payload?.kind === 'cancelaciones' && payload.data.items.map((c) => (
-        <div key={c.event_id} style={rowStyle}>
-          <span>{c.folio} · {c.user} <span className="hint">{c.reason}</span></span>
-          <span className="mono">{money(c.amount)}</span>
-        </div>
-      ))}
+      {payload?.kind === 'devoluciones' && (
+        <>
+          {payload.data.items.map((r) => (
+            <div key={r.return_id} style={rowStyle}>
+              <span>{r.folio} · {r.status} <span className="hint">{r.reason}</span></span>
+              <span className="mono">{money(r.amount)}</span>
+            </div>
+          ))}
+          <Truncado mostrados={payload.data.items.length} total={payload.data.total} />
+        </>
+      )}
+      {payload?.kind === 'cancelaciones' && (
+        <>
+          {payload.data.items.map((c) => (
+            <div key={c.event_id} style={rowStyle}>
+              <span>{c.folio} · {c.user} <span className="hint">{c.reason}</span></span>
+              <span className="mono">{money(c.amount)}</span>
+            </div>
+          ))}
+          <Truncado mostrados={payload.data.items.length} total={payload.data.total} />
+        </>
+      )}
     </SideDrawer>
   )
 }

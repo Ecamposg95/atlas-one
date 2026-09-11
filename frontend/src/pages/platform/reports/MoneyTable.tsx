@@ -1,16 +1,10 @@
 import type { ReactNode } from 'react'
-import type { CompareMode } from '../../../types/reportsMoney'
-import { fmtDeltaCell, deltaTone } from './compareFormat'
 
 export interface MoneyColumn<T> {
   key: string
   label: string
   align?: 'left' | 'right'
   render: (row: T) => ReactNode
-  /** Campo `delta_*_pct` de la fila; si viene y `compare !== 'none'` se pinta una columna Δ. */
-  deltaKey?: string
-  /** Para cifras donde crecer es malo (faltantes, devoluciones). */
-  lowerIsBetter?: boolean
 }
 
 interface Props<T> {
@@ -19,7 +13,6 @@ interface Props<T> {
   rowKey: (row: T) => string | number
   onRowClick?: (row: T) => void
   emptyMessage?: string
-  compare?: CompareMode
   /** Total de filas en el backend (sin paginar). Sin ella no hay control de página. */
   total?: number
   page?: number
@@ -105,12 +98,33 @@ const cellStyle: React.CSSProperties = {
 }
 
 export function MoneyTable<T>({
-  rows, columns, rowKey, onRowClick, emptyMessage = 'Sin datos en el periodo', compare = 'none',
+  rows, columns, rowKey, onRowClick, emptyMessage = 'Sin datos en el periodo',
   total, page = 0, onPageChange, pageSize = DEFAULT_PAGE_SIZE,
 }: Props<T>) {
-  const withDelta = compare !== 'none'
   if (rows.length === 0) {
-    return <div style={{ padding: 32, textAlign: 'center', color: 'var(--p-muted)', fontSize: 13 }}>{emptyMessage}</div>
+    // Una página vacía MÁS ALLÁ de la primera no es "no hay datos": es que el
+    // periodo o el filtro cambiaron bajo los pies del usuario. Sin salida,
+    // quedaba atrapado en una pantalla vacía sin control de página.
+    return (
+      <div style={{ padding: 32, textAlign: 'center', color: 'var(--p-muted)', fontSize: 13 }}>
+        {page > 0 ? 'No hay más registros en esta página.' : emptyMessage}
+        {page > 0 && onPageChange && (
+          <div style={{ marginTop: 12 }}>
+            <button
+              type="button"
+              onClick={() => onPageChange(0)}
+              style={{
+                background: 'var(--p-surface)', border: '1px solid var(--p-border)',
+                color: 'var(--p-text)', padding: '6px 12px', borderRadius: 8,
+                fontSize: 12, cursor: 'pointer',
+              }}
+            >
+              Volver a la primera página
+            </button>
+          </div>
+        )}
+      </div>
+    )
   }
   const showPagination = total !== undefined && onPageChange && total > pageSize
   return (
@@ -124,11 +138,6 @@ export function MoneyTable<T>({
             <tr>
               {columns.map((c) => (
                 <th key={c.key} style={{ ...headStyle, textAlign: c.align ?? 'left' }}>{c.label}</th>
-              ))}
-              {withDelta && columns.filter((c) => c.deltaKey).map((c) => (
-                <th key={`d-${c.key}`} className="pv2-delta-col" style={{ ...headStyle, textAlign: 'right' }}>
-                  Δ {c.label}
-                </th>
               ))}
             </tr>
           </thead>
@@ -148,18 +157,6 @@ export function MoneyTable<T>({
                     {c.render(row)}
                   </td>
                 ))}
-                {withDelta && columns.filter((c) => c.deltaKey).map((c) => {
-                  const pct = (row as unknown as Record<string, number | null>)[c.deltaKey as string]
-                  const d = fmtDeltaCell(pct)
-                  const tone = deltaTone(pct, c.lowerIsBetter)
-                  return (
-                    <td key={`d-${c.key}`} className={`pv2-delta-col pv2-tone-${tone}`} style={{
-                      ...cellStyle, textAlign: 'right', fontFamily: 'var(--font-mono)',
-                    }}>
-                      {d.text}
-                    </td>
-                  )
-                })}
               </tr>
             ))}
           </tbody>

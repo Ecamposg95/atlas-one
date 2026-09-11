@@ -4,6 +4,13 @@
 schema drift, transient error), the calling business operation must NOT
 roll back. We log the exception and proceed.
 
+Cómo se cumple ese "failsafe": el insert va dentro de un SAVEPOINT
+(`db.begin_nested()`). Sin él, un flush fallido deja la sesión en
+pending-rollback y el `commit()` del llamador revienta con
+`PendingRollbackError` — es decir, el audit tumbaría la operación de negocio
+que promete no tocar. El savepoint acota el daño: se deshace solo el insert
+del audit y la transacción padre sigue viva y confirmable.
+
 Callers pass a `db` session; we add+flush but do NOT commit — the parent
 transaction's commit covers it. If the parent rolls back, the audit row
 goes with it (same transaction, atomic with the business event).
@@ -37,23 +44,26 @@ def audit_cash_event(
 ) -> Optional[CashAuditLog]:
     """Insert one audit row. Never raises (returns None on failure)."""
     try:
-        row = CashAuditLog(
-            event_type=event_type,
-            organization_id=organization_id,
-            session_id=session_id,
-            branch_id=branch_id,
-            user_id=user_id,
-            amount=Decimal(str(amount)) if amount is not None else None,
-            related_table=related_table,
-            related_id=str(related_id) if related_id is not None else None,
-            payload_json=payload or None,
-            expected_running_total=(
-                Decimal(str(expected_running_total))
-                if expected_running_total is not None else None
-            ),
-        )
-        db.add(row)
-        db.flush()
+        # SAVEPOINT: si el insert falla, se deshace SOLO él. La transacción de
+        # negocio del llamador queda limpia y su commit sigue funcionando.
+        with db.begin_nested():
+            row = CashAuditLog(
+                event_type=event_type,
+                organization_id=organization_id,
+                session_id=session_id,
+                branch_id=branch_id,
+                user_id=user_id,
+                amount=Decimal(str(amount)) if amount is not None else None,
+                related_table=related_table,
+                related_id=str(related_id) if related_id is not None else None,
+                payload_json=payload or None,
+                expected_running_total=(
+                    Decimal(str(expected_running_total))
+                    if expected_running_total is not None else None
+                ),
+            )
+            db.add(row)
+            db.flush()
         return row
     except Exception:
         logger.exception(

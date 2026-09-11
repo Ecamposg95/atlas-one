@@ -48,6 +48,15 @@ describe('breakpoints del nivel SUPERADMIN (spec §3.2)', () => {
     expect(css).toMatch(/\.pv2-bottombar\s*{[^}]*display:\s*none/)
   })
 
+  it('el fundido de carga de las pestañas de dinero respeta prefers-reduced-motion', () => {
+    // Estaba en línea en el JSX de las cuatro pestañas, donde ninguna media
+    // query lo alcanza: quien pide menos movimiento lo seguía viendo.
+    expect(css).toMatch(/\.pv2-money-loading\s*\{[^}]*transition:/)
+    const reduce = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'))
+    expect(reduce).toContain('.pv2-money-loading')
+    expect(reduce).toMatch(/\.pv2-money-loading\s*\{\s*transition:\s*none/)
+  })
+
   it('la tabla ancha tiene su propio scroll horizontal', () => {
     expect(css).toMatch(/\.pv2 \.pv2-scroll-x\s*{[^}]*overflow-x:\s*auto/)
   })
