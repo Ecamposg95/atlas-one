@@ -30,6 +30,7 @@ from . import (
     feature_flags,
     api_keys,
     reports,
+    reports_money,
     control_tower,
 )
 
@@ -53,4 +54,5 @@ router.include_router(incidents.router)
 router.include_router(feature_flags.router)
 router.include_router(api_keys.router)
 router.include_router(reports.router)
+router.include_router(reports_money.router)
 router.include_router(control_tower.router)
