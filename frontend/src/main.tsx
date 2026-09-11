@@ -2,8 +2,10 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import './styles/atlas-one.css'
+import './styles/motion.css'
 import App from './App'
 import { ConfirmDialogProvider } from './components/ui/ConfirmDialog'
+import { applyMotionFlag } from './theme/motion'
 
 // ── Stale chunk recovery ────────────────────────────────────────────────────
 // Cuando se redeploya el frontend, los chunks viejos cacheados en el browser
@@ -32,6 +34,9 @@ window.addEventListener('unhandledrejection', (e) => handleStaleChunk(e.reason))
 // Limpiamos el flag tras 30s de uso normal — si el usuario sigue OK, el próximo
 // stale chunk sí provocará reload (no quedamos baneados de por vida).
 setTimeout(() => sessionStorage.removeItem(STALE_CHUNK_KEY), 30_000)
+
+// Bandera local `atlas_ui_motion=0`: apaga las animaciones sin deploy.
+applyMotionFlag(document.documentElement)
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
