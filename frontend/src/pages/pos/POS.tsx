@@ -22,6 +22,7 @@ import { CashMovementModal } from '../../components/pos/modals/CashMovementModal
 import { CloseSessionModal } from '../../components/pos/modals/CloseSessionModal'
 import { ProductDetailModal } from '../../components/pos/modals/ProductDetailModal'
 import { formatCurrency } from '../../utils/currency'
+import { errorDetailText } from '../../utils/errorDetail'
 import {
   enqueueSale,
   listPending,
@@ -238,8 +239,12 @@ export function POS() {
           showToast('No se pudo guardar la venta offline', 'error')
         }
       } else {
-        const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-        showToast(detail ?? 'Error al procesar la venta', 'error')
+        // El motivo del rechazo es lo único que la cajera puede accionar con el
+        // dinero ya en la mano, así que se muestra tal cual. `detail` llega como
+        // texto en los HTTPException de create_sale y como arreglo en los 422 de
+        // validación de Pydantic: pintarlo crudo daba "[object Object]".
+        const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+        showToast(errorDetailText(detail, 'Error al procesar la venta'), 'error')
       }
     } finally {
       store.setIsProcessing(false)
