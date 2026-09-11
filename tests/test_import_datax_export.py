@@ -13,6 +13,7 @@ import pytest
 
 from app.models.inventory import InventoryMovement, MovementType, StockOnHand
 from app.models.organization import Branch, Organization
+from app.modules.products.schemas import ProductRead
 from app.models.products import (
     Department,
     Product,
@@ -124,7 +125,7 @@ class TestCatalogo:
         assert v.barcode == "H-625"
         assert v.variant_name == "Estándar"
         assert float(v.price) == 75.0, "el precio base es Precio 1"
-        assert v.cost is None, "la exportacion trae el costo vacio casi siempre"
+        assert float(v.cost) == 0.0, "la exportacion trae el costo vacio casi siempre"
         assert v.organization_id == org.id
 
     def test_toma_el_costo_cuando_viene(self, db, org, cargar):
@@ -143,6 +144,72 @@ class TestCatalogo:
         assert any("imagen propia" in i and "H-625" in i for i in r["incidencias"]), (
             "la carga no descarga imagenes: debe decir cuales quedaron fuera"
         )
+
+
+class TestContratoDelPOS:
+    """`ProductVariantRead` exige `price` y `cost` NO nulos. En produccion, 411
+    variantes con `cost = NULL` tumbaron `GET /api/products/pos/search` con un
+    500 para toda la organizacion."""
+
+    def test_sin_costo_la_variante_queda_en_cero_y_el_pos_la_puede_leer(self, db, org, cargar):
+        cargar([FILA])  # FILA trae "Costo": ""
+        p = db.query(Product).filter(Product.organization_id == org.id).one()
+        v = p.variants[0]
+        assert v.cost is not None and float(v.cost) == 0.0
+
+        leido = ProductRead.model_validate(p)
+        assert float(leido.variants[0].cost) == 0.0
+        assert float(leido.variants[0].price) == 75.0
+
+    def test_sin_precio_1_la_variante_queda_en_cero_con_incidencia(self, db, org, cargar):
+        r = cargar([{**FILA, "¿Aplica Precio 1?": "No", "Precio 1": ""}])
+        p = db.query(Product).filter(Product.organization_id == org.id).one()
+        assert float(p.variants[0].price) == 0.0
+        assert ProductRead.model_validate(p).variants[0].price == 0
+        assert any("sin Precio 1" in i and "H-625" in i for i in r["incidencias"])
+
+    def test_costo_ilegible_no_tumba_la_carga(self, db, org, cargar):
+        r = cargar([
+            {**FILA, "Costo": "s/d"},
+            {**FILA, "Código": "H-626", "Descripción": "SEGUNDA"},
+        ])
+        assert r["creados"] == 2, "un costo mal capturado no vale tumbar el catalogo entero"
+        v = db.query(ProductVariant).filter(ProductVariant.sku == "H-625").one()
+        assert float(v.cost) == 0.0
+        assert any("Costo ilegible" in i and "H-625" in i for i in r["incidencias"])
+
+    def test_una_recorrida_repara_los_nulos_heredados(self, db, org, branch_a, admin_user, tmp_path):
+        ruta = _xlsx(tmp_path, [FILA])
+        imp.import_datax_export(db, ruta, org.id, branch_a.id)
+        # Simula el estado de produccion previo a esta correccion.
+        v = db.query(ProductVariant).filter(ProductVariant.organization_id == org.id).one()
+        v.cost = None
+        v.price = None
+        db.flush()
+
+        imp.import_datax_export(db, ruta, org.id, branch_a.id)
+
+        db.refresh(v)
+        assert float(v.cost) == 0.0, "volver a correrlo tiene que dejar el catalogo legible"
+        assert float(v.price) == 75.0
+        p = db.query(Product).filter(Product.organization_id == org.id).one()
+        ProductRead.model_validate(p)
+
+    def test_el_resumen_cuenta_los_costos_reparados(self, db, org, branch_a, admin_user, tmp_path):
+        ruta = _xlsx(tmp_path, [FILA, {**FILA, "Código": "H-626", "Descripción": "SEGUNDA"}])
+        primera = imp.import_datax_export(db, ruta, org.id, branch_a.id)
+        assert primera["costos_reparados"] == 0, "las filas nuevas ya nacen con costo 0"
+
+        for v in db.query(ProductVariant).filter(ProductVariant.organization_id == org.id):
+            v.cost = None
+        db.flush()
+
+        segunda = imp.import_datax_export(db, ruta, org.id, branch_a.id)
+        assert segunda["costos_reparados"] == 2
+        assert segunda["creados"] == 0, "reparar no puede duplicar nada"
+
+        tercera = imp.import_datax_export(db, ruta, org.id, branch_a.id)
+        assert tercera["costos_reparados"] == 0, "ya no hay nada que reparar"
 
 
 class TestEscalones:

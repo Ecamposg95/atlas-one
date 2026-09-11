@@ -15,6 +15,10 @@ Es idempotente: la identidad de un renglon es (codigo de barras, descripcion)
 dentro de la organizacion. Volver a correrlo refresca precios, escalones y
 minimos/maximos, pero no duplica productos ni vuelve a cargar existencias.
 
+Volver a correrlo tambien repara las variantes que quedaron con `cost` NULL
+(las cargadas antes de que esto lo cubriera): un NULL ahi tumba
+`GET /api/products/pos/search` con un 500 para toda la organizacion.
+
 Antes de escribir nada valida que la organizacion y la sucursal existan y que
 la sucursal sea de esa organizacion, y anuncia a donde va la carga. Todo se
 confirma en un solo commit al final: si un renglon revienta a media corrida,
@@ -267,6 +271,7 @@ def import_datax_export(
         "movimientos": 0,
         "departamentos_creados": 0,
         "codigos_generados": 0,
+        "costos_reparados": 0,
         "incidencias": [],
     }
 
@@ -357,11 +362,22 @@ def import_datax_export(
                 continue
 
             precio_base = _num(f.get("precio_p1"), "Precio 1", nfila)
-            costo = _num(f.get("costo"), "Costo", nfila)
             if not _positivo(precio_base):
                 resumen["incidencias"].append(
-                    f"codigo {codigo or nombre}: sin Precio 1, la variante queda sin precio base"
+                    f"codigo {codigo or nombre}: sin Precio 1, la variante se carga "
+                    f"con precio 0 — corrigelo antes de venderla"
                 )
+
+            # El Costo es informativo (no se cobra): uno ilegible no vale tumbar
+            # la carga entera, a diferencia de un precio.
+            try:
+                costo = _num(f.get("costo"), "Costo", nfila)
+            except ValueError:
+                resumen["incidencias"].append(
+                    f"codigo {codigo or nombre}: Costo ilegible "
+                    f"({(f.get('costo') or '').strip()!r}), se carga como 0"
+                )
+                costo = None
 
             imagen = (f.get("imagen") or "").strip()
             if imagen and IMAGEN_MARCADOR not in imagen:
@@ -422,8 +438,11 @@ def import_datax_export(
                     # Toda ruta de creacion de la aplicacion asigna "Estándar";
                     # dejarlo en NULL tumba el cobro al armar el renglon de venta.
                     variant_name="Estándar",
-                    price=precio_base,
-                    cost=costo,
+                    # `ProductVariantRead` exige price y cost NO nulos: un NULL
+                    # aqui tumba /products/pos/search con un 500 para toda la
+                    # organizacion. El alta por UI tampoco los deja vacios.
+                    price=precio_base if precio_base is not None else Decimal("0"),
+                    cost=costo if costo is not None else Decimal("0"),
                     organization_id=org_id,
                 )
                 db.add(variante)
@@ -433,11 +452,23 @@ def import_datax_export(
                 producto = variante.product
                 producto.department_id = dep.id if dep is not None else None
                 # Solo se pisa lo que el archivo trae: un Precio 1 o un Costo
-                # vacios no borran lo que ya este capturado en Atlas.
+                # vacios no borran lo que ya este capturado en Atlas — pero un
+                # NULL heredado si se repara, para que el POS pueda leerlo.
                 if precio_base is not None:
                     variante.price = precio_base
+                elif variante.price is None:
+                    variante.price = Decimal("0")
+                    resumen["incidencias"].append(
+                        f"codigo {codigo or nombre}: tenia precio NULL en la base "
+                        f"y el archivo no trae Precio 1 — se reparo a 0"
+                    )
                 if costo is not None:
                     variante.cost = costo
+                elif variante.cost is None:
+                    # Reparacion: las variantes cargadas antes de esta correccion
+                    # quedaron con cost NULL y tumbaban /products/pos/search.
+                    variante.cost = Decimal("0")
+                    resumen["costos_reparados"] += 1
                 resumen["actualizados"] += 1
 
             _cargar_escalones(db, org_id, variante, f, nfila, resumen)
@@ -628,6 +659,7 @@ def main() -> None:
     print(f"  movimientos de stock   {r['movimientos']}")
     print(f"  departamentos creados  {r['departamentos_creados']}")
     print(f"  codigos generados      {r['codigos_generados']}")
+    print(f"  costos reparados       {r['costos_reparados']}")
     print(f"  incidencias            {len(r['incidencias'])}")
     for inc in r["incidencias"]:
         print("   ·", inc)
