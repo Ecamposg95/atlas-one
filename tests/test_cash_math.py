@@ -266,6 +266,12 @@ class TestRefundReconciliation:
                             payments=[(PaymentMethod.CASH, 80)],
                             session=old_session, change_given=0,
                             created_at=old_session.opened_at)
+        # La sesión vieja se cierra antes de abrir la de hoy: un cajero no
+        # puede tener dos sesiones abiertas a la vez en la misma sucursal
+        # (índice uq_cash_sessions_open_user_branch).
+        old_session.status = CashSessionStatus.CLOSED
+        old_session.closed_at = old_session.opened_at + timedelta(hours=8)
+        db.flush()
         # Refund hoy en NUEVA sesión
         new_session = _open_session(db, cajero_a, branch_a, opening=200)
         _approve_refund(db, sale, refund_amount=80, session=new_session)

@@ -252,6 +252,35 @@ def run_migrations():
             conn.commit()
             print("  ✓ index ix_appt_resource_range (partial) ensured")
 
+    # Carrera al abrir caja 2026-09-11 (auditoría Rmazh §5) — una sola sesión
+    # ABIERTA por (usuario, sucursal). Parcial: el historial de cortes cerrados
+    # acumula muchas filas del mismo par y no debe estorbar.
+    #
+    # Si la base ya trae duplicados (los que creó la carrera antes de este
+    # arreglo) el CREATE UNIQUE fallaría y tumbaría el deploy. Preferimos
+    # reportarlos y seguir: el arreglo del endpoint ya impide crear nuevos, y
+    # los existentes se resuelven cerrando la sesión sobrante a mano.
+    if engine.dialect.name == "postgresql":
+        with engine.connect() as conn:
+            duplicados = conn.execute(text(
+                "SELECT user_id, branch_id, COUNT(*) AS n FROM cash_sessions "
+                "WHERE status = 'OPEN' GROUP BY user_id, branch_id HAVING COUNT(*) > 1"
+            )).fetchall()
+            if duplicados:
+                detalle = ", ".join(f"user={d[0]} branch={d[1]} ({d[2]})" for d in duplicados)
+                print(
+                    f"  ⚠ uq_cash_sessions_open_user_branch NO se crea: hay sesiones "
+                    f"abiertas duplicadas — {detalle}. Cierra las sobrantes y vuelve a desplegar."
+                )
+            else:
+                conn.execute(text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_cash_sessions_open_user_branch "
+                    "ON cash_sessions (user_id, branch_id) "
+                    "WHERE status = 'OPEN';"
+                ))
+                conn.commit()
+                print("  ✓ index uq_cash_sessions_open_user_branch (partial) ensured")
+
     # --- Sprint 2 backfill: cash_sessions.organization_id y employees.organization_id ---
     # Derivado de branches.organization_id. Idempotente (solo filas con NULL).
     print("\n  Backfill organization_id (Sprint 2)…")

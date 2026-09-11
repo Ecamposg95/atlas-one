@@ -1,6 +1,6 @@
 # app/models/cash.py
 import enum
-from sqlalchemy import Column, Integer, String, DateTime, Numeric, ForeignKey, Enum
+from sqlalchemy import Column, Integer, String, DateTime, Numeric, ForeignKey, Enum, Index, text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
@@ -12,6 +12,24 @@ class CashSessionStatus(str, enum.Enum):
 
 class CashSession(Base, TenantMixin):
     __tablename__ = "cash_sessions"
+
+    # Una sola sesion ABIERTA por (usuario, sucursal). Guarda dura contra la
+    # carrera al abrir caja (auditoria Rmazh §5): el chequeo previo del
+    # endpoint es check-then-insert y dos peticiones concurrentes lo pasan las
+    # dos. El indice es PARCIAL para no estorbar al historial de cortes
+    # cerrados, que acumula muchas filas del mismo par.
+    #
+    # `create_all` solo lo crea en bases nuevas (pruebas, dev); la base de
+    # produccion ya existe, asi que alli lo crea scripts/railway_init.py.
+    __table_args__ = (
+        Index(
+            "uq_cash_sessions_open_user_branch",
+            "user_id", "branch_id",
+            unique=True,
+            sqlite_where=text("status = 'OPEN'"),
+            postgresql_where=text("status = 'OPEN'"),
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
