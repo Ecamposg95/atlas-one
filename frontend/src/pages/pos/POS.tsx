@@ -420,7 +420,7 @@ export function POS() {
       {/* Consolidated header — single bar. Inerte durante el cobro (ver efecto). */}
       <div
         ref={barraRef}
-        className={`flex items-center gap-2 flex-wrap px-4 py-2 flex-shrink-0 transition-opacity ${
+        className={`flex items-center gap-2 flex-wrap px-4 py-2 flex-shrink-0 ${
           payModal !== null ? 'opacity-50' : ''
         }`}
         style={{ background: 'var(--dax-surface)', borderBottom: '1px solid var(--dax-border-dim)' }}
