@@ -81,6 +81,41 @@ class TestGateDePin:
     def test_un_pin_incorrecto_se_rechaza(self, client, org, venta, auth_cajero_a, gerente_a):
         resp = _reimprimir(client, auth_cajero_a, org, venta.id, pin="no-es")
         assert resp.status_code == 403, resp.text
+        # El `detail` va estructurado: el otro 403 del endpoint ("Sin acceso a
+        # esta venta") es texto plano, y el front tiene que distinguirlos para
+        # decidir si deja reintentar en el modal.
+        assert resp.json()["detail"]["code"] == "PIN_INCORRECTO"
+
+    def test_un_rechazo_de_acceso_no_lleva_el_codigo_del_pin(
+        self, client, db, org, branch_b, venta, auth_cajero_a, gerente_a
+    ):
+        """El endpoint tiene otros rechazos (sucursal ajena, venta de otra org)
+        que NO son "PIN incorrecto": ninguno debe traer el codigo, o el modal
+        del front se quedaria abierto pidiendo un PIN que no arregla nada."""
+        venta.branch_id = branch_b.id
+        db.flush()
+        resp = _reimprimir(client, auth_cajero_a, org, venta.id, pin="test1234")
+        assert resp.status_code == 404, resp.text  # no filtra que la venta existe
+        assert resp.json()["detail"] != {"code": "PIN_INCORRECTO", "message": "PIN incorrecto"}
+
+    def test_prefiere_a_un_supervisor_de_la_misma_sucursal(
+        self, client, db, org, branch_a, venta, auth_cajero_a, gerente_a
+    ):
+        """Con gerente en la sucursal, no se prueba el PIN contra los de las
+        demas: cada candidato cuesta un bcrypt."""
+        from app.services.reprint_auth import _supervisores_activos
+        candidatos = _supervisores_activos(db, org.id, branch_a.id)
+        assert [u.id for u in candidatos] == [gerente_a.id]
+
+    def test_sin_supervisor_en_la_sucursal_cae_a_la_organizacion(
+        self, client, db, org, branch_a, hq_branch, admin_user, products_setup, auth_cajero_a, cajero_a
+    ):
+        """El dueno/administrador suele estar en HQ, no en la sucursal que
+        vende: si se filtrara solo por sucursal, nadie podria autorizar."""
+        _, variante = products_setup["product_a"]
+        propia = _crear_venta(db, org, branch_a, cajero_a, variante, folio=5)
+        resp = _reimprimir(client, auth_cajero_a, org, propia.id, pin="test1234")
+        assert resp.status_code == 200, resp.text
 
     def test_un_rol_gerencial_no_necesita_pin(self, client, org, venta, auth_gerente_a):
         resp = _reimprimir(client, auth_gerente_a, org, venta.id)
@@ -225,3 +260,63 @@ class TestTicketTrasDevolucion:
     def test_lo_emite_con_pin_valido(self, client, org, venta, auth_cajero_a, gerente_a):
         resp = _reimprimir(client, auth_cajero_a, org, venta.id, pin="test1234", ruta="reprint-refunded")
         assert resp.status_code == 200, resp.text
+
+
+class TestRastroDeAuditoria:
+    """El PrintJob guarda los bytes y la impresora, no quien pidio el ticket ni
+    quien lo autorizo. Sin esta fila el control del PIN no se puede investigar."""
+
+    def _filas(self, db, org, evento):
+        from app.models.cash_audit import CashAuditLog
+        return (
+            db.query(CashAuditLog)
+            .filter(CashAuditLog.organization_id == org.id,
+                    CashAuditLog.event_type == evento)
+            .all()
+        )
+
+    def test_la_reimpresion_con_pin_deja_quien_autorizo(
+        self, client, db, org, branch_a, venta, auth_cajero_a, cajero_a, gerente_a
+    ):
+        from app.models.cash_audit import CashAuditEvent
+        assert _reimprimir(client, auth_cajero_a, org, venta.id, pin="test1234").status_code == 200
+
+        filas = self._filas(db, org, CashAuditEvent.TICKET_REPRINTED)
+        assert len(filas) == 1
+        fila = filas[0]
+        assert fila.user_id == cajero_a.id
+        assert fila.branch_id == branch_a.id
+        assert fila.related_id == str(venta.id)
+        assert fila.payload_json["via"] == "pin"
+        assert fila.payload_json["authorized_by_user_id"] == gerente_a.id
+
+    def test_el_intento_fallido_queda_registrado(
+        self, client, db, org, venta, auth_cajero_a, cajero_a, gerente_a
+    ):
+        from app.models.cash_audit import CashAuditEvent
+        assert _reimprimir(client, auth_cajero_a, org, venta.id, pin="mal").status_code == 403
+
+        filas = self._filas(db, org, CashAuditEvent.REPRINT_PIN_FAILED)
+        assert len(filas) == 1
+        assert filas[0].user_id == cajero_a.id
+        assert filas[0].related_id == str(venta.id)
+        assert filas[0].payload_json["authorized_by_user_id"] is None
+
+    def test_el_rol_gerencial_tambien_deja_rastro(self, client, db, org, venta, auth_gerente_a, gerente_a):
+        from app.models.cash_audit import CashAuditEvent
+        assert _reimprimir(client, auth_gerente_a, org, venta.id).status_code == 200
+
+        filas = self._filas(db, org, CashAuditEvent.TICKET_REPRINTED)
+        assert len(filas) == 1
+        assert filas[0].user_id == gerente_a.id
+        assert filas[0].payload_json["via"] == "rol_gerencial"
+
+    def test_la_impresion_normal_del_pos_no_ensucia_la_bitacora(
+        self, client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup
+    ):
+        """Una fila por cada venta cobrada seria ruido, no auditoria."""
+        from app.models.cash_audit import CashAuditEvent
+        _, variante = products_setup["product_a"]
+        reciente = _crear_venta(db, org, branch_a, cajero_a, variante, hace_minutos=1, folio=6)
+        assert _reimprimir(client, auth_cajero_a, org, reciente.id).status_code == 200
+        assert self._filas(db, org, CashAuditEvent.TICKET_REPRINTED) == []

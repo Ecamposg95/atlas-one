@@ -27,6 +27,11 @@ class CashAuditEvent:
     SESSION_CLOSED    = "SESSION_CLOSED"
     INVARIANT_FAILED  = "INVARIANT_FAILED"
     CLOSURE_WARNING   = "CLOSURE_WARNING"
+    # Reimpresion de tickets (auditoria Rmazh §6). No mueven efectivo, pero el
+    # fraude que el PIN ataca —entregar una copia como comprobante de una venta
+    # que no ocurrio— se investiga con el mismo hilo: quien, cuando, que venta.
+    TICKET_REPRINTED   = "TICKET_REPRINTED"
+    REPRINT_PIN_FAILED = "REPRINT_PIN_FAILED"
 
 
 class CashAuditLog(Base):

@@ -12,7 +12,7 @@ import { ReprintPinModal } from '../../components/pos/modals/ReprintPinModal'
 import { formatCurrency } from '../../utils/currency'
 import { todayStr, daysAgoStr } from '../../utils/dates'
 import { toast } from '../../store/toastStore'
-import { mensajeReimpresion, pinIncorrecto, requierePin } from '../../utils/reimpresion'
+import { mensajeReimpresion, pinBloqueado, pinIncorrecto, requierePin } from '../../utils/reimpresion'
 
 const PRESETS = [
   { label: 'Hoy', start: () => todayStr(), end: () => todayStr() },
@@ -88,9 +88,10 @@ export function SalesHistory() {
         setVentaPorAutorizar(sale)
         return null
       }
-      // Un PIN equivocado deja el modal abierto para reintentar; cualquier otro
-      // conflicto (bloqueo por intentos, venta cancelada) lo cierra con aviso.
-      if (pin && pinIncorrecto(e)) return mensajeReimpresion(e)
+      // Un PIN equivocado deja el modal abierto para reintentar. El bloqueo por
+      // intentos lo cierra: hay que esperar, insistir no sirve. Y cualquier otro
+      // conflicto (venta cancelada, sin acceso) también lo cierra con aviso.
+      if (pin && pinIncorrecto(e) && !pinBloqueado(e)) return mensajeReimpresion(e)
       toast.error(mensajeReimpresion(e))
       setVentaPorAutorizar(null)
       return null

@@ -150,22 +150,27 @@ export function POS() {
       })
   }
 
-  /** Reimprimir último ticket (incluye leyenda COPIA) */
-  const reprintViaAgent = (saleId: string) => {
+  /**
+   * Aviso común a los tres botones de reimprimir del POS.
+   *
+   * Pasada la ventana de "venta propia reciente", el backend exige el PIN de un
+   * supervisor (428). El POS no lo pide —el historial de ventas es donde se
+   * teclea—, así que ahí se manda al cajero en vez de culpar al agente local.
+   */
+  const avisarFalloReimpresion = (e: unknown) => {
+    showToast(
+      requierePin(e)
+        ? 'Esta reimpresión necesita autorización: hazla desde Historial de ventas'
+        : 'Ticket guardado pero no se pudo imprimir — verifica que el agente esté corriendo',
+      'error',
+    )
+  }
+
+  /** Reimprimir último ticket (incluye leyenda COPIA). Propaga el fallo. */
+  const reprintViaAgent = async (saleId: string) => {
     if (!savedPrinterName) return
-    printerApi.getTicketBase64(saleId)
-      .then(b64 => { if (b64) return printerApi.printViaAgent(savedPrinterName, b64) })
-      .catch((e: unknown) => {
-        // Pasada la ventana de "venta propia reciente", el backend exige el PIN
-        // de un supervisor. El POS no lo pide: el historial de ventas es donde
-        // se teclea, así que ahí se manda al cajero en vez de culpar al agente.
-        showToast(
-          requierePin(e)
-            ? 'Esta reimpresión necesita autorización: hazla desde Historial de ventas'
-            : 'Ticket guardado pero no se pudo imprimir — verifica que el agente esté corriendo',
-          'error',
-        )
-      })
+    const b64 = await printerApi.getTicketBase64(saleId)
+    if (b64) await printerApi.printViaAgent(savedPrinterName, b64)
   }
 
   // ----- Sale submission -----
@@ -303,14 +308,17 @@ export function POS() {
   }, [store])
 
   // ----- Reprint last ticket -----
-  const handleReprint = () => {
+  const handleReprint = async () => {
     if (!lastSaleId) return
-    if (savedPrinterName) {
-      reprintViaAgent(lastSaleId)
-    } else {
-      printerApi.reprintTicket(lastSaleId).catch(() => {})
+    try {
+      if (savedPrinterName) await reprintViaAgent(lastSaleId)
+      else await printerApi.reprintTicket(lastSaleId)
+      // El aviso va DESPUÉS: antes se anunciaba "Imprimiendo…" y el rechazo se
+      // tragaba en un catch vacío, así que un 428 se veía como un éxito.
+      showToast('Imprimiendo último ticket...')
+    } catch (e: unknown) {
+      avisarFalloReimpresion(e)
     }
-    showToast('Imprimiendo último ticket...')
   }
 
   // ----- Payment handlers -----
@@ -548,13 +556,13 @@ export function POS() {
                 return
               }
               try {
-                const b64 = await printerApi.getTicketBase64(last.id)
-                if (b64) await printerApi.printViaAgent(savedPrinterName, b64)
+                await reprintViaAgent(last.id)
                 showToast(`Reimprimiendo ${saleLabel(last)}`)
-              } catch {
-                // El error puede venir del backend (sin bytes) o del agente local.
-                // En ambos casos la venta original existe — solo falla la impresión.
-                showToast('Ticket guardado pero no se pudo imprimir — verifica que el agente esté corriendo', 'error')
+              } catch (e: unknown) {
+                // El error puede venir del backend (falta autorización, sin
+                // bytes) o del agente local. En todos los casos la venta
+                // original existe — solo falla la impresión.
+                avisarFalloReimpresion(e)
               }
             }}
             className="flex items-center gap-1.5 text-xs font-bold px-2.5 rounded-lg transition-colors active:scale-95"

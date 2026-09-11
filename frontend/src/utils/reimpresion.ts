@@ -20,13 +20,37 @@ interface ErrorConRespuesta {
   }
 }
 
+/** `detail` estructurado del backend: `{code, message}`. */
+interface DetalleConCodigo {
+  code?: string
+  message?: string
+}
+
+/** Código que el backend pone SOLO en el 403 del PIN equivocado. */
+const CODIGO_PIN_INCORRECTO = 'PIN_INCORRECTO'
+
 function estado(error: unknown): number | undefined {
   return (error as ErrorConRespuesta)?.response?.status
 }
 
+function crudo(error: unknown): unknown {
+  return (error as ErrorConRespuesta)?.response?.data?.detail
+}
+
+function codigo(error: unknown): string | undefined {
+  const d = crudo(error)
+  if (d && typeof d === 'object' && !Array.isArray(d)) return (d as DetalleConCodigo).code
+  return undefined
+}
+
 function detalle(error: unknown): string | undefined {
-  const d = (error as ErrorConRespuesta)?.response?.data?.detail
-  return typeof d === 'string' && d.trim() !== '' ? d : undefined
+  const d = crudo(error)
+  if (typeof d === 'string' && d.trim() !== '') return d
+  if (d && typeof d === 'object' && !Array.isArray(d)) {
+    const msg = (d as DetalleConCodigo).message
+    if (typeof msg === 'string' && msg.trim() !== '') return msg
+  }
+  return undefined
 }
 
 /** El backend pide el PIN de un supervisor para esta reimpresión. */
@@ -34,9 +58,15 @@ export function requierePin(error: unknown): boolean {
   return estado(error) === 428
 }
 
-/** El PIN tecleado no corresponde a ningún supervisor: se puede reintentar. */
+/**
+ * El PIN tecleado no corresponde a ningún supervisor: se puede reintentar.
+ *
+ * Se exige el código y no solo el 403: el mismo endpoint responde 403 cuando la
+ * venta es de otra organización, y ahí reintentar el PIN no arregla nada — el
+ * modal se quedaría abierto pidiendo algo inútil.
+ */
 export function pinIncorrecto(error: unknown): boolean {
-  return estado(error) === 403
+  return estado(error) === 403 && codigo(error) === CODIGO_PIN_INCORRECTO
 }
 
 /** Demasiados intentos fallidos: el modal debe cerrarse, no reintentar. */

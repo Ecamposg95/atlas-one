@@ -72,9 +72,15 @@ def es_venta_propia_reciente(sale, user: User) -> bool:
     return datetime.now(timezone.utc) - creada <= timedelta(minutes=VENTANA_VENTA_PROPIA_MINUTOS)
 
 
-def _supervisores_activos(db: Session, org_id: int) -> list[User]:
-    """Usuarios con rol gerencial activos en la organizacion."""
-    return (
+def _supervisores_activos(db: Session, org_id: int, branch_id: Optional[int] = None) -> list[User]:
+    """Usuarios con rol gerencial activos en la organizacion.
+
+    Con `branch_id` devuelve solo los de esa sucursal. El caller prueba primero
+    la sucursal y solo cae a la organizacion entera si ahi no hay ninguno: cada
+    candidato cuesta un bcrypt, y una organizacion de 29 sucursales no tiene por
+    que verificar el PIN contra los gerentes de las otras 28.
+    """
+    q = (
         db.query(User)
         .join(UserOrganization, UserOrganization.user_id == User.id)
         .filter(
@@ -83,19 +89,30 @@ def _supervisores_activos(db: Session, org_id: int) -> list[User]:
             User.is_active == True,  # noqa: E712
             User.role.in_(ROLES_GERENCIALES),
         )
-        .all()
     )
+    if branch_id is not None:
+        q = q.filter(User.branch_id == branch_id)
+    return q.all()
 
 
-def verificar_pin_supervisor(db: Session, org_id: int, pin: str) -> Optional[User]:
-    """Devuelve el supervisor cuyo PIN coincide, o None.
+def verificar_pin_supervisor(
+    db: Session, org_id: int, pin: str, branch_id: Optional[int] = None
+) -> Optional[User]:
+    """Devuelve el supervisor cuyo PIN coincide, o None. Corta en el primero.
 
-    Compara contra TODOS los supervisores activos de la organizacion. La
+    Prueba primero los supervisores de la sucursal de la venta y solo si esa
+    sucursal no tiene ninguno cae a los de la organizacion (hay sucursales sin
+    gerente propio; el dueno de la org tampoco tiene sucursal asignada). La
     respuesta no revela cual existe ni cual hizo match: solo el resultado.
     """
     if not pin:
         return None
-    for supervisor in _supervisores_activos(db, org_id):
+
+    candidatos = _supervisores_activos(db, org_id, branch_id) if branch_id is not None else []
+    if not candidatos:
+        candidatos = _supervisores_activos(db, org_id)
+
+    for supervisor in candidatos:
         if not supervisor.password_hash:
             continue
         try:
