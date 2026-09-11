@@ -54,6 +54,7 @@ export function POS() {
   const [productRefreshKey, setProductRefreshKey] = useState(0)
   const [offlineQueue, setOfflineQueue] = useState<PendingSale[]>([])
   const [showOfflineModal, setShowOfflineModal] = useState(false)
+  const barraRef = useRef<HTMLDivElement>(null)
 
   const canEditProducts = !!user?.role && ['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO'].includes(user.role)
   const { branch } = useAuthStore()
@@ -78,6 +79,22 @@ export function POS() {
   }, [])
 
   useEffect(() => { checkSession() }, [checkSession])
+
+  // Durante el cobro la barra superior queda inerte: un clic o un Tab a las
+  // pestañas cambiaba de panel con el modal abierto y dejaba el ticket a medio
+  // cobrar. `inert` la saca del orden de tabulación y del árbol de
+  // accesibilidad, cosa que `pointer-events-none` no hace. Se aplica sobre el
+  // nodo porque react-dom 18 descarta el atributo si se pasa como prop de JSX
+  // (mismo motivo documentado en Layout.tsx para el cajón móvil).
+  useEffect(() => {
+    const el = barraRef.current
+    if (!el) return
+    if (payModal !== null) {
+      el.setAttribute('inert', '')
+    } else {
+      el.removeAttribute('inert')
+    }
+  }, [payModal])
 
   // ----- Parked tickets polling — siempre activo sin importar el tab -----
   // Track 2 (POS bug-fix): pausados están en `parked_tickets`, NO crean
@@ -395,9 +412,12 @@ export function POS() {
         </div>
       )}
 
-      {/* Consolidated header — single bar */}
+      {/* Consolidated header — single bar. Inerte durante el cobro (ver efecto). */}
       <div
-        className="flex items-center gap-2 flex-wrap px-4 py-2 flex-shrink-0"
+        ref={barraRef}
+        className={`flex items-center gap-2 flex-wrap px-4 py-2 flex-shrink-0 transition-opacity ${
+          payModal !== null ? 'opacity-50' : ''
+        }`}
         style={{ background: 'var(--dax-surface)', borderBottom: '1px solid var(--dax-border-dim)' }}
       >
         {/* ← Mi día — solo en sucursal */}

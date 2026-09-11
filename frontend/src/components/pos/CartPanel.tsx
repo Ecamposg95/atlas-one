@@ -7,6 +7,7 @@ import type { Product } from '../../types/products'
 import { ProductDetailModal } from './modals/ProductDetailModal'
 import { PricePickerPopover } from './PricePickerPopover'
 import { formatCurrency } from '../../utils/currency'
+import { confirm } from '../ui/ConfirmDialog'
 import { autoTierTarget, forcedTierMap, cajaTierOf } from '../../pages/pos/cartTiers'
 
 type PaymentMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'MIXED'
@@ -186,6 +187,22 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
     // (el useEffect se ejecutará en el próximo render del carrito)
   }
 
+  // Vaciar el carrito es destructivo y no se puede deshacer: se pregunta antes,
+  // porque el botón vive a un dedo de "Pausar" y de las filas del ticket.
+  const confirmarLimpiar = async () => {
+    const lineas = cart.length
+    const ok = await confirm({
+      title: 'Vaciar el carrito',
+      message: lineas === 1
+        ? 'Se quitará la única línea del ticket. No se puede deshacer.'
+        : `Se quitarán las ${lineas} líneas del ticket. No se puede deshacer.`,
+      confirmText: 'Vaciar',
+      cancelText: 'Cancelar',
+      variant: 'danger',
+    })
+    if (ok) clearCart()
+  }
+
   const removeGroup = (group: ProductGroup) => {
     if (group.unit) {
       removeItem(ck(group.unit))
@@ -328,7 +345,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
             </button>
           )}
           {!isEmpty && (
-            <button onClick={clearCart} className="text-slate-500 hover:text-red-400 text-xs transition-colors">
+            <button onClick={confirmarLimpiar} className="text-slate-500 hover:text-red-400 text-xs transition-colors">
               <i className="fa-solid fa-trash" /> Limpiar
             </button>
           )}

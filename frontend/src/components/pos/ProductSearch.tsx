@@ -85,6 +85,11 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
   const lastInputAtRef = useRef<number>(0)
   const lastSearchTargetRef = useRef<string>('')
   const resultsRef = useRef<Product[]>([])
+  const inputRef = useRef<HTMLInputElement>(null)
+  // El escáner teclea sobre el input: si un clic en un resultado se lleva el
+  // foco, el siguiente código de barras se pierde. Se devuelve en el frame
+  // siguiente, ya con el DOM de resultados actualizado.
+  const devolverFoco = () => requestAnimationFrame(() => inputRef.current?.focus())
 
   useEffect(() => { resultsRef.current = results }, [results])
 
@@ -206,6 +211,7 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
     })
     setQuery('')
     setResults([])
+    devolverFoco()
   }
 
   const stockNum = (p: Product) => Number(p.stock_total ?? 0)
@@ -221,6 +227,7 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
         <div className="relative flex-1">
           <i className="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: 'var(--dax-text-faint)' }} />
           <input
+            ref={inputRef}
             type="text"
             value={query}
             onChange={(e) => handleChange(e.target.value)}
@@ -295,6 +302,7 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
                 }}
               >
                 <button
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() => addToCart(p)}
                   disabled={stock <= 0 || atLimit}
                   className={`text-left flex flex-col gap-1.5 group w-full disabled:opacity-40 disabled:cursor-not-allowed transition-colors ${isLimit ? 'opacity-80' : ''}`}
@@ -386,6 +394,7 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
                   </div>
                 </button>
                 <button
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={(e) => { e.stopPropagation(); setDetailProduct(p) }}
                   className="w-full mt-1 py-1.5 text-xs font-semibold rounded-xl border transition-colors"
                   style={{ borderColor: 'var(--dax-border)', color: 'var(--dax-text-muted)' }}
@@ -403,7 +412,7 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
 
       <ProductDetailModal
         product={detailProduct}
-        onClose={() => setDetailProduct(null)}
+        onClose={() => { setDetailProduct(null); devolverFoco() }}
         onAddToCart={(p) => { addToCart(p); setDetailProduct(null) }}
         canEdit={canEdit}
         onSaved={() => {
