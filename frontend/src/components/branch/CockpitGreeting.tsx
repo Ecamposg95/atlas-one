@@ -1,8 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BRANCH_COPY, ROLE_LABELS } from '../../copy/branchCopy'
 import { ui } from './branchUI'
 import { OpenShiftModal } from './OpenShiftModal'
+import { Sky } from './Sky'
+import { heroState } from '../../theme/heroState'
+import { skyPeriod } from '../../theme/sky'
 import type { DashboardShift, DashboardUser } from '../../types/branchDashboard'
 
 interface Props {
@@ -35,17 +38,31 @@ function formatElapsed(mins: number): string {
 
 export function CockpitGreeting({ user, shift, onShiftOpened }: Props) {
   const [showOpenModal, setShowOpenModal] = useState(false)
+  const [justOpened, setJustOpened] = useState(false)
 
-  const heroClass = shift.is_open ? ui.heroEmerald : ui.heroOrange
-  const ctaTextColor = shift.is_open ? 'text-emerald-700' : 'text-orange-700'
+  useEffect(() => {
+    if (!justOpened) return
+    const t = setTimeout(() => setJustOpened(false), 2400)
+    return () => clearTimeout(t)
+  }, [justOpened])
+
+  const state = heroState(shift.is_open, false)
+  const period = skyPeriod(new Date())
   const firstName = (user.name ?? '').split(/\s+/)[0] || user.name || ''
   const roleLabel = user.role ? (ROLE_LABELS[user.role] ?? user.role) : null
 
   return (
     <>
-      <header className={`${heroClass} px-6 py-7 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4`}>
+      <header
+        className={`${ui.heroSky} px-9 py-9 pl-11 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 ${justOpened ? 'anim-just-opened' : ''}`}
+        data-period={period}
+      >
+        <Sky period={period} />
+        <div className="hero-band" style={{ background: state.band }} />
+        {justOpened && <div className="ripple" />}
+
         {/* Left — avatar + greeting + subtitle */}
-        <div className="flex items-center gap-4">
+        <div className="relative z-10 flex items-center gap-4">
           <div className="flex items-center justify-center w-14 h-14 rounded-full bg-white/20 text-white text-xl font-bold flex-shrink-0">
             {getInitials(user.name)}
           </div>
@@ -61,8 +78,8 @@ export function CockpitGreeting({ user, shift, onShiftOpened }: Props) {
         </div>
 
         {/* Right — status pill + contextual CTA */}
-        <div className="flex flex-col items-end gap-2 flex-shrink-0">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 text-white text-xs font-semibold px-2.5 py-1">
+        <div className="relative z-10 flex flex-col items-end gap-2 flex-shrink-0">
+          <span className={`inline-flex items-center gap-1.5 rounded-full text-xs font-bold px-3 py-1.5 ${state.pill}`}>
             <i className="fa-solid fa-circle text-[8px]" />
             {shift.is_open
               ? `${BRANCH_COPY.cockpit.shiftOpenPill} · ${formatElapsed(shift.duration_minutes ?? 0)}`
@@ -72,7 +89,7 @@ export function CockpitGreeting({ user, shift, onShiftOpened }: Props) {
           {shift.is_open ? (
             <Link
               to="/pos"
-              className={`inline-flex items-center justify-center gap-2 rounded-2xl bg-white ${ctaTextColor} hover:bg-white/95 active:bg-white/90 font-bold text-base py-3 px-6 transition-colors shadow-lg shadow-black/20`}
+              className={`inline-flex items-center justify-center gap-2 rounded-2xl bg-white hero-cta hover:bg-white/95 active:bg-white/90 font-bold text-base py-3 px-6 transition-colors shadow-lg shadow-black/20`}
               aria-label={BRANCH_COPY.cockpit.cobrarAhora}
             >
               <i className="fa-solid fa-cash-register" />
@@ -81,7 +98,7 @@ export function CockpitGreeting({ user, shift, onShiftOpened }: Props) {
           ) : (
             <button
               onClick={() => setShowOpenModal(true)}
-              className={`inline-flex items-center justify-center gap-2 rounded-2xl bg-white ${ctaTextColor} hover:bg-white/95 active:bg-white/90 font-bold text-base py-3 px-6 transition-colors shadow-lg shadow-black/20`}
+              className={`inline-flex items-center justify-center gap-2 rounded-2xl bg-white hero-cta hover:bg-white/95 active:bg-white/90 font-bold text-base py-3 px-6 transition-colors shadow-lg shadow-black/20`}
             >
               <i className="fa-solid fa-play" />
               {BRANCH_COPY.cockpit.abrirTurno}
@@ -92,7 +109,7 @@ export function CockpitGreeting({ user, shift, onShiftOpened }: Props) {
 
       {showOpenModal && (
         <OpenShiftModal
-          onOpened={() => { setShowOpenModal(false); onShiftOpened?.() }}
+          onOpened={() => { setShowOpenModal(false); setJustOpened(true); onShiftOpened?.() }}
           onCancel={() => setShowOpenModal(false)}
         />
       )}

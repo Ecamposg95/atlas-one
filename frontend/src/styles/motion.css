@@ -117,3 +117,8 @@ html.light .hero-sky .text-white { color: #fff !important; }
 .verdict-short { background: color-mix(in srgb, var(--dax-danger)  14%, transparent); color: var(--dax-danger);  border-color: color-mix(in srgb, var(--dax-danger)  32%, transparent); }
 .anim-pop { animation: pop-in .45s cubic-bezier(.2,1.6,.4,1) both; }
 @keyframes pop-in { from { transform: scale(.6); opacity: 0 } to { transform: none; opacity: 1 } }
+
+/* CTA blanco sobre el cielo. La tinta es el acento del vertical, que NO cambia
+   con el tema (a diferencia de --dax-accent, aclarado en oscuro): sobre blanco
+   hay que mantener un color oscuro en los dos temas. */
+.hero-cta { color: var(--p-accent); }
