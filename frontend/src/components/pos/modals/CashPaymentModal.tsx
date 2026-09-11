@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { formatCurrency } from '../../../utils/currency'
+import { cashPaymentValidity, OVERPAY_FACTOR } from '../../../pages/pos/cashPayment'
 
 const QUICK = [50, 100, 200, 500, 1000]
 const BILLS = [1000, 500, 200, 100, 50, 20]
@@ -18,7 +19,10 @@ export function CashPaymentModal({ total, onClose, onConfirm }: Props) {
 
   const receivedNum = parseFloat(received) || 0
   const change = receivedNum - total
-  const isValid = receivedNum >= total
+  // Espejo del guard del backend (sales.py): falta de pago o sobrepago >10x
+  // son 422. Vale más avisarlo aquí que dejar que el cobro falle al final.
+  const validity = cashPaymentValidity(receivedNum, total)
+  const isValid = validity.ok
 
   const addDenomination = (d: number) => {
     setReceived((prev) => String((parseFloat(prev) || 0) + d))
@@ -65,12 +69,17 @@ export function CashPaymentModal({ total, onClose, onConfirm }: Props) {
             type="number"
             value={received}
             onChange={(e) => setReceived(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') submit() }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && isValid && !loading) submit() }}
             className="dax-input text-4xl font-black text-center tabular-nums py-3"
             min={0}
             step="0.50"
             autoFocus
           />
+          {validity.overpay && (
+            <p className="mt-1.5 text-sm font-semibold" style={{ color: 'var(--p-danger)' }} role="alert">
+              Monto muy alto: son más de {OVERPAY_FACTOR} veces el total. Revisa lo recibido.
+            </p>
+          )}
         </div>
 
         {/* Cambio */}
