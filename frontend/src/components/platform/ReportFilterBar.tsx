@@ -39,7 +39,7 @@ const inputStyle: React.CSSProperties = {
 
 const pillBtn = (active: boolean): React.CSSProperties => ({
   background: active ? 'var(--p-accent)' : 'var(--p-surface-2)',
-  color: active ? '#fff' : 'var(--p-text)',
+  color: active ? 'var(--dax-on-accent)' : 'var(--p-text)',
   border: '1px solid ' + (active ? 'var(--p-accent)' : 'var(--p-border)'),
   padding: '6px 12px',
   borderRadius: 999,
