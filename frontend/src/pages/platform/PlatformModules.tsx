@@ -75,7 +75,7 @@ const labelStyle: React.CSSProperties = {
 
 const buttonPrimary: React.CSSProperties = {
   background: 'var(--p-teal)',
-  color: '#000',
+  color: 'var(--dax-on-accent)',
   fontWeight: 700,
   border: 'none',
   padding: '8px 16px',

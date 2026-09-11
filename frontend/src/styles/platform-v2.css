@@ -86,7 +86,7 @@
   width: 26px; height: 26px; border-radius: 7px;
   background: var(--p-accent);
   display: grid; place-items: center;
-  color: #fff; font-weight: 700; font-size: 13px;
+  color: var(--dax-on-accent); font-weight: 700; font-size: 13px;
   font-family: var(--font-display);
   letter-spacing: -0.02em;
 }
@@ -262,13 +262,13 @@
 .pv2 .btn:hover { background: var(--p-surface-2); }
 .pv2 .btn i { color: var(--p-muted); font-size: 11px; }
 .pv2 .btn.primary {
-  background: var(--p-accent); border-color: var(--p-accent); color: #fff;
+  background: var(--p-accent); border-color: var(--p-accent); color: var(--dax-on-accent);
 }
 .pv2 .btn.primary:hover {
-  background: var(--p-accent); border-color: var(--p-accent); color: #fff;
+  background: var(--p-accent); border-color: var(--p-accent); color: var(--dax-on-accent);
   filter: brightness(0.88);
 }
-.pv2 .btn.primary i { color: #fff; }
+.pv2 .btn.primary i { color: var(--dax-on-accent); }
 .pv2 .btn.ghost { background: transparent; }
 
 /* ── Card ────────────────────────────────────────────────────── */
@@ -674,7 +674,7 @@
   border: none; background: transparent; color: var(--p-muted); cursor: pointer;
   font: inherit; font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: 999px; min-height: 32px;
 }
-.pv2 .pv2-segmented button.active { background: var(--p-accent); color: #fff; }
+.pv2 .pv2-segmented button.active { background: var(--p-accent); color: var(--dax-on-accent); }
 
 .pv2 .pv2-group-layout {
   display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: 20px; align-items: start;
@@ -711,7 +711,7 @@
 .pv2 .pv2-badge-diff   { color: var(--p-danger); }
 
 /* Barra inferior de teléfono (oculta salvo ≤480) */
-.pv2-bottombar {
+.pv2 .pv2-bottombar {
   display: none;
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
   height: 60px;
@@ -719,38 +719,38 @@
   background: var(--p-sidebar);
   border-top: 1px solid var(--p-border);
 }
-.pv2-bottombar .bb-item {
+.pv2 .pv2-bottombar .bb-item {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
   color: var(--p-muted); font-size: 10px; text-decoration: none;
   background: transparent; border: none; font-family: inherit; cursor: pointer;
   border-radius: 8px; min-height: 44px;
 }
-.pv2-bottombar .bb-item i { font-size: 17px; }
-.pv2-bottombar .bb-item.active { color: var(--p-accent); }
+.pv2 .pv2-bottombar .bb-item i { font-size: 17px; }
+.pv2 .pv2-bottombar .bb-item.active { color: var(--p-accent); }
 
 /* Hoja "Más" (resto de la navegación en teléfono) */
-.pv2-sheet-backdrop {
+.pv2 .pv2-sheet-backdrop {
   position: fixed; inset: 0; z-index: 50; background: var(--dax-modal-backdrop);
 }
-.pv2-sheet {
+.pv2 .pv2-sheet {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 51;
   max-height: 70vh; overflow-y: auto;
   background: var(--p-surface); border-top: 1px solid var(--p-border);
   border-radius: 14px 14px 0 0; padding: 12px 12px calc(12px + env(safe-area-inset-bottom));
 }
-.pv2-sheet .nav-item {
+.pv2 .pv2-sheet .nav-item {
   display: flex; align-items: center; gap: 12px; padding: 10px 12px;
   border-radius: 8px; color: var(--p-muted); text-decoration: none;
   background: transparent; border: none; width: 100%; text-align: left; font: inherit; cursor: pointer;
 }
-.pv2-sheet .nav-item.active { color: var(--p-text); background: var(--p-accent-soft); }
-.pv2-sheet .nav-item i { width: 18px; text-align: center; }
+.pv2 .pv2-sheet .nav-item.active { color: var(--p-text); background: var(--p-accent-soft); }
+.pv2 .pv2-sheet .nav-item i { width: 18px; text-align: center; }
 
 /* La hoja "Más" es solo de teléfono: por encima de 480 no existe layout de
    barra inferior que la abra, pero si queda montada (p.ej. resize) no debe
    quedarse visible flotando sobre el layout de escritorio/tablet. */
 @media (min-width: 481px) {
-  .pv2-sheet, .pv2-sheet-backdrop { display: none; }
+  .pv2 .pv2-sheet, .pv2 .pv2-sheet-backdrop { display: none; }
 }
 
 /* ── Responsive: tablet horizontal ≤1024px (referencia) ────── */
@@ -796,7 +796,7 @@
 @media (max-width: 480px) {
   .pv2-layout { grid-template-columns: 1fr; }
   .pv2-sidebar { display: none; }
-  .pv2-bottombar { display: grid; grid-template-columns: repeat(5, 1fr); }
+  .pv2 .pv2-bottombar { display: grid; grid-template-columns: repeat(5, 1fr); }
   .pv2 .pv2-main, .pv2 .pv2-page { padding: 16px 12px calc(76px + env(safe-area-inset-bottom)); }
   .pv2 .page-head { flex-direction: column; gap: 10px; }
   .pv2 .page-head h1 { font-size: 22px; }
