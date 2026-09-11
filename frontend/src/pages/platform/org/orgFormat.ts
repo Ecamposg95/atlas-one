@@ -1,4 +1,5 @@
 import type {
+  AttentionCounts,
   AttentionKey,
   AttentionLists,
   BranchOverviewRow,
@@ -52,16 +53,18 @@ const CHIP_DEFS: {
   },
 ]
 
-export function attentionChips(a: AttentionLists): {
+/** `counts` (el total real, antes del recorte) hace que un chip diga
+ *  "10 de 23 cortes con diferencia" en vez de fingir que solo hay 10. */
+export function attentionChips(a: AttentionLists, counts?: AttentionCounts): {
   key: AttentionKey
   label: string
   tone: 'warning' | 'danger'
 }[] {
-  return CHIP_DEFS.map((d) => ({ d, n: a[d.key].length }))
-    .filter(({ n }) => n > 0)
-    .map(({ d, n }) => ({
+  return CHIP_DEFS.map((d) => ({ d, n: a[d.key].length, total: counts?.[d.key] ?? a[d.key].length }))
+    .filter(({ total }) => total > 0)
+    .map(({ d, n, total }) => ({
       key: d.key,
-      label: `${n} ${n === 1 ? d.singular : d.plural}`,
+      label: `${total > n ? `${n} de ${total}` : total} ${total === 1 ? d.singular : d.plural}`,
       tone: d.tone,
     }))
 }

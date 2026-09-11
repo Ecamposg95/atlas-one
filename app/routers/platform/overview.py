@@ -10,14 +10,14 @@ El guard `require_platform_admin` (SUPERADMIN o SUPPORT) lo aplica el paquete.
 Solo lectura. Caché en proceso de 60 s por (organización, fecha) para no
 recalcular en cada auto-refresh del tablero.
 """
-from datetime import date, datetime
+from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.fechas import ZONA_NEGOCIO
+from app.core.fechas import hoy_negocio
 from app.routers.platform.stats import _cached
 from app.schemas.platform_overview import AttentionTodayRead, OrgOverviewRead
 from app.services.org_overview import compute_attention_today, compute_org_overview
@@ -29,7 +29,7 @@ _MAX_DIAS = 400
 
 
 def _resolver_dia(date_str: Optional[str]) -> date:
-    hoy = datetime.now(ZONA_NEGOCIO).date()
+    hoy = hoy_negocio()
     if date_str is None:
         return hoy
     try:
@@ -62,10 +62,16 @@ def get_org_overview(
 @router.get("/attention-today", response_model=AttentionTodayRead)
 def get_attention_today(
     date_str: Optional[str] = Query(None, alias="date",
-                                    description="YYYY-MM-DD en hora del negocio; default hoy"),
+                                    description="No se acepta: esta tira es siempre de hoy"),
     db: Session = Depends(get_db),
 ):
-    day = _resolver_dia(date_str)
+    # Sin fecha a propósito. Las ventas y cancelaciones sí se pueden mirar de un
+    # día pasado, pero las cajas abiertas y las devoluciones pendientes son el
+    # estado de AHORA: con `?date=` la tira mezclaría las ventas del martes con
+    # los pendientes de hoy y diría "hace 300 h sin corte" sobre un día viejo.
+    if date_str is not None:
+        raise HTTPException(status_code=422, detail="date no aplica: Atención hoy es siempre de hoy")
+    day = hoy_negocio()
     key = f"attention_today:{day.isoformat()}"
     payload = _cached(key, lambda: compute_attention_today(db, day=day), ttl_seconds=_TTL_SECONDS)
     return AttentionTodayRead.model_validate(payload)

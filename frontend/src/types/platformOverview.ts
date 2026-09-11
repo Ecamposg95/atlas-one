@@ -89,7 +89,13 @@ export type AttentionKey = 'no_cut' | 'cut_difference' | 'oldest_returns' | 'can
 
 export type AttentionLists = Record<AttentionKey, AttentionItem[]>
 
+/** Cuántos pendientes hay DE VERDAD en cada lista: las listas vienen
+ *  recortadas (tope global y reparto entre organizaciones), así que el chip
+ *  dice "10 de 23" en vez de mentir con "10". */
+export type AttentionCounts = Record<AttentionKey, number>
+
 export interface AttentionToday extends AttentionLists {
   date: string
   generated_at: string
+  counts: AttentionCounts
 }

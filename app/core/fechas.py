@@ -9,6 +9,7 @@ La constante vivía duplicada en `app/routers/cash.py` como `MX_TZ`; aquí
 queda una sola vez y configurable, porque el día que Atlas ONE atienda a un
 cliente fuera del centro de México basta con mover `BUSINESS_TIMEZONE`.
 """
+import logging
 import os
 from datetime import date, datetime, timezone
 
@@ -17,8 +18,22 @@ try:
 except ImportError:  # Python < 3.9
     from backports.zoneinfo import ZoneInfo  # type: ignore
 
-NOMBRE_ZONA_NEGOCIO = os.getenv("BUSINESS_TIMEZONE", "America/Mexico_City")
-ZONA_NEGOCIO = ZoneInfo(NOMBRE_ZONA_NEGOCIO)
+logger = logging.getLogger(__name__)
+
+ZONA_POR_DEFECTO = "America/Mexico_City"
+NOMBRE_ZONA_NEGOCIO = os.getenv("BUSINESS_TIMEZONE", ZONA_POR_DEFECTO)
+
+try:
+    ZONA_NEGOCIO = ZoneInfo(NOMBRE_ZONA_NEGOCIO)
+except Exception:
+    # Una errata en BUSINESS_TIMEZONE no puede tumbar el arranque de la API:
+    # esto se evalúa al importar, y el import cuelga de media aplicación.
+    logger.warning(
+        "BUSINESS_TIMEZONE=%r no es una zona horaria válida; se usa %s",
+        NOMBRE_ZONA_NEGOCIO, ZONA_POR_DEFECTO,
+    )
+    NOMBRE_ZONA_NEGOCIO = ZONA_POR_DEFECTO
+    ZONA_NEGOCIO = ZoneInfo(ZONA_POR_DEFECTO)
 
 
 def hoy_negocio(ahora: datetime | None = None) -> date:

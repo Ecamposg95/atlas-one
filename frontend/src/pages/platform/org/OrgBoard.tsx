@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { SkeletonState } from '../../../components/platform/v2/SkeletonState'
-import type { AttentionLists, BranchOverviewRow } from '../../../types/platformOverview'
+import type { AttentionCounts, AttentionLists, BranchOverviewRow } from '../../../types/platformOverview'
 import { AttentionPanel } from './AttentionPanel'
 import { OrgKpis } from './OrgKpis'
 import { OrgTable } from './OrgTable'
@@ -13,13 +13,15 @@ interface Props {
   orgId: number | null
   /** Los pendientes de TODAS las organizaciones (los carga la página). */
   attention: AttentionLists | null
+  /** Totales reales de la tira, antes del recorte. */
+  counts?: AttentionCounts
   /** Saltar a otra organización desde un pendiente de la tira. */
   onPickOrg: (orgId: number) => void
 }
 
 /** El día de UNA organización: sus totales, sus sucursales y, al lado, los
  *  pendientes de todas (lo único que cruza clientes). */
-export function OrgBoard({ orgId, attention, onPickOrg }: Props) {
+export function OrgBoard({ orgId, attention, counts, onPickOrg }: Props) {
   const [selected, setSelected] = useState<BranchOverviewRow | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const { data, loading, error, lastUpdatedAt, refresh } = useOrgOverview(orgId)
@@ -57,7 +59,9 @@ export function OrgBoard({ orgId, attention, onPickOrg }: Props) {
     <>
       <div className="pv2-org-toolbar">
         <span className="hint">
-          {data.organization_name} · {data.date} · {data.rows.length} sucursales
+          {matches
+            ? `${data.organization_name} · ${data.date} · ${data.rows.length} sucursales`
+            : 'Cargando la organización…'}
         </span>
         <span>
           {error && stale && (
@@ -75,7 +79,9 @@ export function OrgBoard({ orgId, attention, onPickOrg }: Props) {
         {matches
           ? <OrgTable rows={data.rows} onRowClick={setSelected} />
           : <SkeletonState />}
-        {attention && <AttentionPanel attention={attention} variant="panel" onPickOrg={onPickOrg} />}
+        {attention && (
+          <AttentionPanel attention={attention} counts={counts} variant="panel" onPickOrg={onPickOrg} />
+        )}
       </div>
       <UnitDrawer row={selected} onClose={() => setSelected(null)} />
     </>

@@ -88,9 +88,20 @@ class AttentionItem(BaseModel):
     detail: str
 
 
+class AttentionCounts(BaseModel):
+    """Cuántos pendientes hay DE VERDAD en cada lista. Las listas vienen
+    recortadas (tope global y reparto entre organizaciones), así que el chip
+    necesita este conteo para decir "10 de 23" en vez de mentir con "10"."""
+    no_cut: int
+    cut_difference: int
+    oldest_returns: int
+    cancelled_today: int
+
+
 class AttentionTodayRead(BaseModel):
     date: str
     generated_at: str
+    counts: AttentionCounts
     no_cut: List[AttentionItem]
     cut_difference: List[AttentionItem]
     oldest_returns: List[AttentionItem]

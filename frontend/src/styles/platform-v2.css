@@ -704,7 +704,7 @@
   background: var(--p-surface); border: 1px solid var(--p-border); color: var(--p-text); cursor: pointer;
 }
 
-.pv2 .pv2-attention-strip { display: flex; gap: 8px; flex-wrap: wrap; }
+.pv2 .pv2-attention-strip { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .pv2 .pv2-chip {
   display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px;
   font-size: 12px; font-weight: 600; border: 1px solid var(--p-border); background: var(--p-surface);

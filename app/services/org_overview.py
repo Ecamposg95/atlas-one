@@ -40,6 +40,9 @@ from app.services.cash_reconciliation import CASH_INCLUDED_STATUSES
 
 NO_CUT_HOURS = 14
 ATTENTION_LIMIT = 10
+# Cupo por organización dentro de cada lista: se reparte por rondas (lo peor de
+# cada cliente primero, luego lo segundo peor de cada uno...). Sin esto, un
+# cliente con 12 sucursales descuadradas tapa a los otros once en la tira.
 
 _ZERO = Decimal("0")
 _MIX_KEYS = ("cash", "card", "transfer", "other")
@@ -149,7 +152,13 @@ def _cancellations_by_branch(db: Session, w: Window, org_id: Optional[int]) -> d
     El repo de origen leía esto del audit log (`SALE_CANCELLED`); aquí ese
     evento no existe ni nadie lo escribe, así que la fuente es la venta misma.
     Se mide por `created_at` (cuándo nació el ticket), no por `updated_at`:
-    cualquier UPDATE posterior movería la venta de día.
+    cualquier UPDATE posterior movería la venta de día. Efecto conocido: una
+    venta creada ayer y cancelada hoy cuenta para ayer.
+
+    TODO(W7): W7 añade `CashAuditEvent.SALE_CANCELLED` al audit log. Cuando esa
+    rama esté integrada y el evento se escriba de verdad, mover la fuente a
+    `CashAuditLog` filtrando por `ts` (la hora real de la cancelación) — igual
+    que `_approved_returns_by_branch` — y borrar esta consulta.
     """
     q = (
         db.query(
@@ -197,6 +206,12 @@ def _last_closed_by_branch(db: Session, org_id: Optional[int]) -> dict[int, tupl
     rows = (
         db.query(CashSession.branch_id, CashSession.closed_at, CashSession.difference, CashSession.id)
         .join(latest, (CashSession.branch_id == latest.c.b) & (CashSession.closed_at == latest.c.c))
+        # El status también aquí: sin él, una sesión OPEN con `closed_at` viejo
+        # (o reabierta) empataría con el máximo y se colaría como "último corte".
+        .filter(CashSession.status == CashSessionStatus.CLOSED)
+        # Dos cortes al mismo segundo: gana el más reciente por id, no el que
+        # la BD decida devolver primero.
+        .order_by(CashSession.branch_id, CashSession.id)
         .all()
     )
     return {r[0]: (_aware(r[1]), _dec(r[2]), r[3]) for r in rows}
@@ -365,34 +380,67 @@ def _item(r: dict, value, detail: str) -> dict:
             "org_name": r["org_name"], "value": value, "detail": detail}
 
 
-def _attention(rows: list[dict]) -> dict:
+def _cerro_en_la_ventana(iso: Optional[str], w: Window) -> bool:
+    """¿Ese corte es del día que se está mirando? Un descuadre de hace tres
+    semanas es un problema, pero no un pendiente de HOY."""
+    if not iso:
+        return False
+    cerrado = _aware(iso)
+    return cerrado is not None and w.start <= cerrado < w.end
+
+
+def _reparte_por_org(items: list[dict]) -> list[dict]:
+    """Recorta a ATTENTION_LIMIT repartiendo por rondas entre organizaciones:
+    lo peor de cada cliente, luego lo segundo peor de cada uno, etc. `items`
+    llega ya ordenado por gravedad, así que cada ronda respeta ese orden."""
+    por_org: dict[int, list[dict]] = {}
+    for i in items:
+        por_org.setdefault(i["org_id"], []).append(i)
+    elegidos: list[dict] = []
+    ronda = 0
+    while len(elegidos) < ATTENTION_LIMIT:
+        tanda = [cola[ronda] for cola in por_org.values() if len(cola) > ronda]
+        if not tanda:
+            break
+        elegidos.extend(tanda)
+        ronda += 1
+    return elegidos[:ATTENTION_LIMIT]
+
+
+def _attention(rows: list[dict], w: Window) -> dict:
     no_cut = [
         _item(r, r["cash"]["open_hours"], f"{r['cash']['open_sessions']} caja(s) abierta(s)")
         for r in rows if r["cash"]["status"] == "OPEN" and (r["cash"]["open_hours"] or 0) > NO_CUT_HOURS
     ]
     no_cut.sort(key=lambda i: -(i["value"] or 0))
+    # Solo los cortes DE HOY: la diferencia del último corte, sea de cuando sea,
+    # sigue estando en la tabla de la organización.
     cut_diff = [
         _item(r, r["cash"]["last_difference"], r["cash"]["last_close_at"] or "")
-        for r in rows if r["cash"]["last_difference"] not in (None, 0.0)
+        for r in rows
+        if r["cash"]["last_difference"] not in (None, 0.0)
+        and _cerro_en_la_ventana(r["cash"]["last_close_at"], w)
     ]
     cut_diff.sort(key=lambda i: -abs(i["value"]))
+    # Ordenadas por ANTIGÜEDAD, no por monto: el título es "pendientes" y lo que
+    # duele es la devolución que lleva tres meses sin resolverse.
     oldest = [
-        _item(r, r["returns"]["pending_amount"],
-              f"{r['returns']['pending_count']} pendiente(s) · la más vieja {r['returns']['oldest_pending_days']} d")
+        _item(r, r["returns"]["oldest_pending_days"],
+              f"{r['returns']['pending_count']} pendiente(s) · {r['returns']['pending_amount']:.2f}")
         for r in rows if r["returns"]["pending_count"] > 0
     ]
-    oldest.sort(key=lambda i: -i["value"])
+    oldest.sort(key=lambda i: (-(i["value"] or 0), i["name"]))
     cancelled = [
         _item(r, r["cancellations_today_amount"], f"{r['cancellations_today_count']} cancelada(s)")
         for r in rows if r["cancellations_today_count"] > 0
     ]
     cancelled.sort(key=lambda i: -i["value"])
-    return {
-        "no_cut": no_cut[:ATTENTION_LIMIT],
-        "cut_difference": cut_diff[:ATTENTION_LIMIT],
-        "oldest_returns": oldest[:ATTENTION_LIMIT],
-        "cancelled_today": cancelled[:ATTENTION_LIMIT],
-    }
+    listas = {"no_cut": no_cut, "cut_difference": cut_diff,
+              "oldest_returns": oldest, "cancelled_today": cancelled}
+    salida = {k: _reparte_por_org(v) for k, v in listas.items()}
+    # Cuántos hay de verdad: el chip dice "10 de 23" y no miente al recortar.
+    salida["counts"] = {k: len(v) for k, v in listas.items()}
+    return salida
 
 
 # ── API del servicio ────────────────────────────────────────────────────
@@ -425,4 +473,5 @@ def compute_attention_today(db: Session, *, day: date, now: Optional[datetime] =
     cada renglón trae su monto y la organización a la que pertenece."""
     now = now or datetime.now(timezone.utc)
     rows = _branch_rows(db, day, now, None)
-    return {"date": day.isoformat(), "generated_at": now.isoformat(), **_attention(rows)}
+    return {"date": day.isoformat(), "generated_at": now.isoformat(),
+            **_attention(rows, day_window(day))}

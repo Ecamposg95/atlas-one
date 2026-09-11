@@ -83,6 +83,26 @@ describe('attentionChips', () => {
       { key: 'cut_difference', label: '1 corte con diferencia', tone: 'danger' },
     ])
   })
+
+  it('cuando la lista viene recortada, el chip dice "N de TOTAL"', () => {
+    const uno = item(1, 'Kaory')
+    const chips = attentionChips(
+      { ...vacia, cut_difference: [uno, uno] },
+      { no_cut: 0, cut_difference: 23, oldest_returns: 0, cancelled_today: 0 }
+    )
+    expect(chips).toEqual([
+      { key: 'cut_difference', label: '2 de 23 cortes con diferencia', tone: 'danger' },
+    ])
+  })
+
+  it('sin recorte no dice "de": el total y lo mostrado coinciden', () => {
+    const uno = item(1, 'Kaory')
+    const chips = attentionChips(
+      { ...vacia, no_cut: [uno] },
+      { no_cut: 1, cut_difference: 0, oldest_returns: 0, cancelled_today: 0 }
+    )
+    expect(chips).toEqual([{ key: 'no_cut', label: '1 sin corte >14 h', tone: 'warning' }])
+  })
 })
 
 describe('orgsQueNecesitanAtencion', () => {

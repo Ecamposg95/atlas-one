@@ -13,6 +13,7 @@ from decimal import Decimal
 
 import pytest
 
+from app.core.fechas import hoy_negocio
 from app.core.security import create_access_token, get_password_hash
 from app.models.cash import CashSession, CashSessionStatus
 from app.models.cash_audit import CashAuditEvent, CashAuditLog
@@ -28,6 +29,7 @@ from app.models.sales import (
 from app.models.users import PlatformRole, Role, User, UserOrganization
 from app.routers.platform import stats as platform_stats
 from app.services.org_overview import (
+    ATTENTION_LIMIT,
     ZONA_NEGOCIO,
     compute_attention_today,
     compute_org_overview,
@@ -362,14 +364,18 @@ class TestAtencionHoy:
                  opened_at=NOW - timedelta(hours=10), closed_at=NOW - timedelta(hours=1), difference=0)
         assert compute_attention_today(db, day=DAY, now=NOW)["cut_difference"] == []
 
-    def test_devoluciones_pendientes_ordenadas_por_monto(self, db, cajero_a, cajero_c, branch_a, branch_c):
+    def test_devoluciones_pendientes_ordenadas_por_antiguedad_no_por_monto(
+        self, db, cajero_a, cajero_c, branch_a, branch_c
+    ):
         t = datetime(2026, 8, 5, 18, 0, tzinfo=timezone.utc)
         sa = _sale(db, cajero_a, branch_a, 100, t)
         sc = _sale(db, cajero_c, branch_c, 100, t)
-        _return(db, sa, cajero_a, branch_a, 10, NOW - timedelta(days=1))
+        # La chica lleva 40 días esperando; la grande, uno. Manda la espera.
+        _return(db, sa, cajero_a, branch_a, 10, NOW - timedelta(days=40))
         _return(db, sc, cajero_c, branch_c, 500, NOW - timedelta(days=1))
         a = compute_attention_today(db, day=DAY, now=NOW)
-        assert [i["id"] for i in a["oldest_returns"]] == [branch_c.id, branch_a.id]
+        assert [i["id"] for i in a["oldest_returns"]] == [branch_a.id, branch_c.id]
+        assert [i["value"] for i in a["oldest_returns"]] == [40.0, 1.0]
 
     def test_canceladas_de_hoy_en_la_tira(self, db, cajero_a, branch_a):
         _sale(db, cajero_a, branch_a, 300, datetime(2026, 8, 5, 20, 0, tzinfo=timezone.utc),
@@ -386,9 +392,11 @@ class TestAtencionHoy:
         _return(db, sa, cajero_a, branch_a, 10, NOW - timedelta(days=1))
         _return(db, sc, cajero_c, branch_c, 500, NOW - timedelta(days=1))
         a = compute_attention_today(db, day=DAY, now=NOW)
-        assert set(a) == {"date", "generated_at", "no_cut", "cut_difference",
+        assert set(a) == {"date", "generated_at", "counts", "no_cut", "cut_difference",
                           "oldest_returns", "cancelled_today"}
-        assert [i["value"] for i in a["oldest_returns"]] == [500.0, 10.0]
+        assert {i["org_id"] for i in a["oldest_returns"]} == {branch_a.organization_id,
+                                                             branch_c.organization_id}
+        assert a["counts"]["oldest_returns"] == 2
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
@@ -440,8 +448,9 @@ class TestEndpoints:
         r = client.get("/api/platform/attention-today", headers=auth_superadmin)
         assert r.status_code == 200, r.text
         body = r.json()
-        assert set(body) == {"date", "generated_at", "no_cut", "cut_difference",
+        assert set(body) == {"date", "generated_at", "counts", "no_cut", "cut_difference",
                              "oldest_returns", "cancelled_today"}
+        assert body["counts"]["no_cut"] == 1
         assert [i["id"] for i in body["no_cut"]] == [branch_a.id]
         assert body["no_cut"][0]["org_name"] == "Test Org"
 
@@ -470,3 +479,99 @@ class TestEndpoints:
                        params=params, headers=auth_superadmin).json()
         assert a["totals"]["sales_today"] == 100.0
         assert b["totals"]["sales_today"] == 9000.0
+
+
+class TestAtencionHoyEsDeHoy:
+    """La tira dice "Atención HOY": lo que ya se atendió o es viejo no vuelve."""
+
+    def test_un_corte_con_diferencia_de_ayer_no_aparece_en_la_tira_de_hoy(
+        self, db, org, cajero_a, branch_a
+    ):
+        # Cerrado ayer a las 22:00 MX (04:00Z del 5), fuera de la ventana del 5.
+        _session(db, cajero_a, branch_a, status=CashSessionStatus.CLOSED,
+                 opened_at=datetime(2026, 8, 4, 20, 0, tzinfo=timezone.utc),
+                 closed_at=datetime(2026, 8, 5, 4, 0, tzinfo=timezone.utc), difference=-777)
+        a = compute_attention_today(db, day=DAY, now=NOW)
+        assert a["cut_difference"] == []
+        assert a["counts"]["cut_difference"] == 0
+        # …pero la tabla de la organización sí conserva la diferencia del último corte.
+        r = _row(compute_org_overview(db, organization_id=org.id, day=DAY, now=NOW), branch_a.id)
+        assert r["cash"]["last_difference"] == -777.0
+
+    def test_una_caja_cerrada_hoy_no_esta_en_sin_corte(self, db, cajero_a, branch_a):
+        _session(db, cajero_a, branch_a, status=CashSessionStatus.CLOSED,
+                 opened_at=NOW - timedelta(hours=20), closed_at=NOW - timedelta(hours=1),
+                 difference=0)
+        a = compute_attention_today(db, day=DAY, now=NOW)
+        assert a["no_cut"] == []
+        assert a["counts"]["no_cut"] == 0
+
+    def test_una_sesion_open_con_closed_at_viejo_no_es_el_ultimo_corte(
+        self, db, org, cajero_a, gerente_a, branch_a
+    ):
+        """Sesión reabierta: status OPEN con un `closed_at` de antes. No cuenta."""
+        _session(db, cajero_a, branch_a, status=CashSessionStatus.CLOSED,
+                 opened_at=NOW - timedelta(hours=30), closed_at=NOW - timedelta(hours=20),
+                 difference=-15)
+        _session(db, gerente_a, branch_a, status=CashSessionStatus.OPEN,
+                 opened_at=NOW - timedelta(hours=3), closed_at=NOW - timedelta(hours=2),
+                 difference=-999)
+        r = _row(compute_org_overview(db, organization_id=org.id, day=DAY, now=NOW), branch_a.id)
+        assert r["cash"]["last_difference"] == -15.0
+
+
+class TestRepartoEntreOrganizaciones:
+    """Un cliente con muchas sucursales descuadradas no puede tapar a los demás."""
+
+    def test_el_cupo_reparte_por_rondas_y_counts_dice_cuantos_hay(
+        self, db, org, org_b, cajero_a, cajero_c, branch_c
+    ):
+        cerrado = NOW - timedelta(hours=1)
+        ruidosas = []
+        for n in range(12):
+            b = Branch(name=f"Ruidosa {n}", branch_type=BranchType.STORE,
+                       can_sell=True, is_active=True, organization_id=org.id)
+            db.add(b)
+            db.flush()
+            ruidosas.append(b)
+            _session(db, cajero_a, b, status=CashSessionStatus.CLOSED,
+                     opened_at=NOW - timedelta(hours=10), closed_at=cerrado, difference=-(1000 + n))
+        # La otra organización tiene un descuadre chico: el orden por monto la
+        # dejaría al final, pero el reparto por rondas la sube a la primera.
+        _session(db, cajero_c, branch_c, status=CashSessionStatus.CLOSED,
+                 opened_at=NOW - timedelta(hours=10), closed_at=cerrado, difference=-5)
+
+        a = compute_attention_today(db, day=DAY, now=NOW)
+        assert a["counts"]["cut_difference"] == 13
+        assert len(a["cut_difference"]) == ATTENTION_LIMIT
+        ids = [i["id"] for i in a["cut_difference"]]
+        assert branch_c.id in ids, "la otra organización quedó tapada por el cliente ruidoso"
+        assert ids[:2] == [ruidosas[11].id, branch_c.id]   # lo peor de cada organización
+
+
+class TestDiaDelNegocio:
+    def test_hoy_negocio_es_el_dia_de_mexico_no_el_de_utc(self):
+        # 23:30 MX del 5 de agosto = 05:30Z del 6. Para el negocio sigue siendo el 5.
+        assert hoy_negocio(datetime(2026, 8, 6, 5, 30, tzinfo=timezone.utc)) == date(2026, 8, 5)
+        assert hoy_negocio(datetime(2026, 8, 6, 6, 30, tzinfo=timezone.utc)) == date(2026, 8, 6)
+
+    def test_el_endpoint_sin_date_usa_el_dia_del_negocio(
+        self, client, auth_superadmin, org, monkeypatch
+    ):
+        import app.routers.platform.overview as overview
+
+        # 23:30 MX del 5: en UTC ya es día 6, pero el tablero debe decir el 5.
+        monkeypatch.setattr(overview, "hoy_negocio", lambda: date(2026, 8, 5))
+        r = client.get(f"/api/platform/organizations/{org.id}/overview", headers=auth_superadmin)
+        assert r.status_code == 200, r.text
+        assert r.json()["date"] == "2026-08-05"
+
+        a = client.get("/api/platform/attention-today", headers=auth_superadmin)
+        assert a.status_code == 200, a.text
+        assert a.json()["date"] == "2026-08-05"
+
+    def test_atencion_hoy_rechaza_una_fecha(self, client, auth_superadmin):
+        r = client.get("/api/platform/attention-today", params={"date": "2026-08-05"},
+                       headers=auth_superadmin)
+        assert r.status_code == 422
+        assert "hoy" in r.json()["detail"]

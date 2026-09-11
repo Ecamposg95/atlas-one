@@ -203,7 +203,12 @@ export function PlatformMetrics() {
   }, [orgs, orgId])
 
   const changeMode = (m: PlatformMode) => { writeMode(m); setMode(m) }
-  const changeOrg = (id: number) => { writeOrgId(id); setOrgId(id) }
+  const changeOrg = (id: number) => {
+    // Un <select> vacío manda "" → Number("") es 0, que no es una organización.
+    if (!Number.isInteger(id) || id <= 0) return
+    writeOrgId(id)
+    setOrgId(id)
+  }
   /** Desde un pendiente de la tira: abrir esa organización. */
   const pickOrg = (id: number) => { changeOrg(id); changeMode('organizacion') }
 
@@ -379,11 +384,21 @@ export function PlatformMetrics() {
       {/* Atención hoy: cruza TODAS las organizaciones (en el modo Organización
           va como panel al lado de la tabla, dentro de OrgBoard). */}
       {mode === 'global' && attention && (
-        <AttentionPanel attention={attention} variant="strip" onPickOrg={pickOrg} />
+        <AttentionPanel
+          attention={attention}
+          counts={attention.counts}
+          variant="strip"
+          onPickOrg={pickOrg}
+        />
       )}
 
       {mode === 'organizacion' ? (
-        <OrgBoard orgId={orgId} attention={attention} onPickOrg={pickOrg} />
+        <OrgBoard
+          orgId={orgId}
+          attention={attention}
+          counts={attention?.counts}
+          onPickOrg={pickOrg}
+        />
       ) : loading ? (
         <SkeletonState />
       ) : (

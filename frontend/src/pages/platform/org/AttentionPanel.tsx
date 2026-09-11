@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import type {
+  AttentionCounts,
   AttentionItem,
   AttentionKey,
   AttentionLists,
 } from '../../../types/platformOverview'
 import { formatCurrency } from '../../../utils/currency'
-import { attentionChips, fmtCloseAt } from './orgFormat'
+import { attentionChips, fmtCloseAt, orgsQueNecesitanAtencion } from './orgFormat'
 
 const SECTIONS: { key: AttentionKey; title: string; fmt: (i: AttentionItem) => string }[] = [
   { key: 'no_cut', title: 'Sin corte >14 h', fmt: (i) => `${i.value ?? 0} h` },
@@ -13,12 +14,16 @@ const SECTIONS: { key: AttentionKey; title: string; fmt: (i: AttentionItem) => s
   // "$480" no dice si es de hoy o de hace tres días.
   { key: 'cut_difference', title: 'Cortes con diferencia',
     fmt: (i) => `${formatCurrency(i.value ?? 0)} · ${fmtCloseAt(i.detail)}` },
-  { key: 'oldest_returns', title: 'Devoluciones pendientes', fmt: (i) => formatCurrency(i.value ?? 0) },
+  // `value` es la antigüedad en días (la lista se ordena por eso); el monto y
+  // el conteo van en `detail`, que el renglón lleva en su title.
+  { key: 'oldest_returns', title: 'Devoluciones pendientes', fmt: (i) => `${i.value ?? 0} d` },
   { key: 'cancelled_today', title: 'Canceladas hoy', fmt: (i) => formatCurrency(i.value ?? 0) },
 ]
 
 interface Props {
   attention: AttentionLists
+  /** Totales reales antes del recorte; sin ellos el chip cuenta lo que ve. */
+  counts?: AttentionCounts
   variant: 'panel' | 'strip'
   /** Saltar a la organización de un renglón (abre el modo Organización en ella). */
   onPickOrg?: (orgId: number) => void
@@ -54,17 +59,23 @@ function ItemRow({
 
 /** Los pendientes del día de TODAS las organizaciones. Cada renglón trae su
  *  organización: la tira nunca suma el dinero de dos clientes distintos. */
-export function AttentionPanel({ attention, variant, onPickOrg }: Props) {
+export function AttentionPanel({ attention, counts, variant, onPickOrg }: Props) {
   // En la tira, el chip abre el detalle de su lista (y lo vuelve a cerrar).
   const [abierta, setAbierta] = useState<AttentionKey | null>(null)
 
   if (variant === 'strip') {
-    const chips = attentionChips(attention)
+    const chips = attentionChips(attention, counts)
     if (chips.length === 0) return null
     const seccion = abierta ? SECTIONS.find((s) => s.key === abierta) : undefined
+    // Cuenta las organizaciones que se alcanzan a ver: las listas vienen
+    // recortadas, así que con muchísimos pendientes esto es un piso, no el total.
+    const orgs = orgsQueNecesitanAtencion(attention)
     return (
       <section aria-label="Atención hoy">
         <div className="pv2-attention-strip">
+          <span className="hint">
+            {orgs === 1 ? '1 organización pide atención' : `${orgs} organizaciones piden atención`}
+          </span>
           {chips.map((c) => (
             <button
               key={c.key}
