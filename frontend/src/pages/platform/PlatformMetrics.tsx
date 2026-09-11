@@ -330,7 +330,7 @@ export function PlatformMetrics() {
           </div>
 
           {mode === 'organizacion' ? (
-            <label className="pv2-attention-selector">
+            <label className="pv2-org-picker">
               <span className="hint">Organización</span>
               <select
                 className="pv2-org-select"

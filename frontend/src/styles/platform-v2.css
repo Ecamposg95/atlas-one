@@ -698,7 +698,7 @@
   font: inherit; text-align: left; cursor: pointer; min-height: 32px; align-items: center;
 }
 .pv2 .pv2-attention-card button.item:hover .nm { text-decoration: underline; }
-.pv2 .pv2-attention-selector { display: inline-flex; align-items: center; gap: 8px; }
+.pv2 .pv2-org-picker { display: inline-flex; align-items: center; gap: 8px; }
 .pv2 .pv2-org-select {
   min-height: 32px; padding: 0 10px; border-radius: 8px; font: inherit; font-size: 13px;
   background: var(--p-surface); border: 1px solid var(--p-border); color: var(--p-text); cursor: pointer;
