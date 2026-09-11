@@ -5,6 +5,7 @@ import { salesApi, parkedTicketsApi } from '../../api/sales'
 import type { CartItem } from '../../types/sales'
 import { saleLabel } from '../../types/sales'
 import { printerApi } from '../../api/printer'
+import { requierePin } from '../../utils/reimpresion'
 import { usePOSStore } from '../../store/posStore'
 import { useAuthStore } from '../../store/authStore'
 import type { CashSession } from '../../types/cash'
@@ -154,8 +155,16 @@ export function POS() {
     if (!savedPrinterName) return
     printerApi.getTicketBase64(saleId)
       .then(b64 => { if (b64) return printerApi.printViaAgent(savedPrinterName, b64) })
-      .catch(() => {
-        showToast('Ticket guardado pero no se pudo imprimir — verifica que el agente esté corriendo', 'error')
+      .catch((e: unknown) => {
+        // Pasada la ventana de "venta propia reciente", el backend exige el PIN
+        // de un supervisor. El POS no lo pide: el historial de ventas es donde
+        // se teclea, así que ahí se manda al cajero en vez de culpar al agente.
+        showToast(
+          requierePin(e)
+            ? 'Esta reimpresión necesita autorización: hazla desde Historial de ventas'
+            : 'Ticket guardado pero no se pudo imprimir — verifica que el agente esté corriendo',
+          'error',
+        )
       })
   }
 

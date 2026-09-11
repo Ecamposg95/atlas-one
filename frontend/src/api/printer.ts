@@ -373,18 +373,26 @@ export const printerApi = {
     return data.content_base64 ?? data.base64 ?? ''
   },
 
-  /** Obtener ticket en base64 para REimprimir (incluye leyenda COPIA) */
-  getTicketBase64: async (saleId: string): Promise<string> => {
+  /**
+   * Obtener ticket en base64 para REimprimir (incluye leyenda COPIA).
+   *
+   * `pin` es la contraseña de un supervisor: el backend exige rol gerencial o
+   * PIN para reimprimir (app/services/reprint_auth.py). Sin él responde 428 —
+   * ver src/utils/reimpresion.ts.
+   */
+  getTicketBase64: async (saleId: string, pin?: string): Promise<string> => {
     const { data } = await client.post<{ content_base64?: string; base64?: string }>(
-      `/printer/reprint-ticket/${saleId}`
+      `/printer/reprint-ticket/${saleId}`,
+      pin ? { pin } : {}
     )
     return data.content_base64 ?? data.base64 ?? ''
   },
 
   /** Reimprimir ticket → bytes en base64 (caller envía a agente local) */
-  reprintTicket: async (saleId: string): Promise<string> => {
+  reprintTicket: async (saleId: string, pin?: string): Promise<string> => {
     const { data } = await client.post<{ content_base64?: string; base64?: string }>(
-      `/printer/reprint-ticket/${saleId}`
+      `/printer/reprint-ticket/${saleId}`,
+      pin ? { pin } : {}
     )
     return data.content_base64 ?? data.base64 ?? ''
   },

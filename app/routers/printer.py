@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from typing import Optional, Tuple
 from app.core.database import get_db
 from app.models import SalesDocument, User, SalesLineItem, ProductVariant, SaleReturn, SaleReturnItem
+from app.models.sales import DocumentStatus
 from app.models.print_job import PrintJob, PrintJobStatus
 from app.core.security import get_current_user
 from app.core.tenant_context import get_current_active_organization
@@ -17,6 +18,75 @@ import zipfile
 from pathlib import Path
 
 router = APIRouter()
+
+
+class ReprintRequest(BaseModel):
+    """Cuerpo opcional de la reimpresion. Un usuario con rol gerencial no manda
+    nada; un cajero manda el `pin` (la contrasena) de un supervisor para que lo
+    autorice en el momento."""
+    pin: Optional[str] = None
+
+
+def _assert_reimprimible(sale: SalesDocument) -> None:
+    """C-18: una venta CANCELLED ya no representa un cobro. Servir su ticket
+    limpio es exactamente el insumo del fraude por reciclaje de comprobantes:
+    cancelar la venta borraba el cargo, pero no el papel."""
+    estado = sale.status.value if hasattr(sale.status, "value") else str(sale.status)
+    if estado == DocumentStatus.CANCELLED.value:
+        raise HTTPException(
+            status_code=409,
+            detail="Esta venta esta cancelada: su ticket ya no se puede reimprimir.",
+        )
+
+
+def _autorizar_impresion(
+    db: Session, current_user: User, org_id: int, req: Optional[ReprintRequest],
+    sale: SalesDocument,
+) -> Optional[User]:
+    """Gate compartido por los tres endpoints que emiten un ticket de venta
+    (hallazgo §6 de la auditoria Rmazh). Devuelve el supervisor que autorizo, o
+    None si no hizo falta PIN. Nunca deja pasar a alguien sin autoridad ni PIN.
+
+    Va en los TRES y no solo en las reimpresiones: `print-ticket` acepta un
+    `order_id` cualquiera, asi que gatear unicamente `reprint-ticket` dejaria el
+    mismo ticket a un POST de distancia."""
+    from app.services.reprint_auth import (
+        bloqueo_restante,
+        es_rol_gerencial,
+        es_venta_propia_reciente,
+        limpiar_intentos,
+        registrar_intento_fallido,
+        verificar_pin_supervisor,
+    )
+
+    if es_rol_gerencial(current_user):
+        return None
+
+    if es_venta_propia_reciente(sale, current_user):
+        return None
+
+    restante = bloqueo_restante(org_id, current_user.id)
+    if restante is not None:
+        raise HTTPException(
+            status_code=423,
+            detail=f"Demasiados intentos fallidos. Intenta de nuevo en {restante} segundos.",
+        )
+
+    pin = req.pin if req else None
+    if not pin:
+        # 428 (Precondition Required) y no 401: el cajero SI esta autenticado,
+        # lo que falta es una autorizacion puntual. Un 401 dispararia el cierre
+        # de sesion global del interceptor de axios, que es justo el mecanismo
+        # de seguridad que no queremos debilitar con excepciones por ruta.
+        raise HTTPException(status_code=428, detail="Se requiere el PIN de un supervisor")
+
+    supervisor = verificar_pin_supervisor(db, org_id, pin)
+    if not supervisor:
+        registrar_intento_fallido(org_id, current_user.id)
+        raise HTTPException(status_code=403, detail="PIN incorrecto")
+
+    limpiar_intentos(org_id, current_user.id)
+    return supervisor
 
 
 def _resolve_printer(
@@ -127,6 +197,10 @@ class PrintRequest(BaseModel):
     # `mode` ignored — Track 4 deprecó server-side print. Mantenido en el
     # schema para backward-compat con clientes viejos.
     mode: str = "return_base64"
+    # Si la venta no es propia-y-reciente, este endpoint cae al mismo gate de
+    # PIN que la reimpresión. Opcional para no romper al llamador legítimo
+    # (POS.tsx tras cobrar), que nunca lo necesita.
+    pin: Optional[str] = None
 
 
 @router.get("/download-agent")
@@ -215,6 +289,8 @@ def print_ticket_endpoint(
     if sale.organization_id != org_id:
         raise HTTPException(status_code=403, detail="Sin acceso a esta venta")
     _assert_sale_branch_access(sale, current_user)
+    _assert_reimprimible(sale)
+    _autorizar_impresion(db, current_user, org_id, ReprintRequest(pin=req.pin), sale)
 
     from app.models.organization import Organization
     organization = db.query(Organization).filter(Organization.id == org_id).first()
@@ -255,11 +331,12 @@ def print_ticket_endpoint(
 def reprint_ticket_endpoint(
     order_id: str,
     request: Request,
+    req: Optional[ReprintRequest] = Body(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization),
 ):
-    """Track 4: reimpresión sin restricción. Siempre retorna base64."""
+    """Reimpresión de un ticket. Exige rol gerencial o PIN de supervisor."""
     from sqlalchemy.orm import joinedload, selectinload
     sale = db.query(SalesDocument).options(
         joinedload(SalesDocument.lines).joinedload(SalesLineItem.variant),
@@ -272,6 +349,8 @@ def reprint_ticket_endpoint(
     if sale.organization_id != org_id:
         raise HTTPException(status_code=403, detail="Sin acceso a esta venta")
     _assert_sale_branch_access(sale, current_user)
+    _assert_reimprimible(sale)
+    autorizado_por = _autorizar_impresion(db, current_user, org_id, req, sale)
 
     if hasattr(sale, 'reprint_count'):
         sale.reprint_count += 1
@@ -308,6 +387,7 @@ def reprint_ticket_endpoint(
         "content_base64": base64.b64encode(raw_bytes).decode('utf-8'),
         "printer_target": target_printer_name,
         "reprint_count": getattr(sale, 'reprint_count', 'N/A'),
+        "authorized_by": autorizado_por.username if autorizado_por else None,
     }
 
 
@@ -315,11 +395,12 @@ def reprint_ticket_endpoint(
 def reprint_refunded_endpoint(
     order_id: str,
     request: Request,
+    req: Optional[ReprintRequest] = Body(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization),
 ):
-    """Track 4: ticket actualizado tras devoluciones. Siempre base64."""
+    """Ticket actualizado tras devoluciones. Mismo gate que reprint-ticket."""
     from sqlalchemy.orm import joinedload, selectinload
     sale = db.query(SalesDocument).options(
         joinedload(SalesDocument.lines).joinedload(SalesLineItem.variant),
@@ -331,6 +412,8 @@ def reprint_refunded_endpoint(
     if sale.organization_id != org_id:
         raise HTTPException(status_code=403, detail="Sin acceso a esta venta")
     _assert_sale_branch_access(sale, current_user)
+    _assert_reimprimible(sale)
+    _autorizar_impresion(db, current_user, org_id, req, sale)
 
     from app.models.organization import Organization
     organization = db.query(Organization).filter(Organization.id == org_id).first()
