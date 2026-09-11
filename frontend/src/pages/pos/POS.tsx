@@ -57,6 +57,7 @@ export function POS() {
   const [showOfflineModal, setShowOfflineModal] = useState(false)
   const barraRef = useRef<HTMLDivElement>(null)
   const panelIzquierdoRef = useRef<HTMLDivElement>(null)
+  const panelDerechoRef = useRef<HTMLDivElement>(null)
 
   const canEditProducts = !!user?.role && ['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO'].includes(user.role)
   const { branch } = useAuthStore()
@@ -82,17 +83,23 @@ export function POS() {
 
   useEffect(() => { checkSession() }, [checkSession])
 
-  // Durante el cobro, todo lo que hay detrás del modal queda inerte: la barra
-  // superior (un Tab a las pestañas cambiaba de panel con el ticket a medio
-  // cobrar) y el panel de productos (se llegaba a la rejilla con Tab y Enter
-  // agregaba al carrito una línea que el total del modal ya no contemplaba).
+  // Con el dinero ya contado, nada de lo que hay detrás del modal puede mover
+  // el ticket: el total que el modal está cobrando se lee del store EN VIVO
+  // (`usePOSStore(s => s.total())`), así que cualquier cambio al carrito
+  // altera el monto debajo de los billetes. Se vuelven inertes los tres
+  // contenedores: la barra superior (un Tab a las pestañas cambiaba de panel a
+  // media cobranza), el panel de productos (Tab hasta la rejilla + Enter
+  // agregaba una línea) y el panel del carrito (cantidad, precio, descuento,
+  // quitar línea). Es el equivalente a `payFlowActive` de Rmazh; cerrar el
+  // modal lo reactiva todo.
+  //
   // `inert` los saca del orden de tabulación y del árbol de accesibilidad, cosa
   // que `pointer-events-none` no hace. Se aplica sobre el nodo porque react-dom
   // 18 descarta el atributo si se pasa como prop de JSX (mismo motivo
   // documentado en Layout.tsx para el cajón móvil). Los modales se renderizan
   // como hermanos de estos contenedores, así que no se vuelven inertes.
   useEffect(() => {
-    const nodos = [barraRef.current, panelIzquierdoRef.current]
+    const nodos = [barraRef.current, panelIzquierdoRef.current, panelDerechoRef.current]
     for (const el of nodos) {
       if (!el) continue
       if (payModal !== null) {
@@ -621,8 +628,15 @@ export function POS() {
           </div>
         </div>
 
-        {/* Right panel — cart 60% (dominante, atención del cajero) */}
-        <div className="flex-[60] min-w-[420px] flex-shrink-0 flex flex-col overflow-hidden">
+        {/* Right panel — cart 60% (dominante, atención del cajero).
+            Inerte durante el cobro (ver efecto), pero SIN atenuar: el velo del
+            modal ya oscurece la pantalla y el cajero necesita poder leer el
+            ticket que está cobrando. El atenuado de los otros dos contenedores
+            señala "controles apagados"; aquí no hay controles que señalar. */}
+        <div
+          ref={panelDerechoRef}
+          className="flex-[60] min-w-[420px] flex-shrink-0 flex flex-col overflow-hidden"
+        >
           <div className="flex-1 overflow-hidden">
             <CartPanel
               onPay={(method) => setPayModal(method)}
