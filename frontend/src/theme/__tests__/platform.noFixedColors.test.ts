@@ -8,14 +8,20 @@ import { describe, it, expect } from 'vitest'
 // Los fuentes entran como texto (`?raw`, Vite) porque el proyecto no tiene
 // @types/node y `node:fs` no compila con `tsc --noEmit`.
 import platformLayout from '../../pages/platform/PlatformLayout.tsx?raw'
+import platformNav from '../../pages/platform/platformNav.ts?raw'
 import dataTable from '../../components/platform/DataTable.tsx?raw'
 import platformPageShell from '../../components/platform/PlatformPageShell.tsx?raw'
+import reportFilterBar from '../../components/platform/ReportFilterBar.tsx?raw'
+import reportDrillDownDrawer from '../../components/platform/ReportDrillDownDrawer.tsx?raw'
 import kpiCard from '../../components/platform/KPICard.tsx?raw'
 
 const FILES: [string, string][] = [
   ['pages/platform/PlatformLayout.tsx', platformLayout],
+  ['pages/platform/platformNav.ts', platformNav],
   ['components/platform/DataTable.tsx', dataTable],
   ['components/platform/PlatformPageShell.tsx', platformPageShell],
+  ['components/platform/ReportFilterBar.tsx', reportFilterBar],
+  ['components/platform/ReportDrillDownDrawer.tsx', reportDrillDownDrawer],
   ['components/platform/KPICard.tsx', kpiCard],
 ]
 const TAILWIND = /\b(hover:)?(text|bg|border)-(slate|gray|zinc|indigo)-[0-9]{2,3}\b|\btext-white\b(?!\/)|backdrop-blur/g
