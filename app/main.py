@@ -21,7 +21,31 @@ from app.subscribers.abasto import setup_abasto_subscribers
 
 import os
 import sys
+import json
 import logging
+
+# LOG_JSON=true: cada línea de log sale como JSON de un campo por nivel en
+# vez de texto plano, para que Railway pueda filtrar por campo (ej. `org`,
+# `branch`, `slow` de app/observability/timing.py). record.atlas (dict) se
+# sube al primer nivel del payload — lo pone TimingMiddleware via `extra`.
+LOG_JSON = os.getenv("LOG_JSON", "false").lower() == "true"
+
+
+class _JsonLogFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        payload = {
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+            "time": self.formatTime(record),
+        }
+        extra = getattr(record, "atlas", None)
+        if isinstance(extra, dict):
+            payload.update(extra)
+        if record.exc_info:
+            payload["exc"] = self.formatException(record.exc_info)
+        return json.dumps(payload, ensure_ascii=False)
+
 
 # Logging básico hacia stderr — garantiza que los tracebacks lleguen a docker logs
 # incluso cuando uvicorn corre en worker spawn (reload mode). Idempotente.
@@ -32,6 +56,9 @@ if not logging.getLogger().handlers:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         force=True,
     )
+    if LOG_JSON:
+        for _h in logging.getLogger().handlers:
+            _h.setFormatter(_JsonLogFormatter())
 
 # 1.5 USERS BOOTSTRAP
 if os.getenv("INIT_USERS_ON_BOOT") == "true":
@@ -90,6 +117,14 @@ app.add_middleware(
         *_EXTRA_HOSTS,
     ],
 )
+
+# Duración de cada petición en el log (org, sucursal y usuario incluidos).
+# ASGI puro a propósito: BaseHTTPMiddleware puede impedir que corra el
+# `finally: db.close()` de `get_db()` si el cliente se desconecta a media
+# request (terminales POS en redes inestables) — ver el detalle en
+# app/observability/timing.py.
+from app.observability.timing import TimingMiddleware
+app.add_middleware(TimingMiddleware)
 
 # allow_credentials=False: la sesión viaja en el header Authorization (token en
 # localStorage), no en cookies. Con credentials=True + allow_origins=["*"],
