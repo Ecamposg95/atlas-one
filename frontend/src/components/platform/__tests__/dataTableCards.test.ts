@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { cardColumns } from '../dataTableCards'
+import { cardColumns, cardKeyActivatesRow } from '../dataTableCards'
 
 // Spec 2026-09-09 §3.3: bajo 640 px cada fila es una tarjeta con la primera
 // columna como titular y máximo 3 secundarias. `DataTable` es la tabla de 8
@@ -42,5 +42,26 @@ describe('cardColumns', () => {
     expect(primary.key).toBe('a')
     expect(secondary.map((c) => c.key)).toEqual(['b', 'c'])
     expect(actions).toBeUndefined()
+  })
+})
+
+describe('cardKeyActivatesRow', () => {
+  it('Enter y Espacio sobre la tarjeta misma activan la fila', () => {
+    expect(cardKeyActivatesRow('Enter', true)).toBe(true)
+    expect(cardKeyActivatesRow(' ', true)).toBe(true)
+  })
+
+  it('otras teclas sobre la tarjeta no activan nada', () => {
+    expect(cardKeyActivatesRow('Tab', true)).toBe(false)
+    expect(cardKeyActivatesRow('a', true)).toBe(false)
+    expect(cardKeyActivatesRow('Escape', true)).toBe(false)
+  })
+
+  it('Enter que burbujea desde un boton de accion no activa la fila', () => {
+    expect(cardKeyActivatesRow('Enter', false)).toBe(false)
+  })
+
+  it('Espacio que burbujea desde el checkbox no activa la fila ni le roba el preventDefault', () => {
+    expect(cardKeyActivatesRow(' ', false)).toBe(false)
   })
 })

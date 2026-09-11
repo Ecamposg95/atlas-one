@@ -70,7 +70,7 @@ const ghostBtn: React.CSSProperties = {
 
 const primaryBtn: React.CSSProperties = {
   background: 'var(--p-teal)',
-  color: '#000',
+  color: 'var(--dax-on-accent)',
   fontWeight: 700,
   padding: '8px 16px',
   border: 'none',
@@ -751,7 +751,7 @@ export function PlatformUsers() {
                 onClick={copyTempPassword}
                 style={{
                   background: 'var(--p-teal)',
-                  color: '#000',
+                  color: 'var(--dax-on-accent)',
                   border: 'none',
                   padding: '4px 10px',
                   borderRadius: 4,

@@ -56,9 +56,9 @@ describe('alias --p-* → --dax-* (spec §3.1)', () => {
     expect(missing).toEqual([])
   })
 
-  it('cada --dax-* que usa el alias existe en index.css, en claro', () => {
+  it('cada --dax-* que usa platform-v2.css existe en index.css, en claro', () => {
     const lightDax = extractDaxTokens('light')
-    const used = [...new Set([...block('.pv2').matchAll(/var\((--dax-[a-z0-9-]+)\)/g)].map((m) => m[1]))]
+    const used = [...new Set([...css.matchAll(/var\((--dax-[a-z0-9-]+)\)/g)].map((m) => m[1]))]
     expect(used.filter((t) => !(t in lightDax))).toEqual([])
   })
 
@@ -91,11 +91,73 @@ describe('alias --p-* → --dax-* (spec §3.1)', () => {
     expect(resolved.dark['--p-surface-2']).not.toBe(resolved.dark['--p-surface'])
   })
 
-  it('los cuatro tokens nuevos existen en claro y en oscuro', () => {
-    const nuevos = ['--dax-accent-soft', '--dax-success', '--dax-warning', '--dax-danger']
+  it('los tokens nuevos de la piel existen en claro y en oscuro', () => {
+    const nuevos = ['--dax-accent-soft', '--dax-success', '--dax-warning', '--dax-danger', '--dax-on-accent']
     const lightDax = extractDaxTokens('light')
     const darkDax = extractDaxTokens('dark')
     expect(nuevos.filter((t) => !(t in lightDax))).toEqual([])
     expect(nuevos.filter((t) => !(t in darkDax))).toEqual([])
+  })
+})
+
+// ── Contraste del texto sobre el acento (--dax-on-accent) ─────────────────
+// El acento es el del vertical y en oscuro se aclara con color-mix hacia
+// blanco, así que el color que va encima no puede ser un fijo: #fff se cae a
+// ~2.9:1 en oscuro y #000 a ~2.4:1 en claro. Los valores salen de index.css
+// para que la prueba no sea una segunda copia que se desalinee.
+
+function relLuminance(hex: string): number {
+  const ch = [1, 3, 5]
+    .map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+    .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
+  return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2]
+}
+
+function contrast(a: string, b: string): number {
+  const [hi, lo] = [relLuminance(a), relLuminance(b)].sort((x, y) => y - x)
+  return (hi + 0.05) / (lo + 0.05)
+}
+
+/** color-mix(in srgb, <a> <pct>%, <b>) con ambos colores opacos. */
+function mixSrgb(a: string, b: string, pct: number): string {
+  const chan = (h: string, i: number) => parseInt(h.slice(i, i + 2), 16)
+  return '#' + [1, 3, 5]
+    .map((i) => Math.round((pct * chan(a, i) + (100 - pct) * chan(b, i)) / 100))
+    .map((v) => v.toString(16).padStart(2, '0'))
+    .join('')
+}
+
+function daxToken(theme: 'light' | 'dark', name: string): string {
+  const value = extractDaxTokens(theme)[name]
+  expect(value, `falta ${name} en el tema ${theme}`).toBeTruthy()
+  const m = value.match(/^(#[0-9a-fA-F]{6})$/)
+  expect(m, `${name} en ${theme} no es un hex de 6 dígitos: ${value}`).toBeTruthy()
+  return m![1]
+}
+
+describe('contraste del texto sobre el acento (spec §3.1)', () => {
+  // El acento por default de :root; los verticales lo sobreescriben.
+  const accentLight = root.match(/^\s*--p-accent:\s*(#[0-9a-fA-F]{6})/m)?.[1] ?? ''
+
+  it('index.css define el acento por default como hex', () => {
+    expect(accentLight).toMatch(/^#[0-9a-fA-F]{6}$/)
+  })
+
+  it('en claro, --dax-on-accent sobre el acento da ≥ 4.5:1', () => {
+    expect(contrast(daxToken('light', '--dax-on-accent'), accentLight)).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('en oscuro, --dax-on-accent sobre el acento aclarado da ≥ 4.5:1', () => {
+    // .dark aclara el acento: color-mix(in srgb, var(--p-accent) N%, #ffffff)
+    const mix = extractDaxTokens('dark')['--dax-accent']
+    const m = mix?.match(/color-mix\(in srgb,\s*var\(--p-accent\)\s*(\d+)%,\s*(#[0-9a-fA-F]{6})\)/)
+    expect(m, `--dax-accent en oscuro no es el color-mix esperado: ${mix}`).toBeTruthy()
+    const accentDark = mixSrgb(accentLight, m![2], Number(m![1]))
+    expect(contrast(daxToken('dark', '--dax-on-accent'), accentDark)).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('platform-v2.css ya no pinta texto blanco fijo sobre el acento', () => {
+    expect(css).not.toMatch(/#fff\b/)
+    expect(css).toMatch(/var\(--dax-on-accent\)/)
   })
 })
