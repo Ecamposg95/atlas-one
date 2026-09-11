@@ -10,7 +10,7 @@ from fastapi.templating import Jinja2Templates
 import csv
 import io
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func
+from sqlalchemy import func, false as sql_false
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 from typing import Dict, Any, List, Optional
@@ -278,6 +278,10 @@ def read_sales(
     customer_id: Optional[int] = None,
     branch_id: Optional[int] = None, # [NEW] HQ Filter
     doc_type: Optional[List[DocumentType]] = Query(None),
+    folio_search: Optional[str] = Query(
+        None,
+        description="Busca por folio exacto, tolerante al formato: '540', 'a-540', 'A-0540'.",
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization)
@@ -322,6 +326,24 @@ def read_sales(
         query = query.filter(SalesDocument.status == status)
     if customer_id is not None:
         query = query.filter(SalesDocument.customer_id == customer_id)
+
+    # Devoluciones buscan un ticket exacto por folio. El POS lo muestra como
+    # "A-0540" (saleLabel hace padStart(4)), y muchas veces se teclea sólo el
+    # número o sin los ceros a la izquierda ("540" o "a-540"). Se extraen los
+    # dígitos (los ceros a la izquierda mueren solos al convertir a int) y, si
+    # además escribió serie, se filtra también por ella. Sin dígitos no hay
+    # folio que buscar: se fuerza vacío en vez de ignorar el filtro y devolver
+    # TODA la lista (que sería engañoso para quien está buscando un ticket).
+    if folio_search is not None and folio_search.strip():
+        raw = folio_search.strip()
+        digits = "".join(ch for ch in raw if ch.isdigit())
+        if not digits:
+            query = query.filter(sql_false())
+        else:
+            query = query.filter(SalesDocument.folio == int(digits))
+            letters = "".join(ch for ch in raw if ch.isalpha())
+            if letters:
+                query = query.filter(func.upper(SalesDocument.series) == letters.upper())
 
     # Count before adding eager-load options (joinedload inflates count)
     total = query.count()
