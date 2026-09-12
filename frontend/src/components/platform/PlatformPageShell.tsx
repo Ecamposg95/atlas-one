@@ -14,15 +14,7 @@ export function PlatformPageShell({
   children,
 }: Props) {
   return (
-    <div
-      style={{
-        background: 'var(--p-bg)',
-        minHeight: '100vh',
-        padding: '28px 40px 56px',
-        fontFamily: 'var(--font-sans)',
-        color: 'var(--p-text)',
-      }}
-    >
+    <div className="pv2-page">
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',

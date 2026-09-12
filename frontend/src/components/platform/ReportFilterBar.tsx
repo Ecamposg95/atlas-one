@@ -111,7 +111,7 @@ export function ReportFilterBar({ filters, onFiltersChange, onExportCsv, isLoadi
       flexDirection: 'column',
       gap: 14,
     }}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-end' }}>
+      <div className="pv2-filters">
         {/* ── Range pills + custom dates ────────────────────────────── */}
         <div style={{ minWidth: 240 }}>
           <span style={labelStyle}>Rango</span>
@@ -227,7 +227,7 @@ export function ReportFilterBar({ filters, onFiltersChange, onExportCsv, isLoadi
           }}
         >
           <span>
-            <i className="fa-solid fa-triangle-exclamation" style={{ marginRight: 8, color: '#f59e0b' }} />
+            <i className="fa-solid fa-triangle-exclamation" style={{ marginRight: 8, color: 'var(--p-warning)' }} />
             Esta consulta cubre todos los orgs. Puede tomar 10-20 segundos.
           </span>
           <button

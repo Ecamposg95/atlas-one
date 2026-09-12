@@ -38,7 +38,7 @@ const labelStyle: React.CSSProperties = {
 
 const buttonPrimary: React.CSSProperties = {
   background: 'var(--p-teal)',
-  color: '#000',
+  color: 'var(--dax-on-accent)',
   fontWeight: 700,
   border: 'none',
   padding: '8px 16px',
@@ -697,7 +697,7 @@ export function PlatformAdmins() {
                 onClick={copyTempPassword}
                 style={{
                   background: copyOk ? 'var(--p-success)' : 'var(--p-teal)',
-                  color: '#000',
+                  color: copyOk ? '#000' : 'var(--dax-on-accent)',
                   fontWeight: 700,
                   border: 'none',
                   padding: '6px 12px',

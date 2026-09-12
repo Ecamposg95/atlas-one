@@ -205,8 +205,8 @@ function DrillDownContent({ payload }: { payload: DetailPayload }) {
         <p style={{ fontSize: 12, color: 'var(--p-muted)', margin: '0 0 14px' }}>
           {data.total} venta(s) en el rango.
         </p>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
+        <div className="pv2-scroll-x">
+          <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, minWidth: 640 }}>
             <thead>
               <tr>
                 <th style={headerStyle}>Folio</th>
@@ -252,56 +252,60 @@ function DrillDownContent({ payload }: { payload: DetailPayload }) {
           <h4 style={{ ...sectionTitle, fontSize: 12, color: 'var(--p-hint)', textTransform: 'uppercase', letterSpacing: '0.12em' }}>
             Top productos
           </h4>
-          <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
-            <thead>
-              <tr>
-                <th style={headerStyle}>SKU</th>
-                <th style={headerStyle}>Nombre</th>
-                <th style={{ ...headerStyle, textAlign: 'right' }}>Unidades</th>
-                <th style={{ ...headerStyle, textAlign: 'right' }}>Revenue</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.top_products.map((p, i) => (
-                <tr key={i}>
-                  <td style={{ ...cellStyle, fontFamily: 'var(--font-mono)' }}>{p.sku}</td>
-                  <td style={cellStyle}>{p.name}</td>
-                  <td style={{ ...cellStyle, textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{p.units}</td>
-                  <td style={{ ...cellStyle, textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{fmtMoney(p.revenue)}</td>
+          <div className="pv2-scroll-x">
+            <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, minWidth: 640 }}>
+              <thead>
+                <tr>
+                  <th style={headerStyle}>SKU</th>
+                  <th style={headerStyle}>Nombre</th>
+                  <th style={{ ...headerStyle, textAlign: 'right' }}>Unidades</th>
+                  <th style={{ ...headerStyle, textAlign: 'right' }}>Revenue</th>
                 </tr>
-              ))}
-              {data.top_products.length === 0 && (
-                <tr><td style={{ ...cellStyle, textAlign: 'center', color: 'var(--p-muted)' }} colSpan={4}>Sin productos.</td></tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {data.top_products.map((p, i) => (
+                  <tr key={i}>
+                    <td style={{ ...cellStyle, fontFamily: 'var(--font-mono)' }}>{p.sku}</td>
+                    <td style={cellStyle}>{p.name}</td>
+                    <td style={{ ...cellStyle, textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{p.units}</td>
+                    <td style={{ ...cellStyle, textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{fmtMoney(p.revenue)}</td>
+                  </tr>
+                ))}
+                {data.top_products.length === 0 && (
+                  <tr><td style={{ ...cellStyle, textAlign: 'center', color: 'var(--p-muted)' }} colSpan={4}>Sin productos.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         <div>
           <h4 style={{ ...sectionTitle, fontSize: 12, color: 'var(--p-hint)', textTransform: 'uppercase', letterSpacing: '0.12em' }}>
             Top vendedores
           </h4>
-          <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
-            <thead>
-              <tr>
-                <th style={headerStyle}>Nombre</th>
-                <th style={{ ...headerStyle, textAlign: 'right' }}>Transacciones</th>
-                <th style={{ ...headerStyle, textAlign: 'right' }}>Revenue</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.top_sellers.map((s, i) => (
-                <tr key={i}>
-                  <td style={cellStyle}>{s.full_name}</td>
-                  <td style={{ ...cellStyle, textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{s.transactions}</td>
-                  <td style={{ ...cellStyle, textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{fmtMoney(s.revenue)}</td>
+          <div className="pv2-scroll-x">
+            <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, minWidth: 640 }}>
+              <thead>
+                <tr>
+                  <th style={headerStyle}>Nombre</th>
+                  <th style={{ ...headerStyle, textAlign: 'right' }}>Transacciones</th>
+                  <th style={{ ...headerStyle, textAlign: 'right' }}>Revenue</th>
                 </tr>
-              ))}
-              {data.top_sellers.length === 0 && (
-                <tr><td style={{ ...cellStyle, textAlign: 'center', color: 'var(--p-muted)' }} colSpan={3}>Sin vendedores.</td></tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {data.top_sellers.map((s, i) => (
+                  <tr key={i}>
+                    <td style={cellStyle}>{s.full_name}</td>
+                    <td style={{ ...cellStyle, textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{s.transactions}</td>
+                    <td style={{ ...cellStyle, textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{fmtMoney(s.revenue)}</td>
+                  </tr>
+                ))}
+                {data.top_sellers.length === 0 && (
+                  <tr><td style={{ ...cellStyle, textAlign: 'center', color: 'var(--p-muted)' }} colSpan={3}>Sin vendedores.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     )
@@ -315,8 +319,8 @@ function DrillDownContent({ payload }: { payload: DetailPayload }) {
         <p style={{ fontSize: 12, color: 'var(--p-muted)', margin: '0 0 14px' }}>
           {data.total} venta(s).
         </p>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
+        <div className="pv2-scroll-x">
+          <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, minWidth: 640 }}>
             <thead>
               <tr>
                 <th style={headerStyle}>Folio</th>
@@ -354,8 +358,8 @@ function DrillDownContent({ payload }: { payload: DetailPayload }) {
       <p style={{ fontSize: 12, color: 'var(--p-muted)', margin: '0 0 14px' }}>
         {data.total} ticket(s).
       </p>
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
+      <div className="pv2-scroll-x">
+        <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, minWidth: 640 }}>
           <thead>
             <tr>
               <th style={headerStyle}>Folio</th>
