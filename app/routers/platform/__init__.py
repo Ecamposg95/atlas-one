@@ -31,6 +31,7 @@ from . import (
     api_keys,
     reports,
     control_tower,
+    overview,
 )
 
 router = APIRouter(
@@ -54,3 +55,4 @@ router.include_router(feature_flags.router)
 router.include_router(api_keys.router)
 router.include_router(reports.router)
 router.include_router(control_tower.router)
+router.include_router(overview.router)

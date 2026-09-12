@@ -15,6 +15,7 @@ import {
   StatsRange,
   PaymentMethodsResponse,
   BranchComparisonResponse,
+  PlatformOrg,
 } from '../../api/platform'
 import { toast } from '../../store/toastStore'
 import { formatCurrency } from '../../utils/currency'
@@ -29,6 +30,12 @@ import { Leaderboard } from '../../components/platform/v2/Leaderboard'
 
 import { ActivityHeatmap } from '../../components/platform/v2/ActivityHeatmap'
 import { TablaDesplazable } from '../../components/ui/TablaDesplazable'
+
+import { OrgBoard } from './org/OrgBoard'
+import { AttentionPanel } from './org/AttentionPanel'
+import { useAttentionToday } from './org/useOrgOverview'
+import { readMode, readOrgId, writeMode, writeOrgId } from './org/orgPrefs'
+import type { PlatformMode } from '../../types/platformOverview'
 
 // Lazy: cohort retention is the only chart left in "Análisis avanzado".
 const CohortTable = lazy(() =>
@@ -173,6 +180,38 @@ export function PlatformMetrics() {
   const navigate = useNavigate()
   const [range, setRange] = useState<StatsRange>('30d')
 
+  // Global = la plataforma entera; Organización = un cliente a la vez. Ningún
+  // KPI del modo Organización mezcla el dinero de dos clientes; lo único que
+  // cruza a todos es la tira "Atención hoy".
+  const [mode, setMode] = useState<PlatformMode>(() => readMode())
+  const [orgId, setOrgId] = useState<number | null>(() => readOrgId())
+  const [orgs, setOrgs] = useState<PlatformOrg[]>([])
+  const { data: attention } = useAttentionToday()
+
+  useEffect(() => {
+    platformApi.getOrgs()
+      .then((list) => setOrgs([...list].sort((a, b) => a.name.localeCompare(b.name, 'es'))))
+      .catch(() => toast.error('No se pudo cargar la lista de organizaciones'))
+  }, [])
+
+  // Si lo recordado ya no existe (organización borrada, sesión nueva), cae a la primera.
+  useEffect(() => {
+    if (orgs.length === 0) return
+    if (orgId !== null && orgs.some((o) => o.id === orgId)) return
+    writeOrgId(orgs[0].id)
+    setOrgId(orgs[0].id)
+  }, [orgs, orgId])
+
+  const changeMode = (m: PlatformMode) => { writeMode(m); setMode(m) }
+  const changeOrg = (id: number) => {
+    // Un <select> vacío manda "" → Number("") es 0, que no es una organización.
+    if (!Number.isInteger(id) || id <= 0) return
+    writeOrgId(id)
+    setOrgId(id)
+  }
+  /** Desde un pendiente de la tira: abrir esa organización. */
+  const pickOrg = (id: number) => { changeOrg(id); changeMode('organizacion') }
+
   // Phase 1 state
   const [kpis, setKpis] = useState<KpisExtendedResponse | null>(null)
   const [trendsMulti, setTrendsMulti] = useState<TrendsMultiResponse | null>(null)
@@ -234,7 +273,7 @@ export function PlatformMetrics() {
     }
   }, [range])
 
-  useEffect(() => { loadPhase1() }, [loadPhase1])
+  useEffect(() => { if (mode === 'global') loadPhase1() }, [loadPhase1, mode])
 
   const loadPhase2 = useCallback(async () => {
     if (advFetched || advLoading) return
@@ -256,10 +295,6 @@ export function PlatformMetrics() {
     [trendsMulti],
   )
 
-  if (loading) {
-    return <SkeletonState />
-  }
-
   return (
     <main className="pv2-main">
       {/* ── Header ─────────────────────────────────────────────────── */}
@@ -270,39 +305,104 @@ export function PlatformMetrics() {
       </div>
       <div className="page-head">
         <div>
-          <h1>Métricas globales</h1>
-          <div className="sub">Panorama cross-tenant de la plataforma Atlas · SUPERADMIN</div>
+          <h1>{mode === 'global' ? 'Métricas globales' : 'El día de la organización'}</h1>
+          <div className="sub">
+            {mode === 'global'
+              ? 'Panorama cross-tenant de la plataforma Atlas · SUPERADMIN'
+              : 'Una organización a la vez · ningún total mezcla dinero de dos clientes'}
+          </div>
         </div>
         <div className="right">
-          <div className="pill-group" role="tablist" aria-label="Rango temporal">
-            {RANGES.map(r => (
-              <button
-                key={r}
-                type="button"
-                role="tab"
-                aria-pressed={r === range}
-                className={'pill ' + (r === range ? 'active' : '')}
-                onClick={() => setRange(r)}
-              >
-                {r === 'ytd' ? 'YTD' : r}
-              </button>
-            ))}
+          <div className="pv2-segmented" role="tablist" aria-label="Vista de la plataforma">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === 'global'}
+              className={mode === 'global' ? 'active' : ''}
+              onClick={() => changeMode('global')}
+            >
+              Global
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === 'organizacion'}
+              className={mode === 'organizacion' ? 'active' : ''}
+              onClick={() => changeMode('organizacion')}
+            >
+              Organización
+            </button>
           </div>
-          <button
-            className="btn ghost"
-            type="button"
-            onClick={() => loadPhase1({ silent: true })}
-            disabled={refreshing}
-            aria-label="Refrescar métricas"
-          >
-            <i
-              className={'fa-solid fa-arrow-rotate-right'}
-              style={refreshing ? { animation: 'pv2-spin 0.9s linear infinite' } : undefined}
-            />
-            {refreshing ? 'Refrescando…' : 'Refrescar'}
-          </button>
+
+          {mode === 'organizacion' ? (
+            <label className="pv2-org-picker">
+              <span className="hint">Organización</span>
+              <select
+                className="pv2-org-select"
+                aria-label="Organización"
+                value={orgId ?? ''}
+                onChange={(e) => changeOrg(Number(e.target.value))}
+              >
+                {orgs.length === 0 && <option value="">Cargando…</option>}
+                {orgs.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+              </select>
+            </label>
+          ) : (
+            <>
+              <div className="pill-group" role="tablist" aria-label="Rango temporal">
+                {RANGES.map(r => (
+                  <button
+                    key={r}
+                    type="button"
+                    role="tab"
+                    aria-pressed={r === range}
+                    className={'pill ' + (r === range ? 'active' : '')}
+                    onClick={() => setRange(r)}
+                  >
+                    {r === 'ytd' ? 'YTD' : r}
+                  </button>
+                ))}
+              </div>
+              <button
+                className="btn ghost"
+                type="button"
+                onClick={() => loadPhase1({ silent: true })}
+                disabled={refreshing}
+                aria-label="Refrescar métricas"
+              >
+                <i
+                  className={'fa-solid fa-arrow-rotate-right'}
+                  style={refreshing ? { animation: 'pv2-spin 0.9s linear infinite' } : undefined}
+                />
+                {refreshing ? 'Refrescando…' : 'Refrescar'}
+              </button>
+            </>
+          )}
         </div>
       </div>
+
+      {/* Atención hoy: cruza TODAS las organizaciones (en el modo Organización
+          va como panel al lado de la tabla, dentro de OrgBoard). */}
+      {mode === 'global' && attention && (
+        <AttentionPanel
+          attention={attention}
+          counts={attention.counts}
+          variant="strip"
+          onPickOrg={pickOrg}
+        />
+      )}
+
+      {mode === 'organizacion' ? (
+        <OrgBoard
+          orgId={orgId}
+          attention={attention}
+          counts={attention?.counts}
+          onPickOrg={pickOrg}
+        />
+      ) : loading ? (
+        <SkeletonState />
+      ) : (
+        <>
 
       {/* ── Section A · KPIs principales ───────────────────────────── */}
       <section className="grid-kpis-8">
@@ -568,6 +668,8 @@ export function PlatformMetrics() {
           </div>
         </details>
       </section>
+        </>
+      )}
     </main>
   )
 }

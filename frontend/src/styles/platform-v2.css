@@ -665,7 +665,7 @@
   display: flex; gap: 8px; flex-wrap: wrap;
 }
 
-/* ── Tablero del grupo (spec 2026-09-09 §4.4) ──────────────────── */
+/* ── Tablero por organización (spec 2026-09-09 §4.4, adaptada) ── */
 .pv2 .pv2-segmented {
   display: inline-flex; padding: 3px; gap: 2px; border-radius: 999px;
   background: var(--p-surface-2); border: 1px solid var(--p-border);
@@ -676,11 +676,11 @@
 }
 .pv2 .pv2-segmented button.active { background: var(--p-accent); color: var(--dax-on-accent); }
 
-.pv2 .pv2-group-layout {
+.pv2 .pv2-org-layout {
   display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: 20px; align-items: start;
 }
-.pv2 .pv2-group-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
-.pv2 .pv2-group-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.pv2 .pv2-org-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.pv2 .pv2-org-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
 .pv2 .pv2-stale { font-size: 12px; color: var(--p-warning); }
 
 .pv2 .pv2-attention { display: flex; flex-direction: column; gap: 8px; }
@@ -693,8 +693,18 @@
 .pv2 .pv2-attention-card .item .nm { color: var(--p-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pv2 .pv2-attention-card .item .val { color: var(--p-muted); font-family: var(--font-mono); white-space: nowrap; }
 .pv2 .pv2-attention-empty { color: var(--p-muted); font-size: 12px; padding: 6px 0; }
+.pv2 .pv2-attention-card button.item {
+  width: 100%; border: 0; border-top: 1px solid var(--p-border-2); background: transparent;
+  font: inherit; text-align: left; cursor: pointer; min-height: 32px; align-items: center;
+}
+.pv2 .pv2-attention-card button.item:hover .nm { text-decoration: underline; }
+.pv2 .pv2-org-picker { display: inline-flex; align-items: center; gap: 8px; }
+.pv2 .pv2-org-select {
+  min-height: 32px; padding: 0 10px; border-radius: 8px; font: inherit; font-size: 13px;
+  background: var(--p-surface); border: 1px solid var(--p-border); color: var(--p-text); cursor: pointer;
+}
 
-.pv2 .pv2-attention-strip { display: flex; gap: 8px; flex-wrap: wrap; }
+.pv2 .pv2-attention-strip { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .pv2 .pv2-chip {
   display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px;
   font-size: 12px; font-weight: 600; border: 1px solid var(--p-border); background: var(--p-surface);
@@ -785,8 +795,8 @@
   .pv2 .pv2-filters { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 6px; }
   .pv2 .pv2-filters > * { flex: 0 0 auto; }
   .pv2-hero-grid { grid-template-columns: 1fr !important; }
-  .pv2 .pv2-group-layout { grid-template-columns: 1fr; }
-  .pv2 .pv2-group-kpis { grid-template-columns: repeat(2, 1fr); }
+  .pv2 .pv2-org-layout { grid-template-columns: 1fr; }
+  .pv2 .pv2-org-kpis { grid-template-columns: repeat(2, 1fr); }
   .pv2 .pv2-attention { flex-direction: row; overflow-x: auto; padding-bottom: 6px; }
   .pv2 .pv2-attention-card { flex: 0 0 260px; }
   .pv2 .pv2-delta-col { display: none; }
