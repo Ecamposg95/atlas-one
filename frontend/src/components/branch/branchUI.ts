@@ -25,6 +25,9 @@ export const ui = {
   // Solid colors to match the existing hero pattern (no gradients).
   heroEmerald: 'rounded-3xl bg-emerald-600 dark:bg-emerald-700 text-white shadow-2xl shadow-emerald-900/20',
   heroOrange: 'rounded-3xl bg-orange-600 dark:bg-orange-700 text-white shadow-2xl shadow-orange-900/20',
+  // Hero con cielo — el fondo lo pinta `.hero-sky` (styles/motion.css) según
+  // la hora; el estado del turno solo aporta banda lateral + píldora.
+  heroSky: 'rounded-3xl hero-sky shadow-2xl shadow-black/20',
   // Frosted/sticky header
   glass: 'sticky top-0 z-10 backdrop-blur-xl bg-white/80 dark:bg-slate-950/80 border-b border-stone-200/60 dark:border-slate-800/60',
   // Typography

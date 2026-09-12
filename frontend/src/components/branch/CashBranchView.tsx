@@ -11,6 +11,12 @@ import { ui, brand, fmtMoney, fmtDateTime } from './branchUI'
 import { MovementModal } from './MovementModal'
 import { OpenShiftModal } from './OpenShiftModal'
 import { WeekSalesChart } from './WeekSalesChart'
+import { Sky } from './Sky'
+import { Confetti } from './Confetti'
+import { useCountUp } from '../../hooks/useCountUp'
+import { closeVerdict } from '../../theme/verdict'
+import { heroState } from '../../theme/heroState'
+import { skyPeriod } from '../../theme/sky'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -326,9 +332,18 @@ const SEVERITY_STYLE: Record<string, string> = {
 
 function CloseResultPanel({ result, onDone }: { result: CloseResult; onDone: () => void }) {
   const { expected, counted, diff, warnings } = result
+  // Veredicto: el mismo `difference` que ya devolvió el backend, solo vestido.
+  const verdict = closeVerdict(diff)
+  const verdictAmount = useCountUp(Math.abs(diff), 1200)
   const diffClass = diff === 0 ? '' : diff > 0 ? brand.greenText : 'text-rose-600 dark:text-rose-400'
   return (
     <div>
+      <div className={`anim-pop ${verdict.className} p-5 text-center mb-4`} role="status">
+        <p className="text-[10px] font-bold uppercase tracking-widest opacity-80">Cierre de turno</p>
+        <p className="text-4xl font-black tabular-nums mt-1">{fmtMoney(verdictAmount)}</p>
+        <p className="text-base font-bold mt-0.5">{verdict.label}</p>
+      </div>
+
       <div className="space-y-2 text-sm mb-4">
         <Row label="Esperado en caja" value={fmtMoney(String(expected))} />
         <Row label="Contado" value={fmtMoney(String(counted))} />
@@ -397,8 +412,19 @@ export function CashBranchView() {
   const [summary, setSummary] = useState<CashSummary | null>(null)
   const [methodTotals, setMethodTotals] = useState<MethodTotals | null>(null)
   const [summaryError, setSummaryError] = useState(false)
+  // Celebración de apertura: la enciende OpenShiftModal al volver de POST /cash/open.
+  const [justOpened, setJustOpened] = useState(false)
 
   const printerName = usePOSStore((s) => s.printerName)
+
+  useEffect(() => {
+    if (!justOpened) return
+    const t = setTimeout(() => setJustOpened(false), 2400)
+    return () => clearTimeout(t)
+  }, [justOpened])
+
+  // Solo presentación: el fondo mostrado sale del mismo dato de la sesión.
+  const openingAnimated = useCountUp(current ? parseNum(current.opening_balance) : 0)
 
   const COPY = BRANCH_COPY.pages
 
@@ -565,40 +591,47 @@ export function CashBranchView() {
     <div className={`${ui.page} py-6`}>
       <div className={`${ui.container} space-y-5`}>
 
-        {/* ── Hero band — state-aware ──────────────────────────────── */}
+        {/* ── Hero — el cielo es el fondo; el turno es banda + píldora ── */}
         {(() => {
-          const heroClass =
-            current ? ui.heroEmerald :
-            todayClosedSession ? ui.heroOrange :
-            ui.hero
+          const state = heroState(!!current, !!todayClosedSession)
           return (
-            <div className={`${heroClass} px-6 py-6 flex flex-wrap items-center justify-between gap-4`}>
-              <div>
+            <div
+              className={`${ui.heroSky} px-8 py-7 pl-10 flex flex-wrap items-center justify-between gap-4 ${justOpened ? 'anim-just-opened' : ''}`}
+              data-period={skyPeriod(new Date())}
+            >
+              <Sky />
+              <div className="hero-band" style={{ background: state.band }} />
+              {justOpened && <><div className="ripple" /><Confetti /></>}
+
+              <div className="relative z-10">
                 <p className="text-white/70 text-xs font-semibold uppercase tracking-widest mb-0.5">
                   {COPY.cash}
                 </p>
                 <h1 className="text-2xl lg:text-3xl font-bold text-white">Mi caja</h1>
               </div>
 
-              <div className="flex items-center gap-3 flex-wrap">
+              <div className="relative z-10 flex items-center gap-3 flex-wrap">
                 <i className="fa-solid fa-vault text-white/50 text-2xl" />
 
                 {current ? (
                   <div className="text-right flex flex-col items-end gap-2">
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 text-white text-xs font-semibold px-2.5 py-1">
+                    <span className={state.pill}>
                       <i className="fa-solid fa-circle text-[8px]" />
-                      Turno abierto
+                      {state.label}
                     </span>
                     <p className="text-white/80 text-sm">
                       <i className="fa-solid fa-clock mr-1 text-white/50" />
                       {formatElapsed(current.opened_at)}
                     </p>
+                    <p className="text-white/90 text-sm font-semibold tabular-nums">
+                      Fondo {fmtMoney(openingAnimated)}
+                    </p>
                   </div>
                 ) : todayClosedSession ? (
                   <div className="text-right flex flex-col items-end gap-2">
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 text-white text-xs font-semibold px-2.5 py-1">
+                    <span className={state.pill}>
                       <i className="fa-solid fa-circle-check text-[10px]" />
-                      Turno cerrado hoy
+                      {state.label}
                     </span>
                     <p className="text-white/70 text-xs">
                       <i className="fa-solid fa-clock mr-1 text-white/50" />
@@ -606,9 +639,9 @@ export function CashBranchView() {
                     </p>
                   </div>
                 ) : (
-                  <span className={ui.pillSlate}>
-                    <i className="fa-solid fa-circle text-[8px] text-slate-400" />
-                    Sin caja abierta
+                  <span className={state.pill}>
+                    <i className="fa-solid fa-circle text-[8px]" />
+                    {state.label}
                   </span>
                 )}
               </div>
@@ -863,6 +896,7 @@ export function CashBranchView() {
         <OpenShiftModal
           onOpened={() => {
             setOpenShiftModalVisible(false)
+            setJustOpened(true)
             loadAll()
           }}
           onCancel={() => setOpenShiftModalVisible(false)}

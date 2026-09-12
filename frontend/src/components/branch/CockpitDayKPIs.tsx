@@ -1,11 +1,13 @@
 import { BRANCH_COPY, PAY_METHOD_LABELS } from '../../copy/branchCopy'
 import { ui, brand, fmtMoney } from './branchUI'
+import { useCountUp } from '../../hooks/useCountUp'
 import type { DashboardToday } from '../../types/branchDashboard'
 
 interface TodayProps { today: DashboardToday }
 
 /** Col-span-5: large sales total + ticket count + inline goal bar */
 function HeroSales({ today }: TodayProps) {
+  const salesTotal = useCountUp(Number(today.sales_total ?? 0))
   const goalPct = today.goal_progress_pct ?? null
   // Goal bar: purple fill (brand) for ≥80%, amber for mid, rose for low
   const barColor =
@@ -18,7 +20,7 @@ function HeroSales({ today }: TodayProps) {
       <div>
         <p className={`${ui.kpiLabel} mb-1`}>{BRANCH_COPY.cockpit.salesToday}</p>
         <p className={`${ui.kpiHero} text-emerald-500 dark:text-emerald-400`}>
-          {fmtMoney(today.sales_total)}
+          {fmtMoney(salesTotal)}
         </p>
         <p className={`mt-2 text-sm ${ui.muted}`}>
           {BRANCH_COPY.cockpit.salesTickets(today.sales_count)}
