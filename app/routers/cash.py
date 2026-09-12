@@ -3,7 +3,8 @@ import logging
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func, desc
+from sqlalchemy import func, desc, text
+from sqlalchemy.exc import IntegrityError
 from decimal import Decimal
 from datetime import datetime, timezone
 
@@ -52,6 +53,60 @@ def _lock_cash_session_query(query):
     la fila en Postgres, que es donde corre producción.
     """
     return query.with_for_update()
+
+
+def _sesion_abierta(
+    db: Session, user_id: int, branch_id: int, *,
+    organization_id: Optional[int] = None, bloquear: bool = False,
+):
+    """Sesion de caja ABIERTA de un usuario en una sucursal, o None.
+
+    `organization_id` cumple la regla de aislamiento por tenant. Es opcional
+    porque `cash_sessions.organization_id` es nullable y las filas anteriores al
+    backfill de Sprint 2 lo tienen en NULL: filtrar siempre dejaria a esos
+    cajeros abriendo una segunda caja sobre una sesion vieja que el filtro no ve.
+    """
+    q = db.query(CashSession).filter(
+        CashSession.user_id == user_id,
+        CashSession.branch_id == branch_id,
+        CashSession.status == CashSessionStatus.OPEN,
+    )
+    if organization_id is not None:
+        q = q.filter(CashSession.organization_id == organization_id)
+    if bloquear:
+        q = _lock_cash_session_query(q)
+    return q.first()
+
+
+# Indice unico parcial "una sola sesion OPEN por (usuario, sucursal)".
+# Ver app/models/cash.py y scripts/railway_init.py.
+INDICE_CAJA_ABIERTA = "uq_cash_sessions_open_user_branch"
+
+
+def _es_choque_de_caja_abierta(exc: IntegrityError) -> bool:
+    """¿El IntegrityError viene de ese indice y no de otra cosa?
+
+    Postgres nombra el indice en el mensaje; SQLite (las pruebas) solo lista las
+    columnas ("UNIQUE constraint failed: cash_sessions.user_id,
+    cash_sessions.branch_id"), asi que hay que reconocer las dos formas.
+    """
+    mensaje = str(getattr(exc, "orig", exc))
+    if INDICE_CAJA_ABIERTA in mensaje:
+        return True
+    return "cash_sessions.user_id" in mensaje and "cash_sessions.branch_id" in mensaje
+
+
+def _mensaje_caja_ya_abierta(active: Optional[CashSession]) -> str:
+    """Detalle del 409 de apertura. Antes esto devolvia 200 con la sesion
+    existente y descartaba en silencio el opening_balance recibido: el cajero
+    que corregia un fondo mal capturado veia "listo" sin que nada cambiara, y
+    su unico recurso era registrar una entrada de efectivo falsa (Task 5)."""
+    if active is None:
+        return "Ya tienes una caja abierta en esta sucursal."
+    return (
+        f"Ya tienes una caja abierta con fondo {active.opening_balance}. "
+        f"Para corregirlo usa PATCH /cash/sessions/{active.id}/opening-balance."
+    )
 
 
 def _validar_salida(db: Session, session: CashSession, current_user: User, amount: Decimal, reason: str) -> None:
@@ -132,35 +187,45 @@ def open_session(
     if not current_user.branch_id:
         raise HTTPException(400, "Tu usuario no tiene una sucursal asignada. Contacte al administrador.")
 
-    # 1. Idempotente: si ya hay sesión OPEN del usuario en esta sucursal,
-    # retornarla en lugar de error. Esto soporta el modelo "1 cajero opera
-    # 1-3 PCs simultáneamente, todas comparten la misma sesión de caja
-    # porque el efectivo va a una sola caja física" (Track 1 bug-fix).
-    active = db.query(CashSession).filter(
-        CashSession.user_id == current_user.id,
-        CashSession.branch_id == current_user.branch_id,
-        CashSession.status == CashSessionStatus.OPEN
-    ).first()
-    if active:
-        # Antes esto devolvia 200 con la sesion existente y descartaba en
-        # silencio el opening_balance recibido. El cajero que corregia un fondo
-        # mal capturado veia "listo" sin que nada cambiara, y su unico recurso
-        # era registrar una entrada de efectivo falsa (Task 5).
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f"Ya tienes una caja abierta con fondo {active.opening_balance}. "
-                f"Para corregirlo usa PATCH /cash/sessions/{active.id}/opening-balance."
-            ),
+    # 1. Serializar la apertura (auditoria Rmazh §5). El chequeo de abajo es
+    # check-then-insert: sin bloqueo, dos peticiones del mismo cajero lo pasan
+    # las dos y quedan DOS sesiones abiertas, y a partir de ahi el corte cuadra
+    # mal. El advisory lock cubre el caso de la carrera real —cuando todavia no
+    # hay fila que bloquear—; `with_for_update` protege el intervalo cuando la
+    # fila ya existe. Mismo patron que app/utils/folios.py::get_next_folio; en
+    # SQLite (pruebas) se omite porque las escrituras ya estan serializadas.
+    if db.bind is not None and db.bind.dialect.name == "postgresql":
+        db.execute(
+            text("SELECT pg_advisory_xact_lock(:usuario, :sucursal)"),
+            {"usuario": current_user.id, "sucursal": current_user.branch_id},
         )
 
-    # 3. Crear Sesión — organization_id derivado del branch para cumplir multi-tenancy
+    # Se copian a locales: tras un rollback los atributos de `current_user`
+    # quedan expirados y volver a leerlos dispara otra consulta.
+    usuario_id, sucursal_id = current_user.id, current_user.branch_id
+
+    # La sucursal se resuelve antes del chequeo: su organización es la que
+    # acota la búsqueda de la sesión abierta (multi-tenancy) y la que se
+    # guarda en la sesión nueva.
     from app.models.organization import Branch as _Branch
-    branch = db.query(_Branch).filter(_Branch.id == current_user.branch_id).first()
+    branch = db.query(_Branch).filter(_Branch.id == sucursal_id).first()
     if not branch:
         raise HTTPException(400, "Sucursal inválida.")
+    organizacion_id = branch.organization_id
+
+    # Si ya hay sesión OPEN del usuario en esta sucursal, 409. Una sola sesión
+    # soporta el modelo "1 cajero opera 1-3 PCs simultáneamente, todas comparten
+    # la misma sesión de caja porque el efectivo va a una sola caja física"
+    # (Track 1 bug-fix).
+    active = _sesion_abierta(
+        db, usuario_id, sucursal_id, organization_id=organizacion_id, bloquear=True
+    )
+    if active:
+        raise HTTPException(status_code=409, detail=_mensaje_caja_ya_abierta(active))
+
+    # 3. Crear Sesión — organization_id derivado del branch para cumplir multi-tenancy
     new_session = CashSession(
-        organization_id=branch.organization_id,
+        organization_id=organizacion_id,
         branch_id=current_user.branch_id,
         user_id=current_user.id,
         status=CashSessionStatus.OPEN,
@@ -168,7 +233,25 @@ def open_session(
         opened_at=datetime.now(timezone.utc)
     )
     db.add(new_session)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        # Solo el indice unico parcial es un conflicto de estado (otra peticion
+        # abrio primero) y merece un 409. Cualquier otra violacion de integridad
+        # —una FK rota, por ejemplo— es un fallo real que no hay que disfrazar
+        # de "ya tienes una caja abierta": se relanza y sale como 500.
+        if not _es_choque_de_caja_abierta(exc):
+            logger.exception(
+                "CASH_OPEN_INTEGRITY_ERROR: user_id=%s branch_id=%s", usuario_id, sucursal_id
+            )
+            raise
+        raise HTTPException(
+            status_code=409,
+            detail=_mensaje_caja_ya_abierta(
+                _sesion_abierta(db, usuario_id, sucursal_id, organization_id=organizacion_id)
+            ),
+        )
     db.refresh(new_session)
 
     logger.info(

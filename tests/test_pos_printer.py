@@ -16,6 +16,10 @@ def _make_org(**kwargs):
     org.logo_url = None
     org.ticket_header = kwargs.get("ticket_header", None)
     org.ticket_footer = kwargs.get("ticket_footer", None)
+    # Modo de precio (app/services/tax.py). Explicito porque en un MagicMock
+    # cualquier atributo no declarado sale truthy, y eso pondria los tickets en
+    # modo "precio con IVA incluido" sin que ninguna prueba lo pidiera.
+    org.price_includes_tax = kwargs.get("price_includes_tax", False)
     return org
 
 
@@ -213,6 +217,58 @@ class TestReissuedTicket:
             branch={}
         )
         assert "Gracias org" in text
+
+    def _totales(self, text):
+        """Devuelve {'SUBTOTAL': float, 'IVA': float, 'TOTAL': float} del ticket.
+
+        El renglon de TOTAL va envuelto en los ESC de negritas, asi que se
+        busca por patron y no por inicio de linea; el lookbehind evita que
+        'SUBTOTAL:' se lea tambien como 'TOTAL:'.
+        """
+        import re
+        out = {}
+        for etiqueta in ("SUBTOTAL", "IVA", "TOTAL"):
+            m = re.search(rf"(?<![A-Z]){etiqueta}:\s+(-?\d+\.\d{{2}})", text)
+            if m:
+                out[etiqueta] = float(m.group(1))
+        return out
+
+    def test_modo_neto_suma_el_iva_sobre_lo_remanente(self):
+        """Precio neto (modo por defecto): la linea remanente es la base y el
+        IVA se suma encima, a la tasa efectiva de la venta."""
+        lines = [_make_line("Producto", 2, "100.00", "200.00", variant_id="v1")]
+        text = self._build_reissued(
+            sale={"lines": lines, "subtotal": "200.00", "tax_amount": "32.00",
+                  "total_amount": "232.00"},
+        )
+        t = self._totales(text)
+        assert t["SUBTOTAL"] == 200.00
+        assert t["IVA"] == 32.00
+        assert t["TOTAL"] == 232.00
+
+    def test_modo_iva_incluido_descompone_en_vez_de_inflar(self):
+        """Con `price_includes_tax`, `unit_price` YA trae el IVA: sumarselo
+        encima inflaba el ticket reemitido ~16% (auditoria Rmazh §3)."""
+        lines = [_make_line("Producto", 2, "116.00", "232.00", variant_id="v1")]
+        text = self._build_reissued(
+            org={"price_includes_tax": True},
+            sale={"lines": lines, "subtotal": "200.00", "tax_amount": "32.00",
+                  "total_amount": "232.00"},
+        )
+        t = self._totales(text)
+        assert t["SUBTOTAL"] == 200.00
+        assert t["IVA"] == 32.00
+        assert t["TOTAL"] == 232.00, "el total reemitido no puede exceder lo cobrado"
+
+    def test_venta_sin_iva_reemite_sin_iva(self):
+        lines = [_make_line("Producto", 1, "50.00", "50.00", variant_id="v1")]
+        text = self._build_reissued(
+            sale={"lines": lines, "subtotal": "50.00", "tax_amount": "0.00",
+                  "total_amount": "50.00"},
+        )
+        t = self._totales(text)
+        assert t["IVA"] == 0.00
+        assert t["TOTAL"] == 50.00
 
     def test_reissued_marker_shown(self):
         """Reissued ticket must carry the *** TICKET REEMITIDO *** banner."""

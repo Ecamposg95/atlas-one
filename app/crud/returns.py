@@ -1,11 +1,12 @@
 from decimal import Decimal
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 from app.models.returns import SaleReturn, SaleReturnItem
 from app.models.sales import SalesDocument, SalesLineItem, DocumentStatus, DocumentType, PaymentMethod
 from app.models.inventory import InventoryMovement, StockOnHand, MovementType
 from app.schemas.returns import SaleReturnCreate
 from app.models.products import ProductVariant
+from app.models.organization import Organization
+from app.services.tax import prorate_sale_after_refund, resolve_org_tax_mode
 from typing import List
 import uuid
 
@@ -358,55 +359,33 @@ def approve_return(db: Session, return_id: str, supervisor_id: int,
         db_return.cash_session_id = target_session_id
 
     # 7. M-2: persistir totales NETOS en el SalesDocument padre.
-    # `refund_amount` se calcula en create_return() como qty * unit_price (PRE-IVA),
-    # igual que `accumulated_subtotal` en sales create. Por tanto el refund total
-    # es pre-tax y se descuenta directamente del subtotal. El IVA se prorratea
-    # con la tasa efectiva ORIGINAL de la venta (no la actual, que ya puede estar
-    # parcialmente neta de aprobaciones previas). Reconstruimos los totales
-    # ORIGINALES sumando los items APROBADOS antes de este approve y los valores
-    # actuales en sale; así múltiples aprobaciones secuenciales convergen al
-    # mismo resultado neto. Sin esto los reportes fiscales suman valores
-    # pre-devolución y se inflan.
-    # Refunds aprobados ANTES de este return (excluye este db_return).
-    prior_refunded_pretax = db.query(
-        func.coalesce(func.sum(SaleReturnItem.refund_amount), 0)
-    ).join(SaleReturn).filter(
-        SaleReturn.sale_id == sale.id,
-        SaleReturn.status == "APPROVED",
-        SaleReturn.id != db_return.id,
-    ).scalar() or Decimal("0")
-    prior_refunded_pretax = Decimal(str(prior_refunded_pretax))
-
-    # Total refunded incluyendo ESTE return (que ya está APPROVED por flush).
-    this_refund_pretax = sum(
+    # El prorrateo vive en app/services/tax.py (fuente única de IVA, auditoría
+    # Rmazh §3); aquí solo se resuelve qué se le entrega.
+    #
+    # `refund_amount` se calcula en create_return() como qty * unit_price, y
+    # `unit_price` es neto o bruto según el modo de precio de la organización —
+    # de ahí `refund_includes_tax`. El descuento se aplica sobre el estado
+    # ACTUAL de la venta (que ya refleja las aprobaciones previas), así que
+    # varias devoluciones secuenciales convergen sin reconstruir el original.
+    # Sin esto los reportes fiscales suman valores pre-devolución y se inflan.
+    this_refund = sum(
         (Decimal(str(it.refund_amount)) for it in db_return.items),
         Decimal("0"),
     )
-    total_refunded_pretax = prior_refunded_pretax + this_refund_pretax
 
-    # Reconstruir el subtotal/tax ORIGINALES de la venta (pre-cualquier-refund).
-    current_subtotal = Decimal(str(sale.subtotal or 0))
-    current_tax = Decimal(str(sale.tax_amount or 0))
-    # Tax rate efectiva: si ya hubo refunds previos, current_subtotal y
-    # current_tax están en proporción correcta entre sí (se actualizaron juntos).
-    if current_subtotal > 0:
-        effective_tax_rate = current_tax / current_subtotal
-    else:
-        effective_tax_rate = Decimal("0")
-    # Subtotal original = current + refunds previos (que ya descontamos).
-    original_subtotal = current_subtotal + prior_refunded_pretax
+    org_modo_bruto = resolve_org_tax_mode(
+        db.query(Organization).filter(Organization.id == db_return.organization_id).first()
+    )
+    netos = prorate_sale_after_refund(
+        current_subtotal=sale.subtotal,
+        current_tax=sale.tax_amount,
+        refunded_amount=this_refund,
+        refund_includes_tax=org_modo_bruto,
+    )
 
-    net_subtotal = original_subtotal - total_refunded_pretax
-    if net_subtotal < 0:
-        net_subtotal = Decimal("0")
-
-    net_tax = (net_subtotal * effective_tax_rate).quantize(Decimal("0.01"))
-    net_subtotal = net_subtotal.quantize(Decimal("0.01"))
-    net_total = (net_subtotal + net_tax).quantize(Decimal("0.01"))
-
-    sale.subtotal = net_subtotal
-    sale.tax_amount = net_tax
-    sale.total_amount = net_total
+    sale.subtotal = netos.subtotal
+    sale.tax_amount = netos.tax
+    sale.total_amount = netos.total
 
     # F3: audit row before commit (atomic with the refund approval).
     from app.services.cash_audit import audit_cash_event

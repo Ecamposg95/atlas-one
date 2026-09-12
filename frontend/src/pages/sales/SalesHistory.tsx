@@ -8,9 +8,11 @@ import { Badge } from '../../components/ui/Badge'
 import type { SalesDocument } from '../../types/sales'
 import { saleLabel } from '../../types/sales'
 import { ReturnModal } from '../../components/pos/modals/ReturnModal'
+import { ReprintPinModal } from '../../components/pos/modals/ReprintPinModal'
 import { formatCurrency } from '../../utils/currency'
 import { todayStr, daysAgoStr } from '../../utils/dates'
 import { toast } from '../../store/toastStore'
+import { mensajeReimpresion, pinBloqueado, pinIncorrecto, requierePin } from '../../utils/reimpresion'
 
 const PRESETS = [
   { label: 'Hoy', start: () => todayStr(), end: () => todayStr() },
@@ -50,6 +52,8 @@ export function SalesHistory() {
   const [total, setTotal] = useState(0)
   const [selected, setSel] = useState<SalesDocument | null>(null)
   const [returnSale, setReturnSale] = useState<SalesDocument | null>(null)
+  // Venta cuya reimpresión espera el PIN de un supervisor (428 del backend).
+  const [ventaPorAutorizar, setVentaPorAutorizar] = useState<SalesDocument | null>(null)
   const LIMIT = 100
 
   // Track 2 (POS bug-fix): por defecto historial muestra solo ventas
@@ -59,19 +63,38 @@ export function SalesHistory() {
   // falta auditar.
   const [includeOpenStates, setIncludeOpenStates] = useState(false)
 
-  const reprintTicket = async (saleId: string) => {
+  /**
+   * Reimprime un ticket. El backend exige rol gerencial o el PIN de un
+   * supervisor (428) salvo que sea una venta propia recién cobrada, así que el
+   * primer intento va sin PIN y solo se pide cuando hace falta.
+   *
+   * Devuelve el mensaje de error si el PIN no sirvió —el modal lo muestra y
+   * deja reintentar— o null cuando ya no hay nada pendiente.
+   */
+  const reprintTicket = async (sale: SalesDocument, pin?: string): Promise<string | null> => {
     if (!printerName) {
       toast.error('Configura una impresora en /printer-settings primero')
-      return
+      return null
     }
     setReprinting(true)
     try {
-      const b64 = await printerApi.getTicketBase64(saleId)
+      const b64 = await printerApi.getTicketBase64(sale.id, pin)
       if (b64) await printerApi.printViaAgent(printerName, b64)
       toast.success('Ticket enviado a la impresora')
+      setVentaPorAutorizar(null)
+      return null
     } catch (e: unknown) {
-      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      toast.error(detail ?? 'Error al reimprimir')
+      if (requierePin(e)) {
+        setVentaPorAutorizar(sale)
+        return null
+      }
+      // Un PIN equivocado deja el modal abierto para reintentar. El bloqueo por
+      // intentos lo cierra: hay que esperar, insistir no sirve. Y cualquier otro
+      // conflicto (venta cancelada, sin acceso) también lo cierra con aviso.
+      if (pin && pinIncorrecto(e) && !pinBloqueado(e)) return mensajeReimpresion(e)
+      toast.error(mensajeReimpresion(e))
+      setVentaPorAutorizar(null)
+      return null
     } finally {
       setReprinting(false)
     }
@@ -256,7 +279,7 @@ export function SalesHistory() {
                           <i className="fa-solid fa-eye" /> Ver
                         </button>
                         <button
-                          onClick={(e) => { e.stopPropagation(); reprintTicket(s.id) }}
+                          onClick={(e) => { e.stopPropagation(); reprintTicket(s) }}
                           disabled={!printerName}
                           className="px-3 py-2 rounded-lg text-xs font-bold bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/25 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                           title={printerName ? 'Reimprimir ticket' : 'Configura una impresora'}
@@ -335,7 +358,7 @@ export function SalesHistory() {
             <div className="mt-4 border-t border-slate-700/50 pt-4 flex flex-col gap-2">
               <button
                 disabled={reprinting || !printerName}
-                onClick={() => reprintTicket(selected.id)}
+                onClick={() => reprintTicket(selected)}
                 className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition-colors disabled:opacity-40"
                 style={{ background: printerName ? 'rgba(99,102,241,0.15)' : 'rgba(100,116,139,0.1)', color: printerName ? '#a5b4fc' : '#64748b' }}
                 title={printerName ? 'Reimprimir vía agente local' : 'Configura una impresora en /printer-settings primero'}
@@ -364,6 +387,13 @@ export function SalesHistory() {
           initialSale={returnSale}
           onClose={() => setReturnSale(null)}
           onSuccess={() => { setReturnSale(null); load(startDate, endDate, page) }}
+        />
+      )}
+      {ventaPorAutorizar && (
+        <ReprintPinModal
+          etiqueta={saleLabel(ventaPorAutorizar)}
+          onCancel={() => setVentaPorAutorizar(null)}
+          onSubmit={(pin) => reprintTicket(ventaPorAutorizar, pin)}
         />
       )}
     </div>

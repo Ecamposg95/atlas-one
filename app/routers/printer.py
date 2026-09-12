@@ -5,18 +5,168 @@ from sqlalchemy.orm import Session
 from typing import Optional, Tuple
 from app.core.database import get_db
 from app.models import SalesDocument, User, SalesLineItem, ProductVariant, SaleReturn, SaleReturnItem
+from app.models.sales import DocumentStatus
 from app.models.print_job import PrintJob, PrintJobStatus
+from app.models.cash_audit import CashAuditEvent
 from app.core.security import get_current_user
 from app.core.tenant_context import get_current_active_organization
 from app.pos_printer import PosPrinter
 from app.routers.sales import _assert_sale_branch_access
 import base64
 import io
+import logging
 import traceback
 import zipfile
 from pathlib import Path
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
+
+
+class ReprintRequest(BaseModel):
+    """Cuerpo opcional de la reimpresion. Un usuario con rol gerencial no manda
+    nada; un cajero manda el `pin` (la contrasena) de un supervisor para que lo
+    autorice en el momento."""
+    pin: Optional[str] = None
+
+
+def _assert_reimprimible(sale: SalesDocument) -> None:
+    """C-18: una venta CANCELLED ya no representa un cobro. Servir su ticket
+    limpio es exactamente el insumo del fraude por reciclaje de comprobantes:
+    cancelar la venta borraba el cargo, pero no el papel."""
+    estado = sale.status.value if hasattr(sale.status, "value") else str(sale.status)
+    if estado == DocumentStatus.CANCELLED.value:
+        raise HTTPException(
+            status_code=409,
+            detail="Esta venta esta cancelada: su ticket ya no se puede reimprimir.",
+        )
+
+
+def _auditar_impresion(
+    db: Session, *, evento: str, sale: SalesDocument, current_user: User,
+    org_id: int, via: str, supervisor: Optional[User], confirmar: bool = False,
+) -> None:
+    """Deja el rastro de quien emitio (o intento emitir) un ticket.
+
+    El PrintJob guarda los bytes y la impresora, no quien lo pidio ni quien lo
+    autorizo, asi que sin esto el control del PIN no se puede investigar
+    despues. FAILSAFE como el resto de `audit_cash_event`: un fallo de
+    auditoria nunca tumba la impresion.
+
+    `confirmar=True` hace commit: el intento fallido termina en un 403 y sin
+    commit propio la fila se iria con el rollback de la transaccion.
+    """
+    from app.services.cash_audit import audit_cash_event
+
+    try:
+        audit_cash_event(
+            db,
+            event_type=evento,
+            organization_id=org_id,
+            branch_id=sale.branch_id,
+            user_id=current_user.id,
+            amount=sale.total_amount,
+            related_table="sales_documents",
+            related_id=str(sale.id),
+            payload={
+                "via": via,
+                "authorized_by_user_id": supervisor.id if supervisor else None,
+                "authorized_by_username": supervisor.username if supervisor else None,
+                "folio": f"{sale.series}-{sale.folio}" if sale.folio else None,
+            },
+        )
+        if confirmar:
+            db.commit()
+    except Exception:
+        logger.exception("REPRINT_AUDIT_FAILED sale=%s", getattr(sale, "id", None))
+
+
+def _autorizar_impresion(
+    db: Session, current_user: User, org_id: int, req: Optional[ReprintRequest],
+    sale: SalesDocument,
+) -> Optional[User]:
+    """Gate compartido por los tres endpoints que emiten un ticket de venta
+    (hallazgo §6 de la auditoria Rmazh). Devuelve el supervisor que autorizo, o
+    None si no hizo falta PIN. Nunca deja pasar a alguien sin autoridad ni PIN.
+
+    Va en los TRES y no solo en las reimpresiones: `print-ticket` acepta un
+    `order_id` cualquiera, asi que gatear unicamente `reprint-ticket` dejaria el
+    mismo ticket a un POST de distancia."""
+    from app.services.reprint_auth import (
+        bloqueo_restante,
+        es_rol_gerencial,
+        es_venta_propia_reciente,
+        limpiar_intentos,
+        registrar_intento_fallido,
+        verificar_pin_supervisor,
+    )
+
+    # La venta propia reciente se evalua PRIMERO, antes que el rol: un gerente o
+    # un dueno tambien cobran en caja, y con el orden invertido cada venta suya
+    # dejaba una fila TICKET_REPRINTED. Eso no es auditoria, es una copia del
+    # libro de ventas. La impresion normal del POS tras cobrar no se audita; el
+    # PrintJob ya deja el rastro de ese caso.
+    if es_venta_propia_reciente(sale, current_user):
+        return None
+
+    if es_rol_gerencial(current_user):
+        _auditar_impresion(
+            db, evento=CashAuditEvent.TICKET_REPRINTED, sale=sale,
+            current_user=current_user, org_id=org_id, via="rol_gerencial",
+            supervisor=None,
+        )
+        logger.info(
+            "TICKET_REPRINTED: org_id=%s user_id=%s sale_id=%s via=rol_gerencial",
+            org_id, current_user.id, sale.id,
+        )
+        return None
+
+    restante = bloqueo_restante(org_id, current_user.id)
+    if restante is not None:
+        raise HTTPException(
+            status_code=423,
+            detail=f"Demasiados intentos fallidos. Intenta de nuevo en {restante} segundos.",
+        )
+
+    pin = req.pin if req else None
+    if not pin:
+        # 428 (Precondition Required) y no 401: el cajero SI esta autenticado,
+        # lo que falta es una autorizacion puntual. Un 401 dispararia el cierre
+        # de sesion global del interceptor de axios, que es justo el mecanismo
+        # de seguridad que no queremos debilitar con excepciones por ruta.
+        raise HTTPException(status_code=428, detail="Se requiere el PIN de un supervisor")
+
+    supervisor = verificar_pin_supervisor(db, org_id, pin, branch_id=sale.branch_id)
+    if not supervisor:
+        registrar_intento_fallido(org_id, current_user.id)
+        _auditar_impresion(
+            db, evento=CashAuditEvent.REPRINT_PIN_FAILED, sale=sale,
+            current_user=current_user, org_id=org_id, via="pin",
+            supervisor=None, confirmar=True,
+        )
+        logger.warning(
+            "REPRINT_PIN_FAILED: org_id=%s user_id=%s username=%s sale_id=%s",
+            org_id, current_user.id, current_user.username, sale.id,
+        )
+        # `detail` estructurado: el 403 de "Sin acceso a esta venta" y el del
+        # PIN son indistinguibles por codigo, y el front necesita saber cual es
+        # para decidir si deja reintentar en el modal o cierra con aviso.
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "PIN_INCORRECTO", "message": "PIN incorrecto"},
+        )
+
+    limpiar_intentos(org_id, current_user.id)
+    _auditar_impresion(
+        db, evento=CashAuditEvent.TICKET_REPRINTED, sale=sale,
+        current_user=current_user, org_id=org_id, via="pin", supervisor=supervisor,
+    )
+    logger.info(
+        "TICKET_REPRINTED: org_id=%s user_id=%s sale_id=%s via=pin autorizo_user_id=%s",
+        org_id, current_user.id, sale.id, supervisor.id,
+    )
+    return supervisor
 
 
 def _resolve_printer(
@@ -127,6 +277,10 @@ class PrintRequest(BaseModel):
     # `mode` ignored — Track 4 deprecó server-side print. Mantenido en el
     # schema para backward-compat con clientes viejos.
     mode: str = "return_base64"
+    # Si la venta no es propia-y-reciente, este endpoint cae al mismo gate de
+    # PIN que la reimpresión. Opcional para no romper al llamador legítimo
+    # (POS.tsx tras cobrar), que nunca lo necesita.
+    pin: Optional[str] = None
 
 
 @router.get("/download-agent")
@@ -215,6 +369,8 @@ def print_ticket_endpoint(
     if sale.organization_id != org_id:
         raise HTTPException(status_code=403, detail="Sin acceso a esta venta")
     _assert_sale_branch_access(sale, current_user)
+    _assert_reimprimible(sale)
+    _autorizar_impresion(db, current_user, org_id, ReprintRequest(pin=req.pin), sale)
 
     from app.models.organization import Organization
     organization = db.query(Organization).filter(Organization.id == org_id).first()
@@ -255,11 +411,12 @@ def print_ticket_endpoint(
 def reprint_ticket_endpoint(
     order_id: str,
     request: Request,
+    req: Optional[ReprintRequest] = Body(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization),
 ):
-    """Track 4: reimpresión sin restricción. Siempre retorna base64."""
+    """Reimpresión de un ticket. Exige rol gerencial o PIN de supervisor."""
     from sqlalchemy.orm import joinedload, selectinload
     sale = db.query(SalesDocument).options(
         joinedload(SalesDocument.lines).joinedload(SalesLineItem.variant),
@@ -272,6 +429,8 @@ def reprint_ticket_endpoint(
     if sale.organization_id != org_id:
         raise HTTPException(status_code=403, detail="Sin acceso a esta venta")
     _assert_sale_branch_access(sale, current_user)
+    _assert_reimprimible(sale)
+    autorizado_por = _autorizar_impresion(db, current_user, org_id, req, sale)
 
     if hasattr(sale, 'reprint_count'):
         sale.reprint_count += 1
@@ -308,6 +467,7 @@ def reprint_ticket_endpoint(
         "content_base64": base64.b64encode(raw_bytes).decode('utf-8'),
         "printer_target": target_printer_name,
         "reprint_count": getattr(sale, 'reprint_count', 'N/A'),
+        "authorized_by": autorizado_por.username if autorizado_por else None,
     }
 
 
@@ -315,11 +475,12 @@ def reprint_ticket_endpoint(
 def reprint_refunded_endpoint(
     order_id: str,
     request: Request,
+    req: Optional[ReprintRequest] = Body(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization),
 ):
-    """Track 4: ticket actualizado tras devoluciones. Siempre base64."""
+    """Ticket actualizado tras devoluciones. Mismo gate que reprint-ticket."""
     from sqlalchemy.orm import joinedload, selectinload
     sale = db.query(SalesDocument).options(
         joinedload(SalesDocument.lines).joinedload(SalesLineItem.variant),
@@ -331,6 +492,8 @@ def reprint_refunded_endpoint(
     if sale.organization_id != org_id:
         raise HTTPException(status_code=403, detail="Sin acceso a esta venta")
     _assert_sale_branch_access(sale, current_user)
+    _assert_reimprimible(sale)
+    _autorizar_impresion(db, current_user, org_id, req, sale)
 
     from app.models.organization import Organization
     organization = db.query(Organization).filter(Organization.id == org_id).first()

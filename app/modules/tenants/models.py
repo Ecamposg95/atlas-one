@@ -180,6 +180,11 @@ class Organization(Base):
     maps_url = Column(String, nullable=True)
     timezone = Column(String, nullable=True, default="America/Mexico_City")
 
+    # Fiscal — modo de precio. False (default): el precio del catálogo es neto y
+    # el IVA se suma encima (comportamiento histórico de Atlas ONE). True: el
+    # precio ya trae el IVA y se desglosa. Lo consume app/services/tax.py.
+    price_includes_tax = Column(Boolean, default=False, server_default="false", nullable=False)
+
     # SaaS
     status = Column(String, default="ACTIVE", index=True)  # ACTIVE, SUSPENDED
     plan = Column(String, default="FREE")

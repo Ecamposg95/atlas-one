@@ -59,6 +59,7 @@ from app.utils.folios import get_next_folio
 from app.core.events import EventBus, SalesDocumentCreated # [NEW] Event Bus Integration
 from app.core.tenant_context import get_current_active_organization
 from app.models.organization import Organization
+from app.services.tax import compute_line_tax, quantize_amount, quantize_totals, resolve_org_tax_mode
 from app.crud.products import get_variant_if_visible
 try:
     from zoneinfo import ZoneInfo
@@ -505,6 +506,12 @@ def create_sale(
     accumulated_tax = Decimal("0.00")
     db_lines = []
 
+    # Modo de precio de la organización (neto vs. precio con IVA incluido). Se
+    # resuelve una sola vez y lo consume compute_line_tax por renglón.
+    price_includes_tax = resolve_org_tax_mode(
+        db.query(Organization).filter(Organization.id == org_id).first()
+    )
+
     # --- BATCH RESOLVE (perf 2026-05-07) ---
     # Antes: 4 queries × N items (variant lookup + eager re-fetch + stock + PBS).
     # Ahora: 3 queries totales (variants con eager-load + visibilidad, stock bulk, PBS bulk).
@@ -627,18 +634,29 @@ def create_sale(
         discount_factor = Decimal(1) - Decimal(str(item.discount or 0)) / Decimal(100)
         line_total = unit_price * qty_dec * discount_factor
         
-        if sale_in.requires_invoice and variant.has_iva:
-            rate = variant.tax_rate / Decimal("100.0")
-            line_tax = line_total * rate
-            accumulated_subtotal += line_total
-            accumulated_tax += line_tax
-            total_sale += (line_total + line_tax)
-            line_total_gross = line_total + line_tax
-        else:
-            total_sale += line_total
-            accumulated_subtotal += line_total
-            line_tax = Decimal("0.00")
-            line_total_gross = line_total
+        # IVA: fuente única (app/services/tax.py). Antes la fórmula vivía aquí
+        # en línea y repetida en el ticket reemitido y en la devolución, cada
+        # copia con su propio redondeo (auditoría Rmazh §3).
+        #
+        # `quantize=False` a propósito: se acumula sin redondear y se redondea
+        # una sola vez al final (ver `quantize_totals` más abajo). Redondear
+        # renglón por renglón corre el total unos centavos respecto del que
+        # calcula el carrito del POS —`frontend/src/store/posStore.ts` suma sin
+        # redondeos intermedios— y la validación de pagos de esta misma función
+        # solo tolera un centavo: un carrito de cuatro renglones con descuento
+        # rebotaba con 422 al cobrar con tarjeta.
+        desglose = compute_line_tax(
+            line_gross=line_total,
+            tax_rate=variant.tax_rate,
+            has_iva=bool(variant.has_iva),
+            price_includes_tax=price_includes_tax,
+            requires_invoice=bool(sale_in.requires_invoice),
+            quantize=False,
+        )
+        accumulated_subtotal += desglose.subtotal
+        accumulated_tax += desglose.tax
+        total_sale += desglose.total
+        line_total_gross = desglose.total
 
         new_line = SalesLineItem(
             variant_id=variant.id,
@@ -770,6 +788,15 @@ def create_sale(
                 ))
 
     # --- 3. Guardar / Actualizar Cabecera ---
+    # Redondeo a centavos UNA sola vez, ya pasada la validación de pagos, para
+    # que el total que se compara contra lo que cobró el cajero sea exactamente
+    # el que suma el carrito (ver `quantize=False` arriba). Antes esto lo hacía
+    # de forma implícita la columna NUMERIC(10,2) al guardar.
+    _totales_doc = quantize_totals(accumulated_subtotal, accumulated_tax)
+    accumulated_subtotal = _totales_doc.subtotal
+    accumulated_tax = _totales_doc.tax
+    total_sale = quantize_amount(total_sale)  # incluye la propina
+
     if existing_sale:
         sales_doc = existing_sale
         sales_doc.status = doc_status
