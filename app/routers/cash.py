@@ -580,14 +580,135 @@ def get_session_audit_data(db: Session, session_id: int):
 
     # 3b. Devoluciones aprobadas en esta sesión (para UI / counts; el efecto
     # monetario sobre `expected` se calcula vía CashMovement OUT en el helper).
+    from sqlalchemy.orm import joinedload
     from app.models.returns import SaleReturn as SaleReturnModel
-    session_returns = db.query(SaleReturnModel).filter(
+    # `joinedload(sale)`: el detalle del corte lee `r.sale` de cada devolución
+    # para armar el folio — sin esto son N consultas extra por corte.
+    session_returns = db.query(SaleReturnModel).options(
+        joinedload(SaleReturnModel.sale)
+    ).filter(
         SaleReturnModel.cash_session_id == session.id,
         SaleReturnModel.status == "APPROVED"
     ).all()
 
     total_returns_count = len(session_returns)
     total_returns_amount = float(sum(r.total_refunded for r in session_returns))
+
+    # Corte con historia: el conteo y el total no dicen QUÉ se devolvió. El
+    # folio de la venta original es lo que permite rastrearla, la marca de
+    # efectivo separa las que afectan el arqueo de las que no, y la hora dice
+    # CUÁNDO salió el dinero del cajón.
+    #
+    # La hora es la de APROBACIÓN, no la de creación de la solicitud — son
+    # eventos distintos, y lo que le importa al lector del corte es el
+    # segundo. Fuente PRIMARIA: `cash_audit_log` (append-only, nunca se hace
+    # UPDATE sobre él). `approve_return` (app/crud/returns.py) escribe un
+    # REFUND_APPROVED con `related_table="sale_returns"` y
+    # `related_id=db_return.id` en el mismo commit que la aprobación.
+    #
+    # `AuditMixin.updated_at` NO sirve como fuente primaria aunque su
+    # `onupdate` se dispare de forma confiable AL APROBAR: el problema es que
+    # no se dispara *sólo* ahí. `app/routers/platform/users.py` hace
+    # `db.query(SaleReturn).filter(SaleReturn.supervisor_id == user_id)
+    # .update({"supervisor_id": None}, synchronize_session=False)` al borrar
+    # un usuario, SIN filtro de status — ese UPDATE masivo pisa `updated_at`
+    # de devoluciones APROBADAS HISTÓRICAS con la hora del borrado, y una
+    # reimpresión de un corte viejo mostraría esa hora. El audit log, al ser
+    # insert-only, no puede driftear.
+    #
+    # Cadena de fuentes: audit log → `updated_at` (failsafe: `audit_cash_event`
+    # se traga sus excepciones, la fila puede faltar; `session_returns` ya está
+    # filtrada a APPROVED, así que `updated_at` es la aprobación) → `created_at`
+    # (hora de la SOLICITUD, el último recurso).
+    from app.models.cash_audit import CashAuditLog, CashAuditEvent
+    _approved_ts_by_return_id = {}
+    for _rid, _ts in db.query(CashAuditLog.related_id, CashAuditLog.ts).filter(
+        CashAuditLog.session_id == session.id,
+        CashAuditLog.organization_id == session_org_id,
+        CashAuditLog.event_type == CashAuditEvent.REFUND_APPROVED,
+        CashAuditLog.related_table == "sale_returns",
+    ).all():
+        if _rid is None or _ts is None:
+            continue
+        # Más de un evento para el mismo return_id no debería existir
+        # (`approve_return` es idempotente: una 2ª aprobación devuelve el
+        # registro sin re-auditar), pero si lo hubiera se conserva el MÁS
+        # TEMPRANO — el primero es la aprobación real.
+        if _rid not in _approved_ts_by_return_id or _ts < _approved_ts_by_return_id[_rid]:
+            _approved_ts_by_return_id[_rid] = _ts
+
+    # Sólo los cuatro valores de `PaymentMethod` (app/models/sales.py):
+    # `SaleReturn.refund_method` es `Enum(PaymentMethod)`, así que no puede
+    # tomar otro. Un método desconocido (dato viejo) cae en "other" en vez de
+    # perderse — `by_method` tiene que sumar EXACTAMENTE `total`, ni un peso
+    # más ni uno menos: es un desglose, no una segunda fuente.
+    _by_method_totals = {"cash": 0.0, "card": 0.0, "transfer": 0.0, "other": 0.0}
+    # `(_event_time, item)` para poder ordenar por la hora REAL del evento al
+    # final: la PK de `sale_returns` es un UUID aleatorio y Postgres devuelve
+    # las filas en el orden físico del heap (que cambia con cada UPDATE), así
+    # que sin ORDER BY dos reimpresiones del MISMO corte pueden listar las
+    # devoluciones en orden distinto. El orden no se puede pedir en SQL
+    # porque la hora sale del audit log, no de una columna de esta tabla.
+    _returns_sortable = []
+    _session_day = (
+        session.opened_at if session.opened_at.tzinfo
+        else session.opened_at.replace(tzinfo=timezone.utc)
+    ).astimezone(MX_TZ).date()
+    for r in session_returns:
+        _audit_ts = _approved_ts_by_return_id.get(r.id)
+        if _audit_ts is not None:
+            _event_time = _audit_ts
+        elif r.updated_at is not None:
+            _event_time = r.updated_at
+        else:
+            _event_time = r.created_at or session.opened_at
+        if _event_time.tzinfo is None:
+            _event_time = _event_time.replace(tzinfo=timezone.utc)
+
+        _sale = r.sale
+        _folio = None
+        if _sale is not None:
+            _serie = getattr(_sale, "series", None)
+            _num = getattr(_sale, "folio", None)
+            if _num:
+                _folio = f"{_serie}-{_num}" if _serie else str(_num)
+
+        _method_value = (
+            r.refund_method.value if hasattr(r.refund_method, "value")
+            else str(r.refund_method or "CASH")
+        )
+        _method_key = _method_value.lower()
+        if _method_key not in _by_method_totals:
+            _method_key = "other"
+        _by_method_totals[_method_key] += float(r.total_refunded or 0)
+
+        _event_mx = _event_time.astimezone(MX_TZ)
+        # Una devolución aprobada en OTRA fecha (ruta `[POST-CLOSE]` de
+        # `approve_return`: el gerente aprueba hoy una devolución cuya caja
+        # cerró ayer) imprimiría una hora suelta como si fuera de esta
+        # jornada. `cross_day` deja constancia y el ticket la marca.
+        _cross_day = _event_mx.date() != _session_day
+        # `is_cash` sale del MISMO `_method_key` que alimenta `by_method`: si
+        # se derivaran por separado, una fila legada con `refund_method` NULL
+        # caería en el bucket "cash" (por el `or "CASH"` de arriba) pero se
+        # imprimiría sin la marca de efectivo — el renglón contradiría al
+        # subtotal que él mismo alimentó.
+        _returns_sortable.append((_event_time, {
+            "time": _event_mx.strftime("%H:%M"),
+            "date": _event_mx.strftime("%d/%m"),
+            "cross_day": _cross_day,
+            "folio": _folio or "-",
+            "amount": float(r.total_refunded or 0),
+            "is_cash": _method_key == "cash",
+            "method": _method_key,
+        }))
+
+    # Orden estable y cronológico: el detalle es un relato, y un relato que
+    # cambia de orden entre dos impresiones del mismo corte no se puede
+    # auditar. Desempate por folio para que dos eventos con la misma marca de
+    # tiempo tampoco bailen.
+    _returns_sortable.sort(key=lambda it: (it[0], it[1]["folio"]))
+    _returns_list = [item for _ts, item in _returns_sortable]
 
     # 4. Cálculo de KPIs
     # Ventas Totales NETAS post-refund — sale.total_amount está actualizado
@@ -677,6 +798,8 @@ def get_session_audit_data(db: Session, session_id: int):
             "count":        total_returns_count,
             "total":        total_returns_amount,
             "cash_refunds": float(total_cash_refunds),
+            "list":         _returns_list,
+            "by_method":    _by_method_totals,
         },
         "kpis": {
             "total_sales": float(grand_total_sales),

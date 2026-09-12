@@ -468,34 +468,23 @@ class PosPrinter:
         
         raw += self.CMD["LF"] + self.CMD["LEFT"] + sep
 
-        # --- 2. RESUMEN DE VENTAS ---
+        # --- 2. COBRADO POR METODO ---
+        # Corte con historia: esta seccion ABRE el corte -- es el BRUTO que
+        # entro por caja, el primer capitulo de la historia que cuenta el
+        # ticket (cuanto entro -> que se devolvio -> cuanto quedo neto ->
+        # como se concilia contra el cajon).
+        #
+        # Antes vivia DESPUES del resumen de ventas, mezclando dos
+        # convenciones sin decirlo: "Ventas Totales" ya viene neteada por
+        # `approve_return` (reescribe `sale.total_amount`), pero este bloque
+        # de pagos es bruto (los `Payment` no se tocan). Una cajera que hacia
+        # "Ventas Totales - Tarjeta - Devoluciones" restaba la devolucion DOS
+        # VECES. "Total cobrado" deja el bruto explicito para que esa resta
+        # ya no haga falta.
         raw += self.CMD["CENTER"] + self.CMD["BOLD_ON"]
-        raw += b"== RESUMEN DE VENTAS ==\n"
+        raw += b"== COBRADO POR METODO ==\n"
         raw += self.CMD["BOLD_OFF"] + self.CMD["LEFT"]
-        
-        raw += self._rline("Ventas Totales", kpis['total_sales'])
-        raw += f"Tickets: {kpis['total_tickets']}".rjust(self.cols).encode("latin-1") + b"\n"
-        raw += self._rline("Ticket Promedio", kpis['avg_ticket'])
-        raw += self._rline("Impuestos (IVA)", kpis['total_taxes'])
-        
-        raw += self.CMD["LF"] + sep
 
-        # --- 2.5 DEVOLUCIONES (si existen) ---
-        returns_data = audit_data.get('returns', {})
-        if returns_data.get('count', 0) > 0:
-            raw += self.CMD["CENTER"] + self.CMD["BOLD_ON"]
-            raw += b"== DEVOLUCIONES ==\n"
-            raw += self.CMD["BOLD_OFF"] + self.CMD["LEFT"]
-            raw += self._rline(f"Devoluciones ({returns_data['count']})", -returns_data['total'])
-            if returns_data.get('cash_refunds', 0) > 0:
-                raw += self._rline("  Efectivo devuelto", -returns_data['cash_refunds'])
-            raw += self.CMD["LF"] + sep
-
-        # --- 3. POR METODO DE PAGO ---
-        raw += self.CMD["CENTER"] + self.CMD["BOLD_ON"]
-        raw += b"== POR METODO DE PAGO ==\n"
-        raw += self.CMD["BOLD_OFF"] + self.CMD["LEFT"]
-        
         _method_labels = [
             ('cash',         'Efectivo'),
             ('card',         'Tarjeta'),
@@ -504,25 +493,124 @@ class PosPrinter:
             ('check',        'Cheque'),
             ('others',       'Otros'),
         ]
+        # `_total_cobrado` se acumula en la MISMA pasada que imprime los
+        # renglones, sobre las mismas claves: no hay forma de que sume un
+        # metodo que no se imprimio ni de que cuente uno dos veces. Es el
+        # numero contra el que se resta "Devoluciones" para llegar a "Ventas
+        # Totales", asi que tiene que cuadrar exacto con esa resta.
+        _total_cobrado = 0.0
         for m_key, m_label in _method_labels:
             data = payments.get(m_key, {"total": 0, "count": 0})
+            _total_cobrado += data.get('total') or 0
             if data['count'] > 0 or data['total'] > 0:
                 line = f"{m_label} ({data['count']})"
                 raw += self._rline(line, data['total'])
-            
+        raw += self._rline("Total cobrado", _total_cobrado)
+
         raw += self.CMD["LF"] + sep
 
-        # --- 4. FLUJO DE CAJA (ARQUEO) ---
+        # --- 3. DEVOLUCIONES (si existen) ---
+        returns_data = audit_data.get('returns', {})
+        if returns_data.get('count', 0) > 0:
+            raw += self.CMD["CENTER"] + self.CMD["BOLD_ON"]
+            raw += b"== DEVOLUCIONES ==\n"
+            raw += self.CMD["BOLD_OFF"] + self.CMD["LEFT"]
+
+            # El DETALLE va primero, los TOTALES despues: el lector ve QUE se
+            # devolvio antes que CUANTO en total. El conteo y el total no
+            # dicen que se devolvio; el folio de la venta original es lo que
+            # permite rastrearla y la marca "EFEC." separa las que afectan el
+            # arqueo de las que no.
+            for r in (returns_data.get('list') or []):
+                raw += self._return_detail_line(r)
+
+            raw += self._rline(f"Devoluciones ({returns_data['count']})", -returns_data['total'])
+            # Subtotales por metodo de reembolso. "en efectivo" sale de
+            # `cash_refunds` -- la cifra CANONICA del arqueo (los
+            # `CashMovement` OUT que `compute_expected_cash` resta), no de
+            # `by_method['cash']`, para que este renglon y el "Reembolsos (-)"
+            # del arqueo no puedan discrepar. El resto sale de
+            # `by_method` (suma de `total_refunded` agrupada por
+            # `refund_method`). Un metodo sin devoluciones no imprime linea.
+            _cash_refunds = returns_data.get('cash_refunds', 0) or 0
+            _by_method = returns_data.get('by_method') or {}
+            _subtotales = _cash_refunds
+            if _cash_refunds > 0:
+                raw += self._rline("  en efectivo", -_cash_refunds)
+            for _rm_key, _rm_label in [('card', 'tarjeta'),
+                                       ('transfer', 'transferencia'),
+                                       ('other', 'otros')]:
+                _rm_val = _by_method.get(_rm_key) or 0
+                _subtotales += _rm_val
+                if _rm_val > 0:
+                    raw += self._rline(f"  en {_rm_label}", -_rm_val)
+            # Residuo. "en efectivo" sale de `cash_refunds` (los CashMovement
+            # OUT que resta el arqueo) y el resto de `by_method` (los
+            # SaleReturn); en datos previos a la reasignacion de sesion que
+            # hace `approve_return` los dos pueden vivir en cortes distintos y
+            # entonces los subtotales NO suman el total. Imprimir el residuo
+            # deja la columna cuadrada siempre y hace visible la anomalia en
+            # vez de esconderla en una resta que no cierra.
+            _residuo = round(returns_data['total'] - _subtotales, 2)
+            if abs(_residuo) >= 0.01:
+                raw += self._rline("  sin clasificar", -_residuo)
+
+            # "Neto cobrado" = Total cobrado - Devoluciones. Cierta por
+            # construccion (ambos sumandos salen de este mismo ticket), a
+            # diferencia de "Ventas Totales", que es otra cifra y otra fuente
+            # -- ver el comentario de VENTAS NETAS mas abajo.
+            raw += self._rline("Neto cobrado", _total_cobrado - returns_data['total'])
+
+            raw += self.CMD["LF"] + sep
+
+        # --- 4. VENTAS NETAS ---
+        # Aqui NO se imprime ninguna resta: "Ventas Totales" es
+        # `SUM(sales_documents.total_amount)` ya neteado por `approve_return`,
+        # y NO es igual a "Total cobrado - Devoluciones" en dos casos
+        # deterministas:
+        #   a) Con IVA. `SaleReturn.total_refunded` es PRE-IVA
+        #      (app/crud/returns.py), mientras `approve_return` baja
+        #      `sale.total_amount` por el pre-IVA MAS el IVA prorrateado. Al
+        #      16%, una devolucion de $500 baja las ventas $580.
+        #   b) Devolucion post-cierre o de otro dia: se ata a esta sesion
+        #      (`cash_session_id`) pero netea el `total_amount` de una venta
+        #      que pertenece al corte de otro dia.
+        # La resta que SI es cierta por construccion ("Neto cobrado") cierra
+        # el bloque de DEVOLUCIONES, justo arriba.
+        raw += self.CMD["CENTER"] + self.CMD["BOLD_ON"]
+        raw += b"== VENTAS NETAS ==\n"
+        raw += self.CMD["BOLD_OFF"] + self.CMD["LEFT"]
+
+        raw += self._rline("Ventas Totales", kpis['total_sales'])
+        raw += f"Tickets: {kpis['total_tickets']}".rjust(self.cols).encode("latin-1") + b"\n"
+        raw += self._rline("Ticket Promedio", kpis['avg_ticket'])
+        raw += self._rline("Impuestos (IVA)", kpis['total_taxes'])
+
+        raw += self.CMD["LF"] + sep
+
+        # --- 5. FLUJO DE CAJA (ARQUEO) ---
         raw += self.CMD["CENTER"] + self.CMD["BOLD_ON"]
         raw += b"== ARQUEO DE CAJA ==\n"
         raw += self.CMD["BOLD_OFF"] + self.CMD["LEFT"]
         
+        # Etiquetas cortas a proposito: a 58mm (32 columnas) un importe de 8
+        # cifras deja 18 caracteres para la etiqueta, y la guarda de ancho de
+        # `_rline` recortaria en silencio ("Reembolsos Efec. (-:"). Estas
+        # caben enteras en los dos anchos de papel, con cualquier importe que
+        # un cajon real pueda tener.
+        #
+        # "Efec. cobrado (+)", no "Ventas Efectivo (+)": este importe es el
+        # BRUTO cobrado en efectivo (ya neto de cambio entregado, ver
+        # `breakdown.net_cash` en `get_session_audit_data`) -- el mismo numero
+        # que abre el corte en COBRADO POR METODO. "Ventas" sugeria el neto
+        # post-devolucion de VENTAS NETAS, y aqui la cuenta es la contraria:
+        # los reembolsos se restan aparte, dos renglones mas abajo.
         raw += self._rline("Fondo Inicial (+)", session['opening_balance'])
-        raw += self._rline("Ventas Efectivo (+)", payments['cash']['total'])
-        raw += self._rline("Entradas manual (+)", movements['inflows'])
+        raw += self._rline("Efec. cobrado (+)", payments['cash']['total'])
+        raw += self._rline("Entradas man. (+)", movements['inflows'])
         raw += self._rline("Salidas/Gastos (-)", movements['outflows'])
         if audit_data.get('returns', {}).get('cash_refunds', 0) > 0:
-            raw += self._rline("Reembolsos Efec. (-)", -audit_data['returns']['cash_refunds'])
+            raw += self._rline("Reembolsos (-)", -audit_data['returns']['cash_refunds'])
         
         dot_line = ("." * self.cols + "\n").encode("latin-1", "replace")
         raw += self.CMD["LF"] + dot_line
@@ -532,7 +620,7 @@ class PosPrinter:
         raw += dot_line
         
         raw += self.CMD["LF"]
-        raw += self._rline("REPORTADO (CONTADO)", recon['reported'])
+        raw += self._rline("REPORTADO", recon['reported'])
         
         diff = recon['difference']
         label = "DIFERENCIA"
@@ -545,7 +633,7 @@ class PosPrinter:
         
         raw += self.CMD["LF"] + sep
 
-        # --- 5. MOVIMIENTOS DETALLE (Opcional, últimos 5) ---
+        # --- 6. MOVIMIENTOS DETALLE (Opcional, últimos 5) ---
         if movements['list']:
             raw += self.CMD["CENTER"] + b"ULTIMOS MOVIMIENTOS\n"
             raw += self.CMD["LEFT"]
@@ -555,7 +643,7 @@ class PosPrinter:
                 raw += (line + "\n").encode("latin-1", "replace")
             raw += sep
 
-        # --- 6. FIRMAS ---
+        # --- 7. FIRMAS ---
         raw += self.CMD["LF"] * 2
         raw += self.CMD["CENTER"]
         raw += b"______________________\n"
@@ -576,8 +664,81 @@ class PosPrinter:
 
     # --- Helpers de formato ---
     def _rline(self, label: str, value: float) -> bytes:
-        txt = f"{label}: ${value:.2f}"
+        """Renglon etiqueta + importe, anclado al borde derecho del papel.
+
+        El importe NUNCA se sacrifica: si la etiqueta no cabe se recorta
+        desde la derecha. Una etiqueta corta sigue siendo legible; un importe
+        que desborda el ancho se parte en dos renglones, descuadra la columna
+        y deja un corte de caja ilegible justo donde hay que leer dinero.
+        """
+        amount = f"${value:.2f}"
+        max_label = self.cols - len(amount) - 2  # 2 = ": "
+        if max_label <= 0:
+            # Papel absurdamente angosto o importe gigantesco: el importe
+            # solo, sin etiqueta, sigue siendo mas util que ambos partidos.
+            return (amount.rjust(self.cols) + "\n").encode("latin-1", "replace")
+        if len(label) > max_label:
+            label = label[:max_label].rstrip()
+        txt = f"{label}: {amount}"
         return (txt.rjust(self.cols) + "\n").encode("latin-1", "replace")
+
+    def _return_detail_line(self, r: dict) -> bytes:
+        """Un renglon del detalle de devoluciones: hora, folio, marca de
+        efectivo y el importe anclado a la derecha.
+
+        Orden de sacrificio cuando no cabe todo: marca > folio > sangria
+        cosmetica. El folio es todo-o-nada, nunca un prefijo: "A-21444"
+        recortado a "A-21" es un folio DISTINTO pero igual de verosimil, y
+        el supervisor que lo busque abriria otra venta real. La marca de
+        efectivo es lo ultimo que se suelta porque un renglon de efectivo
+        SIN marca miente (dice implicitamente "no toco el cajon").
+
+        El importe se formatea igual que en `_rline` (`$-220.00`, sin
+        separador de miles) para que las dos columnas del bloque de
+        devoluciones — detalle y totales — se lean como la misma unidad.
+        """
+        amount = f"${-float(r.get('amount') or 0):.2f}"
+        time = r.get('time') or ''
+        # Devolucion aprobada en OTRA fecha (ruta `[POST-CLOSE]` de
+        # `approve_return`: se aprueba hoy una devolucion cuya caja cerro
+        # ayer). Una hora suelta se leeria como de esta jornada, asi que el
+        # renglon lleva la fecha: "05/08 18:02" si cabe, y si no al menos un
+        # "+" pegado a la hora ("18:02+") que diga "no es de hoy". El folio ya
+        # se sacrifica solo para hacer sitio (ver mas abajo).
+        if r.get('cross_day'):
+            fecha = r.get('date')
+            largo = f"{fecha} {time}" if fecha else f"{time}+"
+            if self.cols - (len(largo) + 1 + len(amount)) >= 0:
+                time = largo
+            else:
+                time = f"{time}+"
+        # Margen calculado con el importe REAL de este renglon, nunca con una
+        # cantidad de cifras asumida.
+        remaining = max(self.cols - (len(time) + 1 + len(amount)), 0)
+
+        tag = ""
+        if r.get('is_cash'):
+            if remaining >= 6:
+                tag = " EFEC."      # 1 separador + 5 letras
+            elif remaining >= 2:
+                # "$" ya lo usa el importe del mismo renglon; "*" no colisiona
+                # con nada mas que aparezca aqui (folio: letras/digitos/guion).
+                tag = " *"
+            elif remaining >= 1:
+                tag = "*"           # sin separador -- el ultimo peldano
+            remaining -= len(tag)
+
+        folio_full = r.get('folio') or '-'
+        if len(folio_full) + 1 <= remaining:
+            folio = f" {folio_full}"
+            remaining -= len(folio)
+        else:
+            folio = ""
+
+        indent = "  " if remaining >= 2 else ""
+        left = indent + time + folio + tag
+        gap = max(self.cols - len(left) - len(amount), 0)
+        return (left + " " * gap + amount + "\n").encode("latin-1", "replace")
 
     def _wrap_text(self, text: str, width: int) -> List[str]:
         if not text: return []
