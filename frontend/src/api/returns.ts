@@ -62,6 +62,7 @@ export interface CreateReturnPayload {
   sale_id: string
   reason: string
   total_refunded: number
+  refund_method?: string   // CASH | CARD | TRANSFER | OTHER — default CASH en el backend
   cash_session_id?: number | null
   items: {
     variant_id: string
