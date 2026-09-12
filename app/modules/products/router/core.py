@@ -873,6 +873,19 @@ def update_product(
     if prod_in.price is not None and prod_in.price <= 0:
         raise HTTPException(status_code=422, detail="El precio debe ser mayor a cero.")
 
+    # Los ESCALONES también. El esquema los deja pasar (`Decimal >= 0`) y nadie
+    # los validaba: vaciar el campo de un escalón en la UI produce
+    # `Number('') === 0` y ese cero llegaba a la base, dejando el producto a
+    # $0.00 en mayoreo o en caja — el POS elige el escalón más barato aplicable,
+    # así que se regalaría. El guard vive aquí y no en la pantalla porque es la
+    # última línea antes de la base.
+    for _tier in (prod_in.prices or []):
+        if _tier.unit_price is not None and _tier.unit_price <= 0:
+            raise HTTPException(
+                status_code=422,
+                detail=f"El precio del escalón '{_tier.price_name}' debe ser mayor a cero.",
+            )
+
     product = db.query(Product).filter(Product.id == product_id, Product.organization_id == org_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
@@ -906,9 +919,14 @@ def update_product(
         product.unit = prod_in.unit
     if prod_in.image_url is not None:
         product.image_url = prod_in.image_url.strip() if prod_in.image_url.strip() else None
-    if prod_in.department_id is not None:
+    # `is not None` no distingue "no lo mandes" de "bórralo": un null explícito
+    # se descartaba en silencio y la pantalla decía "guardado" sin cambiar nada.
+    # No podía quitarse una marca ni un departamento desde ninguna pantalla.
+    # `model_fields_set` es lo que Pydantic expone justo para esta diferencia.
+    _campos_enviados = prod_in.model_fields_set
+    if "department_id" in _campos_enviados:
         product.department_id = prod_in.department_id
-    if prod_in.brand_id is not None:
+    if "brand_id" in _campos_enviados:
         product.brand_id = prod_in.brand_id
     if prod_in.uses_inventory is not None:
         pass # Not stored directly on Product currently, useful for logic if needed
@@ -934,8 +952,10 @@ def update_product(
                      raise HTTPException(400, f"SKU {prod_in.sku} ya existe")
                  v.sku = prod_in.sku
 
-        if prod_in.barcode is not None:
-            v.barcode = prod_in.barcode.strip() if prod_in.barcode.strip() else None
+        if "barcode" in _campos_enviados:
+            # Tanto null como cadena vacía significan "quítalo".
+            _bc = (prod_in.barcode or "").strip()
+            v.barcode = _bc or None
         if prod_in.price is not None:
             v.price = prod_in.price
         if prod_in.cost is not None:

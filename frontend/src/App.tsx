@@ -32,6 +32,7 @@ const HQBranchDetail  = lazy(() => import('./pages/hq/HQBranchDetail').then(m =>
 
 // Catalog / Core
 const AdminCatalog    = lazy(() => import('./pages/core/AdminCatalog').then(m => ({ default: m.AdminCatalog })))
+const StoreScanner    = lazy(() => import('./pages/scanner/StoreScanner').then(m => ({ default: m.StoreScanner })))
 const Departments     = lazy(() => import('./pages/core/Departments').then(m => ({ default: m.Departments })))
 const Brands          = lazy(() => import('./pages/core/Brands').then(m => ({ default: m.Brands })))
 const Users           = lazy(() => import('./pages/core/Users').then(m => ({ default: m.Users })))
@@ -281,6 +282,17 @@ export default function App() {
             element={
               <RequireRole roles={['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO']}>
                 <Suspense fallback={<PageLoader />}><AdminProductCreate /></Suspense>
+              </RequireRole>
+            }
+          />
+          {/* Scanner de tienda — corrige precios y cuenta existencias parado en
+              el pasillo. Mismo guard que admin/catalog y products/:id/edit:
+              es escritura de catálogo/inventario scoped por sucursal. */}
+          <Route
+            path="scanner"
+            element={
+              <RequireRole roles={['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO']}>
+                <Suspense fallback={<PageLoader />}><StoreScanner /></Suspense>
               </RequireRole>
             }
           />

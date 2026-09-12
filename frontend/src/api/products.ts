@@ -7,6 +7,7 @@ import type {
   CatalogKpis,
   UploadPreviewResponse,
 } from '../types/products'
+import type { AdjustmentCreate, KardexMovement } from './inventory'
 
 interface ProductsResponse {
   items: Product[]
@@ -122,6 +123,39 @@ export const productsApi = {
       return { items: data, total: data.length, page: 0, pages: 1 }
     }
     return { items: data.items ?? [], total: data.total ?? 0, page: data.page ?? 0, pages: data.pages ?? 1 }
+  },
+
+  /**
+   * Búsqueda por código ESCANEADO — coincidencia exacta.
+   *
+   * `posSearch` busca con `%parcial%`, correcto cuando la cajera teclea. Un
+   * escaneo trae el código completo, y con parcial también devuelve los
+   * productos cuyo código lo CONTIENE: en el pasillo del scanner de tienda
+   * eso es editarle el precio al producto equivocado. Por eso `exact: true`.
+   *
+   * `branchId` es la sucursal donde está parado el admin — el backend solo
+   * respeta el hint para ADMINISTRADOR/DUEÑO; el scope real (org + sucursal)
+   * lo sigue aplicando el mismo helper de visibilidad que usa el resto del
+   * catálogo.
+   */
+  scanExact: async (code: string, branchId?: number | null): Promise<Product[]> => {
+    const q = (code ?? '').trim()
+    if (!q) return []
+    const { data } = await client.get<Product[]>('/products/pos/search', {
+      params: { q, exact: true, ...(branchId ? { branch_id: branchId } : {}) },
+    })
+    return Array.isArray(data) ? data : []
+  },
+
+  /**
+   * POST /api/inventory/adjust — registra el conteo del scanner de tienda
+   * como un movimiento de inventario (delta con signo, ya traducido por
+   * `stockAdjust.ts`). Pasa por el mismo endpoint que `inventoryApi.createAdjustment`
+   * para que el movimiento quede firmado en el kardex con quién y cuándo.
+   */
+  adjustStock: async (payload: AdjustmentCreate): Promise<KardexMovement> => {
+    const { data } = await client.post<KardexMovement>('/inventory/adjust', payload)
+    return data
   },
 
   /**

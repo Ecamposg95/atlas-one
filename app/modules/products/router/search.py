@@ -74,7 +74,7 @@ from app.models import (
     Product, ProductVariant, StockOnHand, User, PackagingUnit, ProductBranchStatus,
 )
 from app.core.security import get_current_user
-from app.crud.products import query_visible_products
+from app.crud.products import query_visible_products, _is_admin
 from app.modules.products.schemas import ProductRead, StockLevel
 
 from ._shared import _compute_product_read
@@ -310,6 +310,8 @@ def search_products_pos(
     q: str,
     order_by: Literal["best_sellers", "name_asc", "price_asc", "price_desc"] = "best_sellers",
     days: int = 30,
+    exact: bool = False,
+    branch_id: int = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization),
@@ -320,12 +322,37 @@ def search_products_pos(
         - Incluye variants[0].sku y variants[0].price
         - Incluye prices escalonados y departamento
         - Incluye stock_total por sucursal del usuario
+
+        `exact=true` es para el scanner de tienda: el texto viene de un ESCANEO,
+        no del teclado, así que compara por igualdad contra los códigos y no por
+        `%parcial%`. Con parcial, escanear "750123456789" también trae los
+        productos cuyo código lo CONTIENE — en el pasillo eso es editarle el
+        precio al producto equivocado. No busca por nombre: un escaneo nunca
+        produce un nombre.
         """
+        # Sucursal objetivo para el stock. Mismo patrón que `read_products`
+        # (core.py): el hint `branch_id` SOLO lo respetan los admins; para
+        # cajero/gerente se fuerza la suya, así que el parámetro no sirve para
+        # espiar otra tienda. Lo necesita el scanner: un ADMINISTRADOR de HQ
+        # tiene branch_id NULL y sin esto el stock siempre volvía 0 — con base
+        # 0 un conteo de anaquel se convierte SIEMPRE en entrada y nunca puede
+        # registrar un faltante.
+        _is_adm = _is_admin(current_user)
+        target_branch_id = branch_id if (_is_adm and branch_id) else current_user.branch_id
+
         # Visibilidad: helper aplica tenant + branch + PBS (anti-ATS-11) según rol.
         # search cubre name/sku; agregamos PackagingUnit.barcode manualmente abajo.
+        # En modo exacto NO se le pasa `search`: su ILIKE sobre name/sku/description
+        # se combinaría con AND y escondería el producto cuyo barcode empata pero
+        # cuyo SKU es otro (el caso normal — códigos de barras y SKUs internos
+        # conviven en el mismo catálogo).
         s = f"%{q}%"
         query = (
-            query_visible_products(db, current_user, org_id, search=q)
+            query_visible_products(
+                db, current_user, org_id,
+                search=None if exact else q,
+                join_variants=exact,
+            )
             .outerjoin(PackagingUnit, ProductVariant.id == PackagingUnit.variant_id)
             .options(
                 contains_eager(Product.variants).joinedload(ProductVariant.prices),
@@ -336,14 +363,28 @@ def search_products_pos(
 
         # Extiende búsqueda a barcode de PackagingUnit (el helper ya cubre sku/name/description).
         # Si matchea SOLO por packaging barcode, incluirlo vía OR.
-        query = query.filter(
-            or_(
-                Product.name.ilike(s),
-                ProductVariant.sku.ilike(s),
-                ProductVariant.barcode.ilike(s),
-                PackagingUnit.barcode.ilike(s),
+        if exact:
+            # El SKU se teclea a mano y buena parte del catálogo lo tiene en
+            # minúsculas, así que comparar sensible a mayúsculas obligaría a
+            # adivinar cómo se capturó. Los códigos de barras SÍ se comparan
+            # exactos: son dígitos, y aflojar ahí sería aflojar la precisión
+            # que justifica todo el modo `exact`.
+            query = query.filter(
+                or_(
+                    func.lower(ProductVariant.sku) == q.lower(),
+                    ProductVariant.barcode == q,
+                    PackagingUnit.barcode == q,
+                )
             )
-        )
+        else:
+            query = query.filter(
+                or_(
+                    Product.name.ilike(s),
+                    ProductVariant.sku.ilike(s),
+                    ProductVariant.barcode.ilike(s),
+                    PackagingUnit.barcode.ilike(s),
+                )
+            )
 
         # .distinct() defends against duplicate Product rows introduced by the
         # outerjoin on PackagingUnit (1 variant × N packaging rows) and by
@@ -376,7 +417,7 @@ def search_products_pos(
                 db.query(StockOnHand.variant_id, StockOnHand.qty_on_hand, StockOnHand.is_active)
                 .filter(
                     StockOnHand.variant_id.in_(variant_ids),
-                    StockOnHand.branch_id == current_user.branch_id,
+                    StockOnHand.branch_id == target_branch_id,
                     StockOnHand.organization_id == org_id,
                 )
                 .all()
@@ -394,7 +435,13 @@ def search_products_pos(
             for bs in all_statuses:
                 branch_statuses_cache.setdefault(bs.variant_id, []).append(bs)
 
-        return [_compute_product_read(p, db, current_user, stock_cache, branch_statuses_cache=branch_statuses_cache) for p in products_db]
+        return [
+            _compute_product_read(
+                p, db, current_user, stock_cache, target_branch_id,
+                branch_statuses_cache=branch_statuses_cache,
+            )
+            for p in products_db
+        ]
     except Exception as e:
         logger.exception("SEARCH_PRODUCTS_FAILED org_id=%s query=%s", org_id, q)
         raise HTTPException(status_code=500, detail="Error al buscar productos. Intente de nuevo.")
