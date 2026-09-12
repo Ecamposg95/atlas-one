@@ -4,10 +4,17 @@ import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts'
 import { reportApi } from '../../api/platform'
+import { reportsMoneyApi } from '../../api/reportsMoney'
 import { toast } from '../../store/toastStore'
 import { PlatformPageShell } from '../../components/platform/PlatformPageShell'
 import { ReportFilterBar } from '../../components/platform/ReportFilterBar'
 import { ReportDrillDownDrawer } from '../../components/platform/ReportDrillDownDrawer'
+import { CashCutsTab } from './reports/CashCutsTab'
+import { ReturnsTab } from './reports/ReturnsTab'
+import { CancellationsTab } from './reports/CancellationsTab'
+import { BiweeklyTab } from './reports/BiweeklyTab'
+import { MoneyDetailDrawer } from './reports/MoneyDetailDrawer'
+import { fmtDeltaCell, deltaTone } from './reports/compareFormat'
 import type {
   ReportTab,
   ReportFilters,
@@ -18,23 +25,38 @@ import type {
   SellerRow,
   CustomerRow,
 } from '../../types/reports'
+import type { BiweeklyUnit, CompareMode, MoneyTab } from '../../types/reportsMoney'
 import '../../styles/platform-v2.css'
 import { TablaDesplazable } from '../../components/ui/TablaDesplazable'
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
 const TABS: { key: ReportTab; label: string }[] = [
-  { key: 'productos',  label: 'Productos' },
-  { key: 'sucursales', label: 'Sucursales' },
-  { key: 'vendedores', label: 'Vendedores' },
-  { key: 'clientes',   label: 'Clientes' },
+  { key: 'productos',     label: 'Productos' },
+  { key: 'sucursales',    label: 'Sucursales' },
+  { key: 'vendedores',    label: 'Vendedores' },
+  { key: 'clientes',      label: 'Clientes' },
+  { key: 'cortes',        label: 'Cortes' },
+  { key: 'devoluciones',  label: 'Devoluciones' },
+  { key: 'cancelaciones', label: 'Cancelaciones' },
+  { key: 'quincenal',     label: 'Quincenal · método' },
 ]
 
+const MONEY_TABS: readonly ReportTab[] = ['cortes', 'devoluciones', 'cancelaciones', 'quincenal']
+
+function isMoneyTab(tab: ReportTab): tab is MoneyTab {
+  return (MONEY_TABS as readonly string[]).includes(tab)
+}
+
 const DEFAULT_SORT: Record<ReportTab, string> = {
-  productos:  'revenue:desc',
-  sucursales: 'revenue:desc',
-  vendedores: 'revenue:desc',
-  clientes:   'total_revenue:desc',
+  productos:     'revenue:desc',
+  sucursales:    'revenue:desc',
+  vendedores:    'revenue:desc',
+  clientes:      'total_revenue:desc',
+  cortes:        '',
+  devoluciones:  '',
+  cancelaciones: '',
+  quincenal:     '',
 }
 
 const PAGE_SIZE = 50
@@ -107,17 +129,21 @@ function paramsForRequest(
   filters: ReportFilters,
   sort: string,
   page: number,
+  compare: CompareMode = 'none',
 ): ReportParams {
   const out: ReportParams = {
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
-    sort,
   }
+  // Los endpoints de dinero no ordenan por parámetro: mandarles `sort=''` es
+  // ruido en la URL, en el CSV y en la llave del cache.
+  if (sort) out.sort = sort
   const { start, end } = resolveRange(filters)
   if (start) out.start = start
   if (end) out.end = end
   if (filters.org_id !== undefined) out.org_id = filters.org_id
   if (filters.branch_id !== undefined) out.branch_id = filters.branch_id
+  if (compare !== 'none') out.compare = compare
   return out
 }
 
@@ -129,6 +155,10 @@ export function PlatformReports() {
   const tab = (searchParams.get('tab') ?? 'productos') as ReportTab
   const filters = useMemo(() => readFiltersFromSearch(searchParams), [searchParams])
   const sort = searchParams.get('sort') ?? DEFAULT_SORT[tab]
+  const compare = (searchParams.get('compare') ?? 'none') as CompareMode
+  // La unidad del quincenal vive en la URL para que el CSV salga con la misma
+  // agrupación que la tabla en pantalla.
+  const biweeklyUnit = (searchParams.get('unit') ?? 'branch') as BiweeklyUnit
 
   const [page, setPage] = useState(0)
   const [selected, setSelected] = useState<{ id: string | number; label: string } | null>(null)
@@ -160,6 +190,20 @@ export function PlatformReports() {
     setPage(0)
   }
 
+  const setCompare = (next: CompareMode) => {
+    const sp = new URLSearchParams(searchParams)
+    if (next === 'none') sp.delete('compare'); else sp.set('compare', next)
+    setSearchParams(sp, { replace: true })
+    setPage(0)
+  }
+
+  const setBiweeklyUnit = (next: BiweeklyUnit) => {
+    const sp = new URLSearchParams(searchParams)
+    if (next === 'branch') sp.delete('unit'); else sp.set('unit', next)
+    setSearchParams(sp, { replace: true })
+    setPage(0)
+  }
+
   return (
     <PlatformPageShell
       breadcrumb="Platform / Reportes"
@@ -171,15 +215,27 @@ export function PlatformReports() {
       <ReportFilterBar
         filters={filters}
         onFiltersChange={setFilters}
+        compare={compare}
+        onCompareChange={setCompare}
+        showCompare={!isMoneyTab(tab)}
         onExportCsv={async () => {
           try {
-            const params: ReportParams = paramsForRequest(filters, sort, 0)
+            // Las pestañas de dinero no soportan compare: un `compare`
+            // heredado de otra pestaña no se manda en su CSV.
+            const esDinero = isMoneyTab(tab)
+            const params: ReportParams = paramsForRequest(
+              filters, esDinero ? '' : sort, 0, esDinero ? undefined : compare,
+            )
             delete params.limit
             delete params.offset
             if (tab === 'productos') await reportApi.exportProductsCsv(params)
             else if (tab === 'sucursales') await reportApi.exportBranchesCsv(params)
             else if (tab === 'vendedores') await reportApi.exportSellersCsv(params)
-            else await reportApi.exportCustomersCsv(params)
+            else if (tab === 'clientes') await reportApi.exportCustomersCsv(params)
+            else if (tab === 'cortes') await reportsMoneyApi.exportCashCutsCsv(params)
+            else if (tab === 'devoluciones') await reportsMoneyApi.exportReturnsCsv(params)
+            else if (tab === 'cancelaciones') await reportsMoneyApi.exportCancellationsCsv(params)
+            else await reportsMoneyApi.exportBiweeklyCsv({ ...params, unit: biweeklyUnit })
           } catch (e: any) {
             toast.error(e?.response?.data?.detail ?? e?.message ?? 'No se pudo exportar')
           }
@@ -191,18 +247,31 @@ export function PlatformReports() {
         filters={filters}
         sort={sort}
         page={page}
+        compare={compare}
+        biweeklyUnit={biweeklyUnit}
+        onBiweeklyUnitChange={setBiweeklyUnit}
         onPageChange={setPage}
         onSortChange={setSort}
         onRowClick={(id, label) => setSelected({ id, label })}
       />
 
-      <ReportDrillDownDrawer
-        tab={tab}
-        entityId={selected?.id ?? null}
-        entityLabel={selected?.label ?? ''}
-        filters={filters}
-        onClose={() => setSelected(null)}
-      />
+      {isMoneyTab(tab) ? (
+        <MoneyDetailDrawer
+          tab={tab}
+          branchId={typeof selected?.id === 'number' ? selected.id : null}
+          branchLabel={selected?.label ?? ''}
+          params={paramsForRequest(filters, '', 0)}
+          onClose={() => setSelected(null)}
+        />
+      ) : (
+        <ReportDrillDownDrawer
+          tab={tab}
+          entityId={selected?.id ?? null}
+          entityLabel={selected?.label ?? ''}
+          filters={filters}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </PlatformPageShell>
   )
 }
@@ -216,6 +285,7 @@ function TabBar({ tab, onChange }: { tab: ReportTab; onChange: (t: ReportTab) =>
       gap: 4,
       borderBottom: '1px solid var(--p-border)',
       marginBottom: 0,
+      overflowX: 'auto',
     }}>
       {TABS.map((t) => {
         const active = t.key === tab
@@ -235,6 +305,8 @@ function TabBar({ tab, onChange }: { tab: ReportTab; onChange: (t: ReportTab) =>
               cursor: 'pointer',
               fontFamily: 'var(--font-sans)',
               marginBottom: -1,
+              flexShrink: 0,
+              whiteSpace: 'nowrap',
             }}
           >
             {t.label}
@@ -252,6 +324,9 @@ interface TabContentProps {
   filters: ReportFilters
   sort: string
   page: number
+  compare: CompareMode
+  biweeklyUnit: BiweeklyUnit
+  onBiweeklyUnitChange: (u: BiweeklyUnit) => void
   onPageChange: (p: number) => void
   onSortChange: (s: string) => void
   onRowClick: (id: string | number, label: string) => void
@@ -261,7 +336,48 @@ function ReportTabContent(props: TabContentProps) {
   if (props.tab === 'productos') return <ProductsReport {...props} />
   if (props.tab === 'sucursales') return <BranchesReport {...props} />
   if (props.tab === 'vendedores') return <SellersReport {...props} />
-  return <CustomersReport {...props} />
+  if (props.tab === 'clientes') return <CustomersReport {...props} />
+
+  // Las pestañas de dinero no soportan `compare` en el backend: nunca se
+  // manda, aunque el usuario lo haya elegido antes en otra pestaña.
+  const moneyParams = paramsForRequest(props.filters, '', props.page)
+  if (props.tab === 'cortes') {
+    return (
+      <CashCutsTab
+        params={moneyParams} filters={props.filters}
+        page={props.page} onPageChange={props.onPageChange}
+        onRowClick={props.onRowClick}
+      />
+    )
+  }
+  if (props.tab === 'devoluciones') {
+    return (
+      <ReturnsTab
+        params={moneyParams} filters={props.filters}
+        page={props.page} onPageChange={props.onPageChange}
+        onRowClick={props.onRowClick}
+      />
+    )
+  }
+  if (props.tab === 'cancelaciones') {
+    return (
+      <CancellationsTab
+        params={moneyParams} filters={props.filters}
+        page={props.page} onPageChange={props.onPageChange}
+        onRowClick={props.onRowClick}
+      />
+    )
+  }
+  return (
+    <BiweeklyTab
+      params={moneyParams}
+      filters={props.filters}
+      unit={props.biweeklyUnit}
+      onUnitChange={props.onBiweeklyUnitChange}
+      page={props.page}
+      onPageChange={props.onPageChange}
+    />
+  )
 }
 
 // ── Reusable table primitives ───────────────────────────────────────────────
@@ -320,6 +436,34 @@ function HeaderCell({
         </span>
       )}
     </th>
+  )
+}
+
+// ── Columna Δ (compare !== 'none') para los cuatro pivotes clásicos ────────
+
+function DeltaHeaderCell({ label }: { label: string }) {
+  return (
+    <th
+      className="pv2-delta-col"
+      style={{
+        padding: '10px 14px', textAlign: 'right', color: 'var(--p-hint)', fontSize: 10,
+        textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 500,
+        borderBottom: '1px solid var(--p-border)', background: 'transparent',
+      }}
+    >
+      Δ {label}
+    </th>
+  )
+}
+
+// Los cuatro pivotes clásicos solo comparan Revenue, donde crecer es bueno:
+// por eso `deltaTone` va sin `lowerIsBetter`. Si alguna vez se compara una
+// cifra donde crecer es malo (faltantes), se le pasa aquí.
+function DeltaCell({ pct }: { pct: number | null | undefined }) {
+  return (
+    <td className={`pv2-delta-col pv2-tone-${deltaTone(pct)}`} style={{ ...rightCell }}>
+      {fmtDeltaCell(pct)}
+    </td>
   )
 }
 
@@ -537,12 +681,13 @@ function ReportShell({
 
 // ── Productos ───────────────────────────────────────────────────────────────
 
-function ProductsReport({ filters, sort, page, onPageChange, onSortChange, onRowClick }: TabContentProps) {
-  const params = useMemo(() => paramsForRequest(filters, sort, page), [filters, sort, page])
+function ProductsReport({ filters, sort, page, compare, onPageChange, onSortChange, onRowClick }: TabContentProps) {
+  const params = useMemo(() => paramsForRequest(filters, sort, page, compare), [filters, sort, page, compare])
   const { data, loading, error, reload } = useReportFetch<ProductRow>(
     () => reportApi.getProducts(params),
     [JSON.stringify(params)],
   )
+  const withDelta = compare !== 'none'
 
   const chartData = useMemo(() => {
     if (!data) return []
@@ -567,6 +712,7 @@ function ProductsReport({ filters, sort, page, onPageChange, onSortChange, onRow
                 <HeaderCell label="Depto" sort={sort} onSortChange={onSortChange} />
                 <HeaderCell label="Unidades" sortKey="units_sold" sort={sort} onSortChange={onSortChange} align="right" />
                 <HeaderCell label="Revenue" sortKey="revenue" sort={sort} onSortChange={onSortChange} align="right" />
+                {withDelta && <DeltaHeaderCell label="Revenue" />}
                 <HeaderCell label="AOV" sortKey="aov" sort={sort} onSortChange={onSortChange} align="right" />
                 <HeaderCell label="% Dev" sortKey="return_rate_pct" sort={sort} onSortChange={onSortChange} align="right" />
                 <HeaderCell label="Margen est." sortKey="estimated_margin_pct" sort={sort} onSortChange={onSortChange} align="right" />
@@ -587,13 +733,14 @@ function ProductsReport({ filters, sort, page, onPageChange, onSortChange, onRow
                   <td style={cellStyle}>{r.department ?? '—'}</td>
                   <td style={rightCell}>{r.units_sold.toLocaleString('es-MX')}</td>
                   <td style={rightCell}>{fmtMoney(r.revenue)}</td>
+                  {withDelta && <DeltaCell pct={r.delta_revenue_pct} />}
                   <td style={rightCell}>{fmtMoneyDecimal(r.aov)}</td>
                   <td style={rightCell}>{fmtPct(r.return_rate_pct)}</td>
                   <td style={rightCell}>{fmtPct(r.estimated_margin_pct)}</td>
                 </tr>
               ))}
               {(!data || data.items.length === 0) && !loading && (
-                <tr><td style={{ ...cellStyle, textAlign: 'center', color: 'var(--p-muted)' }} colSpan={9}>Sin productos.</td></tr>
+                <tr><td style={{ ...cellStyle, textAlign: 'center', color: 'var(--p-muted)' }} colSpan={withDelta ? 10 : 9}>Sin productos.</td></tr>
               )}
             </tbody>
           </table>
@@ -606,12 +753,13 @@ function ProductsReport({ filters, sort, page, onPageChange, onSortChange, onRow
 
 // ── Sucursales ──────────────────────────────────────────────────────────────
 
-function BranchesReport({ filters, sort, page, onPageChange, onSortChange, onRowClick }: TabContentProps) {
-  const params = useMemo(() => paramsForRequest(filters, sort, page), [filters, sort, page])
+function BranchesReport({ filters, sort, page, compare, onPageChange, onSortChange, onRowClick }: TabContentProps) {
+  const params = useMemo(() => paramsForRequest(filters, sort, page, compare), [filters, sort, page, compare])
   const { data, loading, error, reload } = useReportFetch<BranchRow>(
     () => reportApi.getBranches(params),
     [JSON.stringify(params)],
   )
+  const withDelta = compare !== 'none'
 
   const chartData = useMemo(() => {
     if (!data) return []
@@ -635,6 +783,7 @@ function BranchesReport({ filters, sort, page, onPageChange, onSortChange, onRow
                 <HeaderCell label="Ciudad" sort={sort} onSortChange={onSortChange} />
                 <HeaderCell label="Trans." sortKey="transactions" sort={sort} onSortChange={onSortChange} align="right" />
                 <HeaderCell label="Revenue" sortKey="revenue" sort={sort} onSortChange={onSortChange} align="right" />
+                {withDelta && <DeltaHeaderCell label="Revenue" />}
                 <HeaderCell label="Tkt prom." sortKey="avg_ticket" sort={sort} onSortChange={onSortChange} align="right" />
                 <HeaderCell label="Cajeros" sortKey="active_cashiers" sort={sort} onSortChange={onSortChange} align="right" />
                 <HeaderCell label="% Dev" sortKey="return_rate_pct" sort={sort} onSortChange={onSortChange} align="right" />
@@ -654,13 +803,14 @@ function BranchesReport({ filters, sort, page, onPageChange, onSortChange, onRow
                   <td style={cellStyle}>{r.city ?? '—'}</td>
                   <td style={rightCell}>{r.transactions.toLocaleString('es-MX')}</td>
                   <td style={rightCell}>{fmtMoney(r.revenue)}</td>
+                  {withDelta && <DeltaCell pct={r.delta_revenue_pct} />}
                   <td style={rightCell}>{fmtMoneyDecimal(r.avg_ticket)}</td>
                   <td style={rightCell}>{r.active_cashiers}</td>
                   <td style={rightCell}>{fmtPct(r.return_rate_pct)}</td>
                 </tr>
               ))}
               {(!data || data.items.length === 0) && !loading && (
-                <tr><td style={{ ...cellStyle, textAlign: 'center', color: 'var(--p-muted)' }} colSpan={8}>Sin sucursales.</td></tr>
+                <tr><td style={{ ...cellStyle, textAlign: 'center', color: 'var(--p-muted)' }} colSpan={withDelta ? 9 : 8}>Sin sucursales.</td></tr>
               )}
             </tbody>
           </table>
@@ -673,12 +823,13 @@ function BranchesReport({ filters, sort, page, onPageChange, onSortChange, onRow
 
 // ── Vendedores ──────────────────────────────────────────────────────────────
 
-function SellersReport({ filters, sort, page, onPageChange, onSortChange, onRowClick }: TabContentProps) {
-  const params = useMemo(() => paramsForRequest(filters, sort, page), [filters, sort, page])
+function SellersReport({ filters, sort, page, compare, onPageChange, onSortChange, onRowClick }: TabContentProps) {
+  const params = useMemo(() => paramsForRequest(filters, sort, page, compare), [filters, sort, page, compare])
   const { data, loading, error, reload } = useReportFetch<SellerRow>(
     () => reportApi.getSellers(params),
     [JSON.stringify(params)],
   )
+  const withDelta = compare !== 'none'
 
   const chartData = useMemo(() => {
     if (!data) return []
@@ -703,6 +854,7 @@ function SellersReport({ filters, sort, page, onPageChange, onSortChange, onRowC
                 <HeaderCell label="Org" sort={sort} onSortChange={onSortChange} />
                 <HeaderCell label="Trans." sortKey="transactions" sort={sort} onSortChange={onSortChange} align="right" />
                 <HeaderCell label="Revenue" sortKey="revenue" sort={sort} onSortChange={onSortChange} align="right" />
+                {withDelta && <DeltaHeaderCell label="Revenue" />}
                 <HeaderCell label="Tkt prom." sortKey="avg_ticket" sort={sort} onSortChange={onSortChange} align="right" />
                 <HeaderCell label="Días act." sortKey="active_days" sort={sort} onSortChange={onSortChange} align="right" />
               </tr>
@@ -722,12 +874,13 @@ function SellersReport({ filters, sort, page, onPageChange, onSortChange, onRowC
                   <td style={cellStyle}>{r.org_name}</td>
                   <td style={rightCell}>{r.transactions.toLocaleString('es-MX')}</td>
                   <td style={rightCell}>{fmtMoney(r.revenue)}</td>
+                  {withDelta && <DeltaCell pct={r.delta_revenue_pct} />}
                   <td style={rightCell}>{fmtMoneyDecimal(r.avg_ticket)}</td>
                   <td style={rightCell}>{r.active_days}</td>
                 </tr>
               ))}
               {(!data || data.items.length === 0) && !loading && (
-                <tr><td style={{ ...cellStyle, textAlign: 'center', color: 'var(--p-muted)' }} colSpan={8}>Sin vendedores.</td></tr>
+                <tr><td style={{ ...cellStyle, textAlign: 'center', color: 'var(--p-muted)' }} colSpan={withDelta ? 9 : 8}>Sin vendedores.</td></tr>
               )}
             </tbody>
           </table>
@@ -740,12 +893,13 @@ function SellersReport({ filters, sort, page, onPageChange, onSortChange, onRowC
 
 // ── Clientes ────────────────────────────────────────────────────────────────
 
-function CustomersReport({ filters, sort, page, onPageChange, onSortChange, onRowClick }: TabContentProps) {
-  const params = useMemo(() => paramsForRequest(filters, sort, page), [filters, sort, page])
+function CustomersReport({ filters, sort, page, compare, onPageChange, onSortChange, onRowClick }: TabContentProps) {
+  const params = useMemo(() => paramsForRequest(filters, sort, page, compare), [filters, sort, page, compare])
   const { data, loading, error, reload } = useReportFetch<CustomerRow>(
     () => reportApi.getCustomers(params),
     [JSON.stringify(params)],
   )
+  const withDelta = compare !== 'none'
 
   const chartData = useMemo(() => {
     if (!data) return []
@@ -767,6 +921,7 @@ function CustomersReport({ filters, sort, page, onPageChange, onSortChange, onRo
                 <HeaderCell label="Cliente" sortKey="customer_name" sort={sort} onSortChange={onSortChange} />
                 <HeaderCell label="Tickets" sortKey="ticket_count" sort={sort} onSortChange={onSortChange} align="right" />
                 <HeaderCell label="Revenue" sortKey="total_revenue" sort={sort} onSortChange={onSortChange} align="right" />
+                {withDelta && <DeltaHeaderCell label="Revenue" />}
                 <HeaderCell label="Tkt prom." sortKey="avg_ticket" sort={sort} onSortChange={onSortChange} align="right" />
                 <HeaderCell label="Último" sortKey="last_purchase" sort={sort} onSortChange={onSortChange} />
                 <HeaderCell label="Recur. (días)" sortKey="avg_days_between_purchases" sort={sort} onSortChange={onSortChange} align="right" />
@@ -784,6 +939,7 @@ function CustomersReport({ filters, sort, page, onPageChange, onSortChange, onRo
                   <td style={cellStyle}>{r.customer_name}</td>
                   <td style={rightCell}>{r.ticket_count}</td>
                   <td style={rightCell}>{fmtMoney(r.total_revenue)}</td>
+                  {withDelta && <DeltaCell pct={r.delta_total_revenue_pct} />}
                   <td style={rightCell}>{fmtMoneyDecimal(r.avg_ticket)}</td>
                   <td style={cellStyle}>{fmtDate(r.last_purchase)}</td>
                   <td style={rightCell}>
@@ -794,7 +950,7 @@ function CustomersReport({ filters, sort, page, onPageChange, onSortChange, onRo
                 </tr>
               ))}
               {(!data || data.items.length === 0) && !loading && (
-                <tr><td style={{ ...cellStyle, textAlign: 'center', color: 'var(--p-muted)' }} colSpan={6}>Sin clientes.</td></tr>
+                <tr><td style={{ ...cellStyle, textAlign: 'center', color: 'var(--p-muted)' }} colSpan={withDelta ? 7 : 6}>Sin clientes.</td></tr>
               )}
             </tbody>
           </table>

@@ -1,12 +1,20 @@
 import { useEffect, useState } from 'react'
 import { platformApi, PlatformOrg, PlatformBranch } from '../../api/platform'
 import type { ReportFilters } from '../../types/reports'
+import type { CompareMode } from '../../types/reportsMoney'
+import { COMPARE_OPTIONS } from '../../pages/platform/reports/compareFormat'
 
 interface Props {
   filters: ReportFilters
   onFiltersChange: (next: ReportFilters) => void
+  compare: CompareMode
+  onCompareChange: (m: CompareMode) => void
   onExportCsv: () => void
   isLoading?: boolean
+  /** Las cuatro pestañas de dinero no soportan comparación de periodos en el
+   * backend (spec 2026-09-09 §5.2) — el selector se oculta ahí en vez de
+   * quedarse visible sin hacer nada. */
+  showCompare?: boolean
 }
 
 const RANGE_PRESETS: { key: NonNullable<ReportFilters['range']>; label: string }[] = [
@@ -31,7 +39,7 @@ const inputStyle: React.CSSProperties = {
 
 const pillBtn = (active: boolean): React.CSSProperties => ({
   background: active ? 'var(--p-accent)' : 'var(--p-surface-2)',
-  color: active ? '#fff' : 'var(--p-text)',
+  color: active ? 'var(--dax-on-accent)' : 'var(--p-text)',
   border: '1px solid ' + (active ? 'var(--p-accent)' : 'var(--p-border)'),
   padding: '6px 12px',
   borderRadius: 999,
@@ -51,7 +59,9 @@ const labelStyle: React.CSSProperties = {
   marginBottom: 6,
 }
 
-export function ReportFilterBar({ filters, onFiltersChange, onExportCsv, isLoading }: Props) {
+export function ReportFilterBar({
+  filters, onFiltersChange, compare, onCompareChange, onExportCsv, isLoading, showCompare = true,
+}: Props) {
   const [orgs, setOrgs] = useState<PlatformOrg[]>([])
   const [branches, setBranches] = useState<PlatformBranch[]>([])
   const [bannerDismissed, setBannerDismissed] = useState(false)
@@ -182,6 +192,20 @@ export function ReportFilterBar({ filters, onFiltersChange, onExportCsv, isLoadi
             ))}
           </select>
         </div>
+
+        {/* ── Comparación de periodos ───────────────────────────────── */}
+        {showCompare && (
+          <div style={{ minWidth: 180 }}>
+            <span style={labelStyle}>Comparar</span>
+            <select
+              style={inputStyle}
+              value={compare}
+              onChange={(e) => onCompareChange(e.target.value as CompareMode)}
+            >
+              {COMPARE_OPTIONS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+            </select>
+          </div>
+        )}
 
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'flex-end' }}>
           <button

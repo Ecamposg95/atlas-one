@@ -1335,8 +1335,34 @@ def cancel_sale(
                 db.add(ledger)
 
     # 3. Marcar Cancelado
+    prev_status = sale.status.value if hasattr(sale.status, "value") else str(sale.status)
     sale.status = DocumentStatus.CANCELLED
-    
+
+    # Rastro append-only de la cancelación: es la ÚNICA fuente del pivote de
+    # cancelaciones (`/api/platform/reports/cancellations`). `updated_at` no
+    # sirve —cualquier UPDATE masivo lo pisa— y el estatus CANCELLED solo
+    # dice que pasó, no cuándo ni quién. `audit_cash_event` escribe dentro de
+    # un SAVEPOINT y no propaga: si el insert falla, se deshace solo él y el
+    # `db.commit()` de abajo confirma igual la cancelación.
+    from app.services.cash_audit import audit_cash_event
+    from app.models.cash_audit import CashAuditEvent
+    audit_cash_event(
+        db,
+        event_type=CashAuditEvent.SALE_CANCELLED,
+        organization_id=org_id,
+        session_id=sale.cash_session_id,
+        branch_id=sale.branch_id,
+        user_id=current_user.id,
+        amount=sale.total_amount,
+        related_table="sales_documents",
+        related_id=sale.id,
+        payload={
+            "reason": reason,
+            "prev_status": prev_status,
+            "folio": sale.folio,
+        },
+    )
+
     db.commit()
     return {"message": "Venta cancelada exitosamente", "sale_id": sale.id}
 

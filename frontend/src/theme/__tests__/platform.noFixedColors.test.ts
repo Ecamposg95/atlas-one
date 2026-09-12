@@ -21,6 +21,15 @@ import orgTable from '../../pages/platform/org/OrgTable.tsx?raw'
 import attentionPanel from '../../pages/platform/org/AttentionPanel.tsx?raw'
 import unitDrawer from '../../pages/platform/org/UnitDrawer.tsx?raw'
 import orgFormat from '../../pages/platform/org/orgFormat.ts?raw'
+import platformReports from '../../pages/platform/PlatformReports.tsx?raw'
+import moneyTable from '../../pages/platform/reports/MoneyTable.tsx?raw'
+import cashCutsTab from '../../pages/platform/reports/CashCutsTab.tsx?raw'
+import returnsTab from '../../pages/platform/reports/ReturnsTab.tsx?raw'
+import cancellationsTab from '../../pages/platform/reports/CancellationsTab.tsx?raw'
+import biweeklyTab from '../../pages/platform/reports/BiweeklyTab.tsx?raw'
+import moneyDetailDrawer from '../../pages/platform/reports/MoneyDetailDrawer.tsx?raw'
+import compareFormat from '../../pages/platform/reports/compareFormat.ts?raw'
+import reportsMoneyApi from '../../api/reportsMoney.ts?raw'
 
 const FILES: [string, string][] = [
   ['pages/platform/PlatformLayout.tsx', platformLayout],
@@ -37,6 +46,15 @@ const FILES: [string, string][] = [
   ['pages/platform/org/AttentionPanel.tsx', attentionPanel],
   ['pages/platform/org/UnitDrawer.tsx', unitDrawer],
   ['pages/platform/org/orgFormat.ts', orgFormat],
+  ['pages/platform/PlatformReports.tsx', platformReports],
+  ['pages/platform/reports/MoneyTable.tsx', moneyTable],
+  ['pages/platform/reports/CashCutsTab.tsx', cashCutsTab],
+  ['pages/platform/reports/ReturnsTab.tsx', returnsTab],
+  ['pages/platform/reports/CancellationsTab.tsx', cancellationsTab],
+  ['pages/platform/reports/BiweeklyTab.tsx', biweeklyTab],
+  ['pages/platform/reports/MoneyDetailDrawer.tsx', moneyDetailDrawer],
+  ['pages/platform/reports/compareFormat.ts', compareFormat],
+  ['api/reportsMoney.ts', reportsMoneyApi],
 ]
 const TAILWIND = /\b(hover:)?(text|bg|border)-(slate|gray|zinc|indigo)-[0-9]{2,3}\b|\btext-white\b(?!\/)|backdrop-blur/g
 const HEX = /#[0-9a-fA-F]{3,8}\b/g
