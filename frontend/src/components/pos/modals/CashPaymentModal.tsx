@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { formatCurrency } from '../../../utils/currency'
+import { cashPaymentValidity, OVERPAY_FACTOR } from '../../../pages/pos/cashPayment'
 
 const QUICK = [50, 100, 200, 500, 1000]
 const BILLS = [1000, 500, 200, 100, 50, 20]
@@ -18,7 +19,10 @@ export function CashPaymentModal({ total, onClose, onConfirm }: Props) {
 
   const receivedNum = parseFloat(received) || 0
   const change = receivedNum - total
-  const isValid = receivedNum >= total
+  // Espejo del guard del backend (sales.py): falta de pago o sobrepago >10x
+  // son 422. Vale más avisarlo aquí que dejar que el cobro falle al final.
+  const validity = cashPaymentValidity(receivedNum, total)
+  const isValid = validity.ok
 
   const addDenomination = (d: number) => {
     setReceived((prev) => String((parseFloat(prev) || 0) + d))
@@ -65,22 +69,29 @@ export function CashPaymentModal({ total, onClose, onConfirm }: Props) {
             type="number"
             value={received}
             onChange={(e) => setReceived(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') submit() }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && isValid && !loading) submit() }}
             className="dax-input text-4xl font-black text-center tabular-nums py-3"
             min={0}
             step="0.50"
             autoFocus
           />
+          {validity.overpay && (
+            <p className="mt-1.5 text-sm font-semibold" style={{ color: 'var(--p-danger)' }} role="alert">
+              Monto muy alto: son más de {OVERPAY_FACTOR} veces el total. Revisa lo recibido.
+            </p>
+          )}
         </div>
 
-        {/* Cambio */}
+        {/* Cambio — "falta" es lo que dice cashPaymentValidity, no el signo de
+            `change`: con la tolerancia de un centavo del backend un faltante de
+            $0.004 es un cobro válido y pintarlo en rojo confundía. */}
         <div className={`rounded-xl p-4 mb-4 text-center border-2 ${
-          change >= 0 ? 'bg-emerald-600/10 border-emerald-600/40' : 'bg-red-600/10 border-red-600/40'
+          !validity.short ? 'bg-emerald-600/10 border-emerald-600/40' : 'bg-red-600/10 border-red-600/40'
         }`}>
           <p className="text-[10px] font-bold uppercase tracking-wider mb-0.5" style={{ color: 'var(--dax-text-muted)' }}>
-            {change >= 0 ? 'Cambio a devolver' : 'Faltante'}
+            {!validity.short ? 'Cambio a devolver' : 'Faltante'}
           </p>
-          <p className={`text-4xl font-black tabular-nums ${change >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+          <p className={`text-4xl font-black tabular-nums ${!validity.short ? 'text-emerald-700' : 'text-red-600'}`}>
             {formatCurrency(Math.abs(change))}
           </p>
         </div>

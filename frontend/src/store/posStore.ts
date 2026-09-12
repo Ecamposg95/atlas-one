@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { CartItem, CartItemPrice, CartItemPackaging } from '../types/sales'
 import type { ParkedTicket } from '../api/sales'
 import type { CashSession } from '../types/cash'
+import { priceForQty } from '../pages/pos/cartTiers'
 
 /** Estructura mínima leída por applyCajaToAll para cada producto del carrito */
 export interface ProductWithCajaInfo {
@@ -139,21 +140,13 @@ export const usePOSStore = create<POSStore>((set, get) => ({
     set((s: POSStore) => ({
       cart: s.cart.map((c: CartItem) => {
         if (itemKey(c) !== cartKey) return c
-        // Package items (vendido por caja) keep their box price fixed — never re-evaluate piece tiers.
-        // Piece items: find the highest-qualifying tier (largest min_quantity <= qty).
-        // Falls back to c.base_price when no tier qualifies.
-        let effectivePrice = c.price
-        if (c.unit_kind !== 'package') {
-          effectivePrice = c.base_price ?? c.price
-          if (c.prices && c.prices.length > 0) {
-            const qualifying = c.prices
-              .filter((t) => t.min_quantity <= qty)
-              .sort((a, b) => b.min_quantity - a.min_quantity)
-            if (qualifying.length > 0) {
-              effectivePrice = qualifying[0].unit_price
-            }
-          }
-        }
+        // priceForQty respeta lo que no debe recalcularse: el ítem vendido por
+        // caja mantiene su precio de caja, y el precio pactado a mano por la
+        // cajera (forcedPriceTier) sobrevive al cambio de cantidad. Antes solo
+        // se exceptuaba unit_kind === 'package', así que subir la cantidad de
+        // una línea con precio forzado la devolvía al escalón automático — y el
+        // flag seguía puesto, de modo que nada la restauraba después.
+        const effectivePrice = priceForQty(c, qty)
         return {
           ...c,
           price: effectivePrice,
