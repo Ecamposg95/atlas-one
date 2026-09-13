@@ -351,7 +351,11 @@ def search_products_pos(
             query_visible_products(
                 db, current_user, org_id,
                 search=None if exact else q,
-                join_variants=exact,
+                # Siempre: el outerjoin a PackagingUnit de abajo referencia
+                # ProductVariant, y un admin sin `search` (la pantalla inicial
+                # del POS manda q="") no traería la tabla unida — Postgres
+                # revienta con "missing FROM-clause entry for product_variants".
+                join_variants=True,
             )
             .outerjoin(PackagingUnit, ProductVariant.id == PackagingUnit.variant_id)
             .options(
