@@ -20,3 +20,13 @@ def test_pos_search_vacio_no_revienta(client, auth_admin, params):
 def test_pos_search_vacio_tambien_para_cajero(client, auth_cajero_a):
     r = client.get("/api/products/pos/search", params={"q": "", "order_by": "best_sellers"}, headers=auth_cajero_a)
     assert r.status_code == 200, r.text
+
+
+def test_pos_search_con_sucursal_que_no_vende_devuelve_lista_vacia(client, auth_cajero_a, db, branch_a):
+    """Sucursal con can_sell=False: cero productos, NO 500 (visto en produccion 2026-09-13)."""
+    branch_a.can_sell = False
+    db.commit()
+    for params in ({"q": "", "order_by": "best_sellers"}, {"q": "cascada"}):
+        r = client.get("/api/products/pos/search", params=params, headers=auth_cajero_a)
+        assert r.status_code == 200, r.text
+        assert r.json() == []

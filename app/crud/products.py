@@ -132,11 +132,27 @@ def query_visible_products(
     else:
         branch_id = getattr(user, "branch_id", None)
         if branch_id is None:
-            return q.filter(Product.id.is_(None))
+            # Cero filas, pero con ProductVariant unida: los callers (el POS
+            # hace outerjoin a PackagingUnit sobre la variante) la referencian
+            # y sin ella Postgres revienta con "missing FROM-clause entry".
+            # Visto en produccion el 2026-09-13: sucursal con can_sell=False
+            # daba 500 en vez de lista vacia.
+            return (
+                q.outerjoin(ProductVariant, ProductVariant.product_id == Product.id)
+                .filter(Product.id.is_(None))
+            )
 
         branch = db.query(Branch).filter(Branch.id == branch_id).first()
         if branch is None or not branch.can_sell:
-            return q.filter(Product.id.is_(None))
+            # Cero filas, pero con ProductVariant unida: los callers (el POS
+            # hace outerjoin a PackagingUnit sobre la variante) la referencian
+            # y sin ella Postgres revienta con "missing FROM-clause entry".
+            # Visto en produccion el 2026-09-13: sucursal con can_sell=False
+            # daba 500 en vez de lista vacia.
+            return (
+                q.outerjoin(ProductVariant, ProductVariant.product_id == Product.id)
+                .filter(Product.id.is_(None))
+            )
 
         # INNER JOIN a PBS — sin registro = oculto (anti-ATS-11).
         q = (

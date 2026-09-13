@@ -44,10 +44,12 @@ def create_branch(
         if existing_hq:
             raise HTTPException(status_code=400, detail="Esta organización ya tiene una oficina central (HQ).")
         
-        # HQ por defecto no vende (según reglas del USER)
-        # Note: Si el usuario mandó can_sell=True explícitamente, tal vez respetarlo?
-        # La solicitud dice: HQ => can_sell = false
-        branch.can_sell = False
+        # HQ por defecto no vende, salvo que el caller lo pida explícitamente:
+        # un negocio de una sola sucursal (Ginebra, Imaltzin) tiene su matriz
+        # como único punto de venta. Forzarlo a False dejaba el POS sin
+        # catálogo (visto en producción el 2026-09-13).
+        if "can_sell" not in branch.model_fields_set:
+            branch.can_sell = False
         branch.is_headquarters = True # Keep in sync
     elif branch.branch_type in [BranchType.WAREHOUSE, BranchType.OFFICE]:
         branch.can_sell = False
@@ -164,8 +166,10 @@ def update_branch(
         if existing_hq:
             raise HTTPException(status_code=400, detail="Esta organización ya tiene una oficina central (HQ).")
         
-        # HQ => can_sell = False
-        db_branch.can_sell = False
+        # HQ => can_sell = False solo si el caller no manda can_sell explícito
+        # (ver create_branch: la matriz de un negocio de una sucursal vende).
+        if "can_sell" not in branch.model_fields_set:
+            db_branch.can_sell = False
         db_branch.is_headquarters = True
     elif branch.branch_type is not None:
         db_branch.is_headquarters = False
@@ -173,9 +177,12 @@ def update_branch(
     for key, value in branch.dict(exclude_unset=True).items():
         setattr(db_branch, key, value)
 
-    # Re-enforce HQ rules after update
+    # Re-enforce HQ rules after update: is_headquarters sigue al tipo. can_sell
+    # NO se toca aquí: el default False para la matriz se aplica solo cuando
+    # el tipo cambia a HQ en esta misma petición (bloque de arriba). Antes se
+    # forzaba siempre, así que editar cualquier campo de la matriz desde el
+    # panel apagaba la venta de la única sucursal.
     if db_branch.branch_type == BranchType.HQ:
-        db_branch.can_sell = False
         db_branch.is_headquarters = True
 
     db.commit()
