@@ -28,6 +28,7 @@ MOD_WORK_ORDERS = "work_orders"
 MOD_KDS = "kds"
 MOD_TABLES = "tables"
 MOD_MENU = "menu"
+MOD_SCANNER = "scanner"
 
 # Presets by Industry
 # Wave 2: enfoque POS multi-sucursal. Industrias de servicios médicos/
@@ -41,6 +42,10 @@ INDUSTRY_PRESETS = {
     IndustryType.ATLAS_POS: [
         MOD_CORE, MOD_POS, MOD_CASH, MOD_CATALOG, MOD_INVENTORY,
         MOD_RETURNS, MOD_PRICING, MOD_PAYMENTS, MOD_REPORTS
+    ],
+    IndustryType.ATLAS_POS_BOUTIQUE: [
+        MOD_CORE, MOD_POS, MOD_CASH, MOD_CATALOG, MOD_INVENTORY,
+        MOD_RETURNS, MOD_PRICING, MOD_PAYMENTS, MOD_REPORTS, MOD_SCANNER
     ],
     IndustryType.DISTRIBUTOR_POS: [
         MOD_CORE, MOD_REPORTS, MOD_POS, MOD_WAREHOUSE, MOD_QUOTES, MOD_INVENTORY, MOD_CASH, MOD_CATALOG
@@ -147,6 +152,7 @@ def seed_global_modules(db: Session):
         {"key": MOD_CATALOG, "name": "Global Catalog", "scope": ModuleScope.HQ, "status": ModuleStatus.STABLE},
         {"key": MOD_BRANCH_CATALOG, "name": "Branch Enablement", "scope": ModuleScope.HQ, "status": ModuleStatus.STABLE},
         {"key": MOD_INVENTORY, "name": "Inventory Control", "scope": ModuleScope.GLOBAL, "status": ModuleStatus.STABLE},
+        {"key": MOD_SCANNER, "name": "Scanner de tienda", "scope": ModuleScope.BRANCH, "status": ModuleStatus.STABLE},
         {"key": MOD_WORK_ORDERS, "name": "Work Orders & Service", "scope": ModuleScope.BRANCH, "status": ModuleStatus.STABLE},
         {"key": MOD_KDS, "name": "Kitchen Display System", "scope": ModuleScope.BRANCH, "status": ModuleStatus.BETA},
         {"key": MOD_TABLES, "name": "Table Management", "scope": ModuleScope.BRANCH, "status": ModuleStatus.BETA},

@@ -39,6 +39,8 @@ class BranchType(str, enum.Enum):
 class IndustryType(str, enum.Enum):
     # Retail / Comercio
     ATLAS_POS = "ATLAS_POS"
+    # Boutique de ropa/moda: ATLAS_POS + modulo `scanner` (camara para cajeros).
+    ATLAS_POS_BOUTIQUE = "ATLAS_POS_BOUTIQUE"
     DISTRIBUTOR_POS = "DISTRIBUTOR_POS"
     RETAIL_CHAIN = "RETAIL_CHAIN"
     ECOMMERCE = "ECOMMERCE"

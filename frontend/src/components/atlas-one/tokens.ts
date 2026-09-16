@@ -175,6 +175,7 @@ export type PresetKey = keyof typeof PRESETS;
  */
 export const INDUSTRY_TYPE_TO_PRESET: Record<string, PresetKey> = {
   ATLAS_POS: 'pos',
+  ATLAS_POS_BOUTIQUE: 'pos',
   ATLAS_ONE_RETAIL: 'retail',
   ATLAS_ONE_BARBER: 'barber',
   ATLAS_ONE_BEAUTY_WELLNESS: 'beauty_wellness',

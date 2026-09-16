@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-import { isNativeDetectorAvailable, FORMATS, normalizeCode, normalizeTyped } from '../barcodeReader'
+import { createDetector, isNativeDetectorAvailable, FORMATS, normalizeCode, normalizeTyped } from '../barcodeReader'
 
 // Chrome en Android trae `BarcodeDetector` en el navegador: decodifica sin
 // librería y sin sumar peso al bundle. Safari en iPhone no lo trae, y ahí hay
@@ -88,5 +88,26 @@ describe('normalizeTyped', () => {
   it('vacío sigue siendo vacío', () => {
     expect(normalizeTyped('   ')).toBe('')
     expect(normalizeTyped(null)).toBe('')
+  })
+})
+
+// Sin `BarcodeDetector` (Firefox, Safari, Chrome en Windows/Linux) el scanner
+// lanzaba "Este navegador no puede leer códigos de barras con la cámara" y la
+// cajera quedaba tecleando a mano. Ahora carga ZXing por `import()` dinámico y
+// devuelve un detector con la misma forma que el nativo.
+describe('createDetector sin detector nativo', () => {
+  let original: unknown
+  beforeEach(() => { original = g.BarcodeDetector; delete g.BarcodeDetector })
+  afterEach(() => { if (original !== undefined) g.BarcodeDetector = original })
+
+  it('resuelve con un detector de respaldo en vez de lanzar', async () => {
+    const detector = await createDetector()
+    expect(typeof detector.detect).toBe('function')
+  })
+})
+
+describe('FORMATS incluye QR', () => {
+  it('las etiquetas de boutique pueden traer QR con el SKU', () => {
+    expect(FORMATS).toContain('qr_code')
   })
 })

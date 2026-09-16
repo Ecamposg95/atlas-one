@@ -29,6 +29,7 @@ MODULES_CATALOG = [
     ("pos", "Punto de Venta", "Ventas mostrador, caja, cortes", ModuleScope.GLOBAL, ModuleStatus.STABLE),
     ("cash_management", "Gestión de Caja", "Cortes de caja, arqueos, control de efectivo", ModuleScope.GLOBAL, ModuleStatus.STABLE),
     ("inventory", "Inventario", "Stock, movimientos, kardex", ModuleScope.GLOBAL, ModuleStatus.STABLE),
+    ("scanner", "Scanner de tienda", "Lectura con la cámara para cajeros: consulta, precio y conteo en piso", ModuleScope.BRANCH, ModuleStatus.STABLE),
     ("catalog", "Catálogo", "Productos, servicios, listas de precio", ModuleScope.GLOBAL, ModuleStatus.STABLE),
     ("branch_catalog_enablement", "Habilitación de Catálogo por Sucursal", "Control de productos disponibles por sucursal", ModuleScope.BRANCH, ModuleStatus.STABLE),
     ("returns", "Devoluciones", "Gestión de devoluciones y notas de crédito", ModuleScope.GLOBAL, ModuleStatus.STABLE),
@@ -278,6 +279,15 @@ PRESETS = [
         "name": "Atlas POS",
         "desc": "Punto de venta de entrada: ventas, caja, catálogo, inventario, precios, devoluciones y reportes.",
         "mods": ATLAS_POS_MODS,
+    },
+    {
+        # Boutique de ropa/moda: lo mismo que Atlas POS mas el Scanner de tienda
+        # visible para cajeros. Es un preset aparte para que activar el scanner en
+        # una boutique no toque a las tiendas que operan con ATLAS_POS.
+        "id": "ATLAS_POS_BOUTIQUE",
+        "name": "Atlas POS Boutique",
+        "desc": "Boutique de ropa y moda: Atlas POS más scanner con cámara para cajeros.",
+        "mods": ATLAS_POS_MODS + ["scanner"],
     },
     {
         "id": "ATLAS_ONE_RETAIL",

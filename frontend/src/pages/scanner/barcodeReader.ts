@@ -1,26 +1,25 @@
 /**
- * Lectura de código de barras con la cámara del teléfono.
+ * Lectura de código de barras (y QR) con la cámara.
  *
  * Chrome en Android expone `BarcodeDetector` nativo: decodifica el sistema
  * operativo, no cuesta un solo byte de bundle y es más rápido.
  *
- * Safari en iPhone no lo trae. Rmazh (referencia de este puerto) resuelve eso
- * cargando `@zxing/browser` por `import()` dinámico. Aquí NO se agregó esa
- * dependencia: el worktree de este cambio comparte `node_modules` por symlink
- * con el repo principal y no se permite instalar paquetes desde aquí (ver
- * implementer-contract). Sin el detector nativo, `createDetector` falla con un
- * mensaje claro y la pantalla cae a la captura manual (SKU o código
- * tecleado), que siempre está visible. Pendiente: agregar `@zxing/browser` en
- * una sesión con `npm install` habilitado para recuperar el escaneo por
- * cámara en iPhone.
+ * Safari (iPhone), Firefox y Chrome de escritorio en Windows/Linux no lo
+ * traen. Ahí se carga `@zxing/browser` por `import()` dinámico, de modo que el
+ * Android nunca descarga la librería. Antes de este respaldo, esos navegadores
+ * mostraban "Este navegador no puede leer códigos de barras con la cámara" y
+ * la cajera quedaba tecleando el código a mano.
  *
  * Este módulo NO abre la cámara ni pinta nada: solo decide con qué se
  * decodifica y normaliza lo que sale. Así la parte con lógica es testeable sin
  * navegador; lo que necesita hardware queda en el hook de la página.
  */
 
-/** Formatos que existen en el catálogo: 1,564 EAN-13, 121 UPC-A, 8 EAN-8. */
-export const FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128'] as const
+/**
+ * Formatos que existen en el catálogo: 1,564 EAN-13, 121 UPC-A, 8 EAN-8.
+ * `qr_code` entra por las boutiques, que etiquetan con QR que lleva el SKU.
+ */
+export const FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'qr_code'] as const
 
 export type ScannedCode = string
 
@@ -62,13 +61,11 @@ export function normalizeTyped(raw: string | null | undefined): string {
 }
 
 /**
- * Devuelve un detector listo para usar. No tiene test unitario a propósito:
- * la rama nativa es una API de navegador, y un test aquí verificaría el mock,
- * no el comportamiento.
+ * Devuelve un detector listo para usar, cargando ZXing solo si hace falta.
  *
- * Lanza cuando el navegador no trae `BarcodeDetector` (Safari/iPhone) — ver la
- * nota de dependencia al inicio del archivo. El caller (la página) lo atrapa
- * y muestra la captura manual en vez de una cámara que nunca decodifica nada.
+ * La rama nativa es una API de navegador y no se prueba (verificaría el
+ * mock). La rama ZXing sí tiene prueba: que resuelva un detector en vez de
+ * lanzar, que es exactamente el fallo que se vio en producción.
  */
 export async function createDetector(): Promise<NativeDetector> {
   if (isNativeDetectorAvailable()) {
@@ -77,7 +74,19 @@ export async function createDetector(): Promise<NativeDetector> {
     ) => NativeDetector
     return new Ctor({ formats: FORMATS })
   }
-  throw new Error(
-    'Este navegador no puede leer códigos de barras con la cámara. Teclea el código o SKU.',
-  )
+  const { BrowserMultiFormatReader } = await import('@zxing/browser')
+  // Sin hints ZXing prueba todos sus formatos (1D y QR): cubre FORMATS de sobra.
+  const reader = new BrowserMultiFormatReader()
+  return {
+    async detect(source: CanvasImageSource) {
+      try {
+        const result = reader.decodeFromCanvas(source as HTMLCanvasElement)
+        return result ? [{ rawValue: result.getText() }] : []
+      } catch {
+        // decodeFromCanvas lanza cuando no hay código en el cuadro. Es el caso
+        // normal entre lecturas, no un error que valga la pena propagar.
+        return []
+      }
+    },
+  }
 }

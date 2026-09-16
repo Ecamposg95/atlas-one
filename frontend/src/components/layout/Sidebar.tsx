@@ -6,9 +6,9 @@ import { returnsApi } from '../../api/returns'
 import { confirm } from '../ui/ConfirmDialog'
 import { useTheme } from '../../context/ThemeContext'
 import type { Role } from '../../types/auth'
+import { BRANCH_ROLES, visibleNavItems, type NavItem } from './navVisibility'
 
 const APPROVER_ROLES: Role[] = ['ADMINISTRADOR', 'DUEÑO', 'GERENTE']
-const BRANCH_ROLES: Role[] = ['CAJERO', 'GERENTE']
 const RETURNS_URLS = new Set(['/returns', '/hq/returns'])
 
 // Presets gastronómicos (valor de `preset` = industry_type de la org). En estos
@@ -24,7 +24,7 @@ const BRANCH_NAV_GROUPS: { header: string; urls: string[] }[] = [
   { header: 'Mi día',        urls: ['/atlas-pos', '/pos'] },
   { header: 'Restaurante',   urls: ['/menu', '/tables', '/mobile/comanda', '/kitchen', '/bar/bottles'] },
   { header: 'Mi turno',      urls: ['/cash-history', '/sales'] },
-  { header: 'Inventario',    urls: ['/products'] },
+  { header: 'Inventario',    urls: ['/products', '/scanner'] },
   { header: 'Reportes',      urls: ['/reports', '/meseros'] },
   { header: 'Configuración', urls: ['/printer-settings'] },
 ]
@@ -61,16 +61,6 @@ function usePendingReturnsCount(role: Role): number {
   return count
 }
 
-interface NavItem {
-  label: string; icon: string; url: string; group: string; sort: number; short: string
-  /** Optional module gate. If set, the item only appears when the org has
-   *  this module enabled (`OrganizationModule.is_enabled=true`). Items without
-   *  this field are always visible (subject to ROLE_ROUTES). */
-  module?: string
-  /** Hide this item for gastro presets (retail-only concept). See GASTRO_PRESETS. */
-  hideForGastro?: boolean
-}
-
 const ALL_NAV: NavItem[] = [
   { label: 'Operaciones',       short: 'OPS', icon: 'fa-gauge-high',          url: '/hq/operations',    group: 'hq',   sort: 0  },
   { label: 'Reportes',          short: 'REP', icon: 'fa-chart-line',          url: '/hq/reports-hub',   group: 'hq',   sort: 1  },
@@ -86,7 +76,7 @@ const ALL_NAV: NavItem[] = [
   { label: 'Compras',           short: 'CMP', icon: 'fa-shopping-cart',       url: '/purchases',        group: 'hq',   sort: 11 },
   { label: 'Gastos',            short: 'GST', icon: 'fa-money-bill-wave',     url: '/expenses',         group: 'hq',   sort: 12 },
   { label: 'Inventario',        short: 'INV', icon: 'fa-boxes',               url: '/inventory',        group: 'hq',   sort: 13, module: 'inventory' },
-  { label: 'Scanner',           short: 'SCN', icon: 'fa-barcode',             url: '/scanner',          group: 'hq',   sort: 13.5, module: 'inventory' },
+  { label: 'Scanner',           short: 'SCN', icon: 'fa-barcode',             url: '/scanner',          group: 'hq',   sort: 13.5, module: 'inventory', branchModule: 'scanner' },
   { label: 'Inv. Global',       short: 'GLB', icon: 'fa-globe',               url: '/hq/inventory',     group: 'hq',   sort: 14, module: 'inventory', hideForGastro: true },
   { label: 'Logística',         short: 'LOG', icon: 'fa-truck-loading',       url: '/logistics',        group: 'hq',   sort: 15, module: 'logistics' },
   { label: 'Cajas',             short: 'CJA', icon: 'fa-box-open',            url: '/boxes',            group: 'hq',   sort: 16, module: 'logistics' },
@@ -126,8 +116,8 @@ const ALL_NAV: NavItem[] = [
 const ROLE_ROUTES: Record<Role, string[]> = {
   ADMINISTRADOR:    ['/cash-history','/hq/operations','/hq/reports-hub','/hq/control','/admin/catalog','/scanner','/departments','/organization','/users','/customers','/hq/branches','/hq/inventory','/hq/sales','/hq/returns','/brands','/hr','/hr/me','/logistics','/boxes','/quotes','/quotes/new','/seguimiento','/purchases','/expenses','/appointments','/commissions','/memberships','/recipes','/ai','/purchasing','/tables','/kitchen','/meseros','/bar/bottles','/menu','/mobile/comanda'],
   DUEÑO:            ['/cash-history','/hq/operations','/hq/reports-hub','/hq/control','/admin/catalog','/scanner','/customers','/hq/sales','/hq/returns','/hr/me','/logistics','/boxes','/quotes','/quotes/new','/seguimiento','/purchases','/expenses','/appointments','/commissions','/memberships','/recipes','/ai','/purchasing','/tables','/kitchen','/meseros','/bar/bottles','/menu','/mobile/comanda'],
-  GERENTE:          ['/cash-history','/reports','/hr/me','/products','/pos','/sales','/returns','/atlas-pos','/tables','/kitchen','/recipes','/meseros','/bar/bottles','/menu','/mobile/comanda'],
-  CAJERO:           ['/pos','/cash-history','/hr/me','/products','/printer-settings','/sales','/returns','/atlas-pos','/tables','/kitchen','/bar/bottles','/menu','/mobile/comanda'],
+  GERENTE:          ['/cash-history','/reports','/hr/me','/products','/scanner','/pos','/sales','/returns','/atlas-pos','/tables','/kitchen','/recipes','/meseros','/bar/bottles','/menu','/mobile/comanda'],
+  CAJERO:           ['/pos','/cash-history','/hr/me','/products','/scanner','/printer-settings','/sales','/returns','/atlas-pos','/tables','/kitchen','/bar/bottles','/menu','/mobile/comanda'],
   VENDEDOR:         ['/mobile/dashboard','/mobile/query','/mobile/sales','/mobile/profile','/hr/me','/atlas-pos'],
   SOPORTE_OPERATIVO:['/mobile/dashboard','/mobile/query','/mobile/profile','/hr/me','/atlas-pos'],
   CLIENTE:          ['/portal'],
@@ -682,16 +672,10 @@ export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
     if (isAuthenticated && !loaded) load()
   }, [isAuthenticated, loaded, load])
 
-  // Fail-open: enabledModules is empty only while context hasn't loaded (or the
-  // fetch failed). In that state we skip module gating and show every allowed
-  // item rather than lock the user out. On success the backend always returns
-  // at least ['core'], so a non-empty list means the preset is authoritative.
+  // El gating por módulo (y el fail-open mientras carga) vive en
+  // `visibleNavItems`, que es pura y tiene pruebas.
   const isGastro = !!preset && GASTRO_PRESETS.has(preset)
-  const items = ALL_NAV
-    .filter((n) => allowed.includes(n.url))
-    .filter((n) => !n.module || enabledModules.length === 0 || enabledModules.includes(n.module))
-    .filter((n) => !(n.hideForGastro && isGastro))
-    .sort((a, b) => a.sort - b.sort)
+  const items = visibleNavItems(ALL_NAV, { role, allowed, enabledModules, isGastro })
 
   const handleLogout = async () => {
     const ok = await confirm({
