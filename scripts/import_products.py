@@ -11,6 +11,11 @@ Columnas esperadas (las del formato que exporta el sistema):
     Nombre*, Categoria, Codigo, Descripcion, Costo unitario, Precio*,
     Mostrar en el catalogo, Controlar stock, Stock actual, Stock minimo
 
+Columnas opcionales Color y Talla: filas con el mismo Nombre* (y categoria) y
+distinta pareja color/talla se agrupan en un solo producto con N variantes;
+la primera fila de cada grupo es la principal. Sin esas columnas, cada fila
+sigue siendo un producto independiente, como siempre.
+
 Uso:
     python scripts/import_products.py archivo.csv --org 15 --branch 17
     python scripts/import_products.py archivo.csv --org 15 --branch 17 --dry-run
@@ -38,6 +43,7 @@ from app.models.products import (
     ProductBranchStatus,
     ProductVariant,
 )
+from app.modules.products.variant_label import clean_attr, variant_label
 
 
 def _norm(s: Optional[str]) -> str:
@@ -58,6 +64,8 @@ CAMPOS = {
     "controlar stock": "controla_stock",
     "stock actual": "stock",
     "stock minimo": "stock_min",
+    "color": "color",
+    "talla": "talla",
 }
 
 
@@ -78,6 +86,13 @@ def _num(valor: Optional[str], campo: str, fila: int) -> Optional[Decimal]:
         raise ValueError(
             f"fila {fila}: {campo} invalido — {valor!r} no es un numero"
         ) from None
+
+
+def _limpiar_attr(valor: Optional[str], maximo: int, nfila: int) -> Optional[str]:
+    try:
+        return clean_attr(valor, maximo)
+    except ValueError as e:
+        raise SystemExit(f"fila {nfila}: color/talla {e}")
 
 
 def _sku_desde_nombre(nombre: str) -> str:
@@ -117,6 +132,11 @@ def import_products(
         if s
     }
     departamentos: Dict[str, Department] = {}
+    padres: Dict[tuple, Product] = {}
+    # clave_padre -> {(color_lower, talla_lower): etiqueta con el casing original
+    # de la primera fila que la trajo, para que la incidencia de duplicado
+    # muestre esa etiqueta y no la de la fila repetida.
+    parejas: Dict[tuple, Dict[tuple, str]] = {}
 
     def _departamento(nombre: str) -> Optional[Department]:
         clave = nombre.strip()
@@ -182,29 +202,57 @@ def import_products(
         usados.add(sku)
 
         dep = _departamento(f.get("categoria") or "")
-        producto = Product(
-            name=nombre,
-            description=(f.get("descripcion") or "").strip() or None,
-            organization_id=org_id,
-            department_id=dep.id if dep is not None else None,
-            is_active=True,
-        )
-        db.add(producto)
-        db.flush()
+
+        color = _limpiar_attr(f.get("color"), 60, nfila)
+        talla = _limpiar_attr(f.get("talla"), 30, nfila)
+        con_variante = bool(color or talla)
+        clave_padre = (nombre.lower(), (dep.id if dep is not None else None))
+
+        etiqueta = variant_label(color, talla)
+        if con_variante and clave_padre in padres:
+            producto = padres[clave_padre]
+            pareja = ((color or "").lower(), (talla or "").lower())
+            if pareja in parejas[clave_padre]:
+                resumen["omitidos"] += 1
+                resumen["incidencias"].append(
+                    f"fila {nfila}: '{nombre}' ya tiene la variante {parejas[clave_padre][pareja]}; se omite"
+                )
+                continue
+            parejas[clave_padre][pareja] = etiqueta
+        else:
+            producto = Product(
+                name=nombre,
+                description=(f.get("descripcion") or "").strip() or None,
+                organization_id=org_id,
+                department_id=dep.id if dep is not None else None,
+                is_active=True,
+                has_variants=con_variante,
+            )
+            db.add(producto)
+            db.flush()
+            resumen["creados"] += 1
+            if con_variante:
+                padres[clave_padre] = producto
+                pareja = ((color or "").lower(), (talla or "").lower())
+                parejas[clave_padre] = {pareja: etiqueta}
 
         variante = ProductVariant(
             product_id=producto.id,
             sku=sku,
-            # Todas las rutas de creacion de la aplicacion asignan "Estándar";
-            # dejarlo en NULL tumbaba el cobro con un 500 al armar la
-            # descripcion del renglon de venta.
-            variant_name="Estándar",
+            # Todas las rutas de creacion de la aplicacion asignan "Estándar"
+            # cuando no hay color/talla; dejarlo en NULL tumbaba el cobro con
+            # un 500 al armar la descripcion del renglon de venta.
+            variant_name=etiqueta,
+            color=color,
+            size=talla,
             price=precio,
             cost=costo,
             organization_id=org_id,
         )
         db.add(variante)
         db.flush()
+        if con_variante:
+            resumen["variantes_creadas"] = resumen.get("variantes_creadas", 0) + 1
 
         stock_min = _num(f.get("stock_min"), "stock minimo", nfila)
         db.add(
@@ -228,7 +276,6 @@ def import_products(
                 is_active=controla,
             )
         )
-        resumen["creados"] += 1
 
     if dry_run:
         db.rollback()
@@ -256,6 +303,8 @@ def main() -> None:
     print("=" * 56)
     print("ENSAYO — nada se guardo" if args.dry_run else "CARGA APLICADA")
     print(f"  creados            {r['creados']}")
+    if r.get("variantes_creadas"):
+        print(f"  variantes creadas  {r['variantes_creadas']}")
     print(f"  omitidos (ya estan){r['omitidos']:>4}")
     print(f"  ignorados          {r['ignorados']}")
     print(f"  categorias creadas {r['categorias_creadas']}")

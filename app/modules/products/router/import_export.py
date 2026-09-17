@@ -26,6 +26,9 @@ from app.core.security import get_current_user
 from app.crud.products import query_visible_products, _is_admin
 
 from ._shared import _safe_str, _is_na, _safe_decimal
+from app.modules.products.schemas import ProductVariantCreate
+from app.modules.products.variant_label import variant_label
+from .variants import crear_variantes
 
 router = APIRouter()
 
@@ -106,59 +109,61 @@ def export_products_template(
             any_b = db.query(Branch).filter(Branch.organization_id == org_id).first()
             if any_b: target_branch_id = any_b.id
 
-    # 2. Add existing products
+    # 2. Add existing products — una fila por variante (color/talla incluidos)
     for p in query:
         if not p.variants: continue
-        v = p.variants[0]
+        for v in p.variants:
 
-        # Get Stock
-        stock_qty = 0
-        if target_branch_id:
-             s = db.query(StockOnHand).filter(
-                 StockOnHand.variant_id == v.id,
-                 StockOnHand.branch_id == target_branch_id
-             ).first()
-             if s: stock_qty = s.qty_on_hand
+            # Get Stock
+            stock_qty = 0
+            if target_branch_id:
+                 s = db.query(StockOnHand).filter(
+                     StockOnHand.variant_id == v.id,
+                     StockOnHand.branch_id == target_branch_id
+                 ).first()
+                 if s: stock_qty = s.qty_on_hand
 
-        row = {
-            "SKU": v.sku,
-            "Nombre": p.name,
-            "Descripcion": p.description or "",
-            "Unidad": p.unit,
-            "Departamento": p.department.name if p.department else "General",
-            "Marca": p.brand.name if p.brand else "",
-            "Codigo Barras": v.barcode or "",
-            "Precio Base": float(v.price),
-            "Costo": float(v.cost),
-            "Stock": float(stock_qty),
-            "Incluye IVA": "Si" if v.has_iva else "No"
-        }
+            row = {
+                "SKU": v.sku,
+                "Nombre": p.name,
+                "Descripcion": p.description or "",
+                "Unidad": p.unit,
+                "Departamento": p.department.name if p.department else "General",
+                "Marca": p.brand.name if p.brand else "",
+                "Codigo Barras": v.barcode or "",
+                "Precio Base": float(v.price),
+                "Costo": float(v.cost),
+                "Stock": float(stock_qty),
+                "Incluye IVA": "Si" if v.has_iva else "No",
+                "Color": v.color or "",
+                "Talla": v.size or "",
+            }
 
-        # Prices (up to 5)
-        prices_sorted = sorted(v.prices, key=lambda x: x.min_quantity)
-        for i, price in enumerate(prices_sorted[:5]):
-            idx = i + 1
-            row[f"P{idx} Nombre"] = price.price_name
-            row[f"P{idx} Min"] = float(price.min_quantity)
-            row[f"P{idx} Precio"] = float(price.unit_price)
-            # Find linked pkg name if any
-            pkg_name = ""
-            if price.linked_package_id:
-                # Naive search in this variant's packages
-                 pkg = next((pk for pk in v.packaging_units if pk.id == price.linked_package_id), None)
-                 if pkg: pkg_name = pkg.name
-            row[f"P{idx} Empaque"] = pkg_name
+            # Prices (up to 5)
+            prices_sorted = sorted(v.prices, key=lambda x: x.min_quantity)
+            for i, price in enumerate(prices_sorted[:5]):
+                idx = i + 1
+                row[f"P{idx} Nombre"] = price.price_name
+                row[f"P{idx} Min"] = float(price.min_quantity)
+                row[f"P{idx} Precio"] = float(price.unit_price)
+                # Find linked pkg name if any
+                pkg_name = ""
+                if price.linked_package_id:
+                    # Naive search in this variant's packages
+                     pkg = next((pk for pk in v.packaging_units if pk.id == price.linked_package_id), None)
+                     if pkg: pkg_name = pkg.name
+                row[f"P{idx} Empaque"] = pkg_name
 
-        # Packaging (up to 3)
-        pkgs_sorted = sorted(v.packaging_units, key=lambda x: x.units_per_package)
-        for i, pkg in enumerate(pkgs_sorted[:3]):
-            idx = i + 1
-            row[f"E{idx} Nombre"] = pkg.name
-            row[f"E{idx} Barcode"] = pkg.barcode or ""
-            row[f"E{idx} Cantidad"] = float(pkg.units_per_package)
-            row[f"E{idx} Precio"] = float(pkg.package_price)
+            # Packaging (up to 3)
+            pkgs_sorted = sorted(v.packaging_units, key=lambda x: x.units_per_package)
+            for i, pkg in enumerate(pkgs_sorted[:3]):
+                idx = i + 1
+                row[f"E{idx} Nombre"] = pkg.name
+                row[f"E{idx} Barcode"] = pkg.barcode or ""
+                row[f"E{idx} Cantidad"] = float(pkg.units_per_package)
+                row[f"E{idx} Precio"] = float(pkg.package_price)
 
-        data.append(row)
+            data.append(row)
 
     # 2. Build final column order (no pandas needed)
     standard_cols = [
@@ -167,7 +172,8 @@ def export_products_template(
     ]
     final_cols = standard_cols + \
                  [f"P{i} {f}" for i in range(1, 6) for f in ["Nombre", "Min", "Precio", "Empaque"]] + \
-                 [f"E{i} {f}" for i in range(1, 4) for f in ["Nombre", "Barcode", "Cantidad", "Precio"]]
+                 [f"E{i} {f}" for i in range(1, 4) for f in ["Nombre", "Barcode", "Cantidad", "Precio"]] + \
+                 ["Color", "Talla"]
 
     # 3. Write Excel with openpyxl directly
     from openpyxl import Workbook
@@ -303,6 +309,11 @@ async def upload_products(
     failed_details = []
     preview_rows: list[dict] = []
 
+    # (nombre_lower, department_id) -> Product creado en esta misma carga con
+    # Color/Talla; las filas siguientes con la misma pareja se agregan como
+    # variantes hermanas via `crear_variantes` en vez de crear otro producto.
+    productos_cargados: dict = {}
+
     # Resolve Target Branch for this import (Explicit OR User's Branch OR Org's HQ)
     # RBAC: Si el usuario tiene sucursal asignada (CAJERO/GERENTE), forzar su sucursal
     # ignorando cualquier branch_id enviado en el form — impide afectar otras sucursales.
@@ -335,7 +346,7 @@ async def upload_products(
             any_b = db.query(Branch).filter(Branch.organization_id == org_id).first()
             if any_b: target_branch_id = any_b.id
 
-    for row in rows:
+    for idx, row in enumerate(rows):
         try:
             with db.begin_nested():
                 # Check basic fields
@@ -387,6 +398,13 @@ async def upload_products(
                 has_iva_val = raw_iva in ("si", "sí", "yes", "1", "true")
                 is_new = False
 
+                # Color/Talla (opcionales): agrupan filas del mismo nombre en
+                # un producto con N variantes en vez de un producto por fila.
+                raw_color = _safe_str(row.get("color"))
+                raw_talla = _safe_str(row.get("talla"))
+                con_variante = bool(raw_color or raw_talla)
+                clave_padre = (raw_name.lower(), dept_id)
+
                 if existing_variant:
                     # Update
                     prod = existing_variant.product
@@ -412,6 +430,37 @@ async def upload_products(
                         preview_rows.append({
                             "action": "UPDATE",
                             "sku": raw_sku,
+                            "name": raw_name or prod.name,
+                            "price": float(price_base) if price_base is not None else None,
+                            "error_message": None,
+                        })
+                elif con_variante and clave_padre in productos_cargados:
+                    # Ya existe un producto de esta misma carga con el mismo
+                    # nombre/categoria: esta fila es una variante hermana.
+                    prod = productos_cargados[clave_padre]
+                    # `crear_variantes` lee `producto.variants` y el PBS de la
+                    # principal — hay que flushear lo pendiente (la sesion es
+                    # autoflush=False) y refrescar la coleccion cacheada, para
+                    # que vea variantes hermanas agregadas en filas anteriores.
+                    db.flush()
+                    db.expire(prod, ["variants"])
+                    entrada = ProductVariantCreate(
+                        color=raw_color or None,
+                        size=raw_talla or None,
+                        sku=raw_sku,
+                        barcode=_safe_str(row.get("codigo barras")) or None,
+                        price=price_base,
+                        cost=cost,
+                    )
+                    nuevas = crear_variantes(db, org_id, prod, [entrada])
+                    variant = nuevas[0]
+                    variant.has_iva = has_iva_val
+                    created_count += 1
+                    is_new = True
+                    if len(preview_rows) < 20:
+                        preview_rows.append({
+                            "action": "NEW",
+                            "sku": variant.sku,
                             "name": raw_name or prod.name,
                             "price": float(price_base) if price_base is not None else None,
                             "error_message": None,
@@ -444,7 +493,9 @@ async def upload_products(
                         product_id=prod.id,
                         sku=raw_sku,
                         barcode=_safe_str(row.get("codigo barras")),
-                        variant_name="Estándar",
+                        color=raw_color or None,
+                        size=raw_talla or None,
+                        variant_name=variant_label(raw_color, raw_talla),
                         price=price_base,
                         cost=cost,
                         has_iva=has_iva_val,
@@ -454,6 +505,8 @@ async def upload_products(
                     db.flush()
                     created_count += 1
                     is_new = True
+                    if con_variante:
+                        productos_cargados[clave_padre] = prod
                     if len(preview_rows) < 20:
                         preview_rows.append({
                             "action": "NEW",
