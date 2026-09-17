@@ -41,6 +41,8 @@ from app.modules.products.schemas import (
     PbsCloneRequest, PbsCloneResponse,
 )
 
+from ._shared import variante_principal
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -127,10 +129,16 @@ def get_product_branch_status(
         or_(Product.organization_id == org_id, Product.organization_id == None)
     ).first()
 
-    if not product or not product.variants:
+    if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    variant_id = product.variants[0].id
+    # La principal es la primera VIVA: con `variants[0]` la matriz mostraba el
+    # PBS de una talla retirada (o nada) en cuanto se retiraba la primera.
+    principal = variante_principal(product)
+    if principal is None:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    variant_id = principal.id
 
     # Get all branch statuses for this variant
     statuses = db.query(ProductBranchStatus, Branch).join(

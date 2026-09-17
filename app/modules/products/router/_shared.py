@@ -68,6 +68,22 @@ _PRODUCT_ADVANCED_ROLES: frozenset = frozenset(
 CRITICAL_STOCK_THRESHOLD = 5
 
 
+def variantes_vivas(product: Product) -> list:
+    """Variantes del producto que siguen vendibles (sin soft-delete)."""
+    return [v for v in (product.variants or []) if v.deleted_at is None]
+
+
+def variante_principal(product: Product):
+    """La variante "principal": la primera VIVA en orden de creacion.
+
+    `product.variants[0]` incluye las retiradas (`DELETE /variants/{id}`), asi
+    que despues de retirar la primera talla las rutas de escritura terminaban
+    editando una variante que ya no se vende. None si no queda ninguna viva.
+    """
+    vivas = variantes_vivas(product)
+    return vivas[0] if vivas else None
+
+
 def _compute_product_read(
     p: Product,
     db: Session,

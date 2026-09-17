@@ -44,7 +44,10 @@ from app.modules.products.schemas import (
     ProductCreate, ProductRead, ProductUpdate, ProductListResponse,
 )
 
-from ._shared import _MANAGER_ROLES, _PRODUCT_ADVANCED_ROLES, _compute_product_read
+from ._shared import (
+    _MANAGER_ROLES, _PRODUCT_ADVANCED_ROLES, _compute_product_read,
+    variante_principal, variantes_vivas,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -947,9 +950,11 @@ def update_product(
 
     # Recalculate approval if needed ? No, explicit status update handles it
 
-    # Update Main Variant
-    if product.variants:
-        v = product.variants[0]
+    # Update Main Variant. La "principal" es la primera VIVA: `variants[0]`
+    # puede ser una talla retirada y el precio/SKU se escribiria en algo que
+    # ya no se vende.
+    v = variante_principal(product)
+    if v is not None:
         if prod_in.sku is not None:
              # Check Uniqueness if changed
              if prod_in.sku != v.sku:
@@ -1027,16 +1032,13 @@ def update_product(
         if (prod_in.target_branch_ids is not None
             and len(prod_in.target_branch_ids) > 0
             and current_user.role in ["ADMINISTRADOR", "DUEÑO"]):
-            variant = product.variants[0] if product.variants else None
-            if variant:
-                # Delete existing ProductBranchStatus records
-                db.query(ProductBranchStatus).filter(
-                    ProductBranchStatus.variant_id == variant.id
-                ).delete()
-
-                # Create new ones for target branches
+            # La disponibilidad es del PRODUCTO: se reescribe el PBS de TODAS
+            # las variantes vivas. Tocando solo `variants[0]`, las demas tallas
+            # quedaban vendibles en sucursales que el usuario acaba de quitar.
+            vivas = variantes_vivas(product)
+            if vivas:
+                # Verify branches exist in org (security) antes de borrar nada.
                 for branch_id in prod_in.target_branch_ids:
-                    # Verify branch exists in org (security)
                     branch = db.query(Branch).filter(
                         Branch.id == branch_id,
                         Branch.organization_id == org_id
@@ -1048,15 +1050,23 @@ def update_product(
                             detail=f"Sucursal {branch_id} no encontrada"
                         )
 
-                    status = ProductBranchStatus(
-                        variant_id=variant.id,
-                        branch_id=branch_id,
-                        is_active_pos=True,
-                        is_active_hq=False,
-                        is_visible=True,
-                        organization_id=org_id
-                    )
-                    db.add(status)
+                for variante in vivas:
+                    # Delete existing ProductBranchStatus records
+                    db.query(ProductBranchStatus).filter(
+                        ProductBranchStatus.variant_id == variante.id,
+                        ProductBranchStatus.organization_id == org_id,
+                    ).delete()
+
+                    # Create new ones for target branches
+                    for branch_id in prod_in.target_branch_ids:
+                        db.add(ProductBranchStatus(
+                            variant_id=variante.id,
+                            branch_id=branch_id,
+                            is_active_pos=True,
+                            is_active_hq=False,
+                            is_visible=True,
+                            organization_id=org_id
+                        ))
 
     db.commit()
     db.refresh(product)
