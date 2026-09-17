@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 
 import { organizationApi } from '../api/organization'
+import { surchargeCacheOnError } from '../pages/pos/cardSurcharge'
 
 /**
  * Caché del porcentaje de comisión por pago con tarjeta de la organización.
@@ -10,10 +11,16 @@ import { organizationApi } from '../api/organization'
  * que no es admin y no debe leer la configuración fiscal completa para cobrar.
  *
  * `pct === 0` significa "no cobrar ni mostrar nada": es el estado de toda
- * organización que no la configuró, y también el estado ante un error de red.
- * **Falla cerrado a propósito**: si el store no sabe cuánto es, el POS cobra
+ * organización que no la configuró. **Falla cerrado a propósito** mientras no
+ * se haya podido cargar NUNCA: si el store no sabe cuánto es, el POS cobra
  * solo la mercancía y el backend responde 422 con el importe correcto en
  * español — preferible a inventar un cargo que el cliente no debe.
+ *
+ * Pero un error DESPUÉS de una carga buena conserva el último valor conocido
+ * (`surchargeCacheOnError`): `getCardSurcharge` también lanza cuando se cae la
+ * red, y borrar el porcentaje justo ahí dejaba al POS cobrando de menos en el
+ * único momento en que además encola las ventas — que el backend rechazaba con
+ * 422 al reconectar y la cola descartaba.
  */
 const REFRESCO_MS = 30 * 60 * 1000 // configuración estática; no cambia sola
 
@@ -44,7 +51,8 @@ export const useCardSurchargeStore = create<CardSurchargeStore>((set, get) => ({
         loading: false,
       })
     } catch {
-      set({ pct: 0, loadedAt: Date.now(), loading: false })
+      const { pct, loadedAt: previo } = get()
+      set({ ...surchargeCacheOnError({ pct, loadedAt: previo }, Date.now()), loading: false })
     }
   },
 

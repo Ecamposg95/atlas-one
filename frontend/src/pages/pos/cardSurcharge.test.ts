@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { formatPct, isCardSurchargeError, mixedSurcharge, surchargeFor } from './cardSurcharge'
+import { formatPct, isCardSurchargeError, mixedSurcharge, surchargeCacheOnError, surchargeFor } from './cardSurcharge'
 
 // Espejo en pantalla de `app/services/card_surcharge.py`: los dos tienen que
 // dar EXACTAMENTE el mismo centavo, porque el cajero lee uno y el backend
@@ -162,5 +162,34 @@ describe('isCardSurchargeError', () => {
     // Los 422 de Pydantic llegan como arreglo de objetos.
     expect(isCardSurchargeError([{ msg: 'field required' }])).toBe(false)
     expect(isCardSurchargeError([{ msg: 'incluye comisión tarjeta' }])).toBe(true)
+  })
+})
+
+// Regresión: el store fallaba a `pct = 0` ante CUALQUIER error, incluido el de
+// red. El primer reintento tras caerse la conexión dejaba al POS cobrando sin
+// comisión, y esas ventas encoladas se descartaban con 422 al reconectar.
+
+describe('surchargeCacheOnError', () => {
+  it('sin carga previa falla cerrado y marca la hora', () => {
+    expect(surchargeCacheOnError({ pct: 0, loadedAt: null }, 1000)).toEqual({
+      pct: 0, loadedAt: 1000,
+    })
+  })
+
+  it('con una carga buena previa conserva el último porcentaje conocido', () => {
+    expect(surchargeCacheOnError({ pct: 3.5, loadedAt: 500 }, 1000)).toEqual({
+      pct: 3.5, loadedAt: 500,
+    })
+  })
+
+  it('conserva también un 0 que sí se leyó del servidor', () => {
+    // Organización sin comisión: el 0 es la verdad, no un fallo.
+    expect(surchargeCacheOnError({ pct: 0, loadedAt: 500 }, 1000)).toEqual({
+      pct: 0, loadedAt: 500,
+    })
+  })
+
+  it('no adelanta loadedAt, para que el siguiente load() reintente', () => {
+    expect(surchargeCacheOnError({ pct: 2.75, loadedAt: 500 }, 9_999_999).loadedAt).toBe(500)
   })
 })

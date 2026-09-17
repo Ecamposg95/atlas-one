@@ -71,10 +71,24 @@ export function POS() {
   const { branch } = useAuthStore()
   const isBranch = !!branch && branch.branch_type !== 'HQ'
 
+  // El temporizador del toast anterior se cancela SIEMPRE: si no, el `setTimeout`
+  // de un aviso normal borraba a los 3.5 s el aviso `sticky` que llegó después
+  // — justo el de la venta descartada, que es el que no se puede perder.
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const showToast = (msg: string, type: Toast['type'] = 'success', sticky = false) => {
+    if (toastTimer.current !== null) {
+      clearTimeout(toastTimer.current)
+      toastTimer.current = null
+    }
     setToast({ msg, type, sticky })
-    if (!sticky) setTimeout(() => setToast(null), 3500)
+    if (!sticky) {
+      toastTimer.current = setTimeout(() => {
+        toastTimer.current = null
+        setToast(null)
+      }, 3500)
+    }
   }
+  useEffect(() => () => { if (toastTimer.current !== null) clearTimeout(toastTimer.current) }, [])
 
   // ----- Session check -----
   const checkSession = useCallback(async () => {
@@ -261,8 +275,16 @@ export function POS() {
           // El servidor cobró una comisión que este POS no conocía: su caché
           // del porcentaje quedó vieja. Sin recargarla, la cajera reintenta el
           // mismo cobro y recibe el mismo 422 indefinidamente.
+          //
+          // El `detail` del backend va COMPLETO y primero: trae el recibido y
+          // el total esperado. Sustituirlo por la pista tapaba el otro motivo
+          // del mismo 422 — que el cliente simplemente pagó de menos—, y la
+          // cajera no tenía cómo saber cuánto faltaba.
           loadSurcharge(true)
-          showToast('El porcentaje de comisión cambió; vuelve a intentar', 'error')
+          showToast(
+            `${errorDetailText(detail, 'Error al procesar la venta')}. Se actualizó el porcentaje; vuelve a intentar`,
+            'error',
+          )
         } else {
           showToast(errorDetailText(detail, 'Error al procesar la venta'), 'error')
         }
@@ -286,7 +308,13 @@ export function POS() {
       // administrador lo cambió mientras tanto, el backend la rechaza con 422
       // y la cola la descarta. Refrescarlo no arregla el payload ya encolado,
       // pero sí evita que las ventas SIGUIENTES caigan en lo mismo.
-      await loadSurcharge(true)
+      //
+      // Solo con red y solo si hay algo que mandar: este `runFlush` corre cada
+      // 30 s, y pedirlo a ciegas significaba pegarle al endpoint 120 veces por
+      // hora en un POS sin cola. Nada de eso es gratis sin conexión.
+      if (navigator.onLine !== false && (await listPending()).length > 0) {
+        await loadSurcharge(true)
+      }
       const result = await flushPending((payload) => salesApi.create(payload as Parameters<typeof salesApi.create>[0]))
       if (result.droppedMessages.length > 0) {
         // Prioridad sobre el "enviadas": esto es dinero cobrado que no quedó

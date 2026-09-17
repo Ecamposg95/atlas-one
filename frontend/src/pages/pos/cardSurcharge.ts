@@ -154,3 +154,35 @@ export function isCardSurchargeError(detail: unknown): boolean {
     .replace(/[̀-ͯ]/g, '')
   return plano.includes('comision tarjeta')
 }
+
+/** Lo que la caché del porcentaje sabe: el valor y cuándo se supo. */
+export interface SurchargeCache {
+  pct: number
+  loadedAt: number | null
+}
+
+/**
+ * Estado de la caché cuando `GET /api/organization/card-surcharge` falla.
+ *
+ * Fallar a `pct = 0` SIEMPRE era peligroso: `getCardSurcharge` lanza también
+ * por error de red, así que el primer reintento tras caerse la conexión ponía
+ * el porcentaje en 0 y el POS seguía vendiendo sin comisión. Esas ventas se
+ * encolan con el importe corto ($1,000 en vez de $1,035), el backend las
+ * rechaza con 422 al reconectar y la cola las descarta: el cliente pagó de
+ * menos Y la venta no quedó registrada.
+ *
+ * Por eso el 0 se reserva para el único caso en el que no hay nada mejor: que
+ * nunca se haya cargado (`loadedAt === null`). Con una carga buena previa se
+ * conserva el último valor conocido, que es justo el que el POS estaba usando
+ * un segundo antes de perder la red.
+ */
+export function surchargeCacheOnError(prev: SurchargeCache, now: number): SurchargeCache {
+  if (prev.loadedAt === null) {
+    // Nunca se supo el porcentaje: falla cerrado (el backend responde 422 con
+    // el importe correcto) y marca la hora para no martillar el endpoint.
+    return { pct: 0, loadedAt: now }
+  }
+  // `loadedAt` se deja como estaba a propósito: la caché sigue siendo "de la
+  // última vez que SÍ se supo", así que un `load()` sin `force` reintenta.
+  return { pct: prev.pct, loadedAt: prev.loadedAt }
+}
