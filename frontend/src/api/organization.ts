@@ -16,6 +16,9 @@ export interface Organization {
   usd_rate_mode?: 'off' | 'auto' | 'manual'
   usd_rate_manual?: number | string | null
   usd_rate_margin?: number | string
+  // Comisión por pago con tarjeta (2026-09-17). 0 = apagada: no se cobra ni se
+  // muestra nada en el POS, el ticket, el corte ni los reportes.
+  card_surcharge_pct?: number | string
 }
 
 /** Respuesta de GET /api/organization/exchange-rate. */
@@ -68,6 +71,11 @@ export const organizationApi = {
 
   refreshExchangeRate: async (): Promise<{ ok: boolean; rate_date: string | null; rate: number | null }> => {
     const { data } = await client.post('/organization/exchange-rate/refresh')
+    return data
+  },
+
+  getCardSurcharge: async (): Promise<{ pct: number | string }> => {
+    const { data } = await client.get<{ pct: number | string }>('/organization/card-surcharge')
     return data
   },
 

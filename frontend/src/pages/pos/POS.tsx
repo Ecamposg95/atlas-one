@@ -10,6 +10,8 @@ import { requierePin } from '../../utils/reimpresion'
 import { usePOSStore } from '../../store/posStore'
 import { useAuthStore } from '../../store/authStore'
 import { useExchangeRateStore } from '../../store/exchangeRateStore'
+import { useCardSurchargeStore } from '../../store/cardSurchargeStore'
+import { surchargeFor } from './cardSurcharge'
 import type { CashSession } from '../../types/cash'
 
 import { ProductSearch } from '../../components/pos/ProductSearch'
@@ -95,6 +97,12 @@ export function POS() {
     const id = setInterval(() => loadUsdRate(true), 30 * 60 * 1000)
     return () => clearInterval(id)
   }, [loadUsdRate])
+
+  // Comisión por pago con tarjeta. Se carga al entrar al POS; `pct = 0` (toda
+  // organización que no la configuró) deja los modales exactamente como antes.
+  const surchargePct = useCardSurchargeStore((s) => s.pct)
+  const loadSurcharge = useCardSurchargeStore((s) => s.load)
+  useEffect(() => { loadSurcharge() }, [loadSurcharge])
 
   // Con el dinero ya contado, nada de lo que hay detrás del modal puede mover
   // el ticket: el total que el modal está cobrando se lee del store EN VIVO
@@ -330,7 +338,11 @@ export function POS() {
   }
 
   const handleCardPay = async (reference: string) => {
-    await submitSale([{ method: 'CARD', amount: total, reference }])
+    // El importe que pasa por la terminal incluye la comisión. El backend lo
+    // recalcula y rechaza cualquier otro con un 422 en español: el cajero no
+    // puede quitarla.
+    const { totalDue } = surchargeFor(total, 0, surchargePct)
+    await submitSale([{ method: 'CARD', amount: totalDue, reference }])
   }
 
   const handleTransferPay = async (reference: string) => {
@@ -615,6 +627,7 @@ export function POS() {
       {payModal === 'CARD' && (
         <CardPaymentModal
           total={total}
+          surchargePct={surchargePct}
           onClose={() => setPayModal(null)}
           onConfirm={handleCardPay}
         />
@@ -629,6 +642,7 @@ export function POS() {
       {payModal === 'MIXED' && (
         <MixedPaymentModal
           total={total}
+          surchargePct={surchargePct}
           onClose={() => setPayModal(null)}
           onConfirm={handleMixedPay}
         />

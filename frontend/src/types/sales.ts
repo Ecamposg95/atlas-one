@@ -34,6 +34,9 @@ export interface SalesDocument {
   subtotal: number
   tax_amount: number
   total_amount: number
+  /** Comisión por pago con tarjeta. `total_amount` NO la incluye. */
+  card_surcharge_amount?: number
+  card_surcharge_pct?: number | null
   requires_invoice: boolean
   created_at: string
   lines: SaleLineItem[]

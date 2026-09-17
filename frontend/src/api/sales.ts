@@ -16,6 +16,9 @@ export interface SaleCreateResponse {
   paid: number
   change: number
   credit_debt: number
+  /** Comisión por pago con tarjeta cobrada. 0 = no aplicó. `total` es solo mercancía. */
+  card_surcharge_amount?: number
+  card_surcharge_pct?: number | null
 }
 
 interface CreateSalePayload {

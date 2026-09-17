@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { formatCurrency } from '../../../utils/currency'
+import { formatPct, surchargeFor } from '../../../pages/pos/cardSurcharge'
 
 type Method = 'CASH' | 'CARD' | 'TRANSFER'
 
@@ -17,19 +18,30 @@ const METHOD_LABELS: Record<Method, { label: string; icon: string; color: string
 
 interface Props {
   total: number
+  /** Comisión por pago con tarjeta de la organización. 0 = apagada. */
+  surchargePct?: number
   onClose: () => void
   onConfirm: (payments: { method: string; amount: number; reference?: string }[]) => Promise<void>
 }
 
-export function MixedPaymentModal({ total, onClose, onConfirm }: Props) {
+export function MixedPaymentModal({ total, surchargePct = 0, onClose, onConfirm }: Props) {
   const [lines, setLines] = useState<PaymentLine[]>([
     { method: 'CASH', amount: String(total.toFixed(2)), reference: '' },
   ])
   const [loading, setLoading] = useState(false)
 
   const paid = lines.reduce((s, l) => s + (parseFloat(l.amount) || 0), 0)
-  const remaining = total - paid
-  const change = paid - total
+  // La comisión se calcula sobre lo que NO se paga con tarjeta, en vivo: si el
+  // cajero mueve el renglón de efectivo, el total a pagar se mueve con él.
+  const nonCardPaid = lines
+    .filter((l) => l.method !== 'CARD')
+    .reduce((s, l) => s + (parseFloat(l.amount) || 0), 0)
+  const cargo = surchargeFor(total, nonCardPaid, surchargePct)
+  // Neutralidad: con la comisión apagada, `totalDue` es el `total` tal cual y
+  // el modal se comporta exactamente como antes.
+  const totalDue = cargo.amount > 0 ? cargo.totalDue : total
+  const remaining = totalDue - paid
+  const change = paid - totalDue
 
   const addLine = () => setLines((l) => [...l, { method: 'CASH', amount: '', reference: '' }])
   const removeLine = (i: number) => setLines((l) => l.filter((_, idx) => idx !== i))
@@ -106,6 +118,21 @@ export function MixedPaymentModal({ total, onClose, onConfirm }: Props) {
           ))}
         </div>
 
+        {cargo.amount > 0 && (
+          <button
+            onClick={() => {
+              const idx = lines.findIndex((l) => l.method === 'CARD')
+              const monto = cargo.cardDue.toFixed(2)
+              if (idx === -1) setLines((l) => [...l, { method: 'CARD', amount: monto, reference: '' }])
+              else updateLine(idx, { amount: monto })
+            }}
+            className="dax-btn-secondary text-xs w-full justify-center mb-2"
+            title="Pone en el renglón de tarjeta lo que falta, con la comisión incluida"
+          >
+            <i className="fa-solid fa-credit-card" /> Completar con tarjeta ({formatCurrency(cargo.cardDue)})
+          </button>
+        )}
+
         <button onClick={addLine} className="dax-btn-secondary text-xs w-full justify-center mb-4">
           <i className="fa-solid fa-plus" /> Agregar método
         </button>
@@ -113,8 +140,19 @@ export function MixedPaymentModal({ total, onClose, onConfirm }: Props) {
         {/* Resumen */}
         <div className={`rounded-xl p-3 mb-4 text-sm space-y-1 ${remaining > 0.005 ? 'bg-red-600/10 border border-red-600/30' : 'bg-emerald-600/10 border border-emerald-600/30'}`}>
           <div className="flex justify-between text-slate-400">
-            <span>Total</span><span>{formatCurrency(total)}</span>
+            <span>{cargo.amount > 0 ? 'Mercancía' : 'Total'}</span><span>{formatCurrency(total)}</span>
           </div>
+          {cargo.amount > 0 && (
+            <>
+              <div className="flex justify-between text-slate-400">
+                <span>Comisión tarjeta {formatPct(cargo.pct)}%</span>
+                <span>{formatCurrency(cargo.amount)}</span>
+              </div>
+              <div className="flex justify-between text-white font-semibold">
+                <span>Total a pagar</span><span>{formatCurrency(totalDue)}</span>
+              </div>
+            </>
+          )}
           <div className="flex justify-between text-slate-400">
             <span>Pagado</span><span>{formatCurrency(paid)}</span>
           </div>

@@ -46,12 +46,15 @@ export function Organization() {
   const saveOrg = async () => {
     setSaving(true)
     try {
-      // Borrar el ajuste sobre el FIX deja '' en el input numerico, y el PUT
-      // responde 422 ("Input should be a valid decimal"): vacio = sin ajuste.
+      // Borrar el ajuste sobre el FIX o la comisión deja '' en el input
+      // numérico, y el PUT responde 422 ("Input should be a valid decimal"):
+      // vacío = sin ajuste / sin comisión.
       const margen = orgForm.usd_rate_margin
+      const comision = orgForm.card_surcharge_pct
       const updated = await organizationApi.updateOrg({
         ...orgForm,
         usd_rate_margin: margen === '' || margen == null ? 0 : margen,
+        card_surcharge_pct: comision === '' || comision == null ? 0 : comision,
       })
       setOrg(updated); setOrgForm(updated)
       await cargarFx()
@@ -302,6 +305,48 @@ export function Organization() {
                   {saving ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Guardar</>}
                 </button>
               </div>
+            </div>
+          </DaxCard>
+
+          {/* Comisión por pago con tarjeta */}
+          <DaxCard>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">
+              <i className="fa-solid fa-credit-card mr-1.5" />Comisión por pago con tarjeta
+            </p>
+            <p className="text-xs text-slate-400 mb-4">
+              Se suma únicamente a la parte de la venta que se cobra con tarjeta; en un
+              pago mixto, solo a esa parte. Aparece en el punto de venta, en el ticket,
+              en el corte de caja y en los reportes, <b>separada del total de la
+              mercancía</b>. <b>0 = sin comisión.</b>
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="dax-label">Porcentaje (%)</label>
+                <input
+                  type="number" step="0.01" min="0" max="20"
+                  value={orgForm.card_surcharge_pct ?? '0'}
+                  onChange={(e) => setOrgForm((p) => ({ ...p, card_surcharge_pct: e.target.value }))}
+                  className="dax-input w-full tabular-nums"
+                  placeholder="3.5"
+                />
+                <p className="text-[10px] mt-1 text-slate-600">0 = sin comisión. Máximo 20 %.</p>
+              </div>
+              <div className="sm:col-span-2 flex items-end">
+                <p className="text-xs text-slate-400">
+                  {Number(orgForm.card_surcharge_pct ?? 0) > 0 ? (
+                    <>Una venta de <b className="tabular-nums text-slate-200">$1,000.00</b> pagada
+                    con tarjeta se cobrará como <b className="tabular-nums text-emerald-400">
+                    {(1000 * (1 + Number(orgForm.card_surcharge_pct) / 100)).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</b>.</>
+                  ) : (
+                    <>La comisión está apagada: el punto de venta y el ticket no muestran nada.</>
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end mt-4">
+              <button onClick={saveOrg} disabled={saving} className="dax-btn-primary text-xs disabled:opacity-40">
+                {saving ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Guardar</>}
+              </button>
             </div>
           </DaxCard>
 

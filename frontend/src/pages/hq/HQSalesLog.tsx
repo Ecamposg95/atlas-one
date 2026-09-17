@@ -250,6 +250,18 @@ export function HQSalesLog() {
               <div className="flex justify-between text-slate-400"><span>Subtotal</span><span>{formatCurrency(Number(selected.subtotal))}</span></div>
               {Number(selected.tax_amount) > 0 && <div className="flex justify-between text-slate-400"><span>IVA</span><span>{formatCurrency(Number(selected.tax_amount))}</span></div>}
               <div className="flex justify-between font-black text-white text-base pt-1"><span>Total</span><span>{formatCurrency(selected.total_amount)}</span></div>
+              {Number(selected.card_surcharge_amount ?? 0) > 0 && (
+                <>
+                  <div className="flex justify-between text-slate-400">
+                    <span>Comisión tarjeta {selected.card_surcharge_pct ?? ''}%</span>
+                    <span>{formatCurrency(Number(selected.card_surcharge_amount))}</span>
+                  </div>
+                  <div className="flex justify-between font-black text-emerald-400 text-base">
+                    <span>Total cobrado</span>
+                    <span>{formatCurrency(Number(selected.total_amount) + Number(selected.card_surcharge_amount))}</span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
