@@ -4,6 +4,8 @@ import { usePOSStore } from '../../store/posStore'
 import { useAuthStore } from '../../store/authStore'
 import type { Product } from '../../types/products'
 import { ProductDetailModal } from './modals/ProductDetailModal'
+import { VariantPickerModal } from './modals/VariantPickerModal'
+import { needsPicker, pickVariantForCart } from './variantPicker'
 import { formatCurrency } from '../../utils/currency'
 
 const EDIT_ROLES = ['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO']
@@ -74,6 +76,7 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
   const [defaultResults, setDefaultResults] = useState<Product[]>([])
   const [defaultLoading, setDefaultLoading] = useState(true)
   const [detailProduct, setDetailProduct] = useState<Product | null>(null)
+  const [pickerFor, setPickerFor] = useState<Product | null>(null)
   const [limitId, setLimitId] = useState<string | null>(null)
   const [sortBy, setSortBy] = useState<SortOrder>(() => {
     try {
@@ -153,12 +156,12 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
     // exactly one, auto-add. Otherwise run the search immediately; cajero can
     // confirm again on the fresh result set.
     if (val.trim() && lastSearchTargetRef.current === val && resultsRef.current.length === 1) {
-      addToCart(resultsRef.current[0])
+      addOrPick(resultsRef.current[0])
       return
     }
     search(val).then((data) => {
       if (lastSearchTargetRef.current === val && data.length === 1) {
-        addToCart(data[0])
+        addOrPick(data[0])
       }
     })
   }
@@ -221,6 +224,11 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
     setQuery('')
     setResults([])
     devolverFoco()
+  }
+
+  const addOrPick = (p: Product) => {
+    if (needsPicker(p)) { setPickerFor(p); return }
+    addToCart(p)
   }
 
   const stockNum = (p: Product) => Number(p.stock_total ?? 0)
@@ -293,7 +301,9 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-2">
           {displayResults.map((p) => {
-            const stock = stockNum(p)
+            const stock = (p.variants?.length ?? 0) > 1
+              ? p.variants!.reduce((a, v) => a + Number(v.stock_total ?? 0), 0)
+              : stockNum(p)
             const price = Number(p.price)
             const inCart = cartQtyUnits(p.id)
             const atLimit = stock > 0 && inCart >= stock
@@ -312,7 +322,7 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
               >
                 <button
                   onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => addToCart(p)}
+                  onClick={() => addOrPick(p)}
                   disabled={stock <= 0 || atLimit}
                   className={`text-left flex flex-col gap-1.5 group w-full disabled:opacity-40 disabled:cursor-not-allowed transition-colors ${isLimit ? 'opacity-80' : ''}`}
                 >
@@ -333,6 +343,14 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
                   </p>
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-[11px] font-mono truncate" style={{ color: 'var(--dax-text-faint)' }}>{p.sku}</p>
+                    {(p.variants?.length ?? 0) > 1 && (
+                      <span
+                        className="text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0"
+                        style={{ background: 'rgba(99,102,241,0.15)', color: '#4338ca' }}
+                      >
+                        {p.variants!.length} variantes
+                      </span>
+                    )}
                     {p.has_iva && (
                       <span
                         className="text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0"
@@ -429,6 +447,14 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
           if (query.trim()) search(query)
         }}
       />
+
+      {pickerFor && (
+        <VariantPickerModal
+          product={pickerFor}
+          onPick={(v) => { addToCart(pickVariantForCart(pickerFor, v)); setPickerFor(null) }}
+          onClose={() => { setPickerFor(null); devolverFoco() }}
+        />
+      )}
     </div>
   )
 }
