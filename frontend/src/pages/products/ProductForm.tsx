@@ -24,7 +24,9 @@ import {
 } from '../../components/products/types'
 import { useEnabledModulesStore } from '../../store/enabledModulesStore'
 import { ProductVariantsSection } from '../../components/products/ProductVariantsSection'
+import { ProductVariantsEditor } from '../../components/products/ProductVariantsEditor'
 import { toExtraVariants, type VariantRow } from '../../components/products/variantMatrix'
+import type { Product } from '../../types/products'
 
 const ADMIN_ROLES = new Set(['ADMINISTRADOR', 'DUEÑO'])
 
@@ -48,6 +50,7 @@ export function ProductForm() {
   const [errors, setErrors] = useState<ProductErrors>({})
   const hasVariantsModule = useEnabledModulesStore((s) => s.enabledModules.includes('variants'))
   const [variantRows, setVariantRows] = useState<VariantRow[]>([])
+  const [loaded, setLoaded] = useState<Product | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -74,6 +77,7 @@ export function ProductForm() {
     if (mode === 'edit' && id) {
       loaders.push(productsApi.getById(id).then((p) => {
         if (cancelled) return
+        setLoaded(p)
         const v = p.variants?.[0]
         setForm({
           name: p.name ?? '',
@@ -292,6 +296,12 @@ export function ProductForm() {
             value={form} onChange={setField} errors={errors}
             departments={departments} brands={brands}
           />
+          {mode === 'edit' && loaded && (loaded.variants?.length ?? 0) > 1 && (
+            <p className="text-[11px] text-amber-400">
+              Estos campos editan la variante principal ({loaded.variants![0].variant_name}). Las demás se
+              editan en la tabla de variantes.
+            </p>
+          )}
           <ProductTieredPricesSection
             prices={prices}
             onChange={setPrices}
@@ -316,6 +326,9 @@ export function ProductForm() {
           )}
           {mode === 'create' && hasVariantsModule && (
             <ProductVariantsSection baseSku={form.sku} rows={variantRows} onRowsChange={setVariantRows} />
+          )}
+          {mode === 'edit' && hasVariantsModule && loaded && (
+            <ProductVariantsEditor product={loaded} onChanged={setLoaded} />
           )}
 
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800/60">
