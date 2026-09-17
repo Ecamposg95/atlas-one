@@ -60,6 +60,7 @@ from app.core.events import EventBus, SalesDocumentCreated # [NEW] Event Bus Int
 from app.core.tenant_context import get_current_active_organization
 from app.models.organization import Organization
 from app.services.tax import compute_line_tax, quantize_amount, quantize_totals, resolve_org_tax_mode
+from app.services.card_surcharge import calcular_comision, pct_de_organizacion
 from app.crud.products import get_variant_if_visible
 try:
     from zoneinfo import ZoneInfo
@@ -394,6 +395,10 @@ def _respuesta_de_venta_existente(db: Session, sale: SalesDocument) -> Dict[str,
         "paid": float(Decimal(str(pagado)).quantize(Decimal("0.01"))),
         "change": float(Decimal(str(sale.change_given or 0)).quantize(Decimal("0.01"))),
         "credit_debt": 0.0,
+        # Comision congelada en el documento: se LEE, nunca se recalcula. Un
+        # reintento del POS no puede volver a cobrarsela al cliente.
+        "card_surcharge_amount": float(Decimal(str(sale.card_surcharge_amount or 0)).quantize(Decimal("0.01"))),
+        "card_surcharge_pct": float(sale.card_surcharge_pct) if sale.card_surcharge_pct is not None else None,
         # Misma forma que el alta normal: el POS no distingue.
         "usd_rate": float(sale.usd_rate) if sale.usd_rate is not None else None,
         "duplicate_ignored": True,
@@ -510,9 +515,10 @@ def create_sale(
 
     # Modo de precio de la organización (neto vs. precio con IVA incluido). Se
     # resuelve una sola vez y lo consume compute_line_tax por renglón.
-    price_includes_tax = resolve_org_tax_mode(
-        db.query(Organization).filter(Organization.id == org_id).first()
-    )
+    # La organización se conserva en una variable porque más abajo también se
+    # le lee `card_surcharge_pct`: una sola consulta, no dos.
+    _org_venta = db.query(Organization).filter(Organization.id == org_id).first()
+    price_includes_tax = resolve_org_tax_mode(_org_venta)
 
     # --- BATCH RESOLVE (perf 2026-05-07) ---
     # Antes: 4 queries × N items (variant lookup + eager re-fetch + stock + PBS).
@@ -716,6 +722,18 @@ def create_sale(
     # como valor inicial evita el `int 0`.
     total_paid = sum((Decimal(str(p.amount)) for p in sale_in.payments), Decimal("0"))
 
+    # --- Comision por pago con tarjeta (2026-09-17) ---
+    # Solo existe si la organizacion la configuro Y hay al menos un pago CARD;
+    # en un mixto se cobra unicamente sobre la parte que pasa por la terminal.
+    # En cualquier otro caso `comision.monto` es Decimal("0.00") y
+    # `total_a_cobrar` ES `total_sale`: el resto del checkout no puede
+    # distinguir esta venta de una anterior a la funcion.
+    #
+    # La comision NO se suma a `total_amount`: se persiste aparte para no
+    # inflar el reporte de ingresos ni el histórico (diseño §2, decision 6).
+    comision = calcular_comision(total_sale, sale_in.payments, pct_de_organizacion(_org_venta))
+    total_a_cobrar = (total_sale + comision.monto) if comision.monto > 0 else total_sale
+
     # Fase 1.3: cambio entregado al cliente. Se calcula al crear la venta y se
     # persiste para que el cuadre de turno NO recompute (evita drift si la
     # lógica retrospectiva cambia). Fórmula: excedente de pagos en efectivo
@@ -729,7 +747,10 @@ def create_sale(
         (Decimal(str(p.amount)) for p in sale_in.payments if p.method != PaymentMethod.CASH),
         Decimal(0),
     )
-    cash_needed = max(Decimal(0), total_sale - non_cash_paid)
+    # `total_a_cobrar`, no `total_sale`: si la comision no entrara aqui, en un
+    # pago mixto el sistema le devolveria al cliente de cambio exactamente el
+    # importe de la comision que le acaba de cobrar.
+    cash_needed = max(Decimal(0), total_a_cobrar - non_cash_paid)
     change_given = max(Decimal(0), cash_paid - cash_needed) if cash_paid > 0 else Decimal(0)
 
     # --- H-1: Server-side recompute + payment validation ---
@@ -739,7 +760,7 @@ def create_sale(
     # redondeo. Un cajero malicioso/confundido no puede registrar `amount=9999`
     # para una venta de $100.
     if sale_in.payments:
-        expected_total = total_sale
+        expected_total = total_a_cobrar
         tolerance = Decimal("0.01")
         # Pago insuficiente → 422
         if total_paid < (expected_total - tolerance):
@@ -850,6 +871,14 @@ def create_sale(
             client_uuid=sale_in.client_uuid,
         )
         db.add(sales_doc)
+
+    # Comision por pago con tarjeta: se CONGELA en el documento. La
+    # reimpresion y el reenvio idempotente la leen de aqui, jamas la
+    # recalculan. El porcentaje solo se guarda si la comision se aplico de
+    # verdad; si no, NULL -- asi una venta en efectivo de una organizacion con
+    # 3.5% configurado no arrastra un porcentaje que nunca se cobro.
+    sales_doc.card_surcharge_amount = comision.monto
+    sales_doc.card_surcharge_pct = comision.pct if comision.monto > 0 else None
 
     # Equivalente en dolares (informativo). Se congela el tipo de cambio
     # efectivo del momento para que el ticket y su reimpresion muestren el
@@ -998,6 +1027,10 @@ def create_sale(
         "paid": float(total_paid.quantize(Decimal("0.01"))),
         "change": float(change_response),
         "credit_debt": float(remaining_debt.quantize(Decimal("0.01"))),
+        # Comision por pago con tarjeta. 0.00 / None = no aplico. `total` de
+        # arriba es SOLO mercancia; lo que el cliente pago es la suma.
+        "card_surcharge_amount": float(comision.monto),
+        "card_surcharge_pct": float(comision.pct) if comision.monto > 0 else None,
         # Tipo de cambio congelado en la venta. None = la organizacion no tiene
         # equivalente en dolares configurado.
         "usd_rate": float(sales_doc.usd_rate) if sales_doc.usd_rate is not None else None,

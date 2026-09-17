@@ -75,6 +75,17 @@ class SalesDocument(Base, UUIDMixin, AuditMixin, TenantMixin):
     # cobro; es informativo (ver app/services/exchange_rate.py).
     usd_rate = Column(Numeric(10, 4), nullable=True)
 
+    # Comision por pago con tarjeta (2026-09-17), CONGELADA al cobrar.
+    # `total_amount` NO la incluye: es mercancia (+IVA +propina) y punto, para
+    # que el reporte de ingresos y el histórico no se muevan. El total que el
+    # cliente pago es `total_amount + card_surcharge_amount`.
+    # `card_surcharge_pct` solo se guarda cuando la comision se aplico de
+    # verdad; NULL = venta anterior a la funcion, organizacion sin comision, o
+    # venta sin pago con tarjeta.
+    # La regla de calculo vive en app/services/card_surcharge.py.
+    card_surcharge_pct = Column(Numeric(5, 2), nullable=True)
+    card_surcharge_amount = Column(Numeric(10, 2), default=0, server_default="0", nullable=False)
+
     requires_invoice = Column(Boolean, default=False)
 
     # Gastro — propina cobrada (se suma al total) y atribución al mesero de la
