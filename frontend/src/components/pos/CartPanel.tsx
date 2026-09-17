@@ -260,7 +260,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
         <button
           onClick={() => updateQty(key, item.quantity - 1)}
           className="w-11 h-11 rounded-lg flex items-center justify-center text-base font-bold transition-all hover:scale-105 active:scale-95"
-          style={{ background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.25)' }}
+          style={{ background: 'var(--dax-danger-soft)', color: 'var(--dax-danger)', border: '1px solid var(--dax-danger)' }}
         >
           <i className="fa-solid fa-minus text-sm" />
         </button>
@@ -279,7 +279,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
               if (e.key === 'Escape') setEditing(null)
             }}
             className="w-20 text-center font-black text-xl rounded-lg px-1 py-2 outline-none"
-            style={{ background: 'var(--dax-card)', border: '1px solid rgba(139,92,246,0.5)', color: 'var(--dax-text)' }}
+            style={{ background: 'var(--dax-card)', border: '1px solid var(--dax-accent)', color: 'var(--dax-text)' }}
             min="1" max={maxQty ?? undefined} step="1"
             autoFocus
           />
@@ -297,7 +297,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
           onClick={() => updateQty(key, item.quantity + 1)}
           disabled={maxQty !== undefined && item.quantity >= maxQty}
           className="w-11 h-11 rounded-lg flex items-center justify-center text-base font-bold transition-all hover:scale-105 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
-          style={{ background: 'rgba(34,197,94,0.15)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.25)' }}
+          style={{ background: 'var(--dax-success-soft)', color: 'var(--dax-success)', border: '1px solid var(--dax-success)' }}
         >
           <i className="fa-solid fa-plus text-sm" />
         </button>
@@ -313,7 +313,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
           <i className="fa-solid fa-shopping-cart text-indigo-400" />
           <span className="text-sm font-black" style={{ color: 'var(--dax-text)' }}>Carrito</span>
           {itemCount > 0 && (
-            <span className="bg-indigo-600 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full">
+            <span className="bg-dax-accent text-dax-on-accent text-[10px] font-black px-1.5 py-0.5 rounded-full">
               {itemCount}
             </span>
           )}
@@ -322,14 +322,17 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
           {!isEmpty && (
             <button
               onClick={onPark}
-              className="text-amber-400 hover:text-amber-300 text-xs flex items-center gap-1 transition-colors font-semibold"
+              className="text-dax-warning hover:brightness-110 text-sm min-h-[44px] flex items-center gap-1 transition-colors font-semibold"
               title="Guardar como pedido pendiente"
             >
               <i className="fa-solid fa-pause text-[10px]" /> Pausar
             </button>
           )}
           {!isEmpty && (
-            <button onClick={confirmarLimpiar} className="text-slate-500 hover:text-red-400 text-xs transition-colors">
+            <button
+              onClick={confirmarLimpiar}
+              className="text-dax-muted hover:text-dax-danger text-sm min-h-[44px] flex items-center gap-1 transition-colors"
+            >
               <i className="fa-solid fa-trash" /> Limpiar
             </button>
           )}
@@ -339,9 +342,9 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
       {/* Cliente — solo visible cuando hay uno seleccionado */}
       {customerName && (
         <div className="px-4 py-2.5 flex items-center gap-2" style={{ borderBottom: '1px solid var(--dax-row-border)' }}>
-          <i className="fa-solid fa-user text-slate-500 text-sm" />
+          <i className="fa-solid fa-user text-dax-muted text-sm" />
           <span className="text-sm flex-1 truncate font-medium" style={{ color: 'var(--dax-text)' }}>{customerName}</span>
-          <button onClick={onClearCustomer} className="text-slate-500 hover:text-red-400 text-sm">
+          <button onClick={onClearCustomer} className="text-dax-muted hover:text-dax-danger text-sm">
             <i className="fa-solid fa-xmark" />
           </button>
         </div>
@@ -351,9 +354,9 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
       <div className="flex-1 overflow-y-auto">
         {isEmpty ? (
           <div className="flex flex-col items-center justify-center h-full text-center p-8">
-            <i className="fa-solid fa-shopping-cart text-slate-700 text-4xl mb-3" />
-            <p className="text-slate-500 text-sm">Carrito vacío</p>
-            <p className="text-slate-600 text-xs mt-1">Busca y agrega productos</p>
+            <i className="fa-solid fa-shopping-cart text-dax-faint text-4xl mb-3" />
+            <p className="text-dax-muted text-sm">Carrito vacío</p>
+            <p className="text-dax-faint text-xs mt-1">Busca y agrega productos</p>
           </div>
         ) : (
           <div>
@@ -394,14 +397,17 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                     >
                       {displayItem.name}
                     </button>
-                    <button onClick={() => removeGroup(group)} className="text-slate-600 hover:text-red-400 text-sm flex-shrink-0 mt-0.5">
+                    <button
+                      onClick={() => removeGroup(group)}
+                      className="text-dax-muted hover:text-dax-danger text-sm flex-shrink-0 min-h-[40px] min-w-[40px] flex items-center justify-center rounded-lg -mt-1"
+                    >
                       <i className="fa-solid fa-xmark" />
                     </button>
                   </div>
 
                   {/* Línea 2: SKU + total piezas + tier badge + precio total */}
                   <div className="flex items-center gap-2 mb-2.5">
-                    <p className="text-xs font-mono text-slate-500">{displayItem.sku}</p>
+                    <p className="text-xs font-mono text-dax-muted">{displayItem.sku}</p>
                     {/* Total piezas: siempre visible */}
                     <span className="flex items-center gap-1 text-xs font-semibold tabular-nums" style={{ color: 'var(--dax-text-muted)' }}>
                       <i className="fa-solid fa-cube text-[9px] opacity-60" />
@@ -412,8 +418,8 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                       <span
                         className="text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1"
                         style={{
-                          background: isForcedPrice ? 'rgba(245,158,11,0.15)' : 'rgba(99,102,241,0.15)',
-                          color: isForcedPrice ? '#fbbf24' : '#a5b4fc',
+                          background: isForcedPrice ? 'var(--dax-warning-soft)' : 'var(--dax-accent-soft)',
+                          color: isForcedPrice ? 'var(--dax-warning)' : 'var(--dax-accent-text)',
                         }}
                       >
                         {isForcedPrice && <i className="fa-solid fa-bolt text-[8px]" />}
@@ -445,7 +451,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                   {/* Editor de descuento */}
                   {priceKey && editingDiscount === priceKey && (
                     <div className="flex items-center gap-2 mb-2">
-                      <span className="text-[10px]" style={{ color: 'var(--dax-text-faint)' }}>Descuento:</span>
+                      <span className="text-[10px]" style={{ color: 'var(--dax-text-muted)' }}>Descuento:</span>
                       <input
                         type="number"
                         value={discountInput}
@@ -460,12 +466,12 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                           if (e.key === 'Escape') setEditing(null)
                         }}
                         className="w-14 text-center text-xs rounded px-1 py-0.5 outline-none"
-                        style={{ background: 'var(--dax-card)', border: '1px solid rgba(139,92,246,0.5)', color: 'var(--dax-text)' }}
+                        style={{ background: 'var(--dax-card)', border: '1px solid var(--dax-accent)', color: 'var(--dax-text)' }}
                         min="0" max="100" step="1"
                         autoFocus
                       />
-                      <span className="text-xs text-slate-500">%</span>
-                      <button onClick={() => setEditing(null)} className="text-[9px] text-slate-500 hover:text-slate-300">✕</button>
+                      <span className="text-xs text-dax-muted">%</span>
+                      <button onClick={() => setEditing(null)} className="text-[9px] text-dax-muted hover:text-dax-text">✕</button>
                     </div>
                   )}
 
@@ -507,7 +513,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                             ×{boxEquiv}
                           </span>
                         ) : (
-                          <span className="flex items-center gap-1 text-xs font-semibold" style={{ color: 'var(--dax-text-faint)' }}>
+                          <span className="flex items-center gap-1 text-xs font-semibold" style={{ color: 'var(--dax-text-muted)' }}>
                             <i className="fa-solid fa-cube text-[10px]" /> Pza
                           </span>
                         )}
@@ -526,7 +532,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                         <div className="flex items-center gap-2">
                           <button disabled
                             className="w-11 h-11 rounded-lg flex items-center justify-center text-base font-bold opacity-20 cursor-not-allowed"
-                            style={{ background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.25)' }}>
+                            style={{ background: 'var(--dax-danger-soft)', color: 'var(--dax-danger)', border: '1px solid var(--dax-danger)' }}>
                             <i className="fa-solid fa-minus text-sm" />
                           </button>
                           <span className="w-20 text-center font-black text-xl tabular-nums opacity-30"
@@ -539,7 +545,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                               totalPiezas >= displayItem.stock
                             }
                             className="w-11 h-11 rounded-lg flex items-center justify-center text-base font-bold transition-all hover:scale-105 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
-                            style={{ background: 'rgba(34,197,94,0.15)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.25)' }}>
+                            style={{ background: 'var(--dax-success-soft)', color: 'var(--dax-success)', border: '1px solid var(--dax-success)' }}>
                             <i className="fa-solid fa-plus text-sm" />
                           </button>
                         </div>
@@ -560,8 +566,8 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                                 setPriceInput(String(unitItem.price ?? 0))
                               }
                             }}
-                            className="text-xs tabular-nums flex items-center gap-1 transition-colors"
-                            style={{ color: hasTiers ? '#a5b4fc' : 'var(--dax-text-faint)' }}
+                            className="text-sm tabular-nums flex items-center gap-1.5 min-h-[40px] px-2 rounded-lg transition-colors hover:bg-dax-elevated"
+                            style={{ color: hasTiers ? 'var(--dax-accent-text)' : 'var(--dax-text-muted)' }}
                             title="Cambiar precio / tier"
                           >
                             {hasTiers && <i className="fa-solid fa-tags text-[9px]" />}
@@ -569,8 +575,8 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                           </button>
                           <button
                             onClick={() => { setEditing({ key: priceKey!, mode: 'discount' }); setDiscountInput(String(unitItem.discount || 0)) }}
-                            className="text-xs tabular-nums transition-colors"
-                            style={{ color: (unitItem.discount ?? 0) > 0 ? 'rgb(251,191,36)' : 'var(--dax-text-faint)' }}
+                            className="text-sm tabular-nums min-h-[40px] min-w-[40px] px-2 rounded-lg transition-colors hover:bg-dax-elevated"
+                            style={{ color: (unitItem.discount ?? 0) > 0 ? 'var(--dax-warning)' : 'var(--dax-text-muted)' }}
                             title="Descuento"
                           >
                             {(unitItem.discount ?? 0) > 0 ? `-${unitItem.discount}%` : '%'}
@@ -591,11 +597,11 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                           <button
                             onClick={() => toggleCaja(group)}
                             disabled={!canAddCaja}
-                            className="text-xs font-bold px-2 py-1 rounded-lg flex items-center gap-1.5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                            className="text-sm font-bold px-3 min-h-[40px] rounded-lg flex items-center gap-1.5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                             style={{
-                              background: cajaActive ? 'rgba(99,102,241,0.25)' : 'rgba(99,102,241,0.10)',
-                              border: `1px solid ${cajaActive ? 'rgba(99,102,241,0.5)' : 'rgba(99,102,241,0.25)'}`,
-                              color: cajaActive ? '#c7d2fe' : '#a5b4fc',
+                              background: cajaActive ? 'var(--dax-accent)' : 'var(--dax-accent-soft)',
+                              border: '1px solid var(--dax-accent)',
+                              color: cajaActive ? 'var(--dax-on-accent)' : 'var(--dax-accent-text)',
                             }}
                           >
                             <i className="fa-solid fa-boxes-stacked text-[10px]" />
@@ -633,7 +639,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                       <div
                         key={cajaKey}
                         className="flex items-start gap-2 mt-2 pt-2"
-                        style={{ borderTop: '1px dashed rgba(99,102,241,0.25)' }}
+                        style={{ borderTop: '1px dashed var(--dax-accent)' }}
                       >
                         <span className="flex items-center gap-1.5 w-16 flex-shrink-0 text-xs font-bold text-indigo-400 mt-1">
                           <i className="fa-solid fa-box-open text-[11px]" />
@@ -651,11 +657,11 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                           <div className="flex items-center gap-1.5">
                             <span
                               className="text-[10px] font-bold px-1.5 py-0.5 rounded"
-                              style={{ background: 'rgba(99,102,241,0.18)', color: '#a5b4fc' }}
+                              style={{ background: 'var(--dax-accent-soft)', color: 'var(--dax-accent-text)' }}
                             >
                               Caja
                             </span>
-                            <span className="text-xs tabular-nums font-semibold whitespace-nowrap" style={{ color: 'var(--dax-text-faint)' }}>
+                            <span className="text-xs tabular-nums font-semibold whitespace-nowrap text-dax-muted">
                               {formatCurrency(cajaItem.price)}/cja
                             </span>
                           </div>
@@ -674,7 +680,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                                   }
                                 }}
                                 className="flex items-center gap-1 transition-colors hover:opacity-80"
-                                style={{ color: isCajaForced ? '#fbbf24' : 'var(--dax-text-muted)' }}
+                                style={{ color: isCajaForced ? 'var(--dax-warning)' : 'var(--dax-text-muted)' }}
                                 title="Forzar precio por pieza al vender caja"
                               >
                                 {isCajaForced && <i className="fa-solid fa-bolt text-[8px]" />}
@@ -683,7 +689,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                               {savingsPct >= 1 && (
                                 <span
                                   className="font-bold px-1 py-0.5 rounded"
-                                  style={{ background: 'rgba(16,185,129,0.15)', color: '#34d399' }}
+                                  style={{ background: 'var(--dax-success-soft)', color: 'var(--dax-success)' }}
                                   title={`Ahorras ${formatCurrency(basePz - unitPriceCaja)} por pieza vs menudeo (${formatCurrency(basePz)}/pz)`}
                                 >
                                   −{savingsPct}%
@@ -697,7 +703,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                             setForcedTier(cajaKey, null)
                             removeItem(cajaKey)
                           }}
-                          className="text-slate-600 hover:text-red-400 text-xs flex-shrink-0 mt-1"
+                          className="text-dax-muted hover:text-dax-danger text-sm flex-shrink-0 min-h-[40px] min-w-[40px] flex items-center justify-center rounded-lg"
                           title="Quitar cajas"
                         >
                           <i className="fa-solid fa-xmark" />
@@ -729,7 +735,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
       </div>
 
       {/* Totales */}
-      <div className="px-4 pt-3 pb-2 space-y-1.5 text-sm" style={{ borderTop: '1px solid var(--dax-border-dim)' }}>
+      <div className="px-4 pt-3 pb-2 space-y-1.5 text-base" style={{ borderTop: '1px solid var(--dax-border-dim)' }}>
         <div className="flex justify-between" style={{ color: 'var(--dax-text-muted)' }}>
           <span>Subtotal</span><span className="tabular-nums font-semibold">{formatCurrency(subtotal)}</span>
         </div>
@@ -739,10 +745,10 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
           {/* Izquierda — Descuento global */}
           {editingGlobalDisc ? (
             <div
-              className="rounded-lg px-2.5 py-2 flex items-center gap-1.5 bg-amber-500/20 border border-amber-500/55"
+              className="rounded-lg px-2.5 py-2 flex items-center gap-1.5 bg-dax-warning-soft border border-dax-warning"
               title="Descuento global al ticket"
             >
-              <i className="fa-solid fa-tag text-[10px] text-amber-200" />
+              <i className="fa-solid fa-tag text-[10px] text-dax-text" />
               <input
                 type="number"
                 min="0"
@@ -760,10 +766,10 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                   if (e.key === 'Escape') setEditingGlobalDisc(false)
                 }}
                 className="flex-1 min-w-0 text-right text-xs rounded px-1 py-0.5 outline-none tabular-nums font-bold"
-                style={{ background: 'var(--dax-card-solid)', border: '1px solid rgba(245,158,11,0.6)', color: 'var(--dax-text)' }}
+                style={{ background: 'var(--dax-card-solid)', border: '1px solid var(--dax-warning)', color: 'var(--dax-text)' }}
                 autoFocus
               />
-              <span className="text-xs font-bold text-amber-200">%</span>
+              <span className="text-xs font-bold text-dax-text">%</span>
             </div>
           ) : globalDiscount > 0 ? (
             <button
@@ -771,10 +777,11 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                 setEditingGlobalDisc(true)
                 setGlobalDiscInput(String(globalDiscount || 0))
               }}
-              className="rounded-lg px-2.5 py-2 bg-amber-500 border border-amber-400 text-white hover:bg-amber-600 transition-colors text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm"
+              className="rounded-lg px-2.5 py-2 bg-amber-500 border border-amber-400 hover:bg-amber-600 transition-colors text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm"
+              style={{ color: '#fff' }}
               title={`Descuento global -${globalDiscount}% (${formatCurrency(globalDiscountAmount)})`}
             >
-              <i className="fa-solid fa-tag text-[10px] text-white" aria-hidden="true" />
+              <i className="fa-solid fa-tag text-[10px]" style={{ color: '#fff' }} aria-hidden="true" />
               <span className="truncate">Desc. -{globalDiscount}%</span>
             </button>
           ) : (
@@ -784,10 +791,11 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                 setGlobalDiscInput(String(globalDiscount || 0))
               }}
               disabled={cart.length === 0}
-              className="rounded-lg px-2.5 py-2 bg-amber-500/70 border border-amber-400 text-white hover:bg-amber-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm"
+              className="rounded-lg px-2.5 py-2 bg-amber-500/70 border border-amber-400 hover:bg-amber-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm"
+              style={{ color: '#fff' }}
               title="Aplicar descuento global al ticket"
             >
-              <i className="fa-solid fa-tag text-[10px] text-white" aria-hidden="true" />
+              <i className="fa-solid fa-tag text-[10px]" style={{ color: '#fff' }} aria-hidden="true" />
               <span className="truncate">Descuento global</span>
             </button>
           )}
@@ -817,19 +825,21 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                   }
                 }}
                 disabled={cart.length === 0}
-                className="rounded-lg px-2.5 py-2 bg-indigo-500/70 border border-indigo-400 text-white hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm"
+                className="rounded-lg px-2.5 py-2 bg-indigo-500/70 border border-indigo-400 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm"
+                style={{ color: '#fff' }}
                 title="Aplica precio caja a todos los productos del carrito que tengan tier caja configurado y cantidad suficiente. Sobreescribe precios manuales."
               >
-                <i className="fa-solid fa-box text-[10px] text-white" aria-hidden="true" />
+                <i className="fa-solid fa-box text-[10px]" style={{ color: '#fff' }} aria-hidden="true" />
                 <span className="truncate">Aplicar caja</span>
               </button>
             ) : (
               <button
                 onClick={() => restoreAutoTier()}
-                className="rounded-lg px-2.5 py-2 bg-emerald-500 border border-emerald-400 text-white hover:bg-emerald-600 transition-colors text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm"
+                className="rounded-lg px-2.5 py-2 bg-emerald-500 border border-emerald-400 hover:bg-emerald-600 transition-colors text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm"
+                style={{ color: '#fff' }}
                 title={`Caja aplicada en ${appliedCount}/${totalCount} — clic para restaurar`}
               >
-                <i className="fa-solid fa-box text-[10px] text-white" aria-hidden="true" />
+                <i className="fa-solid fa-box text-[10px]" style={{ color: '#fff' }} aria-hidden="true" />
                 <span className="truncate">Caja {appliedCount}/{totalCount}</span>
               </button>
             )
@@ -837,7 +847,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
         </div>
 
         {requiresInvoice && (
-          <div className="flex justify-between text-amber-400 font-semibold">
+          <div className="flex justify-between text-dax-warning font-semibold">
             <span>IVA 16%</span><span className="tabular-nums">{formatCurrency(tax)}</span>
           </div>
         )}
@@ -867,8 +877,8 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
           </div>
         </div>
         <div className="flex justify-between items-baseline font-black pt-2" style={{ borderTop: '1px solid var(--dax-row-border)', color: 'var(--dax-text)' }}>
-          <span className="text-base uppercase tracking-wide">Total</span>
-          <span className="tabular-nums text-emerald-600 text-3xl">{formatCurrency(total)}</span>
+          <span className="text-lg uppercase tracking-wide">Total</span>
+          <span className="tabular-nums text-dax-text text-4xl">{formatCurrency(total)}</span>
         </div>
         {usdLine && (
           <div
@@ -884,8 +894,8 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
             onClick={() => setRequiresInvoice(!requiresInvoice)}
             className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors ${
               requiresInvoice
-                ? 'bg-amber-600/20 text-amber-400 border border-amber-600/30'
-                : 'text-slate-500 hover:text-slate-300'
+                ? 'bg-dax-warning-soft text-dax-text border border-dax-warning'
+                : 'text-dax-muted hover:text-dax-text'
             }`}
           >
             <i className={`fa-solid ${requiresInvoice ? 'fa-check-square' : 'fa-square'}`} />
@@ -896,38 +906,26 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
 
       {/* Botones de pago */}
       <div className="px-3 pb-3">
-        <div className="grid gap-1.5" style={{ gridTemplateColumns: '1.4fr 1fr 1fr 1fr' }}>
-          <button
-            onClick={() => onPay('CASH')}
-            disabled={isEmpty}
-            className="flex flex-col items-center justify-center gap-1.5 py-4 px-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            <i className="fa-solid fa-money-bill text-xl text-white" />
-            <span className="text-xs font-bold">Efectivo</span>
+        <div className="grid gap-2" style={{ gridTemplateColumns: '1.4fr 1fr 1fr 1fr' }}>
+          <button onClick={() => onPay('CASH')} disabled={isEmpty}
+            className="flex flex-col items-center justify-center gap-1 min-h-[56px] px-2 rounded-2xl bg-dax-accent text-dax-on-accent font-bold shadow-lg shadow-black/10 hover:brightness-110 transition disabled:opacity-30 disabled:cursor-not-allowed">
+            <i className="fa-solid fa-money-bill text-xl" aria-hidden="true" />
+            <span className="text-sm font-bold">Efectivo</span>
           </button>
-          <button
-            onClick={() => onPay('CARD')}
-            disabled={isEmpty}
-            className="flex flex-col items-center justify-center gap-1.5 py-4 px-2 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-md transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            <i className="fa-solid fa-credit-card text-xl text-white" />
-            <span className="text-xs">Tarjeta</span>
+          <button onClick={() => onPay('CARD')} disabled={isEmpty}
+            className="flex flex-col items-center justify-center gap-1 min-h-[56px] px-2 rounded-2xl bg-dax-elevated text-dax-text font-semibold hover:brightness-95 dark:hover:brightness-125 transition disabled:opacity-30 disabled:cursor-not-allowed">
+            <i className="fa-solid fa-credit-card text-xl" aria-hidden="true" />
+            <span className="text-sm">Tarjeta</span>
           </button>
-          <button
-            onClick={() => onPay('TRANSFER')}
-            disabled={isEmpty}
-            className="flex flex-col items-center justify-center gap-1.5 py-4 px-2 rounded-2xl bg-sky-600 hover:bg-sky-700 text-white font-semibold shadow-md transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            <i className="fa-solid fa-mobile-screen text-xl text-white" />
-            <span className="text-xs">Transfer.</span>
+          <button onClick={() => onPay('TRANSFER')} disabled={isEmpty}
+            className="flex flex-col items-center justify-center gap-1 min-h-[56px] px-2 rounded-2xl bg-dax-elevated text-dax-text font-semibold hover:brightness-95 dark:hover:brightness-125 transition disabled:opacity-30 disabled:cursor-not-allowed">
+            <i className="fa-solid fa-mobile-screen text-xl" aria-hidden="true" />
+            <span className="text-sm">Transfer.</span>
           </button>
-          <button
-            onClick={() => onPay('MIXED')}
-            disabled={isEmpty}
-            className="flex flex-col items-center justify-center gap-1.5 py-4 px-2 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-semibold shadow-md transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            <i className="fa-solid fa-layer-group text-xl text-white" />
-            <span className="text-xs">Mixto</span>
+          <button onClick={() => onPay('MIXED')} disabled={isEmpty}
+            className="flex flex-col items-center justify-center gap-1 min-h-[56px] px-2 rounded-2xl bg-dax-elevated text-dax-text font-semibold hover:brightness-95 dark:hover:brightness-125 transition disabled:opacity-30 disabled:cursor-not-allowed">
+            <i className="fa-solid fa-layer-group text-xl" aria-hidden="true" />
+            <span className="text-sm">Mixto</span>
           </button>
         </div>
       </div>
@@ -935,7 +933,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
       {/* Overlay: procesando */}
       {isProcessing && (
         <div
-          className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 backdrop-blur-sm"
+          className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3"
           style={{ background: 'rgba(0,0,0,0.55)' }}
         >
           <div className="flex flex-col items-center gap-2 px-6 py-4 rounded-2xl"
@@ -952,13 +950,13 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
       {/* Overlay: caja cerrada */}
       {sessionLocked && (
         <div
-          className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 backdrop-blur-sm"
+          className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3"
           style={{ background: 'rgba(0,0,0,0.55)' }}
         >
           <div className="flex flex-col items-center gap-3 px-6 py-5 rounded-2xl"
                style={{ background: 'var(--dax-card)', border: '1px solid var(--dax-border-dim)' }}>
             <div className="w-14 h-14 rounded-full flex items-center justify-center"
-                 style={{ background: 'rgba(99,102,241,0.15)' }}>
+                 style={{ background: 'var(--dax-accent-soft)' }}>
               <i className="fa-solid fa-lock text-2xl" style={{ color: 'var(--dax-accent)' }} />
             </div>
             <p className="text-sm font-black uppercase tracking-widest"

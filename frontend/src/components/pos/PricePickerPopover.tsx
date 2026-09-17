@@ -157,7 +157,7 @@ export function PricePickerPopover({
         <p className="text-xs font-bold uppercase tracking-widest"
            style={{ color: 'var(--dax-text-muted)' }}>Elegir precio</p>
         <button onClick={onClose}
-                className="text-slate-500 hover:text-slate-200 text-sm w-7 h-7 flex items-center justify-center rounded hover:bg-slate-700/40">
+                className="text-dax-muted hover:text-dax-text text-sm w-7 h-7 flex items-center justify-center rounded hover:bg-dax-elevated">
           <i className="fa-solid fa-xmark" />
         </button>
       </div>
@@ -209,12 +209,12 @@ export function PricePickerPopover({
         />
         <button
           onClick={submitFree}
-          className="text-xs font-bold rounded px-3 transition-colors"
+          className="text-sm font-bold rounded px-3 transition-colors"
           style={{
             height: 44,
-            background: 'rgba(99,102,241,0.2)',
-            color: '#c7d2fe',
-            border: '1px solid rgba(99,102,241,0.4)',
+            background: 'var(--dax-accent-soft)',
+            color: 'var(--dax-accent-text)',
+            border: '1px solid var(--dax-accent)',
           }}
         >
           Aplicar
@@ -226,8 +226,8 @@ export function PricePickerPopover({
         <div style={{ borderTop: '1px solid rgba(139,92,246,0.15)' }}>
           <button
             onClick={onResetToAuto}
-            className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-semibold transition-colors hover:bg-slate-700/30"
-            style={{ color: '#fbbf24' }}
+            className="w-full flex items-center justify-center gap-2 min-h-[44px] text-sm font-semibold transition-colors hover:bg-dax-elevated"
+            style={{ color: 'var(--dax-warning)' }}
           >
             <i className="fa-solid fa-rotate-left text-[11px]" />
             Volver a precio automático
@@ -254,8 +254,8 @@ function TierButton({
       className="w-full flex items-center justify-between rounded-lg px-3 transition-colors text-left"
       style={{
         height: 48,
-        background: active ? 'rgba(99,102,241,0.18)' : 'transparent',
-        border: active ? '1px solid rgba(99,102,241,0.5)' : '1px solid rgba(148,163,184,0.12)',
+        background: active ? 'var(--dax-accent-soft)' : 'transparent',
+        border: active ? '1px solid var(--dax-accent)' : '1px solid rgba(148,163,184,0.12)',
         color: 'var(--dax-text)',
       }}
     >

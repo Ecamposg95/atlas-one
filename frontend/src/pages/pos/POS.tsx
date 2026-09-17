@@ -391,6 +391,8 @@ export function POS() {
     setSearchParams(next, { replace: true })
   }, [searchParams, setSearchParams, loadOrder])
 
+  const actionBtn = 'flex items-center gap-2 text-sm font-bold px-3.5 rounded-xl min-h-[44px] transition-colors active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed border'
+
   // ----- No session / loading -----
   if (checkingSession) {
     return (
@@ -418,7 +420,7 @@ export function POS() {
       {/* Consolidated header — single bar. Inerte durante el cobro (ver efecto). */}
       <div
         ref={barraRef}
-        className={`flex items-center gap-2 flex-wrap px-4 py-2 flex-shrink-0 ${
+        className={`flex items-center gap-2 flex-wrap px-4 py-2.5 flex-shrink-0 ${
           payModal !== null ? 'opacity-50' : ''
         }`}
         style={{ background: 'var(--dax-surface)', borderBottom: '1px solid var(--dax-border-dim)' }}
@@ -428,7 +430,7 @@ export function POS() {
           <>
             <Link
               to="/atlas-pos"
-              className="flex items-center gap-1.5 text-xs font-semibold transition-colors"
+              className="flex items-center gap-1.5 text-sm font-semibold transition-colors"
               style={{ color: 'var(--dax-text-muted)' }}
             >
               <i className="fa-solid fa-chevron-left text-[10px]" />
@@ -441,27 +443,25 @@ export function POS() {
         {/* Tabs: Productos / Pendientes — moved up from left panel */}
         <button
           onClick={() => setLeftTab('products')}
-          className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors border ${
+          className={`flex items-center gap-2 text-sm font-semibold px-4 rounded-xl min-h-[44px] transition-colors border ${
             leftTab === 'products'
-              ? 'border-purple-500/60 text-white bg-purple-500/15'
-              : 'border-transparent text-slate-500 hover:text-white hover:bg-white/5'
+              ? 'border-dax-accent bg-dax-accent-soft text-dax-accent-text'
+              : 'border-transparent text-dax-muted hover:bg-dax-elevated'
           }`}
         >
-          <i className="fa-solid fa-barcode text-[10px]" /> Productos
+          <i className="fa-solid fa-barcode text-xs" aria-hidden="true" /> Productos
         </button>
         <button
           onClick={() => setLeftTab('pending')}
-          className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors border ${
+          className={`flex items-center gap-2 text-sm font-semibold px-4 rounded-xl min-h-[44px] transition-colors border ${
             leftTab === 'pending'
-              ? 'border-amber-500/60 text-white bg-amber-500/15'
-              : 'border-transparent text-slate-500 hover:text-white hover:bg-white/5'
+              ? 'border-dax-warning bg-dax-warning-soft text-dax-text'
+              : 'border-transparent text-dax-muted hover:bg-dax-elevated'
           }`}
         >
-          <i className="fa-solid fa-clock text-[10px]" /> Pendientes
+          <i className="fa-solid fa-clock text-xs" aria-hidden="true" /> Pendientes
           {pendingCount > 0 && (
-            <span className="bg-amber-500 text-black text-[10px] font-black px-1.5 py-0.5 rounded-full">
-              {pendingCount}
-            </span>
+            <span className="bg-dax-warning text-black text-[11px] font-black px-2 py-0.5 rounded-full">{pendingCount}</span>
           )}
         </button>
 
@@ -472,39 +472,24 @@ export function POS() {
         <div className="flex items-center gap-1.5 flex-wrap">
           <button
             onClick={() => setCashMovement('IN')}
-            className="flex items-center gap-1.5 text-xs font-bold px-2.5 rounded-lg transition-colors active:scale-95"
-            style={{
-              minHeight: 34,
-              background: 'rgba(16,185,129,0.12)',
-              border: '1.5px solid rgba(16,185,129,0.45)',
-              color: '#047857',
-            }}
+            className={actionBtn}
+            style={{ background: 'var(--dax-success-soft)', borderColor: 'var(--dax-success)', color: 'var(--dax-success)' }}
             title="Entrada de efectivo"
           >
             <i className="fa-solid fa-arrow-down text-xs" /> Entrada
           </button>
           <button
             onClick={() => setCashMovement('OUT')}
-            className="flex items-center gap-1.5 text-xs font-bold px-2.5 rounded-lg transition-colors active:scale-95"
-            style={{
-              minHeight: 34,
-              background: 'rgba(239,68,68,0.12)',
-              border: '1.5px solid rgba(239,68,68,0.45)',
-              color: '#b91c1c',
-            }}
+            className={actionBtn}
+            style={{ background: 'var(--dax-danger-soft)', borderColor: 'var(--dax-danger)', color: 'var(--dax-danger)' }}
             title="Salida de efectivo"
           >
             <i className="fa-solid fa-arrow-up text-xs" /> Salida
           </button>
           <button
             onClick={() => setReturnModal(true)}
-            className="flex items-center gap-1.5 text-xs font-bold px-2.5 rounded-lg transition-colors active:scale-95"
-            style={{
-              minHeight: 34,
-              background: 'rgba(245,158,11,0.14)',
-              border: '1.5px solid rgba(245,158,11,0.50)',
-              color: '#b45309',
-            }}
+            className={actionBtn}
+            style={{ background: 'var(--dax-warning-soft)', borderColor: 'var(--dax-warning)', color: 'var(--dax-warning)' }}
             title="Devoluciones"
           >
             <i className="fa-solid fa-rotate-left text-xs" /> Devolución
@@ -512,13 +497,8 @@ export function POS() {
           {canEditProducts && (
             <button
               onClick={() => setCreateProductOpen(true)}
-              className="flex items-center gap-1.5 text-xs font-bold px-2.5 rounded-lg transition-colors active:scale-95"
-              style={{
-                minHeight: 34,
-                background: 'rgba(13,148,136,0.14)',
-                border: '1.5px solid rgba(13,148,136,0.50)',
-                color: '#0f766e',
-              }}
+              className={actionBtn}
+              style={{ background: 'var(--dax-elevated)', borderColor: 'var(--dax-border-dim)', color: 'var(--dax-text-muted)' }}
               title="Crear nuevo producto"
             >
               <i className="fa-solid fa-plus text-xs" /> Producto
@@ -527,18 +507,13 @@ export function POS() {
           {offlineQueue.length > 0 && (
             <button
               onClick={() => setShowOfflineModal(true)}
-              className="flex items-center gap-1.5 text-xs font-bold px-2.5 rounded-lg transition-colors active:scale-95"
-              style={{
-                minHeight: 34,
-                background: 'rgba(234,179,8,0.14)',
-                border: '1.5px solid rgba(234,179,8,0.50)',
-                color: '#a16207',
-              }}
+              className={actionBtn}
+              style={{ background: 'var(--dax-warning-soft)', borderColor: 'var(--dax-warning)', color: 'var(--dax-warning)' }}
               title="Ventas pendientes de enviar"
             >
               <i className="fa-solid fa-cloud-arrow-up text-xs" />
               Offline
-              <span className="bg-amber-500 text-black text-[10px] font-black px-1.5 py-0.5 rounded-full ml-0.5">
+              <span className="bg-dax-warning text-black text-[11px] font-black px-2 py-0.5 rounded-full ml-0.5">
                 {offlineQueue.length}
               </span>
             </button>
@@ -571,13 +546,8 @@ export function POS() {
                 avisarFalloReimpresion(e)
               }
             }}
-            className="flex items-center gap-1.5 text-xs font-bold px-2.5 rounded-lg transition-colors active:scale-95"
-            style={{
-              minHeight: 34,
-              background: 'var(--dax-elevated)',
-              border: '1.5px solid var(--dax-border-dim)',
-              color: 'var(--dax-text-muted)',
-            }}
+            className={actionBtn}
+            style={{ background: 'var(--dax-elevated)', borderColor: 'var(--dax-border-dim)', color: 'var(--dax-text-muted)' }}
             title="Reimprimir último ticket"
           >
             <i className="fa-solid fa-print text-xs" /> Reimprimir último
@@ -585,8 +555,7 @@ export function POS() {
           <div className="w-px h-4 flex-shrink-0" style={{ background: 'var(--dax-border-dim)' }} />
           <button
             onClick={() => setClosingSession(true)}
-            className="flex items-center gap-1.5 text-xs font-semibold px-2.5 rounded-lg transition-colors hover:text-red-500"
-            style={{ minHeight: 34, color: 'var(--dax-text-muted)' }}
+            className="flex items-center gap-2 text-sm font-semibold px-3.5 rounded-xl min-h-[44px] text-dax-muted hover:text-dax-danger transition-colors"
             title="Cerrar turno"
           >
             <i className="fa-solid fa-lock text-xs" /> Cerrar turno

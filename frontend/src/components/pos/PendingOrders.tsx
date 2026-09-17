@@ -54,15 +54,18 @@ export function PendingOrders({ onLoadOrder }: Props) {
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid var(--dax-border-dim)' }}>
         <div className="flex items-center gap-2">
-          <i className="fa-solid fa-pause text-amber-400 text-sm" />
-          <span className="text-sm font-bold text-white">Tickets Pausados</span>
+          <i className="fa-solid fa-pause text-dax-warning text-sm" />
+          <span className="text-sm font-bold text-dax-text">Tickets Pausados</span>
           {parkedTickets.length > 0 && (
-            <span className="bg-amber-500 text-black text-[10px] font-black px-1.5 py-0.5 rounded-full">
+            <span className="bg-dax-warning text-black text-[10px] font-black px-1.5 py-0.5 rounded-full">
               {parkedTickets.length}
             </span>
           )}
         </div>
-        <button onClick={fetchParked} className="text-slate-500 hover:text-white text-xs">
+        <button
+          onClick={fetchParked}
+          className="text-dax-muted hover:text-dax-text text-sm min-h-[40px] min-w-[40px] flex items-center justify-center rounded-lg"
+        >
           <i className="fa-solid fa-rotate-right" />
         </button>
       </div>
@@ -70,9 +73,9 @@ export function PendingOrders({ onLoadOrder }: Props) {
       <div className="flex-1 overflow-y-auto p-3">
         {parkedTickets.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
-            <i className="fa-solid fa-pause text-slate-700 text-3xl mb-3" />
-            <p className="text-slate-600 text-sm">Sin tickets pausados</p>
-            <p className="text-slate-700 text-xs mt-1">Se actualiza cada 10 seg.</p>
+            <i className="fa-solid fa-pause text-dax-faint text-3xl mb-3" />
+            <p className="text-dax-muted text-sm">Sin tickets pausados</p>
+            <p className="text-dax-faint text-xs mt-1">Se actualiza cada 10 seg.</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -84,13 +87,13 @@ export function PendingOrders({ onLoadOrder }: Props) {
               return (
                 <div key={ticket.id} className="dax-card p-3 flex items-center justify-between gap-3">
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-mono text-indigo-400 truncate">{ticket.id.slice(-8).toUpperCase()}</p>
-                    <p className="text-sm text-white font-semibold">{formatCurrency(total)}</p>
-                    <p className="text-[10px] text-slate-500 truncate">
+                    <p className="text-xs font-mono text-dax-accent-text truncate">{ticket.id.slice(-8).toUpperCase()}</p>
+                    <p className="text-base text-dax-text font-bold tabular-nums">{formatCurrency(total)}</p>
+                    <p className="text-xs text-dax-muted truncate">
                       {itemCount} {itemCount === 1 ? 'artículo' : 'artículos'}
                       {ticket.notes ? ` · ${ticket.notes}` : ''}
                     </p>
-                    <p className="text-[10px] text-slate-600">{ts}</p>
+                    <p className="text-xs text-dax-faint">{ts}</p>
                   </div>
                   {deletingId === ticket.id ? (
                     <div className="flex gap-1 flex-shrink-0">
@@ -103,7 +106,7 @@ export function PendingOrders({ onLoadOrder }: Props) {
                       </button>
                       <button
                         onClick={() => setDeletingId(null)}
-                        className="text-slate-500 hover:text-white text-xs px-2 transition-colors"
+                        className="text-dax-muted hover:text-dax-text text-xs px-2 transition-colors"
                         title="Cancelar"
                       >
                         <i className="fa-solid fa-xmark" />
@@ -113,14 +116,14 @@ export function PendingOrders({ onLoadOrder }: Props) {
                     <>
                       <button
                         onClick={() => setDeletingId(ticket.id)}
-                        className="text-slate-600 hover:text-red-400 text-xs flex-shrink-0 transition-colors"
+                        className="text-dax-faint hover:text-dax-danger text-xs flex-shrink-0 transition-colors"
                         title="Descartar ticket"
                       >
                         <i className="fa-solid fa-trash" />
                       </button>
                       <button
                         onClick={() => onLoadOrder(ticket.id)}
-                        className="dax-btn-primary text-xs flex-shrink-0"
+                        className="dax-btn-primary text-xs flex-shrink-0 min-h-[44px]"
                       >
                         <i className="fa-solid fa-arrow-right" /> Reanudar
                       </button>
