@@ -31,6 +31,26 @@ class ReprintRequest(BaseModel):
     pin: Optional[str] = None
 
 
+def _cambio_del_ticket(sale: SalesDocument, total_paid: float) -> float:
+    """Cambio entregado al cliente, para el renglon CAM del ticket.
+
+    Se prefiere SIEMPRE `sales_documents.change_given`: es el numero que
+    `create_sale` le dijo al cajero y el que ya cuadro contra el cajon. La
+    resta `sum(pagos) - total_amount` NO sirve cuando hay comision de tarjeta,
+    porque `total_amount` excluye la comision mientras que el `Payment` de CARD
+    la incluye: una venta 100% tarjeta imprimia la comision entera como si
+    fuera cambio entregado.
+
+    El fallback (ventas viejas sin `change_given`) hace la misma resta pero
+    descontando la comision congelada, que es la formula correcta.
+    """
+    guardado = getattr(sale, "change_given", None)
+    if guardado is not None:
+        return max(0.0, float(guardado))
+    comision = float(getattr(sale, "card_surcharge_amount", 0) or 0)
+    return max(0.0, total_paid - float(sale.total_amount) - comision)
+
+
 def _assert_reimprimible(sale: SalesDocument) -> None:
     """C-18: una venta CANCELLED ya no representa un cobro. Servir su ticket
     limpio es exactamente el insumo del fraude por reciclaje de comprobantes:
@@ -380,13 +400,14 @@ def print_ticket_endpoint(
         payments_detail = [{"method": p.method, "amount": float(p.amount), "reference": p.reference or ""} for p in sale.payments]
         has_cash = any((p.method or "").upper() in {"CASH", "EFECTIVO"} for p in sale.payments)
         branch_opens_drawer = bool(getattr(sale.branch, "open_drawer_on_print", False))
+        total_paid = sum(float(p.amount) for p in sale.payments)
         raw_bytes = printer.build_ticket_bytes(
             sale=sale,
             cashier=current_user.username,
             organization=organization,
             branch=sale.branch,
-            paid=sum(float(p.amount) for p in sale.payments),
-            change=abs(sum(float(p.amount) for p in sale.payments) - float(sale.total_amount)),
+            paid=total_paid,
+            change=_cambio_del_ticket(sale, total_paid),
             method=sale.payments[0].method if sale.payments else "PENDING",
             is_reprint=False,
             returns=[r for r in sale.returns if r.status == 'APPROVED'],
@@ -441,9 +462,7 @@ def reprint_ticket_endpoint(
     printer, target_printer_name = _resolve_printer(current_user, organization)
 
     total_paid = sum(float(p.amount) for p in sale.payments)
-    change = total_paid - float(sale.total_amount)
-    if change < 0:
-        change = 0.0
+    change = _cambio_del_ticket(sale, total_paid)
     method = sale.payments[0].method if sale.payments else "MIXTO"
 
     try:
