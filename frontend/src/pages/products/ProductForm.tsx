@@ -3,6 +3,7 @@ import { fieldErrorsFromDetail, summarizeFieldErrors } from '../../utils/apiErro
 import { useNavigate, useParams } from 'react-router-dom'
 import { productsApi } from '../../api/products'
 import { organizationApi } from '../../api/organization'
+import { sortByName } from '../../utils/sortByName'
 import { useAuthStore } from '../../store/authStore'
 import { DaxCard } from '../../components/ui/DaxCard'
 import { Spinner } from '../../components/ui/Spinner'
@@ -55,8 +56,8 @@ export function ProductForm() {
   useEffect(() => {
     let cancelled = false
     const loaders: Promise<unknown>[] = [
-      productsApi.getDepartments().then((d) => { if (!cancelled) setDepartments(d) }),
-      productsApi.getBrands().then((b) => { if (!cancelled) setBrands(b) }),
+      productsApi.getDepartments().then((d) => { if (!cancelled) setDepartments(sortByName(d)) }),
+      productsApi.getBrands().then((b) => { if (!cancelled) setBrands(sortByName(b)) }),
     ]
     // Admin necesita la lista de sucursales para la matriz; cajero solo la propia.
     if (isAdmin) {

@@ -3,6 +3,7 @@ import { fieldErrorsFromDetail, summarizeFieldErrors } from '../../utils/apiErro
 import { useNavigate } from 'react-router-dom'
 import { productsApi } from '../../api/products'
 import { organizationApi } from '../../api/organization'
+import { sortByName } from '../../utils/sortByName'
 import { DaxCard } from '../../components/ui/DaxCard'
 import { Spinner } from '../../components/ui/Spinner'
 import { toast } from '../../store/toastStore'
@@ -50,8 +51,8 @@ export function AdminProductCreate() {
     ])
       .then(([depts, brs, bchs]) => {
         if (cancelled) return
-        setDepartments(depts)
-        setBrands(brs)
+        setDepartments(sortByName(depts))
+        setBrands(sortByName(brs))
         setBranches(bchs)
         const init: Record<number, BranchActivation> = {}
         for (const b of bchs) {

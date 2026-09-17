@@ -9,6 +9,7 @@ import { Spinner } from '../../components/ui/Spinner'
 import { Badge } from '../../components/ui/Badge'
 import type { Product, Department, Brand, ProductBranchStatus } from '../../types/products'
 import { formatCurrency } from '../../utils/currency'
+import { sortByName } from '../../utils/sortByName'
 import { toast } from '../../store/toastStore'
 import { ProductImageUploader } from '../../components/products/ProductImageUploader'
 
@@ -1111,10 +1112,10 @@ function ProductsHQView() {
 
   useEffect(() => {
     productsApi.getDepartments()
-      .then(setDepartments)
+      .then((d) => setDepartments(sortByName(d)))
       .catch(() => toast.error('No se pudieron cargar los departamentos.'))
     productsApi.getBrands()
-      .then(setBrands)
+      .then((b) => setBrands(sortByName(b)))
       .catch(() => toast.error('No se pudieron cargar las marcas.'))
   }, [])
 

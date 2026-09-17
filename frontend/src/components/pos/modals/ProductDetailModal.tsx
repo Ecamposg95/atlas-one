@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Product, Brand, Department, PackagingUnit } from '../../../types/products'
 import { formatCurrency } from '../../../utils/currency'
+import { sortByName } from '../../../utils/sortByName'
 import { productsApi } from '../../../api/products'
 import { inventoryApi } from '../../../api/inventory'
 import { useAuthStore } from '../../../store/authStore'
@@ -214,8 +215,8 @@ export function ProductDetailModal({
     Promise.all([productsApi.getBrands(), productsApi.getDepartments()])
       .then(([bs, ds]) => {
         if (cancelled) return
-        setBrands(bs)
-        setDepartments(ds)
+        setBrands(sortByName(bs))
+        setDepartments(sortByName(ds))
       })
       .catch(() => {})
     return () => { cancelled = true }

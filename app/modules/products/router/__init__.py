@@ -151,7 +151,12 @@ def list_brands(
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization),
 ):
-    brands = db.query(Brand).filter(Brand.organization_id == org_id).all()
+    brands = (
+        db.query(Brand)
+        .filter(Brand.organization_id == org_id)
+        .order_by(func.lower(Brand.name))
+        .all()
+    )
 
     counts = dict(
         db.query(Product.brand_id, func.count(Product.id))
