@@ -30,7 +30,7 @@ export interface CardSurcharge {
   totalDue: number
 }
 
-type Numerico = number | string | null | undefined
+export type Numerico = number | string | null | undefined
 
 /** Número redondeado a centavos. Entrada inválida → 0. */
 function cents(value: Numerico): number {
@@ -74,4 +74,55 @@ export function formatPct(pct: Numerico): string {
   const n = Number(pct)
   if (!Number.isFinite(n)) return '0'
   return String(Number(n.toFixed(2)))
+}
+
+/** Renglón de un pago mixto, en lo mínimo que hace falta para la comisión. */
+export interface MixedPaymentLine {
+  method: string
+  amount: Numerico
+}
+
+export interface MixedSurcharge {
+  /** ¿Hay al menos un renglón de tarjeta? Sin él el backend NO cobra comisión. */
+  hasCard: boolean
+  /** Suma de los renglones que NO son tarjeta: la base se descuenta de ahí. */
+  nonCardPaid: number
+  /** Lo que el backend va a cobrar de verdad con estos renglones. */
+  charged: CardSurcharge
+  /** Lo que costaría completar el faltante con tarjeta, exista o no el renglón. */
+  projected: CardSurcharge
+}
+
+/**
+ * Comisión de un pago mixto, con la misma condición que el backend.
+ *
+ * `app/services/card_surcharge.py::calcular_comision` devuelve CERO si ningún
+ * pago es de tarjeta. El modal ignoraba esa condición y mostraba "Comisión" y
+ * "Total a pagar" inflados en un mixto EFECTIVO+TRANSFERENCIA, pidiéndole al
+ * cliente un dinero que la venta nunca iba a registrar (ni como comisión, ni
+ * como cambio).
+ *
+ * Por eso van los dos números: `charged` es la verdad (lo que se cobra) y
+ * `projected` es la hipótesis que alimenta el botón «Completar con tarjeta»,
+ * que es justo el que crea el renglón de CARD que todavía no existe.
+ */
+export function mixedSurcharge(
+  total: Numerico,
+  lines: readonly MixedPaymentLine[],
+  pct: Numerico,
+): MixedSurcharge {
+  const renglones = lines || []
+  const hasCard = renglones.some((l) => String(l?.method || '').toUpperCase() === 'CARD')
+  const nonCardPaid = cents(
+    renglones
+      .filter((l) => String(l?.method || '').toUpperCase() !== 'CARD')
+      .reduce((s, l) => s + (Number(l?.amount) || 0), 0),
+  )
+  const projected = surchargeFor(total, nonCardPaid, pct)
+  return {
+    hasCard,
+    nonCardPaid,
+    charged: hasCard ? projected : surchargeFor(total, nonCardPaid, 0),
+    projected,
+  }
 }

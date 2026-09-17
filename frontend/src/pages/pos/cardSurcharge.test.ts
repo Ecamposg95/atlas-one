@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { formatPct, surchargeFor } from './cardSurcharge'
+import { formatPct, mixedSurcharge, surchargeFor } from './cardSurcharge'
 
 // Espejo en pantalla de `app/services/card_surcharge.py`: los dos tienen que
 // dar EXACTAMENTE el mismo centavo, porque el cajero lee uno y el backend
@@ -75,5 +75,62 @@ describe('formatPct', () => {
   it('entrada inválida devuelve 0', () => {
     expect(formatPct(null)).toBe('0')
     expect(formatPct('abc')).toBe('0')
+  })
+})
+
+// El backend solo cobra comisión si la venta trae un pago con tarjeta
+// (`app/services/card_surcharge.py::hay_pago_con_tarjeta`). El modal de pago
+// mixto no lo comprobaba: un mixto EFECTIVO+TRANSFERENCIA mostraba "Comisión"
+// y pedía de más por una comisión que nadie iba a cobrar.
+
+describe('mixedSurcharge', () => {
+  const pct = 3.5
+
+  it('sin línea de tarjeta no cobra comisión', () => {
+    const r = mixedSurcharge(1000, [
+      { method: 'CASH', amount: '500' },
+      { method: 'TRANSFER', amount: '514' },
+    ], pct)
+    expect(r.hasCard).toBe(false)
+    expect(r.charged.amount).toBe(0)
+    expect(r.charged.totalDue).toBe(1000)
+  })
+
+  it('sin línea de tarjeta sigue proyectando lo que costaría completarla', () => {
+    // Es lo que alimenta el botón "Completar con tarjeta": justo el caso en
+    // el que la línea de CARD todavía no existe.
+    const r = mixedSurcharge(1000, [{ method: 'CASH', amount: '600' }], pct)
+    expect(r.hasCard).toBe(false)
+    expect(r.projected.amount).toBe(14)
+    expect(r.projected.cardDue).toBe(414)
+  })
+
+  it('con línea de tarjeta cobra la comisión sobre lo no-tarjeta', () => {
+    const r = mixedSurcharge(1000, [
+      { method: 'CASH', amount: '600' },
+      { method: 'CARD', amount: '517.50' },
+    ], pct)
+    expect(r.hasCard).toBe(true)
+    expect(r.charged.amount).toBe(14)
+    expect(r.charged.totalDue).toBe(1014)
+    expect(r.nonCardPaid).toBe(600)
+  })
+
+  it('una línea de tarjeta vacía ya cuenta como tarjeta', () => {
+    // El cajero agregó el renglón y todavía no teclea el importe: el backend
+    // recibirá un pago CARD, así que la comisión que se muestra es real.
+    const r = mixedSurcharge(1000, [
+      { method: 'CASH', amount: '600' },
+      { method: 'CARD', amount: '' },
+    ], pct)
+    expect(r.hasCard).toBe(true)
+    expect(r.charged.amount).toBe(14)
+  })
+
+  it('con el porcentaje apagado todo es neutro', () => {
+    const r = mixedSurcharge(1000, [{ method: 'CARD', amount: '1000' }], 0)
+    expect(r.charged.amount).toBe(0)
+    expect(r.projected.amount).toBe(0)
+    expect(r.charged.totalDue).toBe(1000)
   })
 })

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { formatCurrency } from '../../../utils/currency'
-import { formatPct, surchargeFor } from '../../../pages/pos/cardSurcharge'
+import { formatPct, mixedSurcharge } from '../../../pages/pos/cardSurcharge'
 
 type Method = 'CASH' | 'CARD' | 'TRANSFER'
 
@@ -33,10 +33,10 @@ export function MixedPaymentModal({ total, surchargePct = 0, onClose, onConfirm 
   const paid = lines.reduce((s, l) => s + (parseFloat(l.amount) || 0), 0)
   // La comisión se calcula sobre lo que NO se paga con tarjeta, en vivo: si el
   // cajero mueve el renglón de efectivo, el total a pagar se mueve con él.
-  const nonCardPaid = lines
-    .filter((l) => l.method !== 'CARD')
-    .reduce((s, l) => s + (parseFloat(l.amount) || 0), 0)
-  const cargo = surchargeFor(total, nonCardPaid, surchargePct)
+  // `cargo` es lo que el backend va a cobrar de verdad (CERO mientras no haya
+  // un renglón de tarjeta); `proyectado` es lo que costaría completar el
+  // faltante con tarjeta, y es lo que anuncia el botón de abajo.
+  const { charged: cargo, projected: proyectado } = mixedSurcharge(total, lines, surchargePct)
   // Neutralidad: con la comisión apagada, `totalDue` es el `total` tal cual y
   // el modal se comporta exactamente como antes.
   const totalDue = cargo.amount > 0 ? cargo.totalDue : total
@@ -118,18 +118,18 @@ export function MixedPaymentModal({ total, surchargePct = 0, onClose, onConfirm 
           ))}
         </div>
 
-        {cargo.amount > 0 && (
+        {proyectado.amount > 0 && (
           <button
             onClick={() => {
               const idx = lines.findIndex((l) => l.method === 'CARD')
-              const monto = cargo.cardDue.toFixed(2)
+              const monto = proyectado.cardDue.toFixed(2)
               if (idx === -1) setLines((l) => [...l, { method: 'CARD', amount: monto, reference: '' }])
               else updateLine(idx, { amount: monto })
             }}
             className="dax-btn-secondary text-xs w-full justify-center mb-2"
             title="Pone en el renglón de tarjeta lo que falta, con la comisión incluida"
           >
-            <i className="fa-solid fa-credit-card" /> Completar con tarjeta ({formatCurrency(cargo.cardDue)})
+            <i className="fa-solid fa-credit-card" /> Completar con tarjeta ({formatCurrency(proyectado.cardDue)})
           </button>
         )}
 
