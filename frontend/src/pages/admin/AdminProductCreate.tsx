@@ -24,7 +24,7 @@ import {
 } from '../../components/products/types'
 import { useEnabledModulesStore } from '../../store/enabledModulesStore'
 import { ProductVariantsSection } from '../../components/products/ProductVariantsSection'
-import { toExtraVariants, type VariantRow } from '../../components/products/variantMatrix'
+import { splitPrincipal, toExtraVariants, type VariantRow } from '../../components/products/variantMatrix'
 
 export function AdminProductCreate() {
   const navigate = useNavigate()
@@ -116,8 +116,9 @@ export function AdminProductCreate() {
     })
     if (form.has_iva && !Number.isFinite(Number(form.tax_rate)))
       e.tax_rate = 'Escribe un número'
+    // La primera fila es la principal: su SKU es el base, no se valida aparte.
     const skus = new Set<string>([form.sku.trim().toLowerCase()])
-    variantRows.forEach((r, i) => {
+    splitPrincipal(variantRows).extras.forEach((r, i) => {
       const s = r.sku.trim().toLowerCase()
       if (!s) e[`variants.${i}.sku`] = 'SKU requerido'
       else if (skus.has(s)) e[`variants.${i}.sku`] = 'SKU repetido'
@@ -136,6 +137,16 @@ export function AdminProductCreate() {
     }
     setSubmitting(true)
     const stockNum = Number(form.initial_stock || '0')
+    // Matriz boutique: la primera combinación ES la variante principal
+    // (`color`/`size` del producto); el resto viajan como `extra_variants`.
+    const { principal, extras } = splitPrincipal(hasVariantsModule ? variantRows : [])
+    const variantPayload = principal
+      ? {
+          ...(principal.color ? { color: principal.color } : {}),
+          ...(principal.size ? { size: principal.size } : {}),
+          ...(extras.length > 0 ? { extra_variants: toExtraVariants(extras) } : {}),
+        }
+      : {}
     const payload = {
       name: form.name.trim(),
       sku: form.sku.trim(),
@@ -158,7 +169,7 @@ export function AdminProductCreate() {
         min_quantity: Number(p.min_quantity),
         unit_price: Number(p.unit_price),
       })),
-      ...(hasVariantsModule && variantRows.length > 0 ? { extra_variants: toExtraVariants(variantRows) } : {}),
+      ...variantPayload,
     }
     try {
       await productsApi.create(payload)
@@ -208,7 +219,7 @@ export function AdminProductCreate() {
             help="Para precios por cantidad (mayoreo, promo). Se aplica sobre el precio base."
           />
           {hasVariantsModule && (
-            <ProductVariantsSection baseSku={form.sku} rows={variantRows} onRowsChange={setVariantRows} />
+            <ProductVariantsSection baseSku={form.sku} rows={variantRows} onRowsChange={setVariantRows} firstIsPrincipal />
           )}
           <ProductBranchMatrixSection
             branches={branches} activation={branchActivation}

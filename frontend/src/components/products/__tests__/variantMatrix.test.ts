@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { buildVariantRows, parseList, toExtraVariants } from '../variantMatrix'
+import { buildVariantRows, parseList, splitPrincipal, toExtraVariants } from '../variantMatrix'
 
 describe('parseList', () => {
   it('separa por coma o salto de línea y deduplica sin mayúsculas', () => {
@@ -41,5 +41,30 @@ describe('toExtraVariants', () => {
     expect(toExtraVariants([row])).toEqual([{ color: 'Rojo', size: 'S', sku: 'PLY-ROJO-S' }])
     row.price = '130'; row.barcode = '750'
     expect(toExtraVariants([row])[0]).toMatchObject({ price: 130, barcode: '750' })
+  })
+})
+
+describe('splitPrincipal', () => {
+  it('sin filas no hay principal', () => {
+    expect(splitPrincipal([])).toEqual({ principal: null, extras: [] })
+  })
+  it('una sola fila es la principal y no deja extras', () => {
+    const rows = buildVariantRows('PLY', ['Rojo'], ['S'], [])
+    const { principal, extras } = splitPrincipal(rows)
+    expect(principal).toMatchObject({ color: 'Rojo', size: 'S' })
+    expect(extras).toEqual([])
+  })
+  it('con tres filas la primera es la principal y el resto son hermanas', () => {
+    const rows = buildVariantRows('PLY', ['Rojo'], ['S', 'M', 'L'], [])
+    const { principal, extras } = splitPrincipal(rows)
+    expect(principal?.size).toBe('S')
+    expect(extras.map((r) => r.size)).toEqual(['M', 'L'])
+    // El orden de la matriz es el que ve el usuario: no se reordena.
+    expect(extras).toEqual(rows.slice(1))
+  })
+  it('no muta la lista original', () => {
+    const rows = buildVariantRows('PLY', ['Rojo'], ['S', 'M'], [])
+    splitPrincipal(rows)
+    expect(rows).toHaveLength(2)
   })
 })

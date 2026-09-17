@@ -42,6 +42,11 @@ interface ProductCreate {
   image_url?: string | null
   description?: string | null
   barcode?: string | null
+  // Color/talla de la VARIANTE PRINCIPAL (matriz boutique): su primera
+  // combinación no va en `extra_variants`, va aquí. Sin ellos la principal
+  // sigue naciendo como "Estándar" (resto de los tenants).
+  color?: string
+  size?: string
   // Admin-only extensions — all optional to keep existing callers working
   has_iva?: boolean
   tax_rate?: number

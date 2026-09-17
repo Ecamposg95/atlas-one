@@ -6,15 +6,24 @@ interface Props {
   baseSku: string
   rows: VariantRow[]
   onRowsChange: (rows: VariantRow[]) => void
+  /** Alta de producto: la PRIMERA fila es la variante principal (SKU base,
+   *  código y precio de los campos de arriba), no una hermana más. En la
+   *  edición (agregar variantes a un producto que ya existe) va en false:
+   *  ahí la principal ya está creada y todas las filas son hermanas. */
+  firstIsPrincipal?: boolean
 }
 
 /**
  * Matriz color × talla (preset boutique). El admin escribe los colores y las
  * tallas separados por coma; cada combinación es una variante con su SKU
- * sugerido, su código de barras y (opcional) su precio. La variante principal
- * (SKU base) no aparece aquí: es la que capturan los campos de arriba.
+ * sugerido, su código de barras y (opcional) su precio.
+ *
+ * En el alta (`firstIsPrincipal`), la primera combinación ES la variante
+ * principal: usa el SKU base y los campos de arriba, y no se manda como
+ * variante extra. Así una prenda con S/M/L nace con tres variantes y no con
+ * cuatro (la vieja "Estándar" sin talla que el POS mostraba como "—").
  */
-export function ProductVariantsSection({ baseSku, rows, onRowsChange }: Props) {
+export function ProductVariantsSection({ baseSku, rows, onRowsChange, firstIsPrincipal = false }: Props) {
   const [colors, setColors] = useState('')
   const [sizes, setSizes] = useState('')
 
@@ -65,17 +74,36 @@ export function ProductVariantsSection({ baseSku, rows, onRowsChange }: Props) {
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
-                <tr key={r.key}>
-                  <td className="py-1 pr-2 font-semibold text-slate-200">{[r.color, r.size].filter(Boolean).join(' / ')}</td>
-                  <td className="py-1 pr-2"><input className="dax-input" value={r.sku} onChange={(e) => setRow(r.key, { sku: e.target.value })} /></td>
-                  <td className="py-1 pr-2"><input className="dax-input" value={r.barcode} inputMode="numeric" onChange={(e) => setRow(r.key, { barcode: e.target.value })} /></td>
-                  <td className="py-1 pr-2"><input className="dax-input" value={r.price} inputMode="decimal" onChange={(e) => setRow(r.key, { price: e.target.value })} /></td>
-                </tr>
-              ))}
+              {rows.map((r, i) => {
+                const esPrincipal = firstIsPrincipal && i === 0
+                return (
+                  <tr key={r.key}>
+                    <td className="py-1 pr-2 font-semibold text-slate-200">{[r.color, r.size].filter(Boolean).join(' / ')}</td>
+                    <td className="py-1 pr-2">
+                      <input className="dax-input" value={esPrincipal ? baseSku : r.sku} disabled={esPrincipal}
+                             onChange={(e) => setRow(r.key, { sku: e.target.value })} />
+                      {esPrincipal && <span className="text-[11px] text-slate-500 block">principal · SKU base</span>}
+                    </td>
+                    <td className="py-1 pr-2">
+                      {esPrincipal
+                        ? <span className="text-slate-500">código de arriba</span>
+                        : <input className="dax-input" value={r.barcode} inputMode="numeric" onChange={(e) => setRow(r.key, { barcode: e.target.value })} />}
+                    </td>
+                    <td className="py-1 pr-2">
+                      {esPrincipal
+                        ? <span className="text-slate-500">precio base</span>
+                        : <input className="dax-input" value={r.price} inputMode="decimal" onChange={(e) => setRow(r.key, { price: e.target.value })} />}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
-          <p className="text-[11px] text-slate-500 mt-1">{rows.length} variantes además de la principal.</p>
+          <p className="text-[11px] text-slate-500 mt-1">
+            {firstIsPrincipal
+              ? `${rows.length} variantes en total (la primera es la principal).`
+              : `${rows.length} variantes además de la principal.`}
+          </p>
         </div>
       )}
     </section>

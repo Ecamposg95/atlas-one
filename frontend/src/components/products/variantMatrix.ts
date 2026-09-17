@@ -80,3 +80,17 @@ export function toExtraVariants(rows: VariantRow[]): ExtraVariantPayload[] {
     return out
   })
 }
+
+/**
+ * Parte la matriz en variante principal + hermanas.
+ *
+ * La PRIMERA fila es la principal: sus color/talla viajan en el payload del
+ * producto (`color`/`size`) y su SKU es el SKU base, así que no se manda en
+ * `extra_variants`. Antes se mandaban todas y el backend creaba además una
+ * "Estándar" sin talla: una prenda con S/M/L nacía con cuatro variantes y el
+ * POS pintaba una celda "—" invendible.
+ */
+export function splitPrincipal(rows: VariantRow[]): { principal: VariantRow | null; extras: VariantRow[] } {
+  if (rows.length === 0) return { principal: null, extras: [] }
+  return { principal: rows[0], extras: rows.slice(1) }
+}
