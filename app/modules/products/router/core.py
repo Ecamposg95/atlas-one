@@ -122,11 +122,9 @@ def read_products(
     total_count = query.count()
     products_db = query.offset(skip).limit(limit).all()
     # --- Optimización N+1 Stock ---
-    # Colectar IDs de variantes principales
-    variant_ids = []
-    for p in products_db:
-        if p.variants:
-            variant_ids.append(p.variants[0].id)
+    # Colectar IDs de TODAS las variantes (no solo la principal), para que
+    # _compute_product_read pueda llenar el stock_total de cada una.
+    variant_ids = [v.id for p in products_db for v in p.variants]
 
     stock_cache = {}
     if variant_ids and target_branch_id:

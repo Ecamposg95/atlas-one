@@ -75,6 +75,7 @@ def _compute_product_read(
     stock_cache: dict[str, Decimal] = None,
     target_branch_id: int = None,
     branch_statuses_cache: dict[str, list] = None,
+    primary_variant_id: Optional[str] = None,
 ) -> ProductRead:
     """
     Convierte ORM Product -> ProductRead y agrega:
@@ -93,7 +94,10 @@ def _compute_product_read(
     real_branch_id = target_branch_id if target_branch_id is not None else current_user.branch_id
 
     if p.variants:
-        v = p.variants[0]
+        # La variante "principal" es la pedida (p. ej. la que empato un
+        # escaneo) o, si no, la primera en orden de creacion.
+        v = next((x for x in p.variants if x.id == primary_variant_id), p.variants[0])
+        p_read.matched_variant_id = v.id
         p_read.sku = v.sku
         p_read.barcode = v.barcode
         p_read.price = v.price
@@ -190,6 +194,29 @@ def _compute_product_read(
             if bs_for_branch and bs_for_branch.price_override is not None:
                 p_read.price = bs_for_branch.price_override
                 p_read.prices = []  # Tier prices don't apply when override is active
+
+        # Existencia por variante en la sucursal objetivo. Con una sola
+        # variante coincide con stock_total; con varias es lo que permite al
+        # POS mostrar cuantas piezas hay de cada talla.
+        def _qty(val):
+            if isinstance(val, tuple):
+                return val[0] or Decimal(0)
+            return val or Decimal(0)
+
+        faltantes = [vr.id for vr in p_read.variants if stock_cache is None or vr.id not in stock_cache]
+        directo: dict[str, Decimal] = {}
+        if faltantes and real_branch_id:
+            for row in (
+                db.query(StockOnHand.variant_id, StockOnHand.qty_on_hand)
+                .filter(StockOnHand.variant_id.in_(faltantes), StockOnHand.branch_id == real_branch_id)
+                .all()
+            ):
+                directo[row.variant_id] = row.qty_on_hand
+        for vr in p_read.variants:
+            if stock_cache is not None and vr.id in stock_cache:
+                vr.stock_total = _qty(stock_cache[vr.id])
+            else:
+                vr.stock_total = directo.get(vr.id, Decimal(0))
 
     return p_read
 

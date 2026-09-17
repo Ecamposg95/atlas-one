@@ -54,10 +54,18 @@ class ProductVariantRead(BaseModel):
     id: str # UUID
     sku: str
     barcode: Optional[str] = None
+    # Etiqueta y atributos (boutique). Antes no viajaban y el frontend no podia
+    # distinguir dos variantes del mismo producto.
+    variant_name: Optional[str] = None
+    color: Optional[str] = None
+    size: Optional[str] = None
     price: Decimal
     cost: Decimal
     has_iva: bool = False
     tax_rate: Decimal = 16.0
+    # Existencia de ESTA variante en la sucursal objetivo. La llena
+    # `_compute_product_read`; no existe en el ORM.
+    stock_total: Decimal = Decimal(0)
     prices: List[ProductPriceRead] = [] # Incluimos la lista de precios
     packaging_units: List[PackagingUnitRead] = [] # Empaques específicos de esta variante
     class Config:
@@ -152,6 +160,9 @@ class ProductRead(BaseModel):
 
     # En listados simples, devolvemos la variante principal aplanada
     variants: List[ProductVariantRead] = []
+    # Que variante representan los campos aplanados (sku/price/stock_total).
+    # En una busqueda por codigo es la que empato; si no, la primera.
+    matched_variant_id: Optional[str] = None
 
     # Campos computados para facilitar el frontend
     sku: Optional[str] = ""
