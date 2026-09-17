@@ -38,7 +38,10 @@ import {
 
 type PayMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'MIXED'
 type LeftTab = 'products' | 'pending'
-type Toast = { msg: string; type: 'success' | 'error' }
+// `sticky`: el aviso NO se va solo. Se reserva para el dinero que se perdió
+// (una venta encolada que el backend descartó): un toast de 3.5 s se lo puede
+// comer el ruido del mostrador y nadie se entera del descuadre.
+type Toast = { msg: string; type: 'success' | 'error'; sticky?: boolean }
 
 export function POS() {
   const { user } = useAuthStore()
@@ -68,9 +71,9 @@ export function POS() {
   const { branch } = useAuthStore()
   const isBranch = !!branch && branch.branch_type !== 'HQ'
 
-  const showToast = (msg: string, type: Toast['type'] = 'success') => {
-    setToast({ msg, type })
-    setTimeout(() => setToast(null), 3500)
+  const showToast = (msg: string, type: Toast['type'] = 'success', sticky = false) => {
+    setToast({ msg, type, sticky })
+    if (!sticky) setTimeout(() => setToast(null), 3500)
   }
 
   // ----- Session check -----
@@ -278,15 +281,25 @@ export function POS() {
 
   const runFlush = useCallback(async () => {
     try {
+      // El porcentaje de comisión primero: una venta con tarjeta encolada trae
+      // el importe que el POS calculó ANTES de perder la red. Si el
+      // administrador lo cambió mientras tanto, el backend la rechaza con 422
+      // y la cola la descarta. Refrescarlo no arregla el payload ya encolado,
+      // pero sí evita que las ventas SIGUIENTES caigan en lo mismo.
+      await loadSurcharge(true)
       const result = await flushPending((payload) => salesApi.create(payload as Parameters<typeof salesApi.create>[0]))
-      if (result.sent > 0) {
+      if (result.droppedMessages.length > 0) {
+        // Prioridad sobre el "enviadas": esto es dinero cobrado que no quedó
+        // registrado, y el aviso se queda en pantalla hasta que lo cierren.
+        showToast(result.droppedMessages.join(' · '), 'error', true)
+      } else if (result.sent > 0) {
         showToast(`${result.sent} venta(s) offline enviada(s)`)
       }
       await refreshOfflineQueue()
     } catch (e) {
       console.warn('[POS] flushPending error:', e)
     }
-  }, [refreshOfflineQueue])
+  }, [refreshOfflineQueue, loadSurcharge])
 
   useEffect(() => {
     // Initial flush + queue snapshot on mount
@@ -440,7 +453,16 @@ export function POS() {
           toast.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'
         }`}>
           <i className={`fa-solid ${toast.type === 'success' ? 'fa-check' : 'fa-xmark'}`} />
-          {toast.msg}
+          <span className="max-w-xs">{toast.msg}</span>
+          {toast.sticky && (
+            <button
+              onClick={() => setToast(null)}
+              className="ml-1 opacity-70 hover:opacity-100"
+              aria-label="Cerrar aviso"
+            >
+              <i className="fa-solid fa-xmark" />
+            </button>
+          )}
         </div>
       )}
 

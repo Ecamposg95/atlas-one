@@ -15,6 +15,9 @@
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+import { formatCurrency } from './currency'
+import { errorDetailText } from './errorDetail'
+
 const DB_NAME = 'atlas_pos_offline'
 const DB_VERSION = 1
 const STORE = 'pending_sales'
@@ -129,6 +132,43 @@ export interface FlushResult {
   sent: number
   dropped: number // 4xx (inválidas o duplicadas) — se quitan y se loggea
   kept: number // siguen pendientes (sin red aún o muy recientes)
+  /**
+   * Un aviso por cada venta descartada, con monto y motivo. El contador no
+   * basta: ese cobro YA ocurrió en el mundo real y no va a quedar registrado
+   * en ningún lado, así que la cajera tiene que enterarse de cuál fue y por
+   * qué (ver `droppedSaleMessage`).
+   */
+  droppedMessages: string[]
+}
+
+/** Lo que el cliente pagó según el payload encolado. 0 si no se puede leer. */
+function paidAmountOf(payload: unknown): number {
+  const pagos = (payload as { payments?: unknown })?.payments
+  if (!Array.isArray(pagos)) return 0
+  const suma = pagos.reduce((s: number, p: any) => s + (Number(p?.amount) || 0), 0)
+  return Number.isFinite(suma) ? suma : 0
+}
+
+/**
+ * Aviso para una venta encolada que el backend rechazó con 4xx.
+ *
+ * Se descarta a propósito (reintentarla daría el mismo 4xx para siempre), pero
+ * el cobro ya ocurrió: el cliente pagó y se llevó la mercancía. Un
+ * `console.warn` deja ese descuadre invisible, así que el texto lleva el monto
+ * y el motivo para que la cajera lo capture a mano o llame al gerente.
+ *
+ * El caso real que lo dispara: el administrador cambia el porcentaje de
+ * comisión mientras el POS está sin red; al reconectar, la venta con tarjeta
+ * encolada trae el importe viejo y el backend la rechaza con 422.
+ */
+export function droppedSaleMessage(entry: PendingSale, err: any): string {
+  const monto = formatCurrency(paidAmountOf(entry?.payload))
+  const status = err?.response?.status
+  const motivo = errorDetailText(
+    err?.response?.data?.detail,
+    status ? `el servidor la rechazó (HTTP ${status})` : 'el servidor la rechazó',
+  )
+  return `No se pudo registrar la venta de ${monto}: ${motivo}`
 }
 
 /**
@@ -142,7 +182,7 @@ export interface FlushResult {
 export async function flushPending(
   poster: (payload: unknown) => Promise<unknown>,
 ): Promise<FlushResult> {
-  const result: FlushResult = { sent: 0, dropped: 0, kept: 0 }
+  const result: FlushResult = { sent: 0, dropped: 0, kept: 0, droppedMessages: [] }
   let pending: PendingSale[]
   try {
     pending = await listPending()
@@ -184,6 +224,7 @@ export async function flushPending(
           )
           await removePending(entry.id).catch(() => {})
           result.dropped++
+          result.droppedMessages.push(droppedSaleMessage(entry, err))
         } else {
           // 5xx u otro: mantén para reintento posterior.
           try {
