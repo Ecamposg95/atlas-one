@@ -126,3 +126,31 @@ export function mixedSurcharge(
     projected,
   }
 }
+
+/**
+ * ¿Este `detail` de error habla de la comisión por pago con tarjeta?
+ *
+ * `create_sale` añade "(incluye comisión tarjeta N)" al 422 de pagos
+ * insuficientes cuando el servidor SÍ cobró comisión
+ * (`app/routers/sales.py`). Si el POS mandó el importe sin ella, es porque su
+ * caché del porcentaje quedó vieja: un POS abierto todo el día no se entera de
+ * que Empresa cambió el número. La señal sirve para recargar el porcentaje y
+ * pedirle a la cajera que reintente, en vez de dejarla repitiendo el mismo
+ * cobro rechazado.
+ *
+ * Tolerante con la forma del `detail`: texto en los `HTTPException` y arreglo
+ * de objetos en los 422 de validación de Pydantic.
+ */
+export function isCardSurchargeError(detail: unknown): boolean {
+  let texto: string
+  try {
+    texto = typeof detail === 'string' ? detail : JSON.stringify(detail ?? '')
+  } catch {
+    return false
+  }
+  const plano = texto
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+  return plano.includes('comision tarjeta')
+}

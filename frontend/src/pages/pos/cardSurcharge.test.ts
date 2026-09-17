@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { formatPct, mixedSurcharge, surchargeFor } from './cardSurcharge'
+import { formatPct, isCardSurchargeError, mixedSurcharge, surchargeFor } from './cardSurcharge'
 
 // Espejo en pantalla de `app/services/card_surcharge.py`: los dos tienen que
 // dar EXACTAMENTE el mismo centavo, porque el cajero lee uno y el backend
@@ -132,5 +132,35 @@ describe('mixedSurcharge', () => {
     expect(r.charged.amount).toBe(0)
     expect(r.projected.amount).toBe(0)
     expect(r.charged.totalDue).toBe(1000)
+  })
+})
+
+// El 422 de `create_sale` nombra la comisión cuando el servidor SÍ la cobró
+// ("...vs total 1000.00 (incluye comisión tarjeta 35.00)"). Es la señal de que
+// el porcentaje cacheado en el POS quedó viejo: hay que recargarlo y decirle a
+// la cajera que vuelva a intentar, en vez de dejarla reintentando lo mismo.
+
+describe('isCardSurchargeError', () => {
+  it('reconoce el 422 de create_sale con comisión', () => {
+    expect(isCardSurchargeError(
+      'Pagos insuficientes: recibido 1000.00 vs total 1000.00 (incluye comisión tarjeta 35.00)'
+    )).toBe(true)
+  })
+
+  it('tolera el texto sin acentos', () => {
+    expect(isCardSurchargeError('incluye comision tarjeta 35.00')).toBe(true)
+  })
+
+  it('no confunde el 422 de siempre', () => {
+    expect(isCardSurchargeError('Pagos insuficientes: recibido 900.00 vs total 1000.00')).toBe(false)
+  })
+
+  it('aguanta detalles que no son texto', () => {
+    expect(isCardSurchargeError(null)).toBe(false)
+    expect(isCardSurchargeError(undefined)).toBe(false)
+    expect(isCardSurchargeError({ code: 'PIN_INCORRECTO' })).toBe(false)
+    // Los 422 de Pydantic llegan como arreglo de objetos.
+    expect(isCardSurchargeError([{ msg: 'field required' }])).toBe(false)
+    expect(isCardSurchargeError([{ msg: 'incluye comisión tarjeta' }])).toBe(true)
   })
 })

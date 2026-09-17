@@ -11,7 +11,7 @@ import { usePOSStore } from '../../store/posStore'
 import { useAuthStore } from '../../store/authStore'
 import { useExchangeRateStore } from '../../store/exchangeRateStore'
 import { useCardSurchargeStore } from '../../store/cardSurchargeStore'
-import { surchargeFor } from './cardSurcharge'
+import { isCardSurchargeError, surchargeFor } from './cardSurcharge'
 import type { CashSession } from '../../types/cash'
 
 import { ProductSearch } from '../../components/pos/ProductSearch'
@@ -98,11 +98,18 @@ export function POS() {
     return () => clearInterval(id)
   }, [loadUsdRate])
 
-  // Comisión por pago con tarjeta. Se carga al entrar al POS; `pct = 0` (toda
+  // Comisión por pago con tarjeta. Se carga al entrar al POS y se refresca cada
+  // 30 min, igual que el tipo de cambio: un POS que lleva todo el día abierto
+  // conservaba el porcentaje viejo y cobraba de menos hasta que el backend lo
+  // rechazaba con un 422 en CADA venta con tarjeta. `pct = 0` (toda
   // organización que no la configuró) deja los modales exactamente como antes.
   const surchargePct = useCardSurchargeStore((s) => s.pct)
   const loadSurcharge = useCardSurchargeStore((s) => s.load)
-  useEffect(() => { loadSurcharge() }, [loadSurcharge])
+  useEffect(() => {
+    loadSurcharge()
+    const id = setInterval(() => loadSurcharge(true), 30 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [loadSurcharge])
 
   // Con el dinero ya contado, nada de lo que hay detrás del modal puede mover
   // el ticket: el total que el modal está cobrando se lee del store EN VIVO
@@ -247,7 +254,15 @@ export function POS() {
         // texto en los HTTPException de create_sale y como arreglo en los 422 de
         // validación de Pydantic: pintarlo crudo daba "[object Object]".
         const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
-        showToast(errorDetailText(detail, 'Error al procesar la venta'), 'error')
+        if (isCardSurchargeError(detail)) {
+          // El servidor cobró una comisión que este POS no conocía: su caché
+          // del porcentaje quedó vieja. Sin recargarla, la cajera reintenta el
+          // mismo cobro y recibe el mismo 422 indefinidamente.
+          loadSurcharge(true)
+          showToast('El porcentaje de comisión cambió; vuelve a intentar', 'error')
+        } else {
+          showToast(errorDetailText(detail, 'Error al procesar la venta'), 'error')
+        }
       }
     } finally {
       store.setIsProcessing(false)
