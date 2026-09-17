@@ -13,7 +13,12 @@ import time
 
 from app.core.database import get_db
 from app.models.organization import Organization
-from app.schemas.organization import OrganizationRead, OrganizationUpdate, OrganizationCreate
+from app.schemas.organization import (
+    ExchangeRateRead,
+    OrganizationCreate,
+    OrganizationRead,
+    OrganizationUpdate,
+)
 from app.core.security import get_current_user
 from app.models.users import Role
 
@@ -62,10 +67,13 @@ def update_organization(
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
 
+    # `exclude_unset` una sola vez: el bloque de permisos y el de escritura
+    # tienen que mirar exactamente el mismo diccionario.
+    data_to_update = org_in.dict(exclude_unset=True)
+
     # [HARDENING] Refined Logic: Check what is ACTUALLY changing
     if current_user.role not in ADMIN_ROLES:
         allowed_subset = {"printer_name", "ticket_header", "ticket_footer", "paper_width_mm"}
-        data_to_update = org_in.dict(exclude_unset=True)
 
         for key, new_val in data_to_update.items():
             current_val = getattr(org, key)
@@ -76,7 +84,24 @@ def update_organization(
                      print(f"[AUTH BLOCK] User {current_user.username} tried to change restricted field '{key}' from '{current_val}' to '{new_val}'")
                      require_admin(current_user)
 
-    for key, value in org_in.dict(exclude_unset=True).items():
+    # Equivalente en dolares: se valida la configuracion RESULTANTE (la que
+    # quedaria guardada), no el payload parcial. Asi un PUT que solo cambia el
+    # margen no puede dejar la organizacion en modo manual sin tipo capturado,
+    # y un PUT que no toca nada de USD ni siquiera entra aqui.
+    if any(k.startswith("usd_rate_") for k in data_to_update):
+        from app.services.exchange_rate import MODO_OFF, validar_config_usd
+
+        modo = (data_to_update.get("usd_rate_mode", org.usd_rate_mode) or MODO_OFF).strip().lower()
+        manual = data_to_update.get("usd_rate_manual", org.usd_rate_manual)
+        margen = data_to_update.get("usd_rate_margin", org.usd_rate_margin)
+        try:
+            validar_config_usd(modo, manual, margen)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+        if "usd_rate_mode" in data_to_update:
+            data_to_update["usd_rate_mode"] = modo  # normalizado a minusculas
+
+    for key, value in data_to_update.items():
         setattr(org, key, value)
 
     db.commit()
@@ -85,6 +110,75 @@ def update_organization(
 
 # [DEPRECATED] Creation handled via Platform Router
 # @router.post("/", ... )
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TIPO DE CAMBIO USD (2026-09-17)
+# Endpoint propio y barato para el POS: lo consume la cajera, que NO es admin y
+# no tiene por que leer RFC ni configuracion fiscal solo para pintar un numero.
+# Dos SELECT y cero llamadas de red.
+# ═════════════════════════════════════════════════════════════════════════════
+@router.get("/exchange-rate", response_model=ExchangeRateRead)
+def get_exchange_rate(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+    org_id: int = Depends(get_current_active_organization),
+):
+    """Tipo de cambio vigente de la organización. `rate = null` = no mostrar nada."""
+    from app.services.exchange_rate import MODO_OFF, resolve_usd_rate, ultimo_fix
+
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization context not found")
+
+    modo = (org.usd_rate_mode or MODO_OFF).strip().lower()
+    fix = ultimo_fix(db) if modo != MODO_OFF else None
+    resuelto = resolve_usd_rate(org, fix)
+
+    return ExchangeRateRead(
+        mode=modo,
+        rate=resuelto.rate if resuelto else None,
+        source=resuelto.source if resuelto else None,
+        # El FIX se expone aunque no haya tipo efectivo: el panel de Empresa lo
+        # muestra para que el dueño vea que el job SI esta bajando datos.
+        fix_rate=(resuelto.fix_rate if resuelto else None) or (fix.rate if fix else None),
+        fix_date=(resuelto.fix_date if resuelto else None) or (fix.rate_date if fix else None),
+        margin=org.usd_rate_margin or 0,
+        manual_rate=org.usd_rate_manual,
+    )
+
+
+@router.post("/exchange-rate/refresh")
+def refresh_exchange_rate(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+    org_id: int = Depends(get_current_active_organization),
+):
+    """Baja el FIX de Banxico a demanda, para no esperar al job de mañana."""
+    require_admin(current_user)
+
+    from app.core.exchange_rate_job import actualizar_fix_ahora
+    from app.services.banxico import token_configurado
+    from app.services.exchange_rate import ultimo_fix
+
+    token = token_configurado()
+    if not token:
+        raise HTTPException(
+            status_code=503,
+            detail="El servidor no tiene BANXICO_TOKEN configurado. Usa el modo manual.",
+        )
+
+    ok, mensaje = actualizar_fix_ahora(db, token)
+    if not ok:
+        raise HTTPException(status_code=503, detail=f"Banxico no respondió: {mensaje}")
+
+    fila = ultimo_fix(db)
+    return {
+        "ok": True,
+        "rate_date": fila.rate_date.isoformat() if fila else None,
+        "rate": float(fila.rate) if fila else None,
+        "source": fila.source if fila else None,
+    }
 
 
 @router.post("/logo")

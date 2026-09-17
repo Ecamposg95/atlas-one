@@ -89,12 +89,18 @@ async def startup_event():
     # entrega inmediata no cerró (fallo de handler, caída del proceso). No-op en SQLite.
     from app.core.outbox import start_outbox_worker
     start_outbox_worker()
+    # FIX de Banxico para el equivalente en dolares del POS. No-op en SQLite y
+    # sin BANXICO_TOKEN (ver el docstring del modulo).
+    from app.core.exchange_rate_job import start_exchange_rate_job
+    start_exchange_rate_job()
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     from app.core.outbox import stop_outbox_worker
     await stop_outbox_worker()
+    from app.core.exchange_rate_job import stop_exchange_rate_job
+    await stop_exchange_rate_job()
 
 
 # ── Middleware ────────────────────────────────────────────────────────────────
