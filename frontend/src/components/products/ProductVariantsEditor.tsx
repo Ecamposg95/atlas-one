@@ -38,7 +38,13 @@ export function ProductVariantsEditor({ product, onChanged }: Props) {
     setBusyId(v.id); setMsg(null)
     try {
       await productsApi.deleteVariant(v.id)
-      onChanged(await productsApi.getById(product.id))
+      // El DELETE ya aplicó — si el refetch falla, no es lo mismo que "no se
+      // pudo retirar": la variante ya no existe, solo falta refrescar la vista.
+      try {
+        onChanged(await productsApi.getById(product.id))
+      } catch {
+        setMsg('Variante retirada; recarga la página para ver los cambios.')
+      }
     } catch (err) {
       const e = err as { response?: { data?: { detail?: unknown } } }
       setMsg(errorDetailText(e?.response?.data?.detail, 'No se pudo retirar la variante.'))
@@ -99,18 +105,25 @@ function VariantRowEditor({ v, busy, onSave, onRemove }: {
   const [sku, setSku] = useState(v.sku)
   const [barcode, setBarcode] = useState(v.barcode ?? '')
   const [price, setPrice] = useState(String(v.price))
-  const dirty = color !== (v.color ?? '') || size !== (v.size ?? '') || sku !== v.sku || barcode !== (v.barcode ?? '') || Number(price) !== Number(v.price)
+  const priceNum = Number(price)
+  const priceOk = price.trim() !== '' && Number.isFinite(priceNum) && priceNum > 0
+  const otherDirty = color !== (v.color ?? '') || size !== (v.size ?? '') || sku !== v.sku || barcode !== (v.barcode ?? '')
+  const priceDirty = priceOk && priceNum !== Number(v.price)
+  const dirty = otherDirty || priceDirty
   return (
     <tr>
       <td className="py-1 pr-2"><input className="dax-input" value={color} onChange={(e) => setColor(e.target.value)} /></td>
       <td className="py-1 pr-2"><input className="dax-input" value={size} onChange={(e) => setSize(e.target.value)} /></td>
       <td className="py-1 pr-2"><input className="dax-input" value={sku} onChange={(e) => setSku(e.target.value)} /></td>
       <td className="py-1 pr-2"><input className="dax-input" value={barcode} onChange={(e) => setBarcode(e.target.value)} /></td>
-      <td className="py-1 pr-2"><input className="dax-input" value={price} inputMode="decimal" onChange={(e) => setPrice(e.target.value)} /></td>
+      <td className="py-1 pr-2">
+        <input className="dax-input" value={price} inputMode="decimal" onChange={(e) => setPrice(e.target.value)} />
+        {!priceOk && <span className="text-rose-400 text-[11px] block">Precio mayor a 0</span>}
+      </td>
       <td className="py-1 pr-2 text-slate-300">{Number(v.stock_total ?? 0)}</td>
       <td className="py-1 flex gap-1">
-        <button type="button" className="dax-btn-primary" disabled={!dirty || busy}
-                onClick={() => onSave({ color: color || null, size: size || null, sku, barcode: barcode || null, price: Number(price) })}>Guardar</button>
+        <button type="button" className="dax-btn-primary" disabled={!dirty || busy || !priceOk}
+                onClick={() => onSave({ color: color || null, size: size || null, sku, barcode: barcode || null, price: priceNum })}>Guardar</button>
         <button type="button" className="dax-btn-secondary" disabled={busy} onClick={onRemove}>Retirar</button>
       </td>
     </tr>

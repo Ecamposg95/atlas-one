@@ -296,7 +296,7 @@ export function ProductForm() {
             value={form} onChange={setField} errors={errors}
             departments={departments} brands={brands}
           />
-          {mode === 'edit' && loaded && (loaded.variants?.length ?? 0) > 1 && (
+          {mode === 'edit' && hasVariantsModule && loaded && (loaded.variants?.length ?? 0) > 1 && (
             <p className="text-[11px] text-amber-400">
               Estos campos editan la variante principal ({loaded.variants![0].variant_name}). Las demás se
               editan en la tabla de variantes.
@@ -308,6 +308,9 @@ export function ProductForm() {
             errors={errors}
             help="Para precios por cantidad (mayoreo, promo). Se aplica sobre el precio base."
           />
+          {mode === 'create' && hasVariantsModule && (
+            <ProductVariantsSection baseSku={form.sku} rows={variantRows} onRowsChange={setVariantRows} />
+          )}
           {mode === 'create' && isAdmin && (
             <ProductBranchMatrixSection
               branches={branches} activation={branchActivation}
@@ -323,9 +326,6 @@ export function ProductForm() {
                 ? 'Para stock en múltiples sucursales, usa el módulo de inventario tras crear.'
                 : 'El stock se aplica a tu sucursal.'}
             />
-          )}
-          {mode === 'create' && hasVariantsModule && (
-            <ProductVariantsSection baseSku={form.sku} rows={variantRows} onRowsChange={setVariantRows} />
           )}
           {mode === 'edit' && hasVariantsModule && loaded && (
             <ProductVariantsEditor product={loaded} onChanged={setLoaded} />

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { buildVariantRows, parseList, type VariantRow } from './variantMatrix'
 
@@ -24,6 +24,15 @@ export function ProductVariantsSection({ baseSku, rows, onRowsChange }: Props) {
   const setRow = (key: string, patch: Partial<VariantRow>) => {
     onRowsChange(rows.map((r) => (r.key === key ? { ...r, ...patch } : r)))
   }
+
+  // El SKU sugerido de cada fila se compone con el SKU base; si el admin lo
+  // edita después de escribir colores/tallas, las filas quedaban con el
+  // prefijo viejo. Regenerar solo cuando ya hay filas evita crear filas de la
+  // nada a partir de un baseSku vacío.
+  useEffect(() => {
+    if (rows.length > 0) regenerate(colors, sizes)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baseSku])
 
   return (
     <section className="space-y-3">

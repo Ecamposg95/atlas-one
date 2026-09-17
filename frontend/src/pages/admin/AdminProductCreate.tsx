@@ -206,6 +206,9 @@ export function AdminProductCreate() {
             errors={errors}
             help="Para precios por cantidad (mayoreo, promo). Se aplica sobre el precio base."
           />
+          {hasVariantsModule && (
+            <ProductVariantsSection baseSku={form.sku} rows={variantRows} onRowsChange={setVariantRows} />
+          )}
           <ProductBranchMatrixSection
             branches={branches} activation={branchActivation}
             onToggle={toggleBranch} onSetAll={setAllBranches} errors={errors}
@@ -215,9 +218,6 @@ export function AdminProductCreate() {
             branches={branches} enabledBranchIds={enabledBranchIds}
             footer="Para stock en múltiples sucursales, usa el módulo de inventario tras crear."
           />
-          {hasVariantsModule && (
-            <ProductVariantsSection baseSku={form.sku} rows={variantRows} onRowsChange={setVariantRows} />
-          )}
 
           <p className="text-[11px] text-slate-500">
             Precios escalonados y empaques se configuran desde el catálogo tras crear el producto.
