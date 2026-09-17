@@ -150,3 +150,41 @@ class TestExtraVariantsEnElAlta:
             soh = db.query(StockOnHand).filter(StockOnHand.variant_id == hermana.id,
                                                StockOnHand.branch_id == branch_a.id).one()
             assert soh.qty_on_hand == Decimal("0")
+
+
+class TestGuardDeRol:
+    """`require_module("variants")` solo mira el modulo de la org: sin guard de
+    rol, un VENDEDOR de la boutique podia crear variantes, cambiar precios y
+    retirar tallas. Mismo criterio que `delete_product` (_PRODUCT_ADVANCED_ROLES).
+    """
+
+    def test_vendedor_no_puede_crear_variantes(self, client, db, org, playera,
+                                               auth_vendedor_sin_sucursal):
+        p, v = playera
+        r = client.post(f"/api/products/{p.id}/variants",
+                        json={"variants": [{"color": "Rojo", "size": "M"}]},
+                        headers=_h(auth_vendedor_sin_sucursal, org))
+        assert r.status_code == 403, r.text
+        assert db.query(ProductVariant).filter(ProductVariant.product_id == p.id).count() == 1
+
+    def test_vendedor_no_puede_editar_variantes(self, client, db, org, playera,
+                                                auth_vendedor_sin_sucursal):
+        p, v = playera
+        r = client.put(f"/api/products/variants/{v.id}", json={"price": "1"},
+                       headers=_h(auth_vendedor_sin_sucursal, org))
+        assert r.status_code == 403, r.text
+        db.refresh(v)
+        assert Decimal(str(v.price)) == Decimal("100")
+
+    def test_vendedor_no_puede_retirar_variantes(self, client, db, org, playera,
+                                                 auth_vendedor_sin_sucursal, auth_admin):
+        p, v = playera
+        client.post(f"/api/products/{p.id}/variants",
+                    json={"variants": [{"color": "Rojo", "size": "M"}]},
+                    headers=_h(auth_admin, org))
+        nueva = db.query(ProductVariant).filter(ProductVariant.sku == "PLY-ROJO-M").one()
+        r = client.delete(f"/api/products/variants/{nueva.id}",
+                          headers=_h(auth_vendedor_sin_sucursal, org))
+        assert r.status_code == 403, r.text
+        db.refresh(nueva)
+        assert nueva.deleted_at is None

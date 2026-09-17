@@ -27,11 +27,19 @@ from app.modules.products.schemas import (
 )
 from app.modules.products.variant_label import COLOR_MAX, SIZE_MAX, clean_attr, variant_label
 
-from ._shared import _compute_product_read
+from ._shared import _PRODUCT_ADVANCED_ROLES, _compute_product_read
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _exigir_rol_avanzado(current_user: User, accion: str) -> None:
+    """`require_module("variants")` solo comprueba que la org tenga el modulo.
+    El CRUD de variantes toca precio, SKU y disponibilidad, asi que ademas pide
+    el mismo rol que `delete_product` (ADMINISTRADOR/GERENTE/DUENO/CAJERO)."""
+    if current_user.role not in _PRODUCT_ADVANCED_ROLES:
+        raise HTTPException(status_code=403, detail=f"No autorizado para {accion}")
 
 
 def _slug(texto: str) -> str:
@@ -204,6 +212,7 @@ def crear_variantes_endpoint(
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization),
 ):
+    _exigir_rol_avanzado(current_user, "crear variantes")
     if not body.variants:
         raise HTTPException(status_code=422, detail="Manda al menos una variante")
     producto = _producto_de_la_org(db, org_id, product_id)
@@ -225,6 +234,7 @@ def editar_variante(
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization),
 ):
+    _exigir_rol_avanzado(current_user, "editar variantes")
     v = _variante_de_la_org(db, org_id, variant_id)
     enviados = body.model_dump(exclude_unset=True)
     color_in = body.color if "color" in enviados else v.color
@@ -264,6 +274,7 @@ def retirar_variante(
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization),
 ):
+    _exigir_rol_avanzado(current_user, "retirar variantes")
     v = _variante_de_la_org(db, org_id, variant_id)
     vivas = [x for x in v.product.variants if x.deleted_at is None]
     if len(vivas) <= 1:
