@@ -307,7 +307,6 @@ async def upload_products(
     col_keys = set(rows[0].keys()) if rows else set()
     has_pkg_cols = any(k.startswith("e1") for k in col_keys)
     has_tier_cols = any(k.startswith("p1") for k in col_keys)
-    has_variant_cols = "color" in col_keys or "talla" in col_keys
 
     created_count = 0
     updated_count = 0
@@ -442,9 +441,12 @@ async def upload_products(
                     raw_barcode = _safe_str(row.get("codigo barras", ""))
                     if raw_barcode:
                         existing_variant.barcode = raw_barcode
-                    if has_variant_cols:
-                        # Solo tocar color/talla si el archivo trae esas
-                        # columnas — si no, comportamiento identico al actual.
+                    if raw_color or raw_talla:
+                        # Celda vacía no borra; para quitar color/talla usar
+                        # el panel de variantes. Igual que barcode/descripcion/
+                        # unidad arriba: solo se actualiza si la fila trae un
+                        # valor no vacío, nunca por la sola presencia de la
+                        # columna Color/Talla en el archivo.
                         nueva_clave = ((raw_color or "").lower(), (raw_talla or "").lower())
                         actual_clave = ((existing_variant.color or "").lower(), (existing_variant.size or "").lower())
                         if nueva_clave != actual_clave and _pareja_repetida(prod, raw_color, raw_talla, excepto_id=existing_variant.id):

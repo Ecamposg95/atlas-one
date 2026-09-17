@@ -188,6 +188,30 @@ class TestUploadConVariantes:
         assert v.color == "Rojo" and v.size == "S"
         assert v.variant_name == "Rojo / S"
 
+    def test_update_con_color_y_talla_en_blanco_no_borra_los_existentes(self, client, db, org, branch_a, auth_admin):
+        """El archivo trae las columnas Color/Talla (p. ej. porque viene de
+        un export) pero la celda de esta fila viene vacia: igual que
+        barcode/descripcion/unidad, una celda vacia no debe borrar el valor
+        que ya tiene la variante."""
+        p, v = _make_product(db, org, "Playera lisa", "PLY-R-M", 120, [(branch_a.id, True)])
+        v.color, v.size, v.variant_name = "Rojo", "M", "Rojo / M"
+        db.commit()
+
+        filas = [{"SKU": "PLY-R-M", "Nombre": "Playera lisa", "Departamento": "Playeras",
+                  "Precio Base": "125", "Costo": "60", "Stock": "2", "Color": "", "Talla": ""}]
+        content = self._csv(filas, self.CABECERAS)
+        r = client.post(
+            "/api/products/upload",
+            headers=_h(auth_admin, org),
+            files={"file": ("update_blanco.csv", content, "text/csv")},
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["updated"] == 1
+
+        db.refresh(v)
+        assert v.color == "Rojo" and v.size == "M"
+        assert v.variant_name == "Rojo / M"
+
     def test_update_reporta_pareja_repetida_como_fila_fallida(self, client, db, org, branch_a, auth_admin):
         """Si el Color/Talla que trae la fila de Update ya lo tiene otra
         variante del mismo producto, se reporta como fila fallida en vez de
