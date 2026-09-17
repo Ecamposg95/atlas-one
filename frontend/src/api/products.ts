@@ -8,6 +8,7 @@ import type {
   UploadPreviewResponse,
 } from '../types/products'
 import type { AdjustmentCreate, KardexMovement } from './inventory'
+import type { ExtraVariantPayload } from '../components/products/variantMatrix'
 
 interface ProductsResponse {
   items: Product[]
@@ -50,6 +51,7 @@ interface ProductCreate {
   uses_inventory?: boolean
   prices?: ProductPricePayload[]
   packaging_units?: PackagingUnitPayload[]
+  extra_variants?: ExtraVariantPayload[]
 }
 
 /**
@@ -232,6 +234,24 @@ export const productsApi = {
   restore: async (id: string): Promise<{ status: string; product_id: string; message: string }> => {
     const { data } = await client.post(`/products/${id}/restore`)
     return data
+  },
+
+  /** POST /api/products/{id}/variants — agrega variantes de color/talla (módulo `variants`). */
+  createVariants: async (productId: string, variants: ExtraVariantPayload[]): Promise<Product> => {
+    const { data } = await client.post<Product>(`/products/${productId}/variants`, { variants })
+    return data
+  },
+
+  updateVariant: async (
+    variantId: string,
+    patch: { color?: string | null; size?: string | null; sku?: string; barcode?: string | null; price?: number; cost?: number },
+  ): Promise<Product> => {
+    const { data } = await client.put<Product>(`/products/variants/${variantId}`, patch)
+    return data
+  },
+
+  deleteVariant: async (variantId: string): Promise<void> => {
+    await client.delete(`/products/variants/${variantId}`)
   },
 
   /**
