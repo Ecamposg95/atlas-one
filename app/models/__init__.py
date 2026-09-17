@@ -101,3 +101,7 @@ from app.modules.tables import models as _tables_models  # noqa: F401
 from app.modules.kitchen import models as _kitchen_models  # noqa: F401
 from app.modules.recipes import models as _recipes_models  # noqa: F401
 from app.modules.bar import models as _bar_models  # noqa: F401
+
+# 15. Tipo de cambio USD (tabla GLOBAL, sin organization_id — ver el docstring
+#     de app/models/exchange_rate.py). Registrada aqui para `create_all`.
+from .exchange_rate import ExchangeRate  # noqa: F401

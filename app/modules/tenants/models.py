@@ -187,6 +187,19 @@ class Organization(Base):
     # precio ya trae el IVA y se desglosa. Lo consume app/services/tax.py.
     price_includes_tax = Column(Boolean, default=False, server_default="false", nullable=False)
 
+    # Equivalente en dolares (2026-09-17). `usd_rate_mode`:
+    #   'off'    -> apagado: el POS y el ticket no muestran nada (DEFAULT, y es
+    #               lo que queda para todas las organizaciones ya existentes)
+    #   'auto'   -> FIX de Banxico del dia + `usd_rate_margin`
+    #   'manual' -> `usd_rate_manual`, capturado por el administrador
+    # VARCHAR con constantes en app/services/exchange_rate.py, NO enum de DB
+    # (CLAUDE.md §5: un enum nuevo obliga a ALTER TYPE por cada modo).
+    usd_rate_mode = Column(String(10), default="off", server_default="off", nullable=False)
+    usd_rate_manual = Column(Numeric(10, 4), nullable=True)
+    # Pesos que se suman al FIX en modo 'auto' (el spread de ventanilla del
+    # negocio). Puede ser negativo.
+    usd_rate_margin = Column(Numeric(10, 4), default=0, server_default="0", nullable=False)
+
     # SaaS
     status = Column(String, default="ACTIVE", index=True)  # ACTIVE, SUSPENDED
     plan = Column(String, default="FREE")

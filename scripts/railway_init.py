@@ -101,6 +101,13 @@ def run_migrations():
         # propósito: es el comportamiento histórico (precio neto + IVA encima);
         # ponerlo en TRUE cambiaría el total cobrado a clientes vivos.
         ("organization", "price_includes_tax", "ALTER TABLE organization ADD COLUMN price_includes_tax BOOLEAN NOT NULL DEFAULT FALSE;"),
+        # Equivalente en dolares 2026-09-17. Modo 'off' por DEFAULT a proposito:
+        # ninguna organizacion viva ve nada hasta que su dueño lo encienda.
+        # La tabla `exchange_rates` la crea `create_all` (modelo registrado en
+        # app/models/__init__.py); aqui solo van las columnas de tablas ya vivas.
+        ("organization", "usd_rate_mode",   "ALTER TABLE organization ADD COLUMN usd_rate_mode VARCHAR(10) NOT NULL DEFAULT 'off';"),
+        ("organization", "usd_rate_manual", "ALTER TABLE organization ADD COLUMN usd_rate_manual NUMERIC(10,4);"),
+        ("organization", "usd_rate_margin", "ALTER TABLE organization ADD COLUMN usd_rate_margin NUMERIC(10,4) NOT NULL DEFAULT 0;"),
     ]
 
     # Track 1 — Audit + cleanup de Payment huérfanos antes de NOT NULL.
