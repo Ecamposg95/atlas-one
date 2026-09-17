@@ -8,20 +8,44 @@ interface AuthStore {
   branch: Branch | null
   isAuthenticated: boolean
   hydrated: boolean
+  // true cuando OTRA pestaña de este equipo inició sesión con un usuario
+  // distinto. Es un aviso: el interceptor de `api/client.ts` lee el token de
+  // localStorage en cada request, así que a partir de ese momento esta
+  // pestaña ya autentica como el otro usuario aunque en pantalla siga el
+  // nombre anterior.
+  foreignSession: boolean
 
   setAuth: (user: User, token: string, org: Organization | null) => void
   setBranch: (branch: Branch | null) => void
   logout: () => void
   hydrate: () => void
+  dismissForeignSession: () => void
 }
 
-export const useAuthStore = create<AuthStore>((set) => ({
+// El listener de `storage` se instala una sola vez por pestaña.
+let storageListenerReady = false
+
+/**
+ * ¿Otra pestaña cambió la sesión bajo nuestros pies?
+ *
+ * `otroToken` es el valor que quedó en localStorage (lo que escribió la otra
+ * pestaña). Es ajeno solo si esta pestaña TIENE sesión y el token difiere. Un
+ * `otroToken` nulo es un logout ajeno, no una suplantación: no se avisa.
+ */
+function esSesionAjena(propio: string | null, otroToken: string | null): boolean {
+  if (!propio) return false
+  if (!otroToken) return false
+  return otroToken !== propio
+}
+
+export const useAuthStore = create<AuthStore>((set, get) => ({
   user: null,
   token: null,
   org: null,
   branch: null,
   isAuthenticated: false,
   hydrated: false,
+  foreignSession: false,
 
   setAuth: (user, token, org) => {
     localStorage.setItem('atlas_token', token)
@@ -30,7 +54,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
       localStorage.setItem('atlas_org_id', String(org.id))
       localStorage.setItem('atlas_org', JSON.stringify(org))
     }
-    set({ user, token, org, isAuthenticated: true })
+    set({ user, token, org, isAuthenticated: true, foreignSession: false })
   },
 
   setBranch: (branch) => {
@@ -48,7 +72,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     localStorage.removeItem('atlas_user')
     localStorage.removeItem('atlas_org')
     localStorage.removeItem('atlas_branch')
-    set({ user: null, token: null, org: null, branch: null, isAuthenticated: false })
+    set({ user: null, token: null, org: null, branch: null, isAuthenticated: false, foreignSession: false })
   },
 
   // Restaurar sesión desde localStorage al cargar la app
@@ -72,5 +96,20 @@ export const useAuthStore = create<AuthStore>((set) => ({
     } else {
       set({ hydrated: true })
     }
+
+    // Detectar que OTRA pestaña de este equipo cambió la sesión. localStorage
+    // es compartido; el evento `storage` solo llega a las OTRAS pestañas, que
+    // es justo lo que queremos.
+    if (typeof window !== 'undefined' && !storageListenerReady) {
+      storageListenerReady = true
+      window.addEventListener('storage', (ev) => {
+        if (ev.key !== 'atlas_token') return
+        if (esSesionAjena(get().token, ev.newValue)) {
+          set({ foreignSession: true })
+        }
+      })
+    }
   },
+
+  dismissForeignSession: () => set({ foreignSession: false }),
 }))

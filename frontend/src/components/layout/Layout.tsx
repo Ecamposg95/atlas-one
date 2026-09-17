@@ -4,6 +4,7 @@ import { Sidebar } from './Sidebar'
 import { BranchSwitcher } from './BranchSwitcher'
 import { ImpersonationBanner } from './ImpersonationBanner'
 import { AnnouncementBanner } from './AnnouncementBanner'
+import { ForeignSessionBanner } from './ForeignSessionBanner'
 import { Toaster } from '../ui/Toast'
 import { useAuthStore } from '../../store/authStore'
 import { useTheme } from '../../context/ThemeContext'
@@ -143,6 +144,7 @@ export function Layout() {
       )}
 
       <div className="flex flex-col flex-1 overflow-hidden min-w-0">
+        <ForeignSessionBanner />
         <ImpersonationBanner />
         <AnnouncementBanner />
         {/* ── Topbar ── */}
