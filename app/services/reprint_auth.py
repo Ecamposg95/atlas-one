@@ -46,6 +46,14 @@ BLOQUEO_SEGUNDOS = 15 * 60
 
 # (organization_id, user_id) -> marcas de tiempo de los intentos fallidos
 # dentro de la ventana vigente. Se podan al consultarse.
+#
+# `time.monotonic()`, NO `time.time()`: estas marcas solo se comparan entre si
+# dentro del mismo proceso (nunca se serializan ni se comparan contra un
+# timestamp externo), asi que lo correcto es el reloj monotono. Con
+# `time.time()` un salto del reloj de pared (NTP, resincronizacion del
+# hypervisor de WSL2, cambio de hora manual) puede hacer que `_vigentes` vea
+# `ahora - marca >= VENTANA_SEGUNDOS` para una marca recien puesta y la borre
+# de golpe, desactivando el bloqueo a mitad de una prueba (o en produccion).
 _INTENTOS_FALLIDOS: dict[tuple[int, int], list[float]] = {}
 
 
@@ -69,7 +77,14 @@ def es_venta_propia_reciente(sale, user: User) -> bool:
         # SQLite devuelve marcas sin zona; se asumen UTC, como las guarda el
         # server_default de SalesDocument.
         creada = creada.replace(tzinfo=timezone.utc)
-    return datetime.now(timezone.utc) - creada <= timedelta(minutes=VENTANA_VENTA_PROPIA_MINUTOS)
+    delta = datetime.now(timezone.utc) - creada
+    # `delta` nunca deberia ser negativo (la venta no puede haberse creado en
+    # el futuro); si lo es, es un desfase del reloj de pared entre la lectura
+    # que guardo `created_at` y esta — visto en la practica con lecturas
+    # puntuales de CLOCK_REALTIME que saltan varias horas y se corrigen solas.
+    # Tratar ese caso como "NO reciente" es la lectura segura: esta excepcion
+    # exime del PIN, asi que un desfase de reloj nunca debe ampliarla.
+    return timedelta(0) <= delta <= timedelta(minutes=VENTANA_VENTA_PROPIA_MINUTOS)
 
 
 def _supervisores_activos(db: Session, org_id: int, branch_id: Optional[int] = None) -> list[User]:
@@ -147,7 +162,7 @@ def _vigentes(marcas: list[float], ahora: float) -> list[float]:
 
 def bloqueo_restante(org_id: int, user_id: int) -> Optional[int]:
     """Segundos que faltan para poder reintentar, o None si no hay bloqueo."""
-    ahora = time.time()
+    ahora = time.monotonic()
     clave = (org_id, user_id)
     marcas = _vigentes(_INTENTOS_FALLIDOS.get(clave, []), ahora)
     if not marcas:
@@ -161,7 +176,7 @@ def bloqueo_restante(org_id: int, user_id: int) -> Optional[int]:
 
 
 def registrar_intento_fallido(org_id: int, user_id: int) -> None:
-    ahora = time.time()
+    ahora = time.monotonic()
     clave = (org_id, user_id)
     _INTENTOS_FALLIDOS[clave] = _vigentes(_INTENTOS_FALLIDOS.get(clave, []), ahora) + [ahora]
 
