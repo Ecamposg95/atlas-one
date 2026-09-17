@@ -163,10 +163,14 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
     })
   }
 
-  const cartQtyUnits = (productId: string): number => {
+  // Cuenta por variante cuando la hay: dos tallas del mismo producto no
+  // comparten existencia, y sumarlas bloqueaba la segunda talla al llegar al
+  // stock de la primera.
+  const cartQtyUnits = (productId: string, variantId?: string | null): number => {
     let total = 0
     for (const c of cart) {
       if (c.product_id !== productId) continue
+      if (variantId && c.variant_id && c.variant_id !== variantId) continue
       if (c.cart_key?.includes('::caja::')) {
         const cajaTier = c.prices?.find(p => p.price_name.toLowerCase().includes('caja'))
         total += c.quantity * (cajaTier?.min_quantity ?? 1)
@@ -178,17 +182,22 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
   }
 
   const addToCart = (p: Product) => {
+    const variantId = p.matched_variant_id ?? p.variants?.[0]?.id ?? undefined
+    const variant = p.variants?.find((v) => v.id === variantId)
+    const label = variant?.variant_name && variant.variant_name !== 'Estándar' ? variant.variant_name : undefined
     const stock = Number(p.stock_total ?? 0)
-    if (stock > 0 && cartQtyUnits(p.id) >= stock) {
+    if (stock > 0 && cartQtyUnits(p.id, variantId) >= stock) {
       setLimitId(p.id)
       setTimeout(() => setLimitId(null), 2000)
       return
     }
     addItem({
       product_id: p.id,
+      ...(variantId ? { variant_id: variantId, cart_key: variantId } : {}),
+      ...(label ? { variant_label: label } : {}),
       base_price: Number(p.price),
       sku: p.sku ?? '',
-      name: p.name,
+      name: label ? `${p.name} (${label})` : p.name,
       price: Number(p.price),
       quantity: 1,
       discount: 0,

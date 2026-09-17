@@ -41,13 +41,15 @@ export interface ProductVariant {
   id: string
   product_id: string
   sku: string
-  name: string
+  variant_name?: string | null   // "Rojo / M" o "Estándar"
+  color?: string | null
+  size?: string | null
   price: number
   cost: number
   barcode?: string | null
   has_iva?: boolean
   tax_rate?: number
-  stock: number
+  stock_total?: number | string  // Decimal del backend; usar Number()
   prices?: ProductPrice[]
   packaging_units?: PackagingUnit[]
 }
@@ -82,8 +84,10 @@ export interface Product {
   // Empaques de la variante principal
   packaging_units?: PackagingUnit[]
 
-  // Variantes completas
+  // Variantes completas (orden de creación)
   variants?: ProductVariant[]
+  // Qué variante representan sku/price/stock_total: la que empató un escaneo o la primera
+  matched_variant_id?: string | null
 
   // Stock por sucursal
   stock_levels?: StockLevel[]

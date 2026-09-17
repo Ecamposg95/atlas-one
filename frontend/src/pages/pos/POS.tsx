@@ -4,6 +4,7 @@ import { cashApi } from '../../api/cash'
 import { salesApi, parkedTicketsApi } from '../../api/sales'
 import type { CartItem } from '../../types/sales'
 import { saleLabel } from '../../types/sales'
+import { buildSaleItems } from './saleItems'
 import { printerApi } from '../../api/printer'
 import { requierePin } from '../../utils/reimpresion'
 import { usePOSStore } from '../../store/posStore'
@@ -126,50 +127,6 @@ export function POS() {
     return () => clearInterval(id)
   }, [])
 
-  // Convierte ítems del carrito a líneas de venta normalizadas.
-  // Los ítems de caja (cart_key includes '::caja::') se expanden a piezas:
-  //   quantity  → cajas × min_quantity (piezas reales para stock)
-  //   unit_price → tier.unit_price     (precio por pieza)
-  //   subtotal  → quantity × unit_price (conserva el valor monetario)
-  // Si hay descuento global, se aplica al unit_price de cada línea antes de enviar
-  // (distribuye proporcionalmente; el guard de descuento server-side de sales.py
-  // evalúa sobre el precio final, por lo que descuentos combinados > 50% se rechazan).
-  const buildSaleItems = () => {
-    const gd = store.globalDiscount || 0
-    const gdFactor = 1 - gd / 100
-    return store.cart.map((c) => {
-      if (c.cart_key?.includes('::caja::')) {
-        const tierId = c.cart_key.split('::caja::')[1]
-        const cajaTier = c.prices?.find((p) => p.id === tierId)
-        if (cajaTier && cajaTier.min_quantity > 0) {
-          const totalPiezas = c.quantity * cajaTier.min_quantity
-          const unitPrice = cajaTier.unit_price * gdFactor
-          return {
-            product_id: c.product_id,
-            sku: c.sku,
-            name: c.name,
-            unit_price: unitPrice,
-            price: unitPrice,
-            quantity: totalPiezas,
-            discount: c.discount,
-            subtotal: totalPiezas * unitPrice * (1 - c.discount / 100),
-          }
-        }
-      }
-      const unitPrice = c.price * gdFactor
-      return {
-        product_id: c.product_id,
-        sku: c.sku,
-        name: c.name,
-        unit_price: unitPrice,
-        price: unitPrice,
-        quantity: c.quantity,
-        discount: c.discount,
-        subtotal: c.quantity * unitPrice * (1 - c.discount / 100),
-      }
-    })
-  }
-
   /** Imprimir ticket nuevo vía agente local (fire-and-forget, no bloquea el POS) */
   const printViaAgent = (saleId: string) => {
     if (!savedPrinterName) return
@@ -222,7 +179,7 @@ export function POS() {
     const payload = {
       client_uuid: clientUuid,
       customer_id: store.customerId ?? undefined,
-      items: buildSaleItems(),
+      items: buildSaleItems(store.cart, store.globalDiscount),
       payments,
       doc_type: 'SALE',
       requires_invoice: store.requiresInvoice,

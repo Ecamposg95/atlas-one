@@ -65,6 +65,8 @@ export interface CartItemPackaging {
 
 export interface CartItem {
   product_id: string
+  variant_id?: string     // variante exacta (talla/color); el backend la prioriza sobre sku
+  variant_label?: string  // "Rojo / M" para el carrito y el ticket en pantalla
   cart_key?: string      // clave única en el carrito; si ausente usa product_id
   base_price?: number    // precio unitario original, para restaurar al salir de modo caja
   unit_kind?: 'piece' | 'package'  // 'package' = item vendido por caja; inmune a re-evaluación de tiers pieza
