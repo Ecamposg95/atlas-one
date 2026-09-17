@@ -858,7 +858,13 @@ def create_sale(
     # ningun calculo de totales, pagos, stock ni caja.
     if getattr(sales_doc, "usd_rate", None) is None:
         from app.services.exchange_rate import snapshot_usd_rate
-        sales_doc.usd_rate = snapshot_usd_rate(db, org_id)
+        # SAVEPOINT: si Banxico esta vivo pero la tabla/consulta revienta a
+        # nivel SQL (no solo un bug de Python), Postgres aborta la
+        # transaccion completa y el db.flush() de abajo tronaria con
+        # PendingRollbackError. El SAVEPOINT aisla las consultas del
+        # snapshot para que un fallo ahi nunca contamine el resto del cobro.
+        with db.begin_nested():
+            sales_doc.usd_rate = snapshot_usd_rate(db, org_id)
 
     db.flush()
 

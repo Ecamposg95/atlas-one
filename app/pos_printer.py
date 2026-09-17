@@ -337,7 +337,7 @@ class PosPrinter:
         line = f"{label_text:<{label_w}}{value:>{val_w}.2f}\n"
         return line.encode("latin-1", "replace")
 
-    def _usd_line(self, usd_rate, total_mxn: float) -> bytes:
+    def _usd_line(self, usd_rate: Optional[Decimal], total_mxn: float) -> bytes:
         """'USD (T.C. 18.5000):            12.34'. Vacio si la venta no trae tipo.
 
         El tipo de cambio viaja EN LA ETIQUETA, no en una linea aparte con el
@@ -348,12 +348,10 @@ class PosPrinter:
         La conversion la hace `app/services/exchange_rate.py::to_usd`, unica
         fuente del redondeo (el mismo que usa la pantalla del POS).
         """
-        if usd_rate is None:
-            return b""
-        from app.services.exchange_rate import to_usd
+        from app.services.exchange_rate import _dec, to_usd
 
-        tasa = Decimal(str(usd_rate))
-        if tasa <= 0:
+        tasa = _dec(usd_rate)
+        if tasa is None or tasa <= 0:
             return b""
         equivalente = to_usd(Decimal(str(total_mxn)), tasa)
         return self._total_line(f"USD (T.C. {tasa:.4f})", float(equivalente))

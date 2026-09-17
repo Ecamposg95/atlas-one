@@ -37,14 +37,33 @@ def _sale(usd_rate=None, total="185.00"):
     )
 
 
-def _build(sale, ancho=80):
+def _build_raw(sale, ancho=80) -> bytes:
     p = PosPrinter(paper_width_mm=ancho)
-    raw = p.build_ticket_bytes(
+    return p.build_ticket_bytes(
         sale, paid=Decimal("0"), change=Decimal("0"), method="CASH",
         cashier="Cajero Test", is_reprint=False, organization=_org(),
         branch=None, returns=None, payments_detail=None,
     )
-    return raw.decode("latin-1", "replace")
+
+
+def _build(sale, ancho=80):
+    return _build_raw(sale, ancho).decode("latin-1", "replace")
+
+
+def _lineas_visibles(sale, ancho=80):
+    """Lineas del ticket tal como saldrian en el papel: sin los comandos
+    ESC/POS de control (BOLD, CENTER, tamaño de fuente, corte...) que en el
+    buffer quedan pegados justo antes o despues de un texto sin un '\\n' de
+    por medio y que, medidos como caracteres normales, inflan el ancho de la
+    linea aunque el papel real no les de columna ninguna."""
+    p = PosPrinter(paper_width_mm=ancho)
+    raw = _build_raw(sale, ancho)
+    for nombre, secuencia in p.CMD.items():
+        if nombre == "LF":  # el salto de linea SI debe quedarse: es el separador
+            continue
+        raw = raw.replace(secuencia, b"")
+    texto = raw.decode("latin-1", "replace")
+    return [l.rstrip() for l in texto.split("\n")]
 
 
 def test_sin_tipo_de_cambio_no_imprime_nada():
@@ -59,27 +78,38 @@ def test_imprime_el_equivalente_y_el_tipo():
     assert "10.00" in texto  # 185.00 / 18.50
 
 
-def _visible(linea: str) -> str:
-    """Contenido imprimible de una línea, sin los bytes de control ESC/POS que
-    quedan pegados antes del texto (p. ej. el BOLD_OFF del TOTAL): en el papel
-    real esos bytes no ocupan columna, así que no cuentan para el ancho."""
-    return linea[linea.index("USD"):].rstrip()
+def _contenido_usd(linea: str):
+    """Desde la etiqueta 'USD' en adelante, con `partition` para no medir mal
+    si algun dia un nombre de producto contiene la subcadena 'USD' antes de
+    la etiqueta real. None si la línea no la trae."""
+    antes, sep, despues = linea.partition("USD")
+    if not sep:
+        return None
+    return (sep + despues).rstrip()
 
 
 def test_la_linea_cabe_en_papel_de_58mm():
-    texto = _build(_sale(usd_rate="18.5000"), ancho=58)
-    renglones = [_visible(l) for l in texto.split("\n") if "USD" in l]
-    assert renglones, "debe imprimirse la línea USD"
-    for l in renglones:
+    lineas = _lineas_visibles(_sale(usd_rate="18.5000"), ancho=58)
+    # Cobertura del ticket completo (no solo la línea nueva): el papel de
+    # 58mm/32 cols no debe desbordarse en ningún renglón.
+    for l in lineas:
         assert len(l) <= 32, f"línea de {len(l)} columnas: {l!r}"
+    # Ajuste exacto de la línea USD en particular.
+    usd = [c for c in (_contenido_usd(l) for l in lineas) if c is not None]
+    assert usd, "debe imprimirse la línea USD"
+    for c in usd:
+        assert len(c) <= 32, f"línea USD de {len(c)} columnas: {c!r}"
 
 
 def test_la_linea_cabe_en_papel_de_80mm():
-    texto = _build(_sale(usd_rate="18.5000"), ancho=80)
-    renglones = [_visible(l) for l in texto.split("\n") if "USD" in l]
-    assert renglones, "debe imprimirse la línea USD"
-    for l in renglones:
+    lineas = _lineas_visibles(_sale(usd_rate="18.5000"), ancho=80)
+    # Cobertura del ticket completo en 80mm/56 cols, igual que en 58mm.
+    for l in lineas:
         assert len(l) <= 56, f"línea de {len(l)} columnas: {l!r}"
+    usd = [c for c in (_contenido_usd(l) for l in lineas) if c is not None]
+    assert usd, "debe imprimirse la línea USD"
+    for c in usd:
+        assert len(c) <= 56, f"línea USD de {len(c)} columnas: {c!r}"
 
 
 def test_tipo_invalido_se_ignora():
