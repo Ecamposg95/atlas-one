@@ -55,6 +55,16 @@ class TestNeutralidad:
         assert r.json()["card_surcharge_amount"] == 0.0
         assert _doc(db, r.json()["sale_id"]).card_surcharge_amount == Decimal("0.00")
 
+    def test_el_mensaje_de_pago_insuficiente_no_cambia_sin_comision(
+        self, client, db, org, branch_a, cajero_a, auth_cajero_a
+    ):
+        # Sin comision el 422 tiene que ser byte a byte el de siempre: hay POS
+        # y bitacoras alla afuera que leen este texto.
+        _preparar(db, org, branch_a, cajero_a)
+        r = _vender(client, org, auth_cajero_a, [{"method": "CARD", "amount": "900.00"}])
+        assert r.status_code == 422, r.text
+        assert r.json()["detail"] == "Pagos insuficientes: recibido 900.00 vs total 1000.00"
+
     def test_el_efectivo_sigue_dando_cambio_igual(self, client, db, org, branch_a, cajero_a, auth_cajero_a):
         # Con comision configurada pero sin tarjeta, el billete grande de
         # siempre tiene que devolver exactamente el mismo cambio de siempre.
@@ -97,7 +107,12 @@ class TestCobro:
         _preparar(db, org, branch_a, cajero_a, pct="3.5")
         r = _vender(client, org, auth_cajero_a, [{"method": "CARD", "amount": "1000.00"}])
         assert r.status_code == 422, r.text
-        assert "1035.00" in r.json()["detail"]
+        # El mensaje nombra la comision: si solo dijera "total 1035.00" el
+        # cajero creeria que el sistema le esta inventando $35 al carrito.
+        assert r.json()["detail"] == (
+            "Pagos insuficientes: recibido 1000.00 vs total 1035.00 "
+            "(incluye comisión tarjeta 35.00)"
+        )
 
     def test_mixto_solo_cobra_la_parte_de_tarjeta(self, client, db, org, branch_a, cajero_a, auth_cajero_a):
         # Ejemplo B del diseño: $400 en efectivo, el resto con tarjeta.
@@ -148,6 +163,17 @@ class TestCobro:
         assert r.json()["card_surcharge_amount"] == 0.0
 
 
+    def test_el_sobrepago_anomalo_sigue_siendo_422_con_comision(
+        self, client, db, org, branch_a, cajero_a, auth_cajero_a
+    ):
+        # El guard de x10 se mide contra el total CON comision, pero un dedo
+        # gordo de $20,000 sobre una venta de $1,000 tiene que seguir rebotando.
+        _preparar(db, org, branch_a, cajero_a, pct="3.5")
+        r = _vender(client, org, auth_cajero_a, [{"method": "CARD", "amount": "20000.00"}])
+        assert r.status_code == 422, r.text
+        assert r.json()["detail"] == "Sobrepago anómalo, revisa el monto"
+
+
 class TestIdempotencia:
     def test_el_reenvio_devuelve_la_comision_congelada_sin_duplicar(
         self, client, db, org, branch_a, cajero_a, auth_cajero_a
@@ -176,3 +202,79 @@ class TestIdempotencia:
         venta_id = primera.json()["sale_id"]
         assert db.query(Payment).filter(Payment.sales_document_id == venta_id).count() == 1
         assert _doc(db, venta_id).card_surcharge_amount == Decimal("35.00")
+
+
+class TestVentaPendienteQueSeCompleta:
+    """La OTRA ruta que cobra: un documento PENDING que se termina de pagar.
+
+    `create_sale` reutiliza el documento cuando le llega el mismo `id`: borra
+    los pagos viejos y vuelve a calcularlo todo. Ahi la comision se cobra por
+    PRIMERA vez sobre una venta que ya tiene folio, y es exactamente el caso de
+    un credito que el cliente viene a liquidar con tarjeta.
+    """
+
+    VENTA_ID = "11111111-2222-3333-4444-555555555555"
+
+    def _postear(self, client, org, auth, pagos):
+        return client.post("/api/sales/", json={
+            "id": self.VENTA_ID,
+            "doc_type": "ORDER",
+            "items": [{"sku": "COM-01", "quantity": 1}],
+            "payments": pagos,
+        }, headers={**auth, "X-Organization-ID": str(org.id)})
+
+    def test_el_pendiente_que_se_liquida_con_tarjeta_cobra_la_comision(
+        self, client, db, org, branch_a, cajero_a, auth_cajero_a
+    ):
+        _preparar(db, org, branch_a, cajero_a, pct="3.5")
+
+        # 1) Se abre sin pagos: queda PENDING y sin comision, porque todavia no
+        #    hay ninguna tarjeta de por medio.
+        abierta = self._postear(client, org, auth_cajero_a, [])
+        assert abierta.status_code in (200, 201), abierta.text
+        assert abierta.json()["card_surcharge_amount"] == 0.0
+        assert abierta.json()["card_surcharge_pct"] is None
+        db.expire_all()
+        assert _doc(db, self.VENTA_ID).card_surcharge_amount == Decimal("0.00")
+
+        # 2) El cliente vuelve y paga con tarjeta: ahi si se cobra.
+        liquidada = self._postear(
+            client, org, auth_cajero_a, [{"method": "CARD", "amount": "1035.00"}]
+        )
+        assert liquidada.status_code in (200, 201), liquidada.text
+        cuerpo = liquidada.json()
+        assert cuerpo["sale_id"] == self.VENTA_ID
+        assert cuerpo["card_surcharge_amount"] == 35.0
+        assert cuerpo["card_surcharge_pct"] == 3.5
+        assert cuerpo["total"] == 1000.0
+        assert cuerpo["credit_debt"] == 0.0
+
+        db.expire_all()
+        venta = _doc(db, self.VENTA_ID)
+        # La comision NO infla el total: sigue siendo la mercancia de siempre.
+        assert venta.total_amount == Decimal("1000.00")
+        assert venta.card_surcharge_amount == Decimal("35.00")
+        assert venta.card_surcharge_pct == Decimal("3.50")
+        # Un solo pago: el de la primera pasada se borro, no se acumulo.
+        pagos = db.query(Payment).filter(
+            Payment.sales_document_id == self.VENTA_ID
+        ).all()
+        assert len(pagos) == 1
+        assert pagos[0].method == PaymentMethod.CARD
+        assert pagos[0].amount == Decimal("1035.00")
+
+    def test_el_pendiente_que_se_liquida_en_efectivo_no_cobra_comision(
+        self, client, db, org, branch_a, cajero_a, auth_cajero_a
+    ):
+        # Neutralidad en la misma ruta: sin tarjeta, el documento reutilizado
+        # queda igual que antes de la funcion.
+        _preparar(db, org, branch_a, cajero_a, pct="3.5")
+        assert self._postear(client, org, auth_cajero_a, []).status_code in (200, 201)
+        r = self._postear(client, org, auth_cajero_a, [{"method": "CASH", "amount": "1000.00"}])
+        assert r.status_code in (200, 201), r.text
+        assert r.json()["card_surcharge_amount"] == 0.0
+        assert r.json()["change"] == 0.0
+        db.expire_all()
+        venta = _doc(db, self.VENTA_ID)
+        assert venta.card_surcharge_amount == Decimal("0.00")
+        assert venta.card_surcharge_pct is None

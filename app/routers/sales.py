@@ -764,9 +764,20 @@ def create_sale(
         tolerance = Decimal("0.01")
         # Pago insuficiente → 422
         if total_paid < (expected_total - tolerance):
+            # Con comision aplicada el total a cobrar es mayor que el del
+            # carrito: el mensaje dice de donde sale la diferencia para que el
+            # cajero no crea que el sistema le inventa dinero a la venta. Sin
+            # comision el texto queda byte a byte como siempre.
+            detalle_comision = (
+                f" (incluye comisión tarjeta {float(comision.monto):.2f})"
+                if comision.monto > 0 else ""
+            )
             raise HTTPException(
                 status_code=422,
-                detail=f"Pagos insuficientes: recibido {float(total_paid):.2f} vs total {float(expected_total):.2f}"
+                detail=(
+                    f"Pagos insuficientes: recibido {float(total_paid):.2f} "
+                    f"vs total {float(expected_total):.2f}{detalle_comision}"
+                )
             )
         # Sobrepago anómalo (>10x) → 422 (subsume L-1 parcialmente)
         if expected_total > Decimal("0") and total_paid > expected_total * Decimal("10"):
