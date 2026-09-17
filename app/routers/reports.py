@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
 from decimal import Decimal
 from datetime import datetime, date, timedelta
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from zoneinfo import ZoneInfo
 
 _MX = ZoneInfo("America/Mexico_City")
@@ -37,6 +37,12 @@ from app.core.tenant_context import get_current_active_organization
 from app.crud.products import _is_admin
 
 CRITICAL_STOCK_THRESHOLD = 5
+
+
+def _describe_name(name: str, variant_name: Optional[str]) -> str:
+    """"Playera (Rojo / M)" o solo el nombre del producto para la variante estandar."""
+    etiqueta = (variant_name or "").strip()
+    return f"{name} ({etiqueta})" if etiqueta and etiqueta != "Estándar" else name
 
 # Roles de oficina central: los unicos que pueden mirar una sucursal que no es
 # la suya, o la organizacion entera.
@@ -402,6 +408,7 @@ def get_dashboard_stats(
     _low_stock_q = db.query(
         Product.name,
         ProductVariant.sku,
+        ProductVariant.variant_name,
         StockOnHand.qty_on_hand
     ).join(ProductVariant, Product.id == ProductVariant.product_id)\
      .join(StockOnHand, ProductVariant.id == StockOnHand.variant_id)\
@@ -533,7 +540,7 @@ def get_dashboard_stats(
             for p in top_products
         ],
         "low_stock": [
-            {"name": p.name, "sku": p.sku or "", "stock": float(p.qty_on_hand)}
+            {"name": _describe_name(p.name, p.variant_name), "sku": p.sku or "", "stock": float(p.qty_on_hand)}
             for p in low_stock_query
         ],
         "recent_sales": [
@@ -844,7 +851,7 @@ def get_command_center_stats(
     # Inventory Alerts — same threshold as the branch counter so both numbers agree.
     # Non-admins (CAJERO/GERENTE) see only their branch's critical stock (A2-16).
     _alerts_q = db.query(
-        Product.name, StockOnHand.qty_on_hand, Branch.name.label("branch_name")
+        Product.name, ProductVariant.variant_name, StockOnHand.qty_on_hand, Branch.name.label("branch_name")
     ).select_from(StockOnHand)\
      .join(ProductVariant)\
      .join(Product)\
@@ -863,7 +870,7 @@ def get_command_center_stats(
     for ls in low_stock:
         alerts.append({
             "type": "CRITICAL",
-            "msg": f"Stock crítico ({float(ls.qty_on_hand)}) en {ls.name}",
+            "msg": f"Stock crítico ({float(ls.qty_on_hand)}) en {_describe_name(ls.name, ls.variant_name)}",
             "source": ls.branch_name,
             "time": _now_iso,
         })
@@ -1049,7 +1056,7 @@ def export_dashboard_csv(
 
     # --- Low stock ---
     _low_q = db.query(
-        Product.name, ProductVariant.sku, StockOnHand.qty_on_hand
+        Product.name, ProductVariant.sku, ProductVariant.variant_name, StockOnHand.qty_on_hand
     ).join(ProductVariant, Product.id == ProductVariant.product_id)\
      .join(StockOnHand, ProductVariant.id == StockOnHand.variant_id)\
      .filter(
@@ -1096,7 +1103,7 @@ def export_dashboard_csv(
     writer.writerow(["Alertas Stock Bajo"])
     writer.writerow(["SKU", "Producto", "Existencia"])
     for r in low_stock:
-        writer.writerow([r.sku or "", r.name or "", f"{float(r.qty_on_hand or 0):.2f}"])
+        writer.writerow([r.sku or "", _describe_name(r.name, r.variant_name) or "", f"{float(r.qty_on_hand or 0):.2f}"])
 
     output.seek(0)
     filename = f"reports_{start_date}_{end_date}.csv"

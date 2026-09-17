@@ -18,6 +18,16 @@ from decimal import Decimal
 # Importamos tus modelos reales
 from app.models import SalesDocument, Payment, SalesLineItem
 
+
+def _describe_variant(variant) -> str:
+    """"Playera (Rojo / M)" o solo el nombre del producto para la variante estandar."""
+    nombre = variant.product.name if variant is not None and variant.product else "Producto"
+    etiqueta = (variant.variant_name or "").strip() if variant is not None else ""
+    if etiqueta and etiqueta != "Estándar":
+        return f"{nombre} ({etiqueta})"
+    return nombre
+
+
 class PosPrinter:
     # Compact OXXO-style layout (2026-04-29 v2):
     # Use the FULL printable width on each paper size so no horizontal whitespace
@@ -174,9 +184,7 @@ class PosPrinter:
                     r_qty = float(item.quantity)
                     r_amt = float(item.refund_amount)
                     total_returned += r_amt
-                    p_name = "Producto"
-                    if item.variant and item.variant.product:
-                        p_name = item.variant.product.name
+                    p_name = _describe_variant(item.variant) if item.variant else "Producto"
                     raw += self._return_line(r_qty, p_name, r_amt)
 
         raw += sep
