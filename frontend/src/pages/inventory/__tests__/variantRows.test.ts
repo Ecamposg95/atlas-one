@@ -13,6 +13,8 @@ const playera: Product = {
 }
 const gorra: Product = { ...playera, id: 'p2', sku: 'GOR', name: 'Gorra', stock_total: 9,
   variants: [{ id: 'v-g', product_id: 'p2', sku: 'GOR', variant_name: 'Estándar', price: 50, cost: 20, stock_total: '9' }] }
+const camisa: Product = { ...playera, id: 'p3', sku: 'CAM', name: 'Camisa', stock_total: 5,
+  variants: [{ id: 'v-c', product_id: 'p3', sku: 'CAM-S', variant_name: 'Rojo / S', barcode: '7501234567890', price: 200, cost: 120, stock_total: '5' }] }
 
 describe('expandVariantRows', () => {
   it('un renglón por variante con etiqueta y existencia propia', () => {
@@ -26,5 +28,12 @@ describe('expandVariantRows', () => {
     expect(rows).toHaveLength(1)
     expect(rows[0].qty).toBe(9)
     expect(rows[0].variant.id).toBe('p2')
+  })
+  it('con una sola variante, aunque tenga nombre, la etiqueta es el nombre del producto a secas', () => {
+    const rows = expandVariantRows([camisa])
+    expect(rows).toHaveLength(1)
+    expect(rows[0].label).toBe('Camisa')
+    expect(rows[0].sku).toBe('CAM-S')
+    expect(rows[0].barcode).toBe('7501234567890')
   })
 })

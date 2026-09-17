@@ -221,7 +221,14 @@ export function ProductDetailModal({
     return () => { cancelled = true }
   }, [editing])
 
-  const displayStock = Number(product?.stock_total ?? product?.stock ?? 0)
+  // Con varias tallas, "Stock actual" debe seguir a la variante elegida en el
+  // selector, no quedarse pegado a la que matcheó el escaneo (o la primera).
+  const selectedVariantStock = selectedVariantId
+    ? product?.variants?.find(v => v.id === selectedVariantId)?.stock_total
+    : undefined
+  const displayStock = selectedVariantStock != null
+    ? Number(selectedVariantStock)
+    : Number(product?.stock_total ?? product?.stock ?? 0)
   const viewTiers = useMemo(() => {
     const raw = (product?.prices ?? [])
       .slice()

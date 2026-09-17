@@ -13,8 +13,11 @@ import { TablaDesplazable } from '../ui/TablaDesplazable'
 
 // Un renglón por variante — con varias tallas, cada renglón lleva su propio
 // variant_id para que "Ajustar stock" no siempre pegue a la primera variante.
+// `label` es la etiqueta a mostrar (con variante si aplica); `name` se deja
+// intacto como el nombre real del producto (lo usa el prefill del editor).
 interface ProductRow extends Product {
-  variant_id: string
+  variant_id?: string
+  label: string
 }
 
 // ─── Tier palette + SectionHeader ─────────────────────────────────────────────
@@ -106,12 +109,16 @@ export function ProductsBranchView() {
       const res = await productsApi.list({ search: q, limit: 100 })
       const rows: ProductRow[] = expandVariantRows(res.items ?? []).map((row) => ({
         ...row.product,
-        name: row.label,
+        label: row.label,
         sku: row.sku,
         barcode: row.barcode,
-        price: row.variant.price,
+        // El precio con override de sucursal vive en row.product.price (el backend lo aplica
+        // ahí), no en variant.price — usar variant.price perdería el override por sucursal.
+        price: row.product.price,
         stock_total: row.qty,
-        variant_id: row.variant.id,
+        // Sin variantes reales no hay a qué ajustar — deja variant_id sin definir para que
+        // el modal de ajuste muestre "Producto sin variante" en vez de mandar el UUID del producto.
+        variant_id: (row.product.variants && row.product.variants.length > 0) ? row.variant.id : undefined,
       }))
       setItems(rows)
     } catch (e: unknown) {
@@ -292,7 +299,7 @@ export function ProductsBranchView() {
             <ul className="divide-y divide-stone-200 dark:divide-slate-800">
               {visible.map((p) => (
                 <ProductRow
-                  key={p.variant_id}
+                  key={p.variant_id ?? p.id}
                   product={p}
                   onView={() => setFichaTarget(p)}
                   onEdit={() => openEdit(p)}
@@ -379,7 +386,7 @@ function ProductRow({ product: p, onView, onEdit, onStock }: RowProps) {
 
       {/* Name + meta */}
       <div className="flex-1 min-w-0">
-        <p className="font-semibold text-slate-900 dark:text-slate-100 truncate">{p.name}</p>
+        <p className="font-semibold text-slate-900 dark:text-slate-100 truncate">{p.label}</p>
         <p className="text-xs text-slate-500 dark:text-slate-400 truncate font-mono">
           {p.sku}{p.brand_name ? ` · ${p.brand_name}` : ''}
         </p>
@@ -425,7 +432,7 @@ function ProductRow({ product: p, onView, onEdit, onStock }: RowProps) {
 // ─── Product ficha modal (read-only detail card) ──────────────────────────────
 
 interface FichaProps {
-  product: Product
+  product: ProductRow
   onClose: () => void
   onEdit: () => void
   onAdjustStock: () => void
@@ -444,7 +451,7 @@ function ProductFichaModal({ product: p, onClose, onEdit, onAdjustStock }: Ficha
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-1">{p.name}</h2>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-1">{p.label}</h2>
           <p className={`text-xs font-mono ${ui.muted} mb-3`}>{p.sku}{p.barcode ? ` · ${p.barcode}` : ''}</p>
           {p.description && <p className={`text-sm ${ui.muted} mb-3`}>{p.description}</p>}
           <div className="grid grid-cols-2 gap-2 text-sm">
@@ -977,7 +984,7 @@ function StockAdjustModal({ product, onClose, onSaved }: StockModalProps) {
   return (
     <Modal onClose={onClose} title="Ajustar stock">
       <div className="mb-4">
-        <p className="text-sm text-slate-700 dark:text-slate-200 font-semibold">{product.name}</p>
+        <p className="text-sm text-slate-700 dark:text-slate-200 font-semibold">{product.label}</p>
         <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">{product.sku} · Stock actual: <b>{stock}</b></p>
       </div>
 
