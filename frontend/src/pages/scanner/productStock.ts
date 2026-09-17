@@ -1,4 +1,4 @@
-import type { Product } from '../../types/products'
+import type { Product, ProductVariant } from '../../types/products'
 
 /**
  * Lecturas seguras de la respuesta de producto.
@@ -28,12 +28,28 @@ function num(v: unknown): number | null {
  * devolver varias cuando el admin no tiene sucursal propia.
  */
 export function currentStock(product: Product, branchId: number | null): number {
+  // La existencia por variante manda: `stock_levels` es del producto aplanado
+  // y con varias tallas no dice cuántas hay de la escaneada.
+  const v = matchedVariant(product)
+  const porVariante = num(v?.stock_total)
+  if (v && (product.variants?.length ?? 0) > 1 && porVariante !== null) return porVariante
   if (branchId != null) {
     const nivel = (product.stock_levels ?? []).find((s) => s.branch_id === branchId)
     const q = num(nivel?.qty_on_hand)
     if (q !== null) return q
   }
   return num(product.stock_total) ?? 0
+}
+
+/**
+ * Variante sobre la que trabaja el scanner: la que empató el código escaneado
+ * (`matched_variant_id`) o, si el backend no lo dijo, la primera. Nunca
+ * `variants[0]` a secas: con varias tallas eso ajustaba la talla equivocada.
+ */
+export function matchedVariant(product: Product): ProductVariant | null {
+  const vs = product.variants ?? []
+  if (vs.length === 0) return null
+  return vs.find((v) => v.id === product.matched_variant_id) ?? vs[0]
 }
 
 /**

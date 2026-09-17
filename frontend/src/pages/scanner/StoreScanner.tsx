@@ -12,7 +12,7 @@ import { errorDetailText } from '../../utils/errorDetail'
 import {
   createDetector, isNativeDetectorAvailable, normalizeCode, normalizeTyped,
 } from './barcodeReader'
-import { currentStock, parseTierPrice } from './productStock'
+import { currentStock, matchedVariant, parseTierPrice } from './productStock'
 import { buildDetailsUpdatePayload, buildPriceUpdatePayload, type TierEdits } from './scanPayload'
 import { computeAdjustment } from './stockAdjust'
 
@@ -424,10 +424,15 @@ function ProductEditPanel({
   return (
     <div className="space-y-3">
       <DaxCard>
-        <h2 className="text-lg font-black text-white leading-tight">{product.name}</h2>
+        <h2 className="text-lg font-black text-white leading-tight">
+          {product.name}
+          {matchedVariant(product)?.variant_name && matchedVariant(product)!.variant_name !== 'Estándar' && (
+            <span className="ml-2 text-sm font-bold text-indigo-300">{matchedVariant(product)!.variant_name}</span>
+          )}
+        </h2>
         <p className="text-xs text-slate-400 font-mono">
-          {product.sku}
-          {product.barcode ? ` · ${product.barcode}` : ' · sin código'}
+          {matchedVariant(product)?.sku ?? product.sku}
+          {(matchedVariant(product)?.barcode ?? product.barcode) ? ` · ${matchedVariant(product)?.barcode ?? product.barcode}` : ' · sin código'}
         </p>
       </DaxCard>
 
@@ -558,7 +563,7 @@ function StockSection({
   // cadena). `currentStock` resuelve ambas cosas y prefiere la existencia de
   // la sucursal elegida.
   const current = currentStock(product, branchId)
-  const variantId = product.variants?.[0]?.id ?? null
+  const variantId = matchedVariant(product)?.id ?? null
   const adj = counted.trim() === '' ? null : computeAdjustment(current, Number(counted))
 
   useEffect(() => { setCounted(''); setNotes(''); setMsg(null) }, [product.id])
@@ -578,7 +583,9 @@ function StockSection({
         notes: notes.trim() || undefined,
       })
       const fresh = await productsApi.getById(product.id)
-      onChanged(fresh)
+      // El detalle no sabe qué variante se escaneó — se conserva la que ya
+      // teníamos para que el conteo siga sobre la misma talla/color.
+      onChanged({ ...fresh, matched_variant_id: product.matched_variant_id ?? fresh.matched_variant_id })
       setCounted('')
       setMsg(`Registrado: ${adj.kind} de ${adj.abs}.`)
     } catch (err) {
