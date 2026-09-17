@@ -96,8 +96,12 @@ async def _job_loop():
             if token:
                 db = SessionLocal()
                 try:
-                    if not hay_fix_de_hoy(db):
-                        actualizar_fix_ahora(db, token)
+                    # `fetch_fix` es httpx SINCRONO con timeout de 10 s (y la
+                    # lectura pega a la base): llamarlos directo desde el loop
+                    # congelaria todo el servidor al arrancar y a las 12:30.
+                    hay = await asyncio.to_thread(hay_fix_de_hoy, db)
+                    if not hay:
+                        await asyncio.to_thread(actualizar_fix_ahora, db, token)
                 finally:
                     db.close()
         except asyncio.CancelledError:

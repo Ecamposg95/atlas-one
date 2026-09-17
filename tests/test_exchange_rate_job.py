@@ -70,3 +70,51 @@ def test_apagado_sin_token(monkeypatch):
     monkeypatch.setattr(job, "_IS_SQLITE", False)
     monkeypatch.delenv("BANXICO_TOKEN", raising=False)
     assert job.start_exchange_rate_job() is None
+
+
+class TestNoBloqueaElEventLoop:
+    """`fetch_fix` es httpx SINCRONO con timeout de 10 s. Llamarlo directo
+    desde `_job_loop` congela TODO el servidor (cada request en vuelo) al
+    arrancar y a las 12:30. Tiene que ir a un hilo."""
+
+    def test_el_tick_deja_correr_otras_corrutinas(self, monkeypatch):
+        import asyncio
+        import time as _time
+
+        ventana = {}
+
+        class _SesionFalsa:
+            def close(self):
+                pass
+
+        def _bloqueante(db, token):
+            ventana["inicio"] = _time.monotonic()
+            _time.sleep(0.3)          # lo que tarda el HTTP de Banxico
+            ventana["fin"] = _time.monotonic()
+            return True, "ok"
+
+        monkeypatch.setattr(job, "token_configurado", lambda: "tok")
+        monkeypatch.setattr(job, "SessionLocal", _SesionFalsa)
+        monkeypatch.setattr(job, "hay_fix_de_hoy", lambda db: False)
+        monkeypatch.setattr(job, "actualizar_fix_ahora", _bloqueante)
+        monkeypatch.setattr(job, "segundos_hasta_la_proxima_corrida", lambda ahora: 3600)
+
+        async def _correr():
+            latidos = []
+            tarea = asyncio.create_task(job._job_loop())
+            for _ in range(40):
+                await asyncio.sleep(0.02)
+                latidos.append(_time.monotonic())
+                if "fin" in ventana:
+                    break
+            tarea.cancel()
+            try:
+                await tarea
+            except asyncio.CancelledError:
+                pass
+            return latidos
+
+        latidos = asyncio.run(_correr())
+        assert "fin" in ventana, "el tick no llego a correr"
+        durante = [t for t in latidos if ventana["inicio"] < t < ventana["fin"]]
+        assert durante, "el event loop quedo congelado durante la llamada a Banxico"
