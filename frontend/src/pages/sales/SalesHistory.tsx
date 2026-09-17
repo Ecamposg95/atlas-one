@@ -13,6 +13,7 @@ import { formatCurrency } from '../../utils/currency'
 import { todayStr, daysAgoStr } from '../../utils/dates'
 import { toast } from '../../store/toastStore'
 import { mensajeReimpresion, pinBloqueado, pinIncorrecto, requierePin } from '../../utils/reimpresion'
+import { formatPct } from '../pos/cardSurcharge'
 
 const PRESETS = [
   { label: 'Hoy', start: () => todayStr(), end: () => todayStr() },
@@ -355,7 +356,7 @@ export function SalesHistory() {
               {Number(selected.card_surcharge_amount ?? 0) > 0 && (
                 <>
                   <div className="flex justify-between text-slate-400">
-                    <span>Comisión tarjeta {selected.card_surcharge_pct ?? ''}%</span>
+                    <span>Comisión tarjeta {formatPct(selected.card_surcharge_pct)}%</span>
                     <span>{formatCurrency(Number(selected.card_surcharge_amount))}</span>
                   </div>
                   <div className="flex justify-between font-black text-emerald-400 text-base">
