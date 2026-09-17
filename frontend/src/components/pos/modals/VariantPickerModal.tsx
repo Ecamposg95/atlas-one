@@ -24,6 +24,12 @@ export function VariantPickerModal({ product, onPick, onClose }: Props) {
     return () => { cancelled = true }
   }, [product.id])
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   const g = groupVariants(full.variants ?? [])
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60" onClick={onClose}>

@@ -301,8 +301,9 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-2">
           {displayResults.map((p) => {
+            const matched = p.variants?.find((v) => v.id === p.matched_variant_id)
             const stock = (p.variants?.length ?? 0) > 1
-              ? p.variants!.reduce((a, v) => a + Number(v.stock_total ?? 0), 0)
+              ? (matched ? Number(matched.stock_total ?? 0) : p.variants!.reduce((a, v) => a + Number(v.stock_total ?? 0), 0))
               : stockNum(p)
             const price = Number(p.price)
             const inCart = cartQtyUnits(p.id)
