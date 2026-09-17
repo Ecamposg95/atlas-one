@@ -322,6 +322,7 @@ function AttachCodePanel({
   const [hits, setHits] = useState<Product[]>([])
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
+  const [pendingProduct, setPendingProduct] = useState<Product | null>(null)
 
   const search = async () => {
     if (!term.trim()) return
@@ -337,6 +338,11 @@ function AttachCodePanel({
   }
 
   const attach = async (p: Product) => {
+    if ((p.variants?.length ?? 0) > 1) {
+      setPendingProduct(p)
+      setMsg(null)
+      return
+    }
     setBusy(true)
     setMsg(null)
     try {
@@ -348,6 +354,20 @@ function AttachCodePanel({
     } catch (err) {
       const e = err as { response?: { data?: { detail?: unknown } } }
       setMsg(errorDetailText(e?.response?.data?.detail, 'No se pudo asignar el código. ¿Ya lo tiene otro producto?'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const attachToVariant = async (p: Product, variantId: string) => {
+    setBusy(true)
+    setMsg(null)
+    try {
+      const updated = await productsApi.updateVariant(variantId, { barcode: code })
+      onAttached({ ...updated, matched_variant_id: variantId })
+    } catch (err) {
+      const e = err as { response?: { data?: { detail?: unknown } } }
+      setMsg(errorDetailText(e?.response?.data?.detail, 'No se pudo asignar el código a esa variante.'))
     } finally {
       setBusy(false)
     }
@@ -392,6 +412,19 @@ function AttachCodePanel({
               </button>
             ))}
           </div>
+
+          {pendingProduct && (
+            <div className="space-y-2">
+              <p className="text-xs text-slate-400">¿A qué variante de {pendingProduct.name} pertenece este código?</p>
+              <div className="flex flex-wrap gap-2">
+                {(pendingProduct.variants ?? []).filter((v) => !v.barcode).map((v) => (
+                  <button key={v.id} disabled={busy} className="dax-btn-secondary" onClick={() => attachToVariant(pendingProduct, v.id)}>
+                    {v.variant_name ?? v.sku}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {msg && <p className="text-sm text-rose-400">{msg}</p>}
         </div>
