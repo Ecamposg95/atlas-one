@@ -105,7 +105,12 @@ def _compute_product_read(
         # La variante "principal" es la pedida (p. ej. la que empato un
         # escaneo) o, si no, la primera viva en orden de creacion.
         v = next((x for x in variantes_vivas if x.id == primary_variant_id), variantes_vivas[0])
-        p_read.matched_variant_id = v.id
+        # `matched_variant_id` SOLO cuando hubo empate real: el POS lo usa como
+        # senal de "ya se que talla es" (`needsPicker`). Si lo fijamos siempre,
+        # el selector de talla nunca abre y se vende `variants[0]`.
+        p_read.matched_variant_id = (
+            v.id if (primary_variant_id and v.id == primary_variant_id) else None
+        )
         p_read.sku = v.sku
         p_read.barcode = v.barcode
         p_read.price = v.price

@@ -441,11 +441,14 @@ def search_products_pos(
             for p in products_db:
                 set_committed_value(p, "variants", por_producto.get(p.id, []))
 
-        # Que variante empato el codigo (solo tiene sentido en modo exacto).
+        # Que variante empato el codigo. Las comparaciones son EXACTAS, asi que
+        # tambien sirven fuera de `exact=true`: el POS (`posSearch`) nunca manda
+        # `exact`, y escanear ahi tiene que resolver la talla igual. Un texto
+        # tecleado ("playera") no empata nada y devuelve None -> abre el selector.
         def _matched_variant_id(p) -> Optional[str]:
-            if not exact:
+            ql = (q or "").lower()
+            if not ql:
                 return None
-            ql = q.lower()
             for v in p.variants:
                 if (v.sku or "").lower() == ql or v.barcode == q:
                     return v.id

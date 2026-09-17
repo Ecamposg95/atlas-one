@@ -17,6 +17,12 @@ describe('needsPicker', () => {
   it('sí con varias variantes y sin empate de código', () => {
     expect(needsPicker({ ...base, matched_variant_id: null })).toBe(true)
   })
+  it('sí con el payload real de /pos/search por texto (el backend omite el empate)', () => {
+    // Lo que devuelve search_products_pos al teclear "playera": campos
+    // aplanados de la primera variante viva y matched_variant_id en null.
+    const payload = { ...base, sku: 'PLY-s', price: 100, matched_variant_id: null }
+    expect(needsPicker(payload)).toBe(true)
+  })
   it('no cuando el escaneo ya resolvió la variante', () => {
     expect(needsPicker({ ...base, matched_variant_id: 'm' })).toBe(false)
   })

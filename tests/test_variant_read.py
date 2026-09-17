@@ -36,9 +36,11 @@ def test_detalle_trae_las_dos_variantes_con_stock(client, db, org, playera, auth
     assert por_sku["PLY-M"]["color"] == "Rojo" and por_sku["PLY-M"]["size"] == "M"
     assert Decimal(str(por_sku["PLY-S"]["stock_total"])) == Decimal("100")
     assert Decimal(str(por_sku["PLY-M"]["stock_total"])) == Decimal("7")
-    # Aplanado = primera variante (orden de creacion), y se dice cual fue.
+    # Aplanado = primera variante viva (orden de creacion). `matched_variant_id`
+    # queda en None porque nadie empato un codigo: el detalle NO debe fingir que
+    # la talla ya esta elegida (es lo que abre el selector en el POS).
     assert data["sku"] == "PLY-S"
-    assert data["matched_variant_id"] == v_s.id
+    assert data["matched_variant_id"] is None
 
 
 def test_listado_trae_stock_de_todas_las_variantes(client, db, org, playera, auth_cajero_a):

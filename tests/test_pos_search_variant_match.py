@@ -103,3 +103,30 @@ def test_escanear_el_codigo_de_una_caja_devuelve_la_variante_de_esa_caja(
     hit = _buscar(client, org, auth_cajero_a, q="7500000099999", exact="true")[0]
     assert hit["matched_variant_id"] == v_m.id
     assert hit["sku"] == "PLY-M"
+
+
+def test_texto_libre_no_fija_matched_variant_id(client, org, playera, auth_cajero_a):
+    """Teclear el nombre NO resuelve una talla: el POS tiene que abrir el
+    selector (`needsPicker` = variants>1 && !matched_variant_id)."""
+    p, v_s, v_m = playera
+    hit = _buscar(client, org, auth_cajero_a, q="Playera")[0]
+    assert hit["matched_variant_id"] is None
+    # El aplanado sigue siendo la primera variante viva (para la tarjeta).
+    assert hit["sku"] == "PLY-S"
+    assert len(hit["variants"]) == 2
+
+
+def test_escanear_sin_exact_resuelve_la_variante(client, org, playera, auth_cajero_a):
+    """El POS (`posSearch`) nunca manda `exact`: un codigo completo debe
+    resolver igual la talla escaneada."""
+    p, v_s, v_m = playera
+    hit = _buscar(client, org, auth_cajero_a, q="7500000000002")[0]
+    assert hit["matched_variant_id"] == v_m.id
+    assert hit["sku"] == "PLY-M"
+
+
+def test_sku_completo_sin_exact_resuelve_la_variante(client, org, playera, auth_cajero_a):
+    p, v_s, v_m = playera
+    hit = _buscar(client, org, auth_cajero_a, q="ply-m")[0]
+    assert hit["matched_variant_id"] == v_m.id
+    assert hit["sku"] == "PLY-M"
