@@ -326,6 +326,8 @@ function AttachCodePanel({
 
   const search = async () => {
     if (!term.trim()) return
+    setPendingProduct(null)
+    setMsg(null)
     setBusy(true)
     try {
       const res = await productsApi.search(term, 0, 15)
@@ -365,6 +367,7 @@ function AttachCodePanel({
     try {
       const updated = await productsApi.updateVariant(variantId, { barcode: code })
       onAttached({ ...updated, matched_variant_id: variantId })
+      setPendingProduct(null)
     } catch (err) {
       const e = err as { response?: { data?: { detail?: unknown } } }
       setMsg(errorDetailText(e?.response?.data?.detail, 'No se pudo asignar el código a esa variante.'))
@@ -422,6 +425,13 @@ function AttachCodePanel({
                     {v.variant_name ?? v.sku}
                   </button>
                 ))}
+                <button
+                  disabled={busy}
+                  className="text-xs text-slate-400 underline disabled:opacity-50"
+                  onClick={() => setPendingProduct(null)}
+                >
+                  Cancelar
+                </button>
               </div>
             </div>
           )}
