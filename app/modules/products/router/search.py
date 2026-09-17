@@ -412,7 +412,10 @@ def search_products_pos(
                 products_db.sort(key=_price, reverse=(order_by == "price_desc"))
 
         # --- Batch: Stock + BranchStatus caches (avoid N+1) ---
-        variant_ids = [p.variants[0].id for p in products_db if p.variants]
+        # Todas las variantes (no solo la principal), para que
+        # _compute_product_read llene el stock_total de cada una sin
+        # disparar una query por variante faltante.
+        variant_ids = [v.id for p in products_db for v in p.variants]
 
         stock_cache = {}
         branch_statuses_cache = {}

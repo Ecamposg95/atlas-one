@@ -148,7 +148,10 @@ def hq_inventory_list(
     # ── Paginated items ───────────────────────────────────────────────────
     products_db = query.offset(skip).limit(limit).all()
 
-    variant_ids = [p.variants[0].id for p in products_db if p.variants]
+    # Todas las variantes (no solo la principal), para que
+    # _compute_product_read llene el stock_total de cada una sin disparar
+    # una query por variante faltante.
+    variant_ids = [v.id for p in products_db for v in p.variants]
     stock_cache: dict = {}
     if variant_ids:
         if target_branch_id:

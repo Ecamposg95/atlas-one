@@ -111,18 +111,22 @@ def _compute_product_read(
         # Empaques de la variante principal
         p_read.packaging_units = list(v.packaging_units or [])
 
+        # Cache de stock: puede traer Decimal o Tupla (qty, is_active)
+        # segun el caller. Un solo lugar para desempacarlo.
+        def _qty(val):
+            if isinstance(val, tuple):
+                return val[0] or Decimal(0)
+            return val or Decimal(0)
+
         # Stock por sucursal objetivo
         qty = Decimal(0)
         is_active = True # Default en código, aunque en BD es True
 
         if stock_cache is not None:
-             # Cache ahora puede ser Decimal o Tupla (qty, is_active)
              val = stock_cache.get(v.id)
+             qty = _qty(val)
              if isinstance(val, tuple):
-                 qty, _is_active = val
-                 is_active = _is_active if _is_active is not None else True
-             else:
-                 qty = val or Decimal(0)
+                 is_active = val[1] if val[1] is not None else True
         else:
             # Fallback a query individual (si no se usa cache)
             # Solo consultamos si hay un ID de sucursal válido (puede ser None para usuarios globales sin sucursal)
@@ -198,24 +202,28 @@ def _compute_product_read(
         # Existencia por variante en la sucursal objetivo. Con una sola
         # variante coincide con stock_total; con varias es lo que permite al
         # POS mostrar cuantas piezas hay de cada talla.
-        def _qty(val):
-            if isinstance(val, tuple):
-                return val[0] or Decimal(0)
-            return val or Decimal(0)
-
-        faltantes = [vr.id for vr in p_read.variants if stock_cache is None or vr.id not in stock_cache]
-        directo: dict[str, Decimal] = {}
-        if faltantes and real_branch_id:
+        if stock_cache is not None:
+            # El caller ya precargo el batch (core.py/search.py/reports.py
+            # cachean TODAS las variantes de la pagina). Si una variante no
+            # aparece ahi es porque no tiene stock en la sucursal objetivo:
+            # NO disparamos una query por variante (evitaria el N+1 que el
+            # cache batch existe para prevenir).
+            for vr in p_read.variants:
+                vr.stock_total = _qty(stock_cache.get(vr.id))
+        elif real_branch_id:
+            # Sin cache (callers de un solo producto, p. ej. read_product):
+            # una sola query cubre todas las variantes de este producto.
+            directo: dict[str, Decimal] = {}
             for row in (
                 db.query(StockOnHand.variant_id, StockOnHand.qty_on_hand)
-                .filter(StockOnHand.variant_id.in_(faltantes), StockOnHand.branch_id == real_branch_id)
+                .filter(
+                    StockOnHand.variant_id.in_([vr.id for vr in p_read.variants]),
+                    StockOnHand.branch_id == real_branch_id,
+                )
                 .all()
             ):
                 directo[row.variant_id] = row.qty_on_hand
-        for vr in p_read.variants:
-            if stock_cache is not None and vr.id in stock_cache:
-                vr.stock_total = _qty(stock_cache[vr.id])
-            else:
+            for vr in p_read.variants:
                 vr.stock_total = directo.get(vr.id, Decimal(0))
 
     return p_read
