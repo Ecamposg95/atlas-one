@@ -43,6 +43,9 @@ from app.crud.products import (
 from app.modules.products.schemas import (
     ProductCreate, ProductRead, ProductUpdate, ProductListResponse,
 )
+from app.modules.products.variant_label import (
+    COLOR_MAX, SIZE_MAX, clean_attr, variant_label,
+)
 
 from ._shared import (
     _MANAGER_ROLES, _PRODUCT_ADVANCED_ROLES, _compute_product_read,
@@ -52,6 +55,22 @@ from ._shared import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _atributos_principal(color, size):
+    """Limpia color/talla de la variante principal o 422 nombrando el campo.
+
+    `clean_attr` levanta ValueError cuando el texto excede el limite; sin este
+    envoltorio Postgres truncaria (o reventaria) y el formulario no sabria cual
+    de los dos campos corregir.
+    """
+    salida = []
+    for valor, tope, campo in ((color, COLOR_MAX, "color"), (size, SIZE_MAX, "talla")):
+        try:
+            salida.append(clean_attr(valor, tope))
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=f"{campo}: {e}")
+    return salida[0], salida[1]
 
 
 @router.get("/", response_model=ProductListResponse)
@@ -324,12 +343,17 @@ def create_product(
         db.add(new_prod)
         db.flush()
 
-        # Crear variante estándar
+        # Crear la variante principal. Con `color`/`size` (matriz boutique) la
+        # principal ES la primera combinación — nada de una "Estándar" extra
+        # sin talla, que en el POS salía como una celda "—" invendible.
+        _color_pal, _size_pal = _atributos_principal(prod_in.color, prod_in.size)
         new_variant = ProductVariant(
             product_id=new_prod.id,
             sku=prod_in.sku,
             barcode=prod_in.barcode,
-            variant_name="Estándar",
+            color=_color_pal,
+            size=_size_pal,
+            variant_name=variant_label(_color_pal, _size_pal),
             price=prod_in.price,
             cost=prod_in.cost,
             has_iva=prod_in.has_iva,    # [FIX]
@@ -971,6 +995,22 @@ def update_product(
             # Tanto null como cadena vacía significan "quítalo".
             _bc = (prod_in.barcode or "").strip()
             v.barcode = _bc or None
+
+        # Color/talla de la principal: mismo trato que en `PUT /variants/{id}`
+        # (limpieza, pareja única dentro del producto y etiqueta recalculada).
+        if "color" in _campos_enviados or "size" in _campos_enviados:
+            from .variants import _pareja_repetida
+            _color_pal, _size_pal = _atributos_principal(
+                prod_in.color if "color" in _campos_enviados else v.color,
+                prod_in.size if "size" in _campos_enviados else v.size,
+            )
+            if _pareja_repetida(product, _color_pal, _size_pal, excepto_id=v.id):
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Ya existe la variante {variant_label(_color_pal, _size_pal)}",
+                )
+            v.color, v.size = _color_pal, _size_pal
+            v.variant_name = variant_label(_color_pal, _size_pal)
         if prod_in.price is not None:
             v.price = prod_in.price
         if prod_in.cost is not None:

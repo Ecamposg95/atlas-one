@@ -104,6 +104,13 @@ class ProductCreate(BaseModel):
     sku: str
     barcode: Optional[str] = None
 
+    # Color/talla de la VARIANTE PRINCIPAL (preset boutique). La matriz del
+    # alta manda aqui su primera combinacion, asi que la principal ES esa
+    # prenda y no una "Estándar" sin talla que nadie puede vender.
+    # Ausentes (el resto de los tenants) -> variant_name = "Estándar".
+    color: Optional[str] = None
+    size: Optional[str] = None
+
     price: Decimal      # Precio base (se guarda en variant.price)
     cost: Decimal
     has_iva: bool = False
@@ -133,6 +140,9 @@ class ProductUpdate(BaseModel):
     image_url: Optional[str] = None
     sku: Optional[str] = None
     barcode: Optional[str] = None
+    # Color/talla de la variante principal (mismo criterio que ProductCreate).
+    color: Optional[str] = None
+    size: Optional[str] = None
     price: Optional[Decimal] = None
     cost: Optional[Decimal] = None
     has_iva: Optional[bool] = None
