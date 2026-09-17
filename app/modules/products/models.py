@@ -59,7 +59,12 @@ class Product(Base, UUIDMixin, AuditMixin, TenantMixin):
     # Relaciones
     department = relationship("Department") # Relación con el modelo Department
     brand = relationship("Brand")
-    variants = relationship("ProductVariant", back_populates="product", cascade="all, delete-orphan")
+    # Orden determinista: sin `order_by`, `variants[0]` cambiaba entre requests
+    # en cuanto un producto tenia mas de una variante.
+    variants = relationship(
+        "ProductVariant", back_populates="product", cascade="all, delete-orphan",
+        order_by="[ProductVariant.created_at, ProductVariant.id]",
+    )
 
 # --- VARIANTES (SKU) ---
 class ProductVariant(Base, UUIDMixin, AuditMixin, TenantMixin):
@@ -83,7 +88,11 @@ class ProductVariant(Base, UUIDMixin, AuditMixin, TenantMixin):
 
     sku = Column(String, index=True)  # Removed unique=True
     barcode = Column(String, index=True, nullable=True)
-    variant_name = Column(String) # Ej: "Estándar", "Rojo/Grande"
+    variant_name = Column(String) # Etiqueta derivada: "Estándar", "Rojo / M" (ver variant_label.py)
+    # Atributos de boutique (preset ATLAS_POS_BOUTIQUE). Opcionales: el resto de
+    # los giros sigue con una sola variante sin color ni talla.
+    color = Column(String(60), nullable=True)
+    size = Column(String(30), nullable=True)
 
     price = Column(Numeric(10, 2)) # Precio Base (Lista 1)
     cost = Column(Numeric(10, 2))  # Costo Base

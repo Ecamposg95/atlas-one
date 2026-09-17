@@ -52,6 +52,9 @@ def run_migrations():
         # (table, column, ddl)
         ("products", "image_url",      "ALTER TABLE products ADD COLUMN image_url VARCHAR;"),
         ("product_variants", "has_iva", "ALTER TABLE product_variants ADD COLUMN has_iva BOOLEAN DEFAULT FALSE;"),
+        # Variantes color/talla (2026-09-17, preset boutique). Opcionales.
+        ("product_variants", "color", "ALTER TABLE product_variants ADD COLUMN color VARCHAR(60);"),
+        ("product_variants", "size",  "ALTER TABLE product_variants ADD COLUMN size VARCHAR(30);"),
         ("brands",   "logo_url",       "ALTER TABLE brands ADD COLUMN logo_url VARCHAR;"),
         ("branches", "paper_width_mm", "ALTER TABLE branches ADD COLUMN paper_width_mm INTEGER DEFAULT 80;"),
         ("branches", "printer_cols",   "ALTER TABLE branches ADD COLUMN printer_cols INTEGER;"),
