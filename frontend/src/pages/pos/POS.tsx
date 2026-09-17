@@ -9,6 +9,7 @@ import { printerApi } from '../../api/printer'
 import { requierePin } from '../../utils/reimpresion'
 import { usePOSStore } from '../../store/posStore'
 import { useAuthStore } from '../../store/authStore'
+import { useExchangeRateStore } from '../../store/exchangeRateStore'
 import type { CashSession } from '../../types/cash'
 
 import { ProductSearch } from '../../components/pos/ProductSearch'
@@ -84,6 +85,16 @@ export function POS() {
   }, [])
 
   useEffect(() => { checkSession() }, [checkSession])
+
+  // Tipo de cambio USD: se carga al entrar al POS y se refresca cada 30 min.
+  // El store es neutro si la organización no lo configuró (`rate = null`), así
+  // que el carrito y las tarjetas simplemente no pintan nada.
+  const loadUsdRate = useExchangeRateStore((s) => s.load)
+  useEffect(() => {
+    loadUsdRate()
+    const id = setInterval(() => loadUsdRate(true), 30 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [loadUsdRate])
 
   // Con el dinero ya contado, nada de lo que hay detrás del modal puede mover
   // el ticket: el total que el modal está cobrando se lee del store EN VIVO

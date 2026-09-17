@@ -1,11 +1,12 @@
 import { useEffect, useState, useRef } from 'react'
-import { organizationApi, type Organization, type Branch, type BranchCreate } from '../../api/organization'
+import { organizationApi, type Organization, type Branch, type BranchCreate, type ExchangeRateInfo } from '../../api/organization'
 import { DaxCard } from '../../components/ui/DaxCard'
 import { Spinner } from '../../components/ui/Spinner'
 import { Badge } from '../../components/ui/Badge'
 import { toast } from '../../store/toastStore'
 import { confirm as confirmDialog } from '../../components/ui/ConfirmDialog'
 import client from '../../api/client'
+import { errorDetailText } from '../../utils/errorDetail'
 
 const BRANCH_TYPES: Branch['branch_type'][] = ['HQ', 'STORE', 'WAREHOUSE', 'OFFICE']
 const branchTypeLabel = (t: string) =>
@@ -28,21 +29,42 @@ export function Organization() {
   const [logoUploading, setLogoUploading] = useState(false)
   const [logoError, setLogoError] = useState<string | null>(null)
   const logoInputRef = useRef<HTMLInputElement>(null)
+  const [fxInfo, setFxInfo] = useState<ExchangeRateInfo | null>(null)
+  const [fxRefreshing, setFxRefreshing] = useState(false)
 
   useEffect(() => {
     setLoading(true)
     Promise.all([
       organizationApi.getOrg().then((o) => { setOrg(o); setOrgForm(o) }),
       organizationApi.getBranches().then(setBranches),
+      organizationApi.getExchangeRate().then(setFxInfo).catch(() => {}),
     ]).catch(() => {}).finally(() => setLoading(false))
   }, [])
+
+  const cargarFx = () => organizationApi.getExchangeRate().then(setFxInfo).catch(() => {})
 
   const saveOrg = async () => {
     setSaving(true)
     try {
       const updated = await organizationApi.updateOrg(orgForm)
       setOrg(updated); setOrgForm(updated)
-    } catch { toast.error('Error al guardar la organización') } finally { setSaving(false) }
+      await cargarFx()
+    } catch (e: any) {
+      // El 422 del PUT trae el motivo en español ("En modo manual hay que
+      // capturar un tipo de cambio mayor que cero.").
+      toast.error(errorDetailText(e?.response?.data?.detail, 'Error al guardar la organización'))
+    } finally { setSaving(false) }
+  }
+
+  const refreshFx = async () => {
+    setFxRefreshing(true)
+    try {
+      await organizationApi.refreshExchangeRate()
+      await cargarFx()
+      toast.success('Tipo de cambio actualizado')
+    } catch (e: any) {
+      toast.error(errorDetailText(e?.response?.data?.detail, 'No se pudo bajar el tipo de cambio de Banxico'))
+    } finally { setFxRefreshing(false) }
   }
 
   const openCreateBranch = () => { setBranchForm(EMPTY_BRANCH); setEditingBranch(null); setBranchModal('create') }
@@ -204,6 +226,75 @@ export function Organization() {
                   {logoUploading ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-upload" /> {org.logo_url ? 'Cambiar logo' : 'Subir logo'}</>}
                 </button>
                 {logoError && <p className="text-xs text-red-400 mt-1">{logoError}</p>}
+              </div>
+            </div>
+          </DaxCard>
+
+          {/* Tipo de cambio USD */}
+          <DaxCard>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">
+              <i className="fa-solid fa-dollar-sign mr-1.5" />Tipo de cambio USD
+            </p>
+            <p className="text-xs text-slate-400 mb-4">
+              Muestra el equivalente en dólares en el punto de venta y en el ticket.
+              El cobro sigue siendo en pesos. Con <b>Apagado</b> no se muestra nada.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="dax-label">Modo</label>
+                <select
+                  value={orgForm.usd_rate_mode ?? 'off'}
+                  onChange={(e) => setOrgForm((p) => ({ ...p, usd_rate_mode: e.target.value as Organization['usd_rate_mode'] }))}
+                  className="dax-input w-full"
+                >
+                  <option value="off">Apagado</option>
+                  <option value="auto">Automático (FIX de Banxico + ajuste)</option>
+                  <option value="manual">Manual (tipo fijo)</option>
+                </select>
+              </div>
+              <div>
+                <label className="dax-label">Ajuste sobre el FIX</label>
+                <input
+                  type="number" step="0.01"
+                  value={orgForm.usd_rate_margin ?? '0'}
+                  onChange={(e) => setOrgForm((p) => ({ ...p, usd_rate_margin: e.target.value }))}
+                  disabled={(orgForm.usd_rate_mode ?? 'off') !== 'auto'}
+                  className="dax-input w-full tabular-nums disabled:opacity-40"
+                  placeholder="0.30"
+                />
+                <p className="text-[10px] mt-1 text-slate-600">Pesos que se suman al FIX. Puede ser negativo.</p>
+              </div>
+              <div>
+                <label className="dax-label">Tipo de cambio manual</label>
+                <input
+                  type="number" step="0.0001"
+                  value={orgForm.usd_rate_manual ?? ''}
+                  onChange={(e) => setOrgForm((p) => ({ ...p, usd_rate_manual: e.target.value || null }))}
+                  disabled={(orgForm.usd_rate_mode ?? 'off') !== 'manual'}
+                  className="dax-input w-full tabular-nums disabled:opacity-40"
+                  placeholder="19.5000"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 mt-4">
+              <div className="text-xs text-slate-400">
+                {fxInfo?.fix_rate != null ? (
+                  <>FIX del {fxInfo.fix_date ?? '—'}: <b className="tabular-nums text-slate-200">{Number(fxInfo.fix_rate).toFixed(4)}</b></>
+                ) : (
+                  <>Sin FIX descargado todavía.</>
+                )}
+                {fxInfo?.rate != null && (
+                  <> · Vigente: <b className="tabular-nums text-emerald-400">{Number(fxInfo.rate).toFixed(4)}</b></>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button onClick={refreshFx} disabled={fxRefreshing} className="dax-btn-secondary text-xs disabled:opacity-40">
+                  {fxRefreshing ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-rotate" /> Actualizar ahora</>}
+                </button>
+                <button onClick={saveOrg} disabled={saving} className="dax-btn-primary text-xs disabled:opacity-40">
+                  {saving ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Guardar</>}
+                </button>
               </div>
             </div>
           </DaxCard>

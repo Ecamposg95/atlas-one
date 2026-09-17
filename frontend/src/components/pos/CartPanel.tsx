@@ -10,6 +10,8 @@ import { formatCurrency } from '../../utils/currency'
 import { confirm } from '../ui/ConfirmDialog'
 import { autoTierTarget, forcedTierMap, cajaTierOf } from '../../pages/pos/cartTiers'
 import { groupCart, type CartGroup } from '../../pages/pos/cartGroups'
+import { useExchangeRateStore } from '../../store/exchangeRateStore'
+import { usdSummary } from '../../utils/usd'
 
 type PaymentMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'MIXED'
 
@@ -36,6 +38,10 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
   const tip = usePOSStore((s) => s.tip)
   const setTip = usePOSStore((s) => s.setTip)
   const discountedSubtotal = usePOSStore((s) => s.discountedSubtotal())
+  // Equivalente en dólares del total. La carga la dispara POS.tsx; aquí solo
+  // se lee. `null` (organización sin tipo de cambio) ⇒ no se pinta nada.
+  const usdRate = useExchangeRateStore((s) => s.rate)
+  const usdLine = usdSummary(total, usdRate)
   const [editingGlobalDisc, setEditingGlobalDisc] = useState(false)
   const [globalDiscInput, setGlobalDiscInput] = useState('0')
 
@@ -864,6 +870,15 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
           <span className="text-base uppercase tracking-wide">Total</span>
           <span className="tabular-nums text-emerald-600 text-3xl">{formatCurrency(total)}</span>
         </div>
+        {usdLine && (
+          <div
+            className="flex justify-end text-xs font-semibold tabular-nums pt-0.5"
+            style={{ color: 'var(--dax-text-muted)' }}
+            title="Equivalente informativo — el cobro es en pesos"
+          >
+            {usdLine}
+          </div>
+        )}
         <div className="flex items-center gap-2 pt-0.5">
           <button
             onClick={() => setRequiresInvoice(!requiresInvoice)}

@@ -7,6 +7,8 @@ import { ProductDetailModal } from './modals/ProductDetailModal'
 import { VariantPickerModal } from './modals/VariantPickerModal'
 import { needsPicker, pickVariantForCart } from './variantPicker'
 import { formatCurrency } from '../../utils/currency'
+import { useExchangeRateStore } from '../../store/exchangeRateStore'
+import { formatUsd, usdEquivalent } from '../../utils/usd'
 
 const EDIT_ROLES = ['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO']
 
@@ -68,6 +70,8 @@ interface ProductSearchProps {
 export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
   const addItem = usePOSStore((s) => s.addItem)
   const cart   = usePOSStore((s) => s.cart)
+  // Precio en dólares por tarjeta. Solo lectura: POS.tsx dispara la carga.
+  const usdRate = useExchangeRateStore((s) => s.rate)
   const { user } = useAuthStore()
   const canEdit = !!user?.role && EDIT_ROLES.includes(user.role)
   const [query, setQuery] = useState('')
@@ -380,6 +384,15 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
                           {formatCurrency(tiers[0].value)}
                         </span>
                       </div>
+
+                      {usdRate !== null && (
+                        <p
+                          className="text-[10px] font-semibold tabular-nums text-right"
+                          style={{ color: 'var(--dax-text-faint)' }}
+                        >
+                          ≈ {formatUsd(usdEquivalent(tiers[0].value, usdRate))}
+                        </p>
+                      )}
 
                       {/* Tiers extra (Mayoreo, Caja, …) — fila compacta debajo */}
                       {tiers.length > 1 && (
