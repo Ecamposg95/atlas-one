@@ -27,8 +27,8 @@ from app.crud.products import query_visible_products, _is_admin
 
 from ._shared import _safe_str, _is_na, _safe_decimal
 from app.modules.products.schemas import ProductVariantCreate
-from app.modules.products.variant_label import variant_label
-from .variants import crear_variantes
+from app.modules.products.variant_label import COLOR_MAX, SIZE_MAX, clean_attr, variant_label
+from .variants import crear_variantes, _pareja_repetida
 
 router = APIRouter()
 
@@ -113,6 +113,11 @@ def export_products_template(
     for p in query:
         if not p.variants: continue
         for v in p.variants:
+            if v.deleted_at is not None:
+                # Una talla retirada no debe exportarse: si el archivo se
+                # vuelve a subir, la busqueda por SKU/el indice unico ignoran
+                # las filas soft-deleted y la re-crearian como duplicado.
+                continue
 
             # Get Stock
             stock_qty = 0
@@ -302,6 +307,7 @@ async def upload_products(
     col_keys = set(rows[0].keys()) if rows else set()
     has_pkg_cols = any(k.startswith("e1") for k in col_keys)
     has_tier_cols = any(k.startswith("p1") for k in col_keys)
+    has_variant_cols = "color" in col_keys or "talla" in col_keys
 
     created_count = 0
     updated_count = 0
@@ -309,9 +315,11 @@ async def upload_products(
     failed_details = []
     preview_rows: list[dict] = []
 
-    # (nombre_lower, department_id) -> Product creado en esta misma carga con
-    # Color/Talla; las filas siguientes con la misma pareja se agregan como
-    # variantes hermanas via `crear_variantes` en vez de crear otro producto.
+    # (nombre_lower, department_id) -> (Product, id de su variante principal)
+    # creado en esta misma carga con Color/Talla; las filas siguientes con la
+    # misma pareja se agregan como variantes hermanas via `crear_variantes`
+    # en vez de crear otro producto. Se registra solo si la fila termino en
+    # exito (no si el resto del procesamiento de la fila fallo despues).
     productos_cargados: dict = {}
 
     # Resolve Target Branch for this import (Explicit OR User's Branch OR Org's HQ)
@@ -400,10 +408,20 @@ async def upload_products(
 
                 # Color/Talla (opcionales): agrupan filas del mismo nombre en
                 # un producto con N variantes en vez de un producto por fila.
-                raw_color = _safe_str(row.get("color"))
-                raw_talla = _safe_str(row.get("talla"))
+                # `clean_attr` (misma limpieza que usa `crear_variantes`) para
+                # que lo que se guarda coincida con la etiqueta y con lo que
+                # detecta la pareja repetida (espacios/longitud incluidos).
+                raw_color = clean_attr(_safe_str(row.get("color")), COLOR_MAX)
+                raw_talla = clean_attr(_safe_str(row.get("talla")), SIZE_MAX)
                 con_variante = bool(raw_color or raw_talla)
                 clave_padre = (raw_name.lower(), dept_id)
+                # Solo el branch "Create" (fila nueva que abre un grupo) debe
+                # registrarse en `productos_cargados`, y solo si el resto del
+                # procesamiento de la fila termina bien — si se registrara de
+                # inmediato y una excepcion posterior revierte el SAVEPOINT de
+                # esta fila, quedaria un `Product`/`ProductVariant` en memoria
+                # que ya no existe en la transaccion.
+                registrar_grupo = False
 
                 if existing_variant:
                     # Update
@@ -424,6 +442,24 @@ async def upload_products(
                     raw_barcode = _safe_str(row.get("codigo barras", ""))
                     if raw_barcode:
                         existing_variant.barcode = raw_barcode
+                    if has_variant_cols:
+                        # Solo tocar color/talla si el archivo trae esas
+                        # columnas — si no, comportamiento identico al actual.
+                        nueva_clave = ((raw_color or "").lower(), (raw_talla or "").lower())
+                        actual_clave = ((existing_variant.color or "").lower(), (existing_variant.size or "").lower())
+                        if nueva_clave != actual_clave and _pareja_repetida(prod, raw_color, raw_talla, excepto_id=existing_variant.id):
+                            msg = f"'{raw_sku}': ya existe la variante {variant_label(raw_color, raw_talla)} en este producto"
+                            failed_count += 1
+                            failed_details.append({"row": idx + 2, "sku": raw_sku, "error": msg})
+                            if len(preview_rows) < 20:
+                                preview_rows.append({
+                                    "action": "ERROR", "sku": raw_sku, "name": raw_name or prod.name,
+                                    "price": None, "error_message": msg,
+                                })
+                            continue
+                        existing_variant.color = raw_color
+                        existing_variant.size = raw_talla
+                        existing_variant.variant_name = variant_label(raw_color, raw_talla)
                     updated_count += 1
                     variant = existing_variant
                     if len(preview_rows) < 20:
@@ -437,7 +473,7 @@ async def upload_products(
                 elif con_variante and clave_padre in productos_cargados:
                     # Ya existe un producto de esta misma carga con el mismo
                     # nombre/categoria: esta fila es una variante hermana.
-                    prod = productos_cargados[clave_padre]
+                    prod, principal_id = productos_cargados[clave_padre]
                     # `crear_variantes` lee `producto.variants` y el PBS de la
                     # principal — hay que flushear lo pendiente (la sesion es
                     # autoflush=False) y refrescar la coleccion cacheada, para
@@ -445,14 +481,14 @@ async def upload_products(
                     db.flush()
                     db.expire(prod, ["variants"])
                     entrada = ProductVariantCreate(
-                        color=raw_color or None,
-                        size=raw_talla or None,
+                        color=raw_color,
+                        size=raw_talla,
                         sku=raw_sku,
                         barcode=_safe_str(row.get("codigo barras")) or None,
                         price=price_base,
                         cost=cost,
                     )
-                    nuevas = crear_variantes(db, org_id, prod, [entrada])
+                    nuevas = crear_variantes(db, org_id, prod, [entrada], principal_id=principal_id)
                     variant = nuevas[0]
                     variant.has_iva = has_iva_val
                     created_count += 1
@@ -493,8 +529,8 @@ async def upload_products(
                         product_id=prod.id,
                         sku=raw_sku,
                         barcode=_safe_str(row.get("codigo barras")),
-                        color=raw_color or None,
-                        size=raw_talla or None,
+                        color=raw_color,
+                        size=raw_talla,
                         variant_name=variant_label(raw_color, raw_talla),
                         price=price_base,
                         cost=cost,
@@ -505,8 +541,7 @@ async def upload_products(
                     db.flush()
                     created_count += 1
                     is_new = True
-                    if con_variante:
-                        productos_cargados[clave_padre] = prod
+                    registrar_grupo = con_variante
                     if len(preview_rows) < 20:
                         preview_rows.append({
                             "action": "NEW",
@@ -702,6 +737,11 @@ async def upload_products(
                                 linked_package_id=linked_pkg_id,
                                 organization_id=org_id
                             ))
+
+                # La fila entera termino sin excepciones: recien ahora se
+                # registra como grupo para las filas siguientes de esta carga.
+                if registrar_grupo:
+                    productos_cargados[clave_padre] = (prod, variant.id)
 
         except Exception as e:
             err_msg = str(e)

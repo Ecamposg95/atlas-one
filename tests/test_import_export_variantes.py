@@ -6,6 +6,7 @@ se agrupan en un producto con N variantes via `crear_variantes`.
 """
 import io
 
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from conftest import _make_product
@@ -44,6 +45,31 @@ class TestExportConVariantes:
         assert filas["PLY-R-S"][headers.index("Color")] == "Rojo"
         assert filas["PLY-R-S"][headers.index("Talla")] == "S"
         assert filas["PLY-R-M"][headers.index("Talla")] == "M"
+
+    def test_variante_retirada_no_se_exporta(self, client, db, org, branch_a, auth_admin):
+        """Una talla dada de baja (soft delete) no debe aparecer en el
+        export: si el archivo se vuelve a subir, la busqueda por SKU y el
+        indice unico ignoran las filas soft-deleted, y la fila fantasma se
+        recrearia como un producto/variante duplicado."""
+        p, principal = _make_product(db, org, "Playera lisa", "PLY-R-S", 120, [(branch_a.id, True)])
+        principal.color, principal.size, principal.variant_name = "Rojo", "S", "Rojo / S"
+        retirada = ProductVariant(
+            product_id=p.id, sku="PLY-R-M", price=Decimal("120"), cost=Decimal("70"),
+            color="Rojo", size="M", variant_name="Rojo / M", organization_id=org.id,
+            deleted_at=datetime.now(timezone.utc),
+        )
+        db.add(retirada)
+        db.commit()
+
+        r = client.get("/api/products/export/excel", headers=_h(auth_admin, org))
+        assert r.status_code == 200, r.text
+
+        from openpyxl import load_workbook
+        wb = load_workbook(io.BytesIO(r.content))
+        ws = wb.active
+        headers = [c.value for c in ws[1]]
+        skus = {row[headers.index("SKU")] for row in ws.iter_rows(min_row=2, values_only=True)}
+        assert skus == {"PLY-R-S"}, "la variante retirada no debe exportarse"
 
 
 class TestUploadConVariantes:
@@ -111,3 +137,80 @@ class TestUploadConVariantes:
         skus = {v.sku for v in db.query(ProductVariant).join(Product).filter(
             Product.organization_id == org.id, Product.name == "Gorra lisa").all()}
         assert skus == {"GOR-R-S", "GOR-R-M"}
+
+    def test_sin_columnas_de_variante_importa_como_antes(self, client, db, org, auth_admin):
+        """Sin Color/Talla en el archivo, el comportamiento es identico al
+        actual: cada fila con el mismo nombre crea su propio producto con
+        variante "Estándar", sin agrupar nada."""
+        cabeceras_sin_variante = ["SKU", "Nombre", "Departamento", "Precio Base", "Costo", "Stock"]
+        filas = [
+            {"SKU": "GOR-1", "Nombre": "Gorra", "Departamento": "Gorras",
+             "Precio Base": "80", "Costo": "40", "Stock": "1"},
+            {"SKU": "GOR-2", "Nombre": "Gorra", "Departamento": "Gorras",
+             "Precio Base": "80", "Costo": "40", "Stock": "1"},
+        ]
+        content = self._csv(filas, cabeceras_sin_variante)
+        r = client.post(
+            "/api/products/upload",
+            headers=_h(auth_admin, org),
+            files={"file": ("gorras_sin_variante.csv", content, "text/csv")},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["created"] == 2
+        assert body["failed"] == 0
+
+        productos = db.query(Product).filter(Product.organization_id == org.id, Product.name == "Gorra").all()
+        assert len(productos) == 2, "sin Color/Talla, cada fila sigue siendo un producto independiente"
+        for p in productos:
+            v = db.query(ProductVariant).filter(ProductVariant.product_id == p.id).one()
+            assert v.variant_name == "Estándar"
+            assert v.color is None and v.size is None
+
+    def test_update_aplica_color_y_talla_a_una_variante_existente(self, client, db, org, branch_a, auth_admin):
+        """Actualizar por SKU con Color/Talla en el archivo debe corregir la
+        variante existente (antes se descartaban silenciosamente)."""
+        p, v = _make_product(db, org, "Playera lisa", "PLY-R-S", 120, [(branch_a.id, True)])
+        db.commit()
+
+        filas = [{"SKU": "PLY-R-S", "Nombre": "Playera lisa", "Departamento": "Playeras",
+                  "Precio Base": "125", "Costo": "60", "Stock": "2", "Color": "Rojo", "Talla": "S"}]
+        content = self._csv(filas, self.CABECERAS)
+        r = client.post(
+            "/api/products/upload",
+            headers=_h(auth_admin, org),
+            files={"file": ("update.csv", content, "text/csv")},
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["updated"] == 1
+
+        db.refresh(v)
+        assert v.color == "Rojo" and v.size == "S"
+        assert v.variant_name == "Rojo / S"
+
+    def test_update_reporta_pareja_repetida_como_fila_fallida(self, client, db, org, branch_a, auth_admin):
+        """Si el Color/Talla que trae la fila de Update ya lo tiene otra
+        variante del mismo producto, se reporta como fila fallida en vez de
+        aplicarse silenciosamente (colision de pareja)."""
+        p, v1 = _make_product(db, org, "Playera lisa", "PLY-R-S", 120, [(branch_a.id, True)])
+        v1.color, v1.size, v1.variant_name = "Rojo", "S", "Rojo / S"
+        v2 = ProductVariant(
+            product_id=p.id, sku="PLY-R-M", price=Decimal("120"), cost=Decimal("70"),
+            color="Rojo", size="M", variant_name="Rojo / M", organization_id=org.id,
+        )
+        db.add(v2)
+        db.commit()
+
+        filas = [{"SKU": "PLY-R-M", "Nombre": "Playera lisa", "Departamento": "Playeras",
+                  "Precio Base": "120", "Costo": "70", "Stock": "1", "Color": "Rojo", "Talla": "S"}]
+        content = self._csv(filas, self.CABECERAS)
+        r = client.post(
+            "/api/products/upload",
+            headers=_h(auth_admin, org),
+            files={"file": ("colision.csv", content, "text/csv")},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["failed"] == 1 and body["updated"] == 0
+        db.refresh(v2)
+        assert v2.size == "M", "la variante existente no debe mutarse cuando la nueva pareja colisiona"

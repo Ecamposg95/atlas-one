@@ -109,14 +109,26 @@ def _pareja_repetida(producto: Product, color: Optional[str], size: Optional[str
     return False
 
 
-def crear_variantes(db: Session, org_id: int, producto: Product, entradas: List[ProductVariantCreate]) -> List[ProductVariant]:
+def crear_variantes(
+    db: Session, org_id: int, producto: Product, entradas: List[ProductVariantCreate],
+    principal_id: Optional[str] = None,
+) -> List[ProductVariant]:
     """Crea variantes hermanas de la principal. Sin commit: lo hace el caller.
 
     Cada variante nueva hereda precio/costo/IVA de la principal si no los trae,
     y se habilita (PBS) con existencia 0 en las mismas sucursales donde ya esta
     la principal, para que aparezca en el POS de inmediato.
+
+    `principal_id`: fija cual variante es la principal en vez de tomar la
+    primera de `producto.variants` (orden no garantizado una vez que el
+    producto ya tiene mas de una variante — p. ej. cuando el caller invoca
+    esta funcion varias veces para el mismo producto, como en la carga
+    masiva por fila).
     """
-    principal = next(v for v in producto.variants if v.deleted_at is None)
+    if principal_id is not None:
+        principal = next(v for v in producto.variants if v.id == principal_id and v.deleted_at is None)
+    else:
+        principal = next(v for v in producto.variants if v.deleted_at is None)
     pbs_base = db.query(ProductBranchStatus).filter(ProductBranchStatus.variant_id == principal.id).all()
     if not pbs_base:
         # No es un caso fatal (p. ej. un producto HQ sin PBS explicito vive
