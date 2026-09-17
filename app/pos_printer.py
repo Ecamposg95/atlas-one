@@ -200,6 +200,11 @@ class PosPrinter:
         raw += self._total_line("TOTAL", net_total)
         raw += self.CMD["BOLD_OFF"]
 
+        # Equivalente en dolares. Solo si la venta trae el tipo congelado
+        # (`sales_documents.usd_rate`); una organizacion sin tipo de cambio ve
+        # el ticket de siempre.
+        raw += self._usd_line(getattr(sale, "usd_rate", None), net_total)
+
         # --- 4. PAYMENT (1 line single, N lines mixed) ---
         raw += self._payment_block(method, float(paid), float(change), payments_detail)
 
@@ -332,6 +337,27 @@ class PosPrinter:
         line = f"{label_text:<{label_w}}{value:>{val_w}.2f}\n"
         return line.encode("latin-1", "replace")
 
+    def _usd_line(self, usd_rate, total_mxn: float) -> bytes:
+        """'USD (T.C. 18.5000):            12.34'. Vacio si la venta no trae tipo.
+
+        El tipo de cambio viaja EN LA ETIQUETA, no en una linea aparte con el
+        simbolo '≈': el ticket se codifica en latin-1 (`_total_line`) y '≈'
+        saldria impreso como '?'. La etiqueta mide 19 caracteres, asi que cabe
+        en el `label_w` de 20 del papel de 58 mm.
+
+        La conversion la hace `app/services/exchange_rate.py::to_usd`, unica
+        fuente del redondeo (el mismo que usa la pantalla del POS).
+        """
+        if usd_rate is None:
+            return b""
+        from app.services.exchange_rate import to_usd
+
+        tasa = Decimal(str(usd_rate))
+        if tasa <= 0:
+            return b""
+        equivalente = to_usd(Decimal(str(total_mxn)), tasa)
+        return self._total_line(f"USD (T.C. {tasa:.4f})", float(equivalente))
+
     def _payment_block(self, method, paid: float, change: float, payments_detail) -> bytes:
         """Single payment → 1 line with REC + CAM. Mixed → N lines, last one carries CAM."""
         method_map = {
@@ -435,6 +461,10 @@ class PosPrinter:
         raw += self.CMD["BOLD_ON"]
         raw += self._total_line("TOTAL", new_final)
         raw += self.CMD["BOLD_OFF"]
+
+        # Mismo tipo de cambio que el ticket original: viene congelado en la
+        # venta, no se vuelve a resolver.
+        raw += self._usd_line(getattr(sale, "usd_rate", None), new_final)
 
         # Footer
         footer_msg = self._resolve_footer(organization, branch)

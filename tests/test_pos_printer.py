@@ -62,6 +62,12 @@ def _make_sale(**kwargs):
     sale.customer = None
     sale.payments = []
 
+    # Equivalente en dolares: EXPLICITO porque en un MagicMock cualquier
+    # atributo no declarado sale truthy, y eso imprimiria una linea USD con un
+    # MagicMock como tipo de cambio en TODAS las pruebas de ticket (mismo
+    # motivo documentado arriba para org.price_includes_tax).
+    sale.usd_rate = kwargs.get("usd_rate", None)
+
     import datetime, zoneinfo
     sale.created_at = datetime.datetime(2026, 4, 8, 10, 0, 0,
                                         tzinfo=zoneinfo.ZoneInfo("America/Mexico_City"))

@@ -68,6 +68,13 @@ class SalesDocument(Base, UUIDMixin, AuditMixin, TenantMixin):
     # cambia). NULL = venta legada anterior a la migración → recomputar.
     change_given = Column(Numeric(12, 2), nullable=True)
 
+    # Equivalente en dolares (2026-09-17): tipo de cambio efectivo CONGELADO al
+    # cobrar, para que el ticket y su reimpresion muestren siempre el mismo
+    # numero aunque el FIX de mañana sea otro. NULL = venta anterior a la
+    # funcion, o organizacion en modo 'off'. NO participa de ningun calculo de
+    # cobro; es informativo (ver app/services/exchange_rate.py).
+    usd_rate = Column(Numeric(10, 4), nullable=True)
+
     requires_invoice = Column(Boolean, default=False)
 
     # Gastro — propina cobrada (se suma al total) y atribución al mesero de la

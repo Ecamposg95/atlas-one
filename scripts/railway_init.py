@@ -108,6 +108,7 @@ def run_migrations():
         ("organization", "usd_rate_mode",   "ALTER TABLE organization ADD COLUMN usd_rate_mode VARCHAR(10) NOT NULL DEFAULT 'off';"),
         ("organization", "usd_rate_manual", "ALTER TABLE organization ADD COLUMN usd_rate_manual NUMERIC(10,4);"),
         ("organization", "usd_rate_margin", "ALTER TABLE organization ADD COLUMN usd_rate_margin NUMERIC(10,4) NOT NULL DEFAULT 0;"),
+        ("sales_documents", "usd_rate", "ALTER TABLE sales_documents ADD COLUMN usd_rate NUMERIC(10,4);"),
     ]
 
     # Track 1 — Audit + cleanup de Payment huérfanos antes de NOT NULL.

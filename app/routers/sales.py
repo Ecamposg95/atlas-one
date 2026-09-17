@@ -394,6 +394,8 @@ def _respuesta_de_venta_existente(db: Session, sale: SalesDocument) -> Dict[str,
         "paid": float(Decimal(str(pagado)).quantize(Decimal("0.01"))),
         "change": float(Decimal(str(sale.change_given or 0)).quantize(Decimal("0.01"))),
         "credit_debt": 0.0,
+        # Misma forma que el alta normal: el POS no distingue.
+        "usd_rate": float(sale.usd_rate) if sale.usd_rate is not None else None,
         "duplicate_ignored": True,
     }
 
@@ -848,7 +850,16 @@ def create_sale(
             client_uuid=sale_in.client_uuid,
         )
         db.add(sales_doc)
-    
+
+    # Equivalente en dolares (informativo). Se congela el tipo de cambio
+    # efectivo del momento para que el ticket y su reimpresion muestren el
+    # mismo numero. `snapshot_usd_rate` NUNCA lanza: si Banxico, la tabla o el
+    # servicio fallan devuelve None y la venta se cobra igual. NO participa de
+    # ningun calculo de totales, pagos, stock ni caja.
+    if getattr(sales_doc, "usd_rate", None) is None:
+        from app.services.exchange_rate import snapshot_usd_rate
+        sales_doc.usd_rate = snapshot_usd_rate(db, org_id)
+
     db.flush()
 
     # --- H-2: Persist global_discount_pct (defensive write) ---
@@ -970,7 +981,10 @@ def create_sale(
         "total": float(sales_doc.total_amount.quantize(Decimal("0.01")) if sales_doc.total_amount is not None else Decimal("0.00")),
         "paid": float(total_paid.quantize(Decimal("0.01"))),
         "change": float(change_response),
-        "credit_debt": float(remaining_debt.quantize(Decimal("0.01")))
+        "credit_debt": float(remaining_debt.quantize(Decimal("0.01"))),
+        # Tipo de cambio congelado en la venta. None = la organizacion no tiene
+        # equivalente en dolares configurado.
+        "usd_rate": float(sales_doc.usd_rate) if sales_doc.usd_rate is not None else None,
     }
 
 # --------------------------------------------------------------------------
