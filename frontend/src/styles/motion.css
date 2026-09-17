@@ -122,3 +122,30 @@ html.light .hero-sky .text-white { color: #fff !important; }
    con el tema (a diferencia de --dax-accent, aclarado en oscuro): sobre blanco
    hay que mantener un color oscuro en los dos temas. */
 .hero-cta { color: var(--p-accent); }
+
+/* ── Botón de tema con mini cielo (port Rmazh) ───────────────────────────────
+   Misma convención que .sky-*: el sol, las nubes, la luna y las estrellas son
+   ILUSTRACIÓN, no UI — sus colores no siguen el tema ni el acento del vertical.
+   Loops finitos: vivo al llegar, quieto después. */
+.theme-toggle { position: relative; width: 100%; height: 52px; border-radius: 12px; overflow: hidden;
+  border: 1px solid rgba(255,255,255,.10); cursor: pointer; display: flex; align-items: center;
+  justify-content: center; gap: 8px; padding: 0 12px; color: #fff; font-size: 12px; font-weight: 700;
+  margin-bottom: 6px; text-shadow: 0 1px 2px rgba(0,0,0,.45); transition: filter .15s ease; }
+.theme-toggle:hover { filter: brightness(1.08); }
+.theme-toggle.is-light { background: linear-gradient(120deg, #0369A1, #38BDF8); }
+.theme-toggle.is-dark  { background: linear-gradient(120deg, #020617, #1E1B4B); }
+.tt-sky { position: absolute; inset: 0; pointer-events: none; }
+.tt-label, .tt-icon { position: relative; z-index: 1; }
+.tt-icon { font-size: 12px; opacity: .85; }
+.tt-sun { position: absolute; left: 34%; top: 50%; width: 16px; height: 16px; margin-top: -8px; border-radius: 50%;
+  background: #fde047; box-shadow: 0 0 14px 5px rgba(253,224,71,.5); animation: tt-bob 4s ease-in-out 8; }
+.tt-cloud { position: absolute; height: 8px; border-radius: 9999px; background: rgba(255,255,255,.75);
+  animation: tt-drift 18s linear 3; }
+.tt-cloud::before { content: ''; position: absolute; width: 10px; height: 10px; border-radius: 50%; background: inherit; top: -5px; left: 5px; }
+.tt-moon { position: absolute; left: 32%; top: 50%; width: 14px; height: 14px; margin-top: -7px; border-radius: 50%;
+  background: #fef3c7; box-shadow: 0 0 12px 3px rgba(254,243,199,.35); }
+.tt-moon::after { content: ''; position: absolute; width: 11px; height: 11px; border-radius: 50%; background: #0f172a; left: 5px; top: -2px; }
+.tt-star { position: absolute; width: 2px; height: 2px; border-radius: 50%; background: #fff;
+  animation: sky-twinkle 2.4s ease-in-out 25; }
+@keyframes tt-bob   { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-2px) } }
+@keyframes tt-drift { from { transform: translateX(-30px) } to { transform: translateX(160px) } }

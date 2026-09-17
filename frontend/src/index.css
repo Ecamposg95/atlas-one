@@ -104,6 +104,23 @@
     --sb-active-line: color-mix(in srgb, var(--p-accent) 48%, transparent);
     --sb-glow:        color-mix(in srgb, var(--p-accent) 42%, transparent);
     --sb-logo-grad:   linear-gradient(135deg, var(--p-accent) 0%, var(--p-accent-hover) 100%);
+
+    /* ── Identidad por módulo del sidebar (port Rmazh) ──
+       Cada grupo de la navegación tiene su matiz: el ítem activo lo usa para
+       el riel lateral, el resplandor y el relleno del gradiente. Son tokens,
+       no hex sueltos en el TSX, para que el matiz se ajuste en un solo lugar.
+       INVARIANTES entre temas: el sidebar es oscuro en claro y en oscuro
+       (--sb-bg no cambia de familia), así que un solo juego alcanza. */
+    --sb-mod-violet: #a78bfa;
+    --sb-mod-green:  #34d399;
+    --sb-mod-blue:   #38bdf8;
+    --sb-mod-amber:  #fbbf24;
+    --sb-mod-rose:   #fb7185;
+    --sb-mod-cyan:   #22d3ee;
+    --sb-mod-indigo: #818cf8;
+    --sb-mod-orange: #fb923c;
+    --sb-mod-teal:   #2dd4bf;
+    --sb-mod-slate:  #94a3b8;
   }
 
   /* ── PRESET THEMING (2026-05-14) ──

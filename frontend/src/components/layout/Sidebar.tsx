@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
 import { useEnabledModulesStore } from '../../store/enabledModulesStore'
@@ -42,6 +42,35 @@ const HQ_NAV_GROUPS: { header: string; urls: string[] }[] = [
   { header: 'Organización', urls: ['/organization', '/hq/branches', '/users', '/hr'] },
   { header: 'Inteligencia', urls: ['/ai'] },
 ]
+
+// Color de acento por grupo — identidad de módulo en el sidebar. El ícono se
+// tiñe con el color del grupo; el ítem activo lo usa para el riel lateral, el
+// resplandor y el relleno suave. Los encabezados de sección y las etiquetas
+// inactivas se quedan neutros. Los matices viven en index.css (--sb-mod-*),
+// no como hex sueltos aquí.
+const GROUP_COLOR: Record<string, string> = {
+  // Grupos HQ (admin)
+  'Operación': 'var(--sb-mod-violet)', 'Catálogo': 'var(--sb-mod-green)',
+  'Ventas': 'var(--sb-mod-blue)', 'Inventario': 'var(--sb-mod-amber)',
+  'Compras': 'var(--sb-mod-teal)', 'Clientes': 'var(--sb-mod-rose)',
+  'Organización': 'var(--sb-mod-cyan)', 'Inteligencia': 'var(--sb-mod-indigo)',
+  'Restaurante': 'var(--sb-mod-orange)', 'Más': 'var(--sb-mod-slate)',
+  // Grupos de sucursal
+  'Mi día': 'var(--sb-mod-violet)', 'Mi turno': 'var(--sb-mod-green)',
+  'Reportes': 'var(--sb-mod-indigo)', 'Configuración': 'var(--sb-mod-slate)',
+}
+const DEFAULT_GROUP_COLOR = 'var(--sb-mod-violet)'
+
+// url → color del grupo, para el IconRail contraído (que no tiene secciones).
+const URL_COLOR: Record<string, string> = {}
+for (const _g of [...HQ_NAV_GROUPS, ...BRANCH_NAV_GROUPS]) {
+  const _c = GROUP_COLOR[_g.header] ?? DEFAULT_GROUP_COLOR
+  for (const _u of _g.urls) URL_COLOR[_u] = _c
+}
+
+/** Mezcla un token de color con transparencia — el equivalente a un sufijo de
+ *  alpha en hex, que con var() no se puede concatenar. */
+const alpha = (color: string, pct: number) => `color-mix(in srgb, ${color} ${pct}%, transparent)`
 
 /** Hook que polea el conteo de devoluciones pendientes cada 60s para roles aprobadores. */
 function usePendingReturnsCount(role: Role): number {
@@ -128,6 +157,96 @@ const ROLE_COLOR: Record<Role, string> = {
   CAJERO: '#34d399', VENDEDOR: '#fbbf24', SOPORTE_OPERATIVO: '#94a3b8', CLIENTE: '#94a3b8',
 }
 
+// ── Encabezado de sección ───────────────────────────────────────
+function SectionHeader({ children }: { children: ReactNode }) {
+  return (
+    <p style={{
+      textAlign: 'left', margin: '12px 8px 6px',
+      fontSize: '10px', fontWeight: 800, textTransform: 'uppercase',
+      letterSpacing: '0.14em', color: 'rgba(148,163,184,0.55)',
+    }}>
+      {children}
+    </p>
+  )
+}
+
+// ── Píldora de navegación — acrílico + riel con el color del módulo ──
+// Solo capa visual: la lógica de qué ítems se ven vive en `visibleNavItems`
+// y en los grupos de arriba.
+function NavPill({ item, active, color, pendingReturns }: {
+  item: NavItem; active: boolean; color: string; pendingReturns: number
+}) {
+  const showReturnsBadge = RETURNS_URLS.has(item.url) && pendingReturns > 0
+  return (
+    <Link
+      to={item.url}
+      aria-current={active ? 'page' : undefined}
+      style={{
+        position: 'relative',
+        display: 'flex', alignItems: 'center', gap: '12px',
+        padding: '11px 12px 11px 14px', minHeight: '44px',
+        borderRadius: '12px',
+        textDecoration: 'none', transition: 'background 0.15s ease',
+        background: active
+          ? `linear-gradient(90deg, ${alpha(color, 18)} 0%, rgba(255,255,255,0.07) 100%)`
+          : 'transparent',
+        border: `1px solid ${active ? alpha(color, 33) : 'transparent'}`,
+        backdropFilter: active ? 'blur(12px)' : undefined,
+        boxShadow: active ? 'inset 0 1px 0 rgba(255,255,255,0.10), 0 4px 14px rgba(0,0,0,0.35)' : undefined,
+      }}
+      onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.035)' }}
+      onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+    >
+      {active && (
+        <span
+          aria-hidden="true"
+          style={{
+            position: 'absolute', left: '-12px', top: '8px', bottom: '8px', width: '4px',
+            borderRadius: '0 4px 4px 0',
+            background: color, boxShadow: `0 0 12px ${color}`,
+          }}
+        />
+      )}
+      <i
+        className={`fa-solid ${item.icon}`}
+        style={{
+          fontSize: '16px', width: '18px', textAlign: 'center', flexShrink: 0,
+          color: active ? color : 'rgba(237,237,248,0.55)',
+          filter: active ? `drop-shadow(0 0 6px ${alpha(color, 60)})` : undefined,
+        }}
+        aria-hidden="true"
+      />
+      <span style={{
+        fontSize: '13px',
+        fontWeight: active ? 700 : 600,
+        color: active ? '#ffffff' : 'var(--sb-text)',
+        textShadow: active ? `0 0 14px ${alpha(color, 60)}` : undefined,
+        flex: 1,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>
+        {item.label}
+      </span>
+      {showReturnsBadge ? (
+        <span style={{
+          minWidth: '20px', height: '20px', padding: '0 5px',
+          borderRadius: '10px', flexShrink: 0,
+          background: '#f59e0b', color: '#1c1917',
+          fontSize: '10px', fontWeight: 900,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          {pendingReturns > 99 ? '99+' : pendingReturns}
+        </span>
+      ) : (
+        <i
+          className="fa-solid fa-chevron-right"
+          style={{ fontSize: '10px', color: 'rgba(148,163,184,0.45)' }}
+          aria-hidden="true"
+        />
+      )}
+    </Link>
+  )
+}
+
 // ── BRANCH NAV — full-width rectangle buttons ───────────────────
 function BranchNav({ items, pendingReturns }: { items: NavItem[]; pendingReturns: number }) {
   const { pathname } = useLocation()
@@ -146,74 +265,25 @@ function BranchNav({ items, pendingReturns }: { items: NavItem[]; pendingReturns
   return (
     <nav style={{ flex: 1, overflowY: 'auto', padding: '10px 12px' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        {grouped.map((section) => (
-          <div key={section.header}>
-            <p style={{
-              fontSize: '9px', fontWeight: 800, textTransform: 'uppercase',
-              letterSpacing: '0.12em', color: 'rgba(148,163,184,0.55)',
-              marginBottom: '6px', paddingLeft: '4px',
-            }}>
-              {section.header}
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {section.items.map((item) => {
-                const active = pathname === item.url || pathname.startsWith(item.url + '/')
-                const showReturnsBadge = RETURNS_URLS.has(item.url) && pendingReturns > 0
-                return (
-                  <Link
+        {grouped.map((section) => {
+          const color = GROUP_COLOR[section.header] ?? DEFAULT_GROUP_COLOR
+          return (
+            <div key={section.header}>
+              <SectionHeader>{section.header}</SectionHeader>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {section.items.map((item) => (
+                  <NavPill
                     key={item.url}
-                    to={item.url}
-                    style={{
-                      position: 'relative',
-                      display: 'flex', flexDirection: 'row',
-                      alignItems: 'center', gap: '12px',
-                      padding: '14px 14px',
-                      borderRadius: '14px',
-                      textDecoration: 'none', transition: 'all 0.15s ease',
-                      background: active
-                        ? 'var(--sb-active-bg)'
-                        : 'rgba(255,255,255,0.055)',
-                      border: `1px solid ${active ? 'var(--sb-active-line)' : 'rgba(255,255,255,0.07)'}`,
-                      borderLeft: active
-                        ? '4px solid var(--p-accent)'
-                        : '4px solid transparent',
-                      boxShadow: active ? '0 0 12px var(--sb-glow)' : 'none',
-                    }}
-                  >
-                    <i
-                      className={`fa-solid ${item.icon}`}
-                      style={{
-                        fontSize: '18px', flexShrink: 0,
-                        color: active ? 'var(--sb-active-icon)' : 'rgba(255,255,255,0.78)',
-                      }}
-                    />
-                    <span style={{
-                      fontSize: '13px',
-                      fontWeight: active ? 700 : 500,
-                      color: active ? 'var(--sb-active-text)' : 'rgba(255,255,255,0.82)',
-                      letterSpacing: '-0.01em',
-                      flex: 1,
-                    }}>
-                      {item.label}
-                    </span>
-                    {showReturnsBadge && (
-                      <span style={{
-                        minWidth: '20px', height: '20px', padding: '0 5px',
-                        borderRadius: '10px', flexShrink: 0,
-                        background: '#f59e0b', color: '#1c1917',
-                        fontSize: '10px', fontWeight: 900,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        boxShadow: '0 0 8px rgba(245,158,11,0.5)',
-                      }}>
-                        {pendingReturns > 99 ? '99+' : pendingReturns}
-                      </span>
-                    )}
-                  </Link>
-                )
-              })}
+                    item={item}
+                    active={pathname === item.url || pathname.startsWith(item.url + '/')}
+                    color={color}
+                    pendingReturns={pendingReturns}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </nav>
   )
@@ -240,65 +310,25 @@ function HQNav({ items, pendingReturns }: { items: NavItem[]; pendingReturns: nu
   return (
     <nav style={{ flex: 1, overflowY: 'auto', padding: '10px 12px' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-        {grouped.map((section) => (
-          <div key={section.header}>
-            <p style={{
-              fontSize: '9px', fontWeight: 800, textTransform: 'uppercase',
-              letterSpacing: '0.12em', color: 'rgba(255,255,255,0.42)',
-              marginBottom: '6px', paddingLeft: '6px',
-            }}>
-              {section.header}
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-              {section.items.map((item) => {
-                const active = pathname === item.url || pathname.startsWith(item.url + '/')
-                const showReturnsBadge = RETURNS_URLS.has(item.url) && pendingReturns > 0
-                return (
-                  <Link
+        {grouped.map((section) => {
+          const color = GROUP_COLOR[section.header] ?? DEFAULT_GROUP_COLOR
+          return (
+            <div key={section.header}>
+              <SectionHeader>{section.header}</SectionHeader>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {section.items.map((item) => (
+                  <NavPill
                     key={item.url}
-                    to={item.url}
-                    style={{
-                      position: 'relative',
-                      display: 'flex', alignItems: 'center', gap: '11px',
-                      padding: '9px 11px', borderRadius: '10px',
-                      textDecoration: 'none', transition: 'all 0.15s ease',
-                      background: active ? 'var(--sb-active-bg)' : 'transparent',
-                      borderLeft: `3px solid ${active ? 'var(--p-accent)' : 'transparent'}`,
-                    }}
-                    onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.06)' }}
-                    onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent' }}
-                  >
-                    <i
-                      className={`fa-solid ${item.icon}`}
-                      style={{
-                        fontSize: '15px', width: '18px', textAlign: 'center', flexShrink: 0,
-                        color: active ? 'var(--sb-active-icon)' : 'rgba(255,255,255,0.75)',
-                      }}
-                    />
-                    <span style={{
-                      fontSize: '12.5px',
-                      fontWeight: active ? 700 : 500,
-                      color: active ? 'var(--sb-active-text)' : 'rgba(255,255,255,0.9)',
-                      letterSpacing: '-0.01em', flex: 1,
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>
-                      {item.label}
-                    </span>
-                    {showReturnsBadge && (
-                      <span style={{
-                        minWidth: '18px', height: '18px', padding: '0 5px', borderRadius: '9px', flexShrink: 0,
-                        background: '#f59e0b', color: '#1c1917', fontSize: '10px', fontWeight: 900,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      }}>
-                        {pendingReturns > 99 ? '99+' : pendingReturns}
-                      </span>
-                    )}
-                  </Link>
-                )
-              })}
+                    item={item}
+                    active={pathname === item.url || pathname.startsWith(item.url + '/')}
+                    color={color}
+                    pendingReturns={pendingReturns}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </nav>
   )
@@ -477,26 +507,31 @@ function MatrixSidebar({ items, logout, isBranchRole }: { items: NavItem[]; logo
           </button>
         )}
 
-        {/* Theme toggle */}
+        {/* Theme toggle — mini cielo animado */}
         <button
           onClick={toggleTheme}
-          style={{
-            width: '100%', display: 'flex', alignItems: 'center', gap: '8px',
-            padding: '8px 10px', borderRadius: '9px', cursor: 'pointer', transition: 'all 0.15s',
-            fontSize: '11px', fontWeight: 600,
-            color: theme === 'dark' ? '#fbbf24' : '#818cf8',
-            background: theme === 'dark' ? 'rgba(251,191,36,0.08)' : 'rgba(99,102,241,0.08)',
-            border: `1px solid ${theme === 'dark' ? 'rgba(251,191,36,0.25)' : 'rgba(99,102,241,0.25)'}`,
-            marginBottom: '6px',
-          }}
-          onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.opacity = '0.8' }}
-          onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.opacity = '1' }}
+          className={`theme-toggle ${theme === 'dark' ? 'is-dark' : 'is-light'}`}
+          aria-label={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+          title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
         >
-          <i
-            className={`fa-solid ${theme === 'dark' ? 'fa-sun' : 'fa-moon'}`}
-            style={{ fontSize: '11px', flexShrink: 0 }}
-          />
-          <span>{theme === 'dark' ? 'Claro' : 'Oscuro'}</span>
+          <span className="tt-sky" aria-hidden="true">
+            {theme === 'dark' ? (
+              <>
+                <span className="tt-moon" />
+                {[[12, 30], [30, 60], [48, 22], [64, 70], [80, 40], [92, 18]].map(([l, t], i) => (
+                  <span key={i} className="tt-star" style={{ left: `${l}%`, top: `${t}%`, animationDelay: `${(i * 0.4) % 2}s` }} />
+                ))}
+              </>
+            ) : (
+              <>
+                <span className="tt-sun" />
+                <span className="tt-cloud" style={{ left: '12%', top: '22%', width: 22 }} />
+                <span className="tt-cloud" style={{ left: '58%', top: '55%', width: 16, animationDelay: '-6s', opacity: .8 }} />
+              </>
+            )}
+          </span>
+          <span className="tt-label">{theme === 'dark' ? 'Modo oscuro' : 'Modo claro'}</span>
+          <i className={`fa-solid ${theme === 'dark' ? 'fa-sun' : 'fa-moon'} tt-icon`} aria-hidden="true" />
         </button>
 
         {/* Logout */}
@@ -588,23 +623,25 @@ function IconRail({ items, logout }: { items: NavItem[]; logout: () => void }) {
         {items.map((item) => {
           const active = pathname === item.url || pathname.startsWith(item.url + '/')
           const showReturnsBadge = RETURNS_URLS.has(item.url) && pendingReturns > 0
+          const color = URL_COLOR[item.url] ?? DEFAULT_GROUP_COLOR
           return (
             <Link
               key={item.url}
               to={item.url}
               title={`${item.label}${showReturnsBadge ? ` (${pendingReturns} pendientes)` : ''}`}
+              aria-current={active ? 'page' : undefined}
               style={{
                 position: 'relative',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 height: '38px', borderRadius: '8px', marginBottom: '2px',
                 textDecoration: 'none', transition: 'all 0.15s ease',
-                background: active ? 'var(--sb-active-bg)' : 'transparent',
-                borderLeft: `2px solid ${active ? 'var(--sb-active-icon)' : 'transparent'}`,
+                background: active ? alpha(color, 15) : 'transparent',
+                borderLeft: `2px solid ${active ? color : 'transparent'}`,
               }}
             >
               <i
                 className={`fa-solid ${item.icon}`}
-                style={{ fontSize: '14px', color: active ? 'var(--sb-active-icon)' : 'rgba(255,255,255,0.78)' }}
+                style={{ fontSize: '14px', color: active ? color : alpha(color, 70) }}
               />
               {showReturnsBadge && (
                 <span style={{
