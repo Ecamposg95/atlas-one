@@ -707,6 +707,12 @@ class PosPrinter:
         #   b) Devolucion post-cierre o de otro dia: se ata a esta sesion
         #      (`cash_session_id`) pero netea el `total_amount` de una venta
         #      que pertenece al corte de otro dia.
+        #   c) Con comision de tarjeta. La comision es dinero que entro por la
+        #      terminal, asi que suma en "Total cobrado", pero NO es mercancia
+        #      vendida: `total_amount` la excluye a proposito
+        #      (app/services/card_surcharge.py), asi que NO suma en "Ventas
+        #      Totales". Al 3.5%, un dia de $10,000 en tarjeta cobra $10,350 y
+        #      vende $10,000.
         # La resta que SI es cierta por construccion ("Neto cobrado") cierra
         # el bloque de DEVOLUCIONES, justo arriba.
         raw += self.CMD["CENTER"] + self.CMD["BOLD_ON"]
