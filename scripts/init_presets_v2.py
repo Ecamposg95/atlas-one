@@ -30,6 +30,7 @@ MODULES_CATALOG = [
     ("cash_management", "Gestión de Caja", "Cortes de caja, arqueos, control de efectivo", ModuleScope.GLOBAL, ModuleStatus.STABLE),
     ("inventory", "Inventario", "Stock, movimientos, kardex", ModuleScope.GLOBAL, ModuleStatus.STABLE),
     ("scanner", "Scanner de tienda", "Lectura con la cámara para cajeros: consulta, precio y conteo en piso", ModuleScope.BRANCH, ModuleStatus.STABLE),
+    ("variants", "Variantes color/talla", "Prendas con varias tallas y colores: matriz de variantes, selector en el POS y existencia por variante", ModuleScope.GLOBAL, ModuleStatus.STABLE),
     ("catalog", "Catálogo", "Productos, servicios, listas de precio", ModuleScope.GLOBAL, ModuleStatus.STABLE),
     ("branch_catalog_enablement", "Habilitación de Catálogo por Sucursal", "Control de productos disponibles por sucursal", ModuleScope.BRANCH, ModuleStatus.STABLE),
     ("returns", "Devoluciones", "Gestión de devoluciones y notas de crédito", ModuleScope.GLOBAL, ModuleStatus.STABLE),
@@ -287,7 +288,7 @@ PRESETS = [
         "id": "ATLAS_POS_BOUTIQUE",
         "name": "Atlas POS Boutique",
         "desc": "Boutique de ropa y moda: Atlas POS más scanner con cámara para cajeros.",
-        "mods": ATLAS_POS_MODS + ["scanner"],
+        "mods": ATLAS_POS_MODS + ["scanner", "variants"],
     },
     {
         "id": "ATLAS_ONE_RETAIL",
