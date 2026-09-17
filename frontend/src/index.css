@@ -38,6 +38,12 @@
     --dax-success-soft: color-mix(in srgb, var(--dax-success) 14%, transparent);
     --dax-warning-soft: color-mix(in srgb, var(--dax-warning) 16%, transparent);
     --dax-danger-soft:  color-mix(in srgb, var(--dax-danger)  12%, transparent);
+    /* Tinta de los semánticos cuando el texto va ENCIMA de su propio tinte.
+       Sobre papel, --dax-success/--dax-warning no alcanzan AA a 14 px; estas
+       versiones oscurecidas sí. En oscuro la tinta vuelve a ser el semántico,
+       que ahí ya es la variante aclarada. */
+    --dax-success-ink: #047857;
+    --dax-warning-ink: #b45309;
     --dax-accent-soft: color-mix(in srgb, var(--dax-accent) 14%, transparent);
     /* Tinta del acento sobre fondos claros/teñidos — no es --dax-accent, que
        sobre papel queda demasiado claro para leer texto pequeño. */
@@ -243,6 +249,8 @@
     --dax-success-soft: color-mix(in srgb, var(--dax-success) 18%, transparent);
     --dax-warning-soft: color-mix(in srgb, var(--dax-warning) 18%, transparent);
     --dax-danger-soft:  color-mix(in srgb, var(--dax-danger)  16%, transparent);
+    --dax-success-ink: var(--dax-success);
+    --dax-warning-ink: var(--dax-warning);
     --dax-accent-soft: color-mix(in srgb, var(--dax-accent) 14%, transparent);
     /* Sobre el void índigo la tinta del acento es la versión aclarada. */
     --dax-accent-text: color-mix(in srgb, var(--p-accent) 55%, #ffffff);

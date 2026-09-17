@@ -473,7 +473,7 @@ export function POS() {
           <button
             onClick={() => setCashMovement('IN')}
             className={actionBtn}
-            style={{ background: 'var(--dax-success-soft)', borderColor: 'var(--dax-success)', color: 'var(--dax-success)' }}
+            style={{ background: 'var(--dax-success-soft)', borderColor: 'var(--dax-success)', color: 'var(--dax-success-ink)' }}
             title="Entrada de efectivo"
           >
             <i className="fa-solid fa-arrow-down text-xs" /> Entrada
@@ -489,7 +489,7 @@ export function POS() {
           <button
             onClick={() => setReturnModal(true)}
             className={actionBtn}
-            style={{ background: 'var(--dax-warning-soft)', borderColor: 'var(--dax-warning)', color: 'var(--dax-warning)' }}
+            style={{ background: 'var(--dax-warning-soft)', borderColor: 'var(--dax-warning)', color: 'var(--dax-warning-ink)' }}
             title="Devoluciones"
           >
             <i className="fa-solid fa-rotate-left text-xs" /> Devolución
@@ -508,7 +508,7 @@ export function POS() {
             <button
               onClick={() => setShowOfflineModal(true)}
               className={actionBtn}
-              style={{ background: 'var(--dax-warning-soft)', borderColor: 'var(--dax-warning)', color: 'var(--dax-warning)' }}
+              style={{ background: 'var(--dax-warning-soft)', borderColor: 'var(--dax-warning)', color: 'var(--dax-warning-ink)' }}
               title="Ventas pendientes de enviar"
             >
               <i className="fa-solid fa-cloud-arrow-up text-xs" />

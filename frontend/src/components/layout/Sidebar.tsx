@@ -511,8 +511,8 @@ function MatrixSidebar({ items, logout, isBranchRole }: { items: NavItem[]; logo
         <button
           onClick={toggleTheme}
           className={`theme-toggle ${theme === 'dark' ? 'is-dark' : 'is-light'}`}
-          aria-label={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-          title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+          aria-label={theme === 'dark' ? 'Modo oscuro — cambiar a modo claro' : 'Modo claro — cambiar a modo oscuro'}
+          title={theme === 'dark' ? 'Modo oscuro — cambiar a modo claro' : 'Modo claro — cambiar a modo oscuro'}
         >
           <span className="tt-sky" aria-hidden="true">
             {theme === 'dark' ? (

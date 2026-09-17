@@ -260,7 +260,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
         <button
           onClick={() => updateQty(key, item.quantity - 1)}
           className="w-11 h-11 rounded-lg flex items-center justify-center text-base font-bold transition-all hover:scale-105 active:scale-95"
-          style={{ background: 'var(--dax-danger-soft)', color: 'var(--dax-danger)', border: '1px solid var(--dax-danger)' }}
+          style={{ background: 'var(--dax-danger-soft)', color: 'var(--dax-danger)', border: '1px solid color-mix(in srgb, var(--dax-danger) 35%, transparent)' }}
         >
           <i className="fa-solid fa-minus text-sm" />
         </button>
@@ -297,7 +297,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
           onClick={() => updateQty(key, item.quantity + 1)}
           disabled={maxQty !== undefined && item.quantity >= maxQty}
           className="w-11 h-11 rounded-lg flex items-center justify-center text-base font-bold transition-all hover:scale-105 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
-          style={{ background: 'var(--dax-success-soft)', color: 'var(--dax-success)', border: '1px solid var(--dax-success)' }}
+          style={{ background: 'var(--dax-success-soft)', color: 'var(--dax-success)', border: '1px solid color-mix(in srgb, var(--dax-success) 35%, transparent)' }}
         >
           <i className="fa-solid fa-plus text-sm" />
         </button>
@@ -532,7 +532,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                         <div className="flex items-center gap-2">
                           <button disabled
                             className="w-11 h-11 rounded-lg flex items-center justify-center text-base font-bold opacity-20 cursor-not-allowed"
-                            style={{ background: 'var(--dax-danger-soft)', color: 'var(--dax-danger)', border: '1px solid var(--dax-danger)' }}>
+                            style={{ background: 'var(--dax-danger-soft)', color: 'var(--dax-danger)', border: '1px solid color-mix(in srgb, var(--dax-danger) 35%, transparent)' }}>
                             <i className="fa-solid fa-minus text-sm" />
                           </button>
                           <span className="w-20 text-center font-black text-xl tabular-nums opacity-30"
@@ -545,7 +545,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                               totalPiezas >= displayItem.stock
                             }
                             className="w-11 h-11 rounded-lg flex items-center justify-center text-base font-bold transition-all hover:scale-105 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
-                            style={{ background: 'var(--dax-success-soft)', color: 'var(--dax-success)', border: '1px solid var(--dax-success)' }}>
+                            style={{ background: 'var(--dax-success-soft)', color: 'var(--dax-success)', border: '1px solid color-mix(in srgb, var(--dax-success) 35%, transparent)' }}>
                             <i className="fa-solid fa-plus text-sm" />
                           </button>
                         </div>
@@ -639,7 +639,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                       <div
                         key={cajaKey}
                         className="flex items-start gap-2 mt-2 pt-2"
-                        style={{ borderTop: '1px dashed var(--dax-accent)' }}
+                        style={{ borderTop: '1px dashed color-mix(in srgb, var(--dax-accent) 35%, transparent)' }}
                       >
                         <span className="flex items-center gap-1.5 w-16 flex-shrink-0 text-xs font-bold text-indigo-400 mt-1">
                           <i className="fa-solid fa-box-open text-[11px]" />
@@ -913,17 +913,17 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
             <span className="text-sm font-bold">Efectivo</span>
           </button>
           <button onClick={() => onPay('CARD')} disabled={isEmpty}
-            className="flex flex-col items-center justify-center gap-1 min-h-[56px] px-2 rounded-2xl bg-dax-elevated text-dax-text font-semibold hover:brightness-95 dark:hover:brightness-125 transition disabled:opacity-30 disabled:cursor-not-allowed">
+            className="flex flex-col items-center justify-center gap-1 min-h-[56px] px-2 rounded-2xl bg-dax-elevated text-dax-text font-semibold border border-dax-border hover:brightness-95 dark:hover:brightness-125 transition disabled:opacity-30 disabled:cursor-not-allowed">
             <i className="fa-solid fa-credit-card text-xl" aria-hidden="true" />
             <span className="text-sm">Tarjeta</span>
           </button>
           <button onClick={() => onPay('TRANSFER')} disabled={isEmpty}
-            className="flex flex-col items-center justify-center gap-1 min-h-[56px] px-2 rounded-2xl bg-dax-elevated text-dax-text font-semibold hover:brightness-95 dark:hover:brightness-125 transition disabled:opacity-30 disabled:cursor-not-allowed">
+            className="flex flex-col items-center justify-center gap-1 min-h-[56px] px-2 rounded-2xl bg-dax-elevated text-dax-text font-semibold border border-dax-border hover:brightness-95 dark:hover:brightness-125 transition disabled:opacity-30 disabled:cursor-not-allowed">
             <i className="fa-solid fa-mobile-screen text-xl" aria-hidden="true" />
             <span className="text-sm">Transfer.</span>
           </button>
           <button onClick={() => onPay('MIXED')} disabled={isEmpty}
-            className="flex flex-col items-center justify-center gap-1 min-h-[56px] px-2 rounded-2xl bg-dax-elevated text-dax-text font-semibold hover:brightness-95 dark:hover:brightness-125 transition disabled:opacity-30 disabled:cursor-not-allowed">
+            className="flex flex-col items-center justify-center gap-1 min-h-[56px] px-2 rounded-2xl bg-dax-elevated text-dax-text font-semibold border border-dax-border hover:brightness-95 dark:hover:brightness-125 transition disabled:opacity-30 disabled:cursor-not-allowed">
             <i className="fa-solid fa-layer-group text-xl" aria-hidden="true" />
             <span className="text-sm">Mixto</span>
           </button>
@@ -933,7 +933,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
       {/* Overlay: procesando */}
       {isProcessing && (
         <div
-          className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3"
+          className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 backdrop-blur-sm"
           style={{ background: 'rgba(0,0,0,0.55)' }}
         >
           <div className="flex flex-col items-center gap-2 px-6 py-4 rounded-2xl"
@@ -950,7 +950,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
       {/* Overlay: caja cerrada */}
       {sessionLocked && (
         <div
-          className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3"
+          className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 backdrop-blur-sm"
           style={{ background: 'rgba(0,0,0,0.55)' }}
         >
           <div className="flex flex-col items-center gap-3 px-6 py-5 rounded-2xl"
