@@ -238,3 +238,37 @@ class TestUploadConVariantes:
         assert body["failed"] == 1 and body["updated"] == 0
         db.refresh(v2)
         assert v2.size == "M", "la variante existente no debe mutarse cuando la nueva pareja colisiona"
+
+    def test_fila_fallida_no_escribe_precio_ni_nombre(self, client, db, org, branch_a, auth_admin):
+        """Una fila rechazada (pareja repetida) debe revertir TODO lo que la
+        rama Update ya habia escrito: precio, costo y nombre del producto.
+        Antes el `continue` salia del `with db.begin_nested()` por la puerta
+        buena (RELEASE SAVEPOINT) y los cambios se confirmaban igual."""
+        p, v1 = _make_product(db, org, "Playera lisa", "PLY-R-S", 120, [(branch_a.id, True)])
+        v1.color, v1.size, v1.variant_name = "Rojo", "S", "Rojo / S"
+        v2 = ProductVariant(
+            product_id=p.id, sku="PLY-R-M", price=Decimal("120"), cost=Decimal("70"),
+            color="Rojo", size="M", variant_name="Rojo / M", organization_id=org.id,
+        )
+        db.add(v2)
+        db.commit()
+
+        filas = [{"SKU": "PLY-R-M", "Nombre": "Playera RENOMBRADA", "Departamento": "Playeras",
+                  "Precio Base": "999", "Costo": "555", "Stock": "1", "Color": "Rojo", "Talla": "S"}]
+        content = self._csv(filas, self.CABECERAS)
+        r = client.post(
+            "/api/products/upload",
+            headers=_h(auth_admin, org),
+            files={"file": ("colision_precio.csv", content, "text/csv")},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["failed"] == 1 and body["updated"] == 0
+
+        db.expire_all()
+        v2 = db.query(ProductVariant).filter(ProductVariant.sku == "PLY-R-M").one()
+        p = db.query(Product).get(p.id)
+        assert Decimal(str(v2.price)) == Decimal("120"), "el precio de la fila fallida no debe persistir"
+        assert Decimal(str(v2.cost)) == Decimal("70")
+        assert v2.size == "M"
+        assert p.name == "Playera lisa", "el nombre del producto tampoco debe cambiar"

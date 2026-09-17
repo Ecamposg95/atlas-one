@@ -33,6 +33,16 @@ from .variants import crear_variantes, _pareja_repetida
 router = APIRouter()
 
 
+class _FilaInvalida(Exception):
+    """Fila del upload rechazada por una validacion de negocio.
+
+    Se lanza en vez de `continue`: salir del `with db.begin_nested()` por la
+    puerta buena hace RELEASE SAVEPOINT (confirma lo ya escrito en esa fila);
+    la excepcion hace ROLLBACK TO SAVEPOINT y el `except Exception` del bucle
+    ya lleva el conteo de fallidas.
+    """
+
+
 # -----------------------------
 # 6. Exportar Excel (Template con productos existentes)
 # -----------------------------
@@ -450,15 +460,13 @@ async def upload_products(
                         nueva_clave = ((raw_color or "").lower(), (raw_talla or "").lower())
                         actual_clave = ((existing_variant.color or "").lower(), (existing_variant.size or "").lower())
                         if nueva_clave != actual_clave and _pareja_repetida(prod, raw_color, raw_talla, excepto_id=existing_variant.id):
-                            msg = f"'{raw_sku}': ya existe la variante {variant_label(raw_color, raw_talla)} en este producto"
-                            failed_count += 1
-                            failed_details.append({"row": idx + 2, "sku": raw_sku, "error": msg})
-                            if len(preview_rows) < 20:
-                                preview_rows.append({
-                                    "action": "ERROR", "sku": raw_sku, "name": raw_name or prod.name,
-                                    "price": None, "error_message": msg,
-                                })
-                            continue
+                            # Lanzar (no `continue`): hay que revertir el
+                            # SAVEPOINT, o el precio/costo/nombre que esta
+                            # rama ya escribio se confirman pese al "failed".
+                            raise _FilaInvalida(
+                                f"'{raw_sku}': ya existe la variante "
+                                f"{variant_label(raw_color, raw_talla)} en este producto"
+                            )
                         existing_variant.color = raw_color
                         existing_variant.size = raw_talla
                         existing_variant.variant_name = variant_label(raw_color, raw_talla)
@@ -574,17 +582,11 @@ async def upload_products(
                             ids = [int(x.strip()) for x in target_branch_ids.split(",") if x.strip()]
                             effective_branch_ids.update(ids)
                         except Exception:
-                            failed_count += 1
-                            failed_details.append(f"target_branch_ids inválido: '{target_branch_ids}'")
-                            if len(preview_rows) < 20:
-                                preview_rows.append({
-                                    "action": "ERROR",
-                                    "sku": (row.get("sku") or row.get("código") or row.get("codigo") or None),
-                                    "name": row.get("nombre") or row.get("name"),
-                                    "price": None,
-                                    "error_message": f"target_branch_ids inválido: '{target_branch_ids}'",
-                                })
-                            continue
+                            # Igual que la pareja repetida: lanzar para revertir
+                            # el SAVEPOINT de la fila, no `continue`.
+                            raise _FilaInvalida(
+                                f"target_branch_ids inválido: '{target_branch_ids}'"
+                            )
                     else:
                         # scope == "branch": usar HQ branch como fallback
                         hq_b = db.query(Branch).filter(
@@ -604,17 +606,9 @@ async def upload_products(
                     }
                     invalid = effective_branch_ids - valid_ids
                     if invalid:
-                        failed_count += 1
-                        failed_details.append(f"Sucursales no válidas para esta organización: {invalid}")
-                        if len(preview_rows) < 20:
-                            preview_rows.append({
-                                "action": "ERROR",
-                                "sku": (row.get("sku") or row.get("código") or row.get("codigo") or None),
-                                "name": row.get("nombre") or row.get("name"),
-                                "price": None,
-                                "error_message": f"Sucursales no válidas para esta organización: {invalid}",
-                            })
-                        continue
+                        raise _FilaInvalida(
+                            f"Sucursales no válidas para esta organización: {invalid}"
+                        )
 
                 for bid in effective_branch_ids:
                     existing_status = db.query(ProductBranchStatus).filter(
