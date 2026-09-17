@@ -59,15 +59,31 @@ def segundos_hasta_la_proxima_corrida(ahora: datetime) -> float:
 
 
 def actualizar_fix_ahora(db, token: str) -> Tuple[bool, str]:
-    """Baja el FIX y lo guarda. Devuelve (exito, mensaje). NO lanza."""
+    """Baja el FIX y lo guarda. Devuelve (exito, mensaje). NO lanza.
+
+    El guardado (`guardar_fix` + `commit`) puede fallar por su cuenta —
+    conexion caida, un choque de integridad si el job de fondo corre al mismo
+    tiempo que un refresco manual — y no solo la descarga HTTP. Ambos casos se
+    normalizan al mismo `BanxicoError` para que el endpoint de refresco
+    (`app/modules/tenants/router.py::refresh_exchange_rate`) los trate igual
+    (503 con detalle accionable) en vez de un 500 sin manejar, y para que no
+    quede una fila a medio escribir (rollback explicito).
+    """
     try:
         dia, tipo = fetch_fix(token)
     except BanxicoError as e:
         logger.warning("BANXICO_FETCH_FAILED %s", e)
         return False, str(e)
 
-    guardar_fix(db, dia, tipo)
-    db.commit()
+    try:
+        guardar_fix(db, dia, tipo)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        error = BanxicoError(f"No se pudo guardar el FIX: {e}")
+        logger.warning("BANXICO_SAVE_FAILED %s", error)
+        return False, str(error)
+
     logger.info("BANXICO_FIX_OK fecha=%s tipo=%s", dia, tipo)
     return True, f"FIX {dia.isoformat()} = {tipo}"
 

@@ -135,14 +135,22 @@ def get_exchange_rate(
     fix = ultimo_fix(db) if modo != MODO_OFF else None
     resuelto = resolve_usd_rate(org, fix)
 
+    # El FIX se expone aunque no haya tipo efectivo: el panel de Empresa lo
+    # muestra para que el dueño vea que el job SI esta bajando datos. `is None`
+    # explicito (no `or`): un FIX de $0 seria falsy y tapado por el fallback.
+    fix_rate = resuelto.fix_rate if resuelto is not None and resuelto.fix_rate is not None else (
+        fix.rate if fix is not None else None
+    )
+    fix_date = resuelto.fix_date if resuelto is not None and resuelto.fix_date is not None else (
+        fix.rate_date if fix is not None else None
+    )
+
     return ExchangeRateRead(
         mode=modo,
         rate=resuelto.rate if resuelto else None,
         source=resuelto.source if resuelto else None,
-        # El FIX se expone aunque no haya tipo efectivo: el panel de Empresa lo
-        # muestra para que el dueño vea que el job SI esta bajando datos.
-        fix_rate=(resuelto.fix_rate if resuelto else None) or (fix.rate if fix else None),
-        fix_date=(resuelto.fix_date if resuelto else None) or (fix.rate_date if fix else None),
+        fix_rate=fix_rate,
+        fix_date=fix_date,
         margin=org.usd_rate_margin or 0,
         manual_rate=org.usd_rate_manual,
     )

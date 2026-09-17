@@ -136,3 +136,24 @@ class TestRefrescoManual:
         monkeypatch.setenv("BANXICO_TOKEN", "abc123")
         r = client.post("/api/organization/exchange-rate/refresh", headers=_h(auth_cajero_a, org))
         assert r.status_code == 403
+
+    def test_falla_al_guardar_es_503_y_no_deja_fila_a_medias(self, client, db, org, auth_admin, monkeypatch):
+        # La descarga sale bien pero el guardado revienta (conexion caida, choque
+        # de integridad con el job de fondo). Debe ser un 503 accionable, jamas
+        # un 500 sin manejar, y no debe quedar una fila a medio escribir.
+        monkeypatch.setenv("BANXICO_TOKEN", "abc123")
+        from app.core import exchange_rate_job as job
+
+        monkeypatch.setattr(job, "fetch_fix",
+                            lambda token: (date(2026, 9, 17), Decimal("18.4321")))
+
+        def _revienta_al_guardar(db_, dia, tipo, **kwargs):
+            raise RuntimeError("conexion caida")
+
+        monkeypatch.setattr(job, "guardar_fix", _revienta_al_guardar)
+        r = client.post("/api/organization/exchange-rate/refresh", headers=_h(auth_admin, org))
+        assert r.status_code == 503, r.text
+        assert "guardar" in r.json()["detail"].lower()
+        assert db.query(ExchangeRate).filter(
+            ExchangeRate.rate_date == date(2026, 9, 17)
+        ).count() == 0
