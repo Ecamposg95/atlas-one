@@ -96,19 +96,15 @@ def test_si_la_tabla_esta_caida_la_venta_se_cobra_igual(
     tocaba SQL, asi que nunca dejaba a la sesion en un estado abortado.
 
     Aqui la consulta que revienta es SQL real EN LA MISMA SESION que
-    `create_sale` esta usando para la venta. En Postgres eso aborta la
-    transaccion completa; sin el SAVEPOINT que aisla el snapshot, el
-    `db.flush()` de la venta (linea siguiente) tronaria con
-    PendingRollbackError y el cobro se caeria por una funcion informativa.
-
-    SQLite soporta SAVEPOINT y por eso ejercita el `with db.begin_nested()`
-    de verdad (no lo mockea), pero NO reproduce el aborto de transaccion de
-    Postgres: aqui la sesion sigue usable despues del error aun sin el
-    SAVEPOINT. Esta prueba, entonces, confirma que el codigo no rompe nada
-    en SQLite y deja la venta/stock correctos; la garantia contra el
-    PendingRollbackError de Postgres es de diseño (el patron SAVEPOINT es el
-    recomendado por SQLAlchemy para esto), no algo que esta suite pueda
-    demostrar con el motor de pruebas."""
+    `create_sale` esta usando para la venta: `tipo_vigente_o_error` (a
+    diferencia de `snapshot_usd_rate`) NO se traga el error, asi que sube
+    hasta el `with db.begin_nested():` del router, que hace ROLLBACK TO
+    SAVEPOINT (SQLite lo soporta igual que Postgres) y deja la sesion sana
+    para el resto del cobro — el `db.flush()` de la venta (linea siguiente)
+    y todo lo de despues corren en una transaccion limpia. Si el try/except
+    estuviera DENTRO del `with` (como con `snapshot_usd_rate`), esta misma
+    prueba fallaria: el `with` no veria ninguna excepcion y, en Postgres,
+    emitiria RELEASE SAVEPOINT sobre una conexion ya abortada."""
     _preparar(db, org, branch_a, cajero_a)
     org.usd_rate_mode = "manual"
     org.usd_rate_manual = Decimal("19.5000")
@@ -136,3 +132,12 @@ def test_si_la_tabla_esta_caida_la_venta_se_cobra_igual(
         StockOnHand.variant_id == variante.id, StockOnHand.branch_id == branch_a.id,
     ).one().qty_on_hand
     assert stock_despues == stock_antes - 1
+
+    # La sesion sigue sana: ni PendingRollbackError ni InFailedSqlTransaction.
+    # Se prueba con la MISMA sesion que uso `create_sale` (el fixture `client`
+    # sobrescribe `get_db` para devolver este `db`, ver tests/conftest.py),
+    # tanto para una lectura nueva como para poder seguir escribiendo.
+    venta = db.query(SalesDocument).filter(SalesDocument.id == r.json()["sale_id"]).one()
+    assert venta.total_amount == Decimal("185.00")
+    db.execute(text("SELECT 1"))
+    db.commit()

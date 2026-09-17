@@ -109,3 +109,40 @@ class TestValidarConfig:
         validar_config_usd(MODO_AUTO, None, Decimal("0.30"))
         validar_config_usd(MODO_AUTO, None, Decimal("-0.10"))
         validar_config_usd(MODO_MANUAL, Decimal("19.5"), 0)
+
+
+class TestTipoVigenteOError:
+    """`tipo_vigente_o_error` es la mitad "con DB" del servicio: a diferencia
+    de `snapshot_usd_rate`, NO se traga sus propias excepciones — por diseño,
+    para que `create_sale` pueda envolverla en un SAVEPOINT y dejar que el
+    error cruce el `with` (ver el comentario en app/routers/sales.py)."""
+
+    def test_modo_off_no_consulta_la_tabla_y_devuelve_none(self, db, org, monkeypatch):
+        from app.services import exchange_rate as servicio
+
+        org.usd_rate_mode = MODO_OFF
+        db.commit()
+
+        def _no_deberia_llamarse(db_, currency="USD"):
+            raise AssertionError("modo 'off' no debe consultar exchange_rates")
+
+        monkeypatch.setattr(servicio, "ultimo_fix", _no_deberia_llamarse)
+
+        assert servicio.tipo_vigente_o_error(db, org.id) is None
+
+    def test_lanza_si_la_consulta_del_fix_revienta(self, db, org, monkeypatch):
+        from sqlalchemy import text
+
+        from app.services import exchange_rate as servicio
+
+        org.usd_rate_mode = MODO_MANUAL
+        org.usd_rate_manual = Decimal("19.5000")
+        db.commit()
+
+        def _tabla_caida(db_, currency="USD"):
+            db_.execute(text("SELECT * FROM tabla_que_no_existe"))
+
+        monkeypatch.setattr(servicio, "ultimo_fix", _tabla_caida)
+
+        with pytest.raises(Exception):
+            servicio.tipo_vigente_o_error(db, org.id)

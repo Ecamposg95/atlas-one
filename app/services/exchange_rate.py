@@ -195,23 +195,42 @@ def guardar_fix(db, dia: date, tipo: Decimal,
     return fila
 
 
+def tipo_vigente_o_error(db, org_id: int) -> Optional[Decimal]:
+    """Como `snapshot_usd_rate`, pero SIN atrapar excepciones: las deja subir.
+
+    Uso exclusivo de `app/routers/sales.py::create_sale`, que la llama DENTRO
+    de un SAVEPOINT (`db.begin_nested()`). Si el snapshot atrapara su propio
+    error (como hace `snapshot_usd_rate`), la excepcion nunca cruzaria la
+    frontera del `with` y SQLAlchemy emitiria `RELEASE SAVEPOINT` creyendo que
+    todo salio bien — sobre una conexion de Postgres que ya quedo en estado
+    "current transaction is aborted" por el fallo SQL real, lo que revienta
+    con `InFailedSqlTransaction` igual. Dejando que la excepcion suba, el
+    `with` la ve y SQLAlchemy hace `ROLLBACK TO SAVEPOINT`, dejando la sesion
+    sana; el try/except que la atrapa vive AFUERA del `with`, en el router.
+    """
+    from app.models.organization import Organization
+
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if org is None:
+        return None
+    resuelto = tipo_vigente(db, org)
+    return resuelto.rate if resuelto else None
+
+
 def snapshot_usd_rate(db, org_id: int) -> Optional[Decimal]:
     """Tipo efectivo para congelar en una venta. NUNCA lanza.
 
-    La llama `app/routers/sales.py::create_sale`, el motor ATS-critico: si
-    Banxico, la tabla o esta misma funcion fallan, la venta TIENE que cobrarse
-    igual. Por eso cualquier excepcion se traga con un warning y devuelve None
-    (= la venta queda sin equivalente en dolares, que es exactamente el estado
-    de todas las ventas anteriores a esta funcion).
+    Envoltura de `tipo_vigente_o_error` para llamadores que NO estan dentro
+    de un SAVEPOINT propio (p. ej. el endpoint de configuracion). Si Banxico,
+    la tabla o el servicio fallan, cualquier excepcion se traga con un
+    warning y devuelve None (= sin equivalente en dolares, el estado de todas
+    las ventas anteriores a esta funcion).
+
+    `create_sale` NO usa esta funcion directamente — usa `tipo_vigente_o_error`
+    dentro de su propio SAVEPOINT + try/except (ver el comentario ahi).
     """
     try:
-        from app.models.organization import Organization
-
-        org = db.query(Organization).filter(Organization.id == org_id).first()
-        if org is None:
-            return None
-        resuelto = tipo_vigente(db, org)
-        return resuelto.rate if resuelto else None
+        return tipo_vigente_o_error(db, org_id)
     except Exception:  # noqa: BLE001 — jamas impedir un cobro
         logger.warning("USD_SNAPSHOT_FAILED org=%s", org_id, exc_info=True)
         return None

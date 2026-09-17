@@ -853,18 +853,28 @@ def create_sale(
 
     # Equivalente en dolares (informativo). Se congela el tipo de cambio
     # efectivo del momento para que el ticket y su reimpresion muestren el
-    # mismo numero. `snapshot_usd_rate` NUNCA lanza: si Banxico, la tabla o el
-    # servicio fallan devuelve None y la venta se cobra igual. NO participa de
-    # ningun calculo de totales, pagos, stock ni caja.
+    # mismo numero. Si Banxico, la tabla o el servicio fallan la venta se
+    # cobra igual y el tipo queda en NULL (ver el try/except de abajo). NO
+    # participa de ningun calculo de totales, pagos, stock ni caja.
     if getattr(sales_doc, "usd_rate", None) is None:
-        from app.services.exchange_rate import snapshot_usd_rate
-        # SAVEPOINT: si Banxico esta vivo pero la tabla/consulta revienta a
+        from app.services.exchange_rate import tipo_vigente_o_error
+        # SAVEPOINT + try/except AFUERA del `with` (a proposito, no es un
+        # descuido): si Banxico esta vivo pero la tabla/consulta revienta a
         # nivel SQL (no solo un bug de Python), Postgres aborta la
-        # transaccion completa y el db.flush() de abajo tronaria con
-        # PendingRollbackError. El SAVEPOINT aisla las consultas del
-        # snapshot para que un fallo ahi nunca contamine el resto del cobro.
-        with db.begin_nested():
-            sales_doc.usd_rate = snapshot_usd_rate(db, org_id)
+        # transaccion completa. El SAVEPOINT aisla esas consultas para que
+        # el fallo no contamine el resto del cobro — pero SOLO si la
+        # excepcion cruza la frontera del `with`: por eso aqui se usa
+        # `tipo_vigente_o_error` (que SI lanza) y NO `snapshot_usd_rate`
+        # (que se traga su propio error). Si el try/except estuviera DENTRO
+        # del `with`, SQLAlchemy no veria ninguna excepcion al salir y
+        # emitiria RELEASE SAVEPOINT sobre una conexion ya abortada, que
+        # revienta con InFailedSqlTransaction igual que sin el SAVEPOINT.
+        try:
+            with db.begin_nested():
+                sales_doc.usd_rate = tipo_vigente_o_error(db, org_id)
+        except Exception:  # noqa: BLE001 — jamas impedir un cobro
+            logger.warning("USD_SNAPSHOT_FAILED org=%s", org_id, exc_info=True)
+            sales_doc.usd_rate = None
 
     db.flush()
 
