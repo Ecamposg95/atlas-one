@@ -139,6 +139,10 @@ export function ProductDetailModal({
   const [addStockReason, setAddStockReason] = useState('')
   const [addStockBusy, setAddStockBusy]     = useState(false)
   const [addStockMsg, setAddStockMsg]       = useState<string | null>(null)
+  // Variante elegida para el ajuste — con varias tallas, por omisión la que escaneó/matched.
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(
+    product?.matched_variant_id ?? product?.variants?.[0]?.id ?? null
+  )
 
   // Empaques (cajas)
   const [packs, setPacks] = useState<PackRow[]>([])
@@ -159,6 +163,7 @@ export function ProductDetailModal({
     setTiers(initialTiers(product ?? null, mode === 'create'))
     setBrandId(product?.brand_id ?? '')
     setDepartmentId(product?.department?.id ?? '')
+    setSelectedVariantId(product?.matched_variant_id ?? product?.variants?.[0]?.id ?? null)
     setPacks(
       (product?.packaging_units ?? []).map((u: PackagingUnit) => ({
         id: u.id,
@@ -253,6 +258,7 @@ export function ProductDetailModal({
     setTiers(initialTiers(product ?? null, false))
     setBrandId(product?.brand_id ?? '')
     setDepartmentId(product?.department?.id ?? '')
+    setSelectedVariantId(product?.matched_variant_id ?? product?.variants?.[0]?.id ?? null)
   }
 
   const updateTier = (idx: number, patch: Partial<Pick<TierSlot, 'unit_price' | 'price_name' | 'min_quantity'>>) => {
@@ -296,8 +302,8 @@ export function ProductDetailModal({
     setTiers(prev => prev.filter((_, i) => i !== idx))
   }
 
-  // Variant id para ajustes de stock (productos existentes).
-  const primaryVariantId = product?.variants?.[0]?.id ?? null
+  // Variant id para ajustes de stock (productos existentes) — la variante elegida en el selector.
+  const primaryVariantId = selectedVariantId
 
   const addStock = async () => {
     if (!primaryVariantId) { setAddStockMsg('Producto sin variante — no se puede ajustar stock'); return }
@@ -510,6 +516,22 @@ export function ProductDetailModal({
                     {displayStock}
                   </span>
                 </div>
+                {(product?.variants?.length ?? 0) > 1 && (
+                  <label className="block mb-2">
+                    <span className="text-[9px] font-bold uppercase tracking-wider block mb-1" style={{ color: 'var(--dax-text-faint)' }}>
+                      Variante a ajustar
+                    </span>
+                    <select
+                      className="dax-input w-full text-xs"
+                      value={selectedVariantId ?? ''}
+                      onChange={e => setSelectedVariantId(e.target.value || null)}
+                    >
+                      {product?.variants?.map(v => (
+                        <option key={v.id} value={v.id}>{v.variant_name ?? v.sku}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
                 <div className="grid grid-cols-[1fr_2fr_auto] gap-2 items-end">
                   <label className="block">
                     <span className="text-[9px] font-bold uppercase tracking-wider block mb-1" style={{ color: 'var(--dax-text-faint)' }}>

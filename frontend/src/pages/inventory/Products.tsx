@@ -1294,9 +1294,14 @@ function ProductsHQView() {
                       ? (p.stock_levels.find(s => s.branch_id === user.branch_id)?.qty_on_hand ?? p.stock ?? 0)
                       : (p.stock_total ?? p.stock ?? 0)
                     return (
-                      <span className={`dax-badge text-[10px] ${qty > 0 ? 'dax-badge-green' : 'dax-badge-red'}`}>
-                        {qty}
-                      </span>
+                      <div className="flex flex-col items-end">
+                        <span className={`dax-badge text-[10px] ${qty > 0 ? 'dax-badge-green' : 'dax-badge-red'}`}>
+                          {qty}
+                        </span>
+                        {(p.variants?.length ?? 0) > 1 && (
+                          <span className="text-slate-500 text-[9px] mt-0.5">{p.variants!.length} variantes</span>
+                        )}
+                      </div>
                     )
                   })()}
                 </div>
@@ -1382,9 +1387,14 @@ function ProductsHQView() {
                               ? (p.stock_levels.find(s => s.branch_id === user.branch_id)?.qty_on_hand ?? p.stock ?? 0)
                               : (p.stock_total ?? p.stock ?? 0)
                             return (
-                              <span className={`dax-badge ${qty > 0 ? 'dax-badge-green' : 'dax-badge-red'}`}>
-                                {qty}
-                              </span>
+                              <div className="flex flex-col items-end leading-tight">
+                                <span className={`dax-badge ${qty > 0 ? 'dax-badge-green' : 'dax-badge-red'}`}>
+                                  {qty}
+                                </span>
+                                {(p.variants?.length ?? 0) > 1 && (
+                                  <span className="text-slate-500 text-[9px] mt-0.5">{p.variants!.length} variantes</span>
+                                )}
+                              </div>
                             )
                           })()}
                         </td>

@@ -8,13 +8,14 @@ import { toast } from '../../store/toastStore'
 import type { Product } from '../../types/products'
 import { useEffect } from 'react'
 import { formatCurrency } from '../../utils/currency'
+import { expandVariantRows, type InventoryRow } from '../inventory/variantRows'
 
 export function HQInventory() {
   const [search, setSearch] = useState('')
   const [products, setProducts] = useState<Product[]>([])
   const [branches, setBranches] = useState<Branch[]>([])
   const [loading, setLoading] = useState(false)
-  const [selected, setSelected] = useState<Product | null>(null)
+  const [selected, setSelected] = useState<InventoryRow | null>(null)
   const [kardex, setKardex] = useState<Awaited<ReturnType<typeof inventoryApi.getKardex>>>([])
   const [kardexLoading, setKardexLoading] = useState(false)
   const [adjustModal, setAdjustModal] = useState(false)
@@ -36,13 +37,14 @@ export function HQInventory() {
     } catch { setProducts([]) } finally { setLoading(false) }
   }, [])
 
-  const variantId = (p: Product) => p.variants?.[0]?.id ?? p.id
+  // Un renglón por variante — con varias tallas, kardex y ajuste van a la que se eligió, no a la primera.
+  const rows = expandVariantRows(products)
 
-  const openDetail = async (p: Product) => {
-    setSelected(p)
+  const openDetail = async (row: InventoryRow) => {
+    setSelected(row)
     setKardexLoading(true)
     try {
-      const data = await inventoryApi.getKardex(variantId(p))
+      const data = await inventoryApi.getKardex(row.variant.id)
       setKardex(data)
     } catch { setKardex([]) } finally { setKardexLoading(false) }
   }
@@ -52,13 +54,13 @@ export function HQInventory() {
     setAdjSaving(true)
     try {
       await inventoryApi.createAdjustment({
-        variant_id: variantId(selected),
+        variant_id: selected.variant.id,
         quantity: parseInt(adjQty),
         branch_id: Number(adjBranch),
         reason: adjReason,
       })
       setAdjustModal(false); setAdjQty(''); setAdjReason(''); setAdjBranch('')
-      const data = await inventoryApi.getKardex(variantId(selected))
+      const data = await inventoryApi.getKardex(selected.variant.id)
       setKardex(data)
     } catch { toast.error('Error al ajustar el inventario') } finally { setAdjSaving(false) }
   }
@@ -83,7 +85,7 @@ export function HQInventory() {
 
       {loading && <Spinner text="Buscando..." />}
 
-      {products.length > 0 && !selected && (
+      {rows.length > 0 && !selected && (
         <DaxCard padding={false}>
           <div className="overflow-x-auto">
             <table className="dax-table w-full">
@@ -97,16 +99,16 @@ export function HQInventory() {
                 </tr>
               </thead>
               <tbody>
-                {products.map((p) => (
-                  <tr key={p.id}>
-                    <td className="font-mono text-indigo-400 text-xs">{p.sku}</td>
-                    <td className="text-white font-semibold">{p.name}</td>
-                    <td className="text-right text-slate-300">{formatCurrency(p.price ?? 0)}</td>
-                    <td className={`text-right font-bold ${(p.stock_total ?? 0) <= 0 ? 'text-red-400' : 'text-emerald-400'}`}>
-                      {p.stock_total ?? 0}
+                {rows.map((row) => (
+                  <tr key={row.variant.id}>
+                    <td className="font-mono text-indigo-400 text-xs">{row.sku}</td>
+                    <td className="text-white font-semibold">{row.label}</td>
+                    <td className="text-right text-slate-300">{formatCurrency(row.product.price ?? 0)}</td>
+                    <td className={`text-right font-bold ${row.qty <= 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                      {row.qty}
                     </td>
                     <td>
-                      <button onClick={() => openDetail(p)} className="dax-btn-secondary text-xs">
+                      <button onClick={() => openDetail(row)} className="dax-btn-secondary text-xs">
                         <i className="fa-solid fa-chart-line" /> Kardex
                       </button>
                     </td>
@@ -123,7 +125,7 @@ export function HQInventory() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-[10px] text-slate-500 uppercase tracking-widest">Kardex</p>
-              <p className="text-lg font-black text-white">{selected.name}</p>
+              <p className="text-lg font-black text-white">{selected.label}</p>
               <p className="text-xs font-mono text-indigo-400">{selected.sku}</p>
             </div>
             <div className="flex gap-2">
@@ -191,7 +193,7 @@ export function HQInventory() {
               <h3 className="text-lg font-black text-white">Ajuste de Inventario</h3>
               <button onClick={() => setAdjustModal(false)} className="text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
             </div>
-            <p className="text-slate-400 text-sm mb-4">{selected.name}</p>
+            <p className="text-slate-400 text-sm mb-4">{selected.label}</p>
             <div className="space-y-3">
               <div>
                 <label className="dax-label">Sucursal</label>

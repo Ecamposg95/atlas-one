@@ -5,20 +5,16 @@ import { inventoryApi } from '../../api/inventory'
 import { toast } from '../../store/toastStore'
 import { ui, brand, fmtMoney } from './branchUI'
 import type { Product, Brand, Department, ProductPrice, PackagingUnit, CatalogKpis, UploadPreviewResponse } from '../../types/products'
+import { expandVariantRows } from '../../pages/inventory/variantRows'
 
 import { TablaDesplazable } from '../ui/TablaDesplazable'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+// Un renglón por variante — con varias tallas, cada renglón lleva su propio
+// variant_id para que "Ajustar stock" no siempre pegue a la primera variante.
 interface ProductRow extends Product {
-  variant_id?: string
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function firstVariantId(p: Product): string | null {
-  if (p.variants && p.variants.length > 0) return p.variants[0].id
-  return null
+  variant_id: string
 }
 
 // ─── Tier palette + SectionHeader ─────────────────────────────────────────────
@@ -99,18 +95,23 @@ export function ProductsBranchView() {
 
   const [editing, setEditing] = useState<Product | null>(null)
   const [creating, setCreating] = useState(false)
-  const [stockTarget, setStockTarget] = useState<Product | null>(null)
+  const [stockTarget, setStockTarget] = useState<ProductRow | null>(null)
   const [showImport, setShowImport] = useState(false)
-  const [fichaTarget, setFichaTarget] = useState<Product | null>(null)
+  const [fichaTarget, setFichaTarget] = useState<ProductRow | null>(null)
 
   // ── Load ───────────────────────────────────────────────────────────────────
   const load = useCallback(async (q: string) => {
     setLoading(true)
     try {
       const res = await productsApi.list({ search: q, limit: 100 })
-      const rows: ProductRow[] = (res.items ?? []).map((p) => ({
-        ...p,
-        variant_id: firstVariantId(p) ?? undefined,
+      const rows: ProductRow[] = expandVariantRows(res.items ?? []).map((row) => ({
+        ...row.product,
+        name: row.label,
+        sku: row.sku,
+        barcode: row.barcode,
+        price: row.variant.price,
+        stock_total: row.qty,
+        variant_id: row.variant.id,
       }))
       setItems(rows)
     } catch (e: unknown) {
@@ -291,7 +292,7 @@ export function ProductsBranchView() {
             <ul className="divide-y divide-stone-200 dark:divide-slate-800">
               {visible.map((p) => (
                 <ProductRow
-                  key={p.id}
+                  key={p.variant_id}
                   product={p}
                   onView={() => setFichaTarget(p)}
                   onEdit={() => openEdit(p)}
@@ -927,7 +928,7 @@ interface PackRow {
 // ─── Stock adjust modal ───────────────────────────────────────────────────────
 
 interface StockModalProps {
-  product: Product
+  product: ProductRow
   onClose: () => void
   onSaved: () => void
 }
@@ -939,7 +940,7 @@ function StockAdjustModal({ product, onClose, onSaved }: StockModalProps) {
   const [reason, setReason] = useState('')
   const [saving, setSaving] = useState(false)
 
-  const variantId = firstVariantId(product)
+  const variantId = product.variant_id
   const stock = Number(product.stock_total ?? product.stock ?? 0)
 
   async function submit() {

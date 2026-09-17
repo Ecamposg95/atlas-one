@@ -84,7 +84,7 @@ export function ProductBranchMatrix({ product, onClose, onSaved }: Props) {
     setSaving(true)
     try {
       const res = await productsApi.bulkToggleBranchStatus({
-        variant_ids: [variant.id],
+        variant_ids: (product.variants ?? []).map((v) => v.id),
         branch_ids: branchIds,
         is_active_pos: enable,
       })
@@ -114,7 +114,7 @@ export function ProductBranchMatrix({ product, onClose, onSaved }: Props) {
       const res = await productsApi.cloneBranchStatus({
         from_branch_id: Number(cloneFrom),
         to_branch_ids,
-        variant_ids: [variant.id],
+        variant_ids: (product.variants ?? []).map((v) => v.id),
         overwrite: cloneOverwrite,
       })
       toast.success(`Clonado: ${res.created} nuevas, ${res.updated} actualizadas, ${res.skipped} sin cambios.`)
