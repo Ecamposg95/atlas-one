@@ -102,6 +102,11 @@ class TestEditarYBorrar:
         r = client.put(f"/api/products/variants/{v.id}", json={"barcode": "7500000000022"}, headers=_h(auth_admin, org))
         assert r.status_code == 409
 
+    def test_put_talla_demasiado_larga_es_422(self, client, org, playera, auth_admin):
+        p, v = playera
+        r = client.put(f"/api/products/variants/{v.id}", json={"size": "x" * 31}, headers=_h(auth_admin, org))
+        assert r.status_code == 422
+
     def test_delete_con_stock_es_409_y_sin_stock_borra_suave(self, client, db, org, branch_a, playera, auth_admin):
         p, v = playera
         r = client.post(f"/api/products/{p.id}/variants", json={"variants": [{"color": "Rojo", "size": "M"}]},
@@ -111,6 +116,13 @@ class TestEditarYBorrar:
         r2 = client.delete(f"/api/products/variants/{nueva_id}", headers=_h(auth_admin, org))
         assert r2.status_code == 204
         assert db.query(ProductVariant).get(nueva_id).deleted_at is not None
+        # La variante retirada ya no aparece en el producto ni sigue vendible/visible.
+        r3 = client.get(f"/api/products/{p.id}", headers=_h(auth_admin, org))
+        assert r3.status_code == 200, r3.text
+        assert nueva_id not in {x["id"] for x in r3.json()["variants"]}
+        pbs = db.query(ProductBranchStatus).filter(ProductBranchStatus.variant_id == nueva_id,
+                                                    ProductBranchStatus.branch_id == branch_a.id).one()
+        assert (pbs.is_active_pos, pbs.is_visible) == (False, False)
         # La ultima variante no se puede borrar aunque quede en cero
         soh = db.query(StockOnHand).filter(StockOnHand.variant_id == v.id).one(); soh.qty_on_hand = Decimal(0); db.commit()
         assert client.delete(f"/api/products/variants/{v.id}", headers=_h(auth_admin, org)).status_code == 409
@@ -127,3 +139,14 @@ class TestExtraVariantsEnElAlta:
         assert r.status_code in (200, 201), r.text
         skus = {x["sku"] for x in r.json()["variants"]}
         assert skus == {"PNT", "PNT-AZUL-30", "PNT-A32"}
+        # Las hermanas deben quedar tan vendibles como la principal: PBS +
+        # StockOnHand(0) en la misma sucursal (era el bug critico #1: la
+        # principal se `add()`-eaba sin flush y `crear_variantes` no la veia).
+        for sku in ("PNT-AZUL-30", "PNT-A32"):
+            hermana = db.query(ProductVariant).filter(ProductVariant.sku == sku).one()
+            pbs = db.query(ProductBranchStatus).filter(ProductBranchStatus.variant_id == hermana.id,
+                                                       ProductBranchStatus.branch_id == branch_a.id).one()
+            assert pbs.is_active_pos is True
+            soh = db.query(StockOnHand).filter(StockOnHand.variant_id == hermana.id,
+                                               StockOnHand.branch_id == branch_a.id).one()
+            assert soh.qty_on_hand == Decimal("0")

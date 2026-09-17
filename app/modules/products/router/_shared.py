@@ -85,6 +85,13 @@ def _compute_product_read(
     """
     p_read = ProductRead.model_validate(p)
 
+    # Las variantes retiradas (soft-delete, `DELETE /variants/{id}`) ya no se
+    # pueden vender ni editar -- no viajan al frontend, o el POS/la matriz
+    # las mostraria como si siguieran vivas.
+    p_read.variants = [
+        vr for vr, orm in zip(p_read.variants, p.variants) if orm.deleted_at is None
+    ]
+
     # ATS-12: Campos aplanados que el template POS consume directamente
     p_read.department_name = p.department.name if p.department else None
     p_read.brand_id = p.brand_id
@@ -93,10 +100,11 @@ def _compute_product_read(
     # Determinar qué sucursal mostrar: La solicitada o la del usuario
     real_branch_id = target_branch_id if target_branch_id is not None else current_user.branch_id
 
-    if p.variants:
+    variantes_vivas = [v for v in p.variants if v.deleted_at is None]
+    if variantes_vivas:
         # La variante "principal" es la pedida (p. ej. la que empato un
-        # escaneo) o, si no, la primera en orden de creacion.
-        v = next((x for x in p.variants if x.id == primary_variant_id), p.variants[0])
+        # escaneo) o, si no, la primera viva en orden de creacion.
+        v = next((x for x in variantes_vivas if x.id == primary_variant_id), variantes_vivas[0])
         p_read.matched_variant_id = v.id
         p_read.sku = v.sku
         p_read.barcode = v.barcode

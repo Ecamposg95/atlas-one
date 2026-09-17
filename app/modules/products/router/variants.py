@@ -6,6 +6,7 @@ llaman estos endpoints. Aqui vive todo lo que crea, edita o retira variantes;
 """
 from __future__ import annotations
 
+import logging
 import unicodedata
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -28,6 +29,8 @@ from app.modules.products.variant_label import COLOR_MAX, SIZE_MAX, clean_attr, 
 
 from ._shared import _compute_product_read
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 
@@ -47,7 +50,7 @@ def _producto_de_la_org(db: Session, org_id: int, product_id: str) -> Product:
         .filter(Product.id == product_id, Product.organization_id == org_id)
         .first()
     )
-    if p is None or not p.variants:
+    if p is None or not any(v.deleted_at is None for v in p.variants):
         raise HTTPException(status_code=404, detail="Producto no encontrado")
     return p
 
@@ -87,11 +90,13 @@ def _barcode_en_uso(db: Session, org_id: int, barcode: str, excepto_id: Optional
     return db.query(q.exists()).scalar()
 
 
-def _atributos(color: Optional[str], size: Optional[str], indice: int) -> tuple[Optional[str], Optional[str]]:
+def _atributos(color: Optional[str], size: Optional[str], contexto: str) -> tuple[Optional[str], Optional[str]]:
+    """Limpia/valida color+talla o levanta 422 con `contexto` en el detalle
+    (p. ej. "variants[0]" en el alta, "variante <id>" en la edición)."""
     try:
         return clean_attr(color, COLOR_MAX), clean_attr(size, SIZE_MAX)
     except ValueError as e:
-        raise HTTPException(status_code=422, detail=f"variants[{indice}]: color/talla {e}")
+        raise HTTPException(status_code=422, detail=f"{contexto}: color/talla {e}")
 
 
 def _pareja_repetida(producto: Product, color: Optional[str], size: Optional[str], excepto_id: Optional[str] = None) -> bool:
@@ -111,18 +116,31 @@ def crear_variantes(db: Session, org_id: int, producto: Product, entradas: List[
     y se habilita (PBS) con existencia 0 en las mismas sucursales donde ya esta
     la principal, para que aparezca en el POS de inmediato.
     """
-    principal = producto.variants[0]
+    principal = next(v for v in producto.variants if v.deleted_at is None)
     pbs_base = db.query(ProductBranchStatus).filter(ProductBranchStatus.variant_id == principal.id).all()
+    if not pbs_base:
+        # No es un caso fatal (p. ej. un producto HQ sin PBS explicito vive
+        # "visible en todas las sucursales" por el OUTER JOIN de ATS-11), pero
+        # si ocurre dentro de `create_product` es casi siempre porque el PBS
+        # de la principal todavia no se aplico (falta un flush aguas arriba).
+        logger.warning(
+            "crear_variantes: la variante principal %s no tiene ProductBranchStatus; "
+            "las variantes hermanas nacen sin PBS/stock por sucursal.",
+            principal.id,
+        )
     nuevas: List[ProductVariant] = []
     vistos: set[tuple[str, str]] = set()
     for i, e in enumerate(entradas):
-        color, size = _atributos(e.color, e.size, i)
+        color, size = _atributos(e.color, e.size, f"variants[{i}]")
         if not color and not size:
             raise HTTPException(status_code=422, detail=f"variants[{i}]: indica color o talla")
         clave = ((color or "").lower(), (size or "").lower())
         if clave in vistos or _pareja_repetida(producto, color, size):
             raise HTTPException(status_code=409, detail=f"Ya existe la variante {variant_label(color, size)}")
         vistos.add(clave)
+
+        if e.price is not None and e.price <= 0:
+            raise HTTPException(status_code=422, detail=f"variants[{i}]: el precio debe ser mayor a cero.")
 
         sku = (e.sku or "").strip() or _sku_generado(principal.sku, color, size)
         if _sku_en_uso(db, org_id, sku):
@@ -197,8 +215,9 @@ def editar_variante(
 ):
     v = _variante_de_la_org(db, org_id, variant_id)
     enviados = body.model_dump(exclude_unset=True)
-    color = clean_attr(body.color, COLOR_MAX) if "color" in enviados else v.color
-    size = clean_attr(body.size, SIZE_MAX) if "size" in enviados else v.size
+    color_in = body.color if "color" in enviados else v.color
+    size_in = body.size if "size" in enviados else v.size
+    color, size = _atributos(color_in, size_in, f"variante {v.id}")
     if ("color" in enviados or "size" in enviados) and _pareja_repetida(v.product, color, size, excepto_id=v.id):
         raise HTTPException(status_code=409, detail=f"Ya existe la variante {variant_label(color, size)}")
     if "sku" in enviados:
@@ -243,5 +262,11 @@ def retirar_variante(
     if db.query(SalesLineItem).filter(SalesLineItem.variant_id == v.id).first() is not None:
         raise HTTPException(status_code=409, detail="La variante tiene ventas; no se puede retirar, solo desactivar el producto.")
     v.deleted_at = datetime.now(timezone.utc)
+    # La variante retirada no debe seguir vendible ni visible en ninguna
+    # sucursal: `deleted_at` la saca de ProductRead.variants, pero su PBS
+    # sigue existiendo (historial) y sin esto el POS podria seguir viendola.
+    for pbs in db.query(ProductBranchStatus).filter(ProductBranchStatus.variant_id == v.id).all():
+        pbs.is_active_pos = False
+        pbs.is_visible = False
     db.commit()
     return Response(status_code=204)
