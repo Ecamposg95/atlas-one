@@ -9,6 +9,7 @@ import time
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload, contains_eager
+from sqlalchemy.orm.attributes import set_committed_value
 from sqlalchemy import or_, func
 from typing import List, Literal, Optional, Dict, Tuple
 from decimal import Decimal
@@ -411,6 +412,40 @@ def search_products_pos(
                         return 0.0
                 products_db.sort(key=_price, reverse=(order_by == "price_desc"))
 
+        # `contains_eager` dejo en `p.variants` SOLO las filas que empataron
+        # el WHERE. Para el selector de tallas del POS hace falta la coleccion
+        # completa, asi que se recargan las variantes de los productos hallados
+        # en una sola consulta (no N+1) y se sustituye la coleccion parcial.
+        product_ids = [p.id for p in products_db]
+        if product_ids:
+            todas = (
+                db.query(ProductVariant)
+                .options(
+                    joinedload(ProductVariant.prices),
+                    joinedload(ProductVariant.packaging_units),
+                )
+                .filter(ProductVariant.product_id.in_(product_ids), ProductVariant.deleted_at.is_(None))
+                .order_by(ProductVariant.created_at, ProductVariant.id)
+                .all()
+            )
+            por_producto: dict[str, list] = {}
+            for v in todas:
+                por_producto.setdefault(v.product_id, []).append(v)
+            for p in products_db:
+                set_committed_value(p, "variants", por_producto.get(p.id, []))
+
+        # Que variante empato el codigo (solo tiene sentido en modo exacto).
+        def _matched_variant_id(p) -> Optional[str]:
+            if not exact:
+                return None
+            ql = q.lower()
+            for v in p.variants:
+                if (v.sku or "").lower() == ql or v.barcode == q:
+                    return v.id
+                if any(pk.barcode == q for pk in (v.packaging_units or [])):
+                    return v.id
+            return None
+
         # --- Batch: Stock + BranchStatus caches (avoid N+1) ---
         # Todas las variantes (no solo la principal), para que
         # _compute_product_read llene el stock_total de cada una sin
@@ -446,6 +481,7 @@ def search_products_pos(
             _compute_product_read(
                 p, db, current_user, stock_cache, target_branch_id,
                 branch_statuses_cache=branch_statuses_cache,
+                primary_variant_id=_matched_variant_id(p),
             )
             for p in products_db
         ]
