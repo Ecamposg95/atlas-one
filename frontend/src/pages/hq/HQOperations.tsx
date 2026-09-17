@@ -346,7 +346,7 @@ export function HQOperations() {
             <i className="fas fa-download mr-1" /> CSV
           </button>
           <button onClick={load} title="Actualizar ahora (R)"
-            className="w-9 h-9 flex items-center justify-center rounded-full bg-slate-800/80 border border-slate-700 hover:bg-emerald-500/20 hover:border-emerald-500/50 hover:text-emerald-400 transition text-slate-400">
+            className="dax-btn-icon w-9 h-9 flex items-center justify-center rounded-full bg-slate-800/80 border border-slate-700 hover:bg-emerald-500/20 hover:border-emerald-500/50 hover:text-emerald-400 transition text-slate-400">
             <i className={`fas fa-sync-alt text-xs ${loading ? 'fa-spin' : ''}`} />
           </button>
         </div>

@@ -163,7 +163,7 @@ export function Layout() {
               onClick={() => (esMovil ? setCajonAbierto(a => !a) : setCollapsed(c => !c))}
               aria-expanded={esMovil ? cajonAbierto : undefined}
               aria-controls={esMovil ? 'cajon-lateral' : undefined}
-              className="transition-colors p-1.5 rounded-lg flex-shrink-0"
+              className="transition-colors p-1.5 rounded-lg flex-shrink-0 dax-btn-icon"
               style={{ color: 'rgba(148,163,184,0.6)' }}
               onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = 'white')}
               onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = 'rgba(148,163,184,0.6)')}
@@ -259,7 +259,9 @@ export function Layout() {
             <Outlet />
           ) : (
             <div className="p-4 sm:p-6 lg:p-8 max-w-screen-2xl mx-auto">
-              <Outlet />
+              <div className="route-fade" key={location.pathname}>
+                <Outlet />
+              </div>
             </div>
           )}
         </main>

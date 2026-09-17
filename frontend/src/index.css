@@ -572,6 +572,29 @@
     letter-spacing: -0.03em;
     color: var(--dax-text);
   }
+
+  /* Tap target móvil — se aplica por pantalla a los botones de solo icono.
+     Los sube al piso de 44x44 en <md sin tocar el layout de escritorio. */
+  @media (max-width: 767px) {
+    .dax-btn-icon {
+      min-width: 44px;
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+  }
+}
+
+/* Transición al cambiar de ruta — la pantalla nueva entra en vez de aparecer
+   de golpe. Fuera de @layer para que gane; motion.css la anula con
+   prefers-reduced-motion y con html.ui-no-motion. */
+@keyframes route-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.route-fade {
+  animation: route-fade-in 0.18s ease-out;
 }
 
 @media (prefers-reduced-motion: reduce) {

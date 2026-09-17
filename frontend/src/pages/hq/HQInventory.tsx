@@ -191,7 +191,7 @@ export function HQInventory() {
           <div className="dax-card p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-black text-white">Ajuste de Inventario</h3>
-              <button onClick={() => setAdjustModal(false)} className="text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
+              <button onClick={() => setAdjustModal(false)} className="dax-btn-icon text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
             </div>
             <p className="text-slate-400 text-sm mb-4">{selected.label}</p>
             <div className="space-y-3">

@@ -382,7 +382,7 @@ export function AdminCatalog() {
                       <div className="inline-flex gap-1">
                         <button
                           onClick={() => handleMatrix(p)}
-                          className="p-1.5 rounded-md text-slate-400 hover:text-indigo-300 hover:bg-indigo-500/10"
+                          className="dax-btn-icon p-1.5 rounded-md text-slate-400 hover:text-indigo-300 hover:bg-indigo-500/10"
                           title="Matriz de sucursales"
                         >
                           <i className="fa-solid fa-store" />
@@ -391,14 +391,14 @@ export function AdminCatalog() {
                           <>
                             <button
                               onClick={() => handleApprove(p)}
-                              className="p-1.5 rounded-md text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10"
+                              className="dax-btn-icon p-1.5 rounded-md text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10"
                               title="Aprobar"
                             >
                               <i className="fa-solid fa-check" />
                             </button>
                             <button
                               onClick={() => handleReject(p)}
-                              className="p-1.5 rounded-md text-slate-400 hover:text-amber-400 hover:bg-amber-500/10"
+                              className="dax-btn-icon p-1.5 rounded-md text-slate-400 hover:text-amber-400 hover:bg-amber-500/10"
                               title="Rechazar"
                             >
                               <i className="fa-solid fa-xmark" />
@@ -407,21 +407,21 @@ export function AdminCatalog() {
                         )}
                         <button
                           onClick={() => setAuditProduct(p)}
-                          className="p-1.5 rounded-md text-slate-400 hover:text-amber-300 hover:bg-amber-500/10"
+                          className="dax-btn-icon p-1.5 rounded-md text-slate-400 hover:text-amber-300 hover:bg-amber-500/10"
                           title="Historial"
                         >
                           <i className="fa-solid fa-clock-rotate-left" />
                         </button>
                         <button
                           onClick={() => handleEdit(p)}
-                          className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-slate-700"
+                          className="dax-btn-icon p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-slate-700"
                           title="Editar"
                         >
                           <i className="fa-solid fa-pen-to-square" />
                         </button>
                         <button
                           onClick={() => handleDuplicate(p)}
-                          className="p-1.5 rounded-md text-slate-400 hover:text-cyan-300 hover:bg-cyan-500/10"
+                          className="dax-btn-icon p-1.5 rounded-md text-slate-400 hover:text-cyan-300 hover:bg-cyan-500/10"
                           title="Duplicar"
                         >
                           <i className="fa-solid fa-copy" />
@@ -429,7 +429,7 @@ export function AdminCatalog() {
                         {p.is_active ? (
                           <button
                             onClick={() => handleDelete(p)}
-                            className="p-1.5 rounded-md text-slate-400 hover:text-rose-400 hover:bg-rose-500/10"
+                            className="dax-btn-icon p-1.5 rounded-md text-slate-400 hover:text-rose-400 hover:bg-rose-500/10"
                             title="Archivar"
                           >
                             <i className="fa-solid fa-box-archive" />
@@ -437,7 +437,7 @@ export function AdminCatalog() {
                         ) : (
                           <button
                             onClick={() => handleRestore(p)}
-                            className="p-1.5 rounded-md text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10"
+                            className="dax-btn-icon p-1.5 rounded-md text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10"
                             title="Restaurar"
                           >
                             <i className="fa-solid fa-box-open" />

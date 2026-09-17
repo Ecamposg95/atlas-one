@@ -375,11 +375,11 @@ export function Organization() {
                           </Badge>
                         </td>
                         <td className="flex gap-1">
-                          <button onClick={() => openEditBranch(b)} className="text-slate-500 hover:text-white text-xs">
+                          <button onClick={() => openEditBranch(b)} className="dax-btn-icon text-slate-500 hover:text-white text-xs">
                             <i className="fa-solid fa-pen" />
                           </button>
                           {!b.is_headquarters && (
-                            <button onClick={() => deleteBranch(b)} className="text-slate-600 hover:text-red-400 text-xs ml-1">
+                            <button onClick={() => deleteBranch(b)} className="dax-btn-icon text-slate-600 hover:text-red-400 text-xs ml-1">
                               <i className="fa-solid fa-trash" />
                             </button>
                           )}
@@ -400,7 +400,7 @@ export function Organization() {
           <div className="dax-card p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-lg font-black text-white">{branchModal === 'create' ? 'Nueva Sucursal' : 'Editar Sucursal'}</h3>
-              <button onClick={() => setBranchModal(null)} className="text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
+              <button onClick={() => setBranchModal(null)} className="dax-btn-icon text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
             </div>
             <div className="space-y-3">
               <div>

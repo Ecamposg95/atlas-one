@@ -190,7 +190,7 @@ export function HQSalesLog() {
                     </td>
                     <td><Badge variant={statusVariant(s.status) as 'green' | 'red' | 'blue' | 'yellow'}>{s.status}</Badge></td>
                     <td>
-                      <button onClick={() => setSel(s)} className="text-slate-500 hover:text-white transition-colors text-xs">
+                      <button onClick={() => setSel(s)} className="dax-btn-icon text-slate-500 hover:text-white transition-colors text-xs">
                         <i className="fa-solid fa-eye" />
                       </button>
                     </td>
@@ -219,7 +219,7 @@ export function HQSalesLog() {
                 <p className="text-[10px] text-slate-500 uppercase tracking-widest">Folio</p>
                 <p className="text-xl font-black text-indigo-400 font-mono">{saleLabel(selected)}</p>
               </div>
-              <button onClick={() => setSel(null)} className="text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
+              <button onClick={() => setSel(null)} className="dax-btn-icon text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
             </div>
 
             <div className="space-y-3 text-sm">

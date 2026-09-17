@@ -168,7 +168,7 @@ export function HQReturns() {
                     <td className="text-right font-semibold text-red-400">{formatCurrency(r.total_refunded)}</td>
                     <td><Badge variant={statusVariant(r.status)}>{r.status}</Badge></td>
                     <td>
-                      <button onClick={() => setSelected(r)} className="text-slate-500 hover:text-white text-xs">
+                      <button onClick={() => setSelected(r)} className="dax-btn-icon text-slate-500 hover:text-white text-xs">
                         <i className="fa-solid fa-eye" />
                       </button>
                     </td>
@@ -186,7 +186,7 @@ export function HQReturns() {
           <div className="dax-card p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-black text-white">Detalle de Devolución</h3>
-              <button onClick={() => setSelected(null)} className="text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
+              <button onClick={() => setSelected(null)} className="dax-btn-icon text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
             </div>
 
             <div className="space-y-2 text-sm mb-4">

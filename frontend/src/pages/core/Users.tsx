@@ -122,7 +122,7 @@ export function Users() {
                       </button>
                     </td>
                     <td>
-                      <button onClick={() => openEdit(u)} className="text-slate-500 hover:text-white text-xs">
+                      <button onClick={() => openEdit(u)} className="dax-btn-icon text-slate-500 hover:text-white text-xs">
                         <i className="fa-solid fa-pen" />
                       </button>
                     </td>
@@ -140,7 +140,7 @@ export function Users() {
           <div className="dax-card p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-lg font-black text-white">{modal === 'create' ? 'Nuevo Usuario' : 'Editar Usuario'}</h3>
-              <button onClick={() => setModal(null)} className="text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
+              <button onClick={() => setModal(null)} className="dax-btn-icon text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
             </div>
 
             <div className="space-y-3">

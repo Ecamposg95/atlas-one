@@ -186,7 +186,7 @@ export function Customers() {
                     <td className={`text-right font-semibold tabular-nums ${balanceColor(c.current_balance)}`}>{formatCurrency(c.current_balance)}</td>
                     <td className="text-right text-slate-500 text-sm tabular-nums">{c.credit_limit != null ? formatCurrency(c.credit_limit) : '—'}</td>
                     <td>
-                      <button onClick={() => openDetail(c)} className="text-slate-500 hover:text-white text-xs mr-2">
+                      <button onClick={() => openDetail(c)} className="dax-btn-icon text-slate-500 hover:text-white text-xs mr-2">
                         <i className="fa-solid fa-eye" />
                       </button>
                       {c.current_balance > 0 && (
@@ -247,7 +247,7 @@ export function Customers() {
                   className="text-slate-500 hover:text-red-400 disabled:opacity-40" title="Eliminar" disabled={deleting}>
                   <i className="fa-solid fa-trash" />
                 </button>
-                <button onClick={() => setSelected(null)} className="text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
+                <button onClick={() => setSelected(null)} className="dax-btn-icon text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
               </div>
             </div>
 
