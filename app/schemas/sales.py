@@ -99,6 +99,11 @@ class SaleRead(BaseModel):
     subtotal: Optional[Decimal] = Decimal(0)
     tax_amount: Optional[Decimal] = Decimal(0)
     total_amount: Decimal
+    # Comision por pago con tarjeta (2026-09-17). `total_amount` NO la incluye:
+    # lo que el cliente pago es la suma de los dos. `card_surcharge_pct` es
+    # NULL cuando no aplico.
+    card_surcharge_pct: Optional[Decimal] = None
+    card_surcharge_amount: Decimal = Decimal("0")
     requires_invoice: Optional[bool] = False
     created_at: datetime
     

@@ -28,6 +28,43 @@ def _describe_variant(variant) -> str:
     return nombre
 
 
+def _card_surcharge_amount(sale) -> float:
+    """Comision de tarjeta congelada en la venta, como float. 0.0 si no aplico.
+
+    `getattr` defensivo y `try` alrededor del `float`: varias rutas arman el
+    documento con SimpleNamespace (`tests/test_ticket_layout.py`) o MagicMock
+    (`tests/test_pos_printer.py`), y una venta anterior a la funcion no tiene
+    la columna poblada. Un atributo que no es un numero vale 0.0, nunca una
+    excepcion en medio de una impresion.
+    """
+    valor = getattr(sale, "card_surcharge_amount", None)
+    if valor is None:
+        return 0.0
+    try:
+        monto = float(valor)
+    except (TypeError, ValueError):
+        return 0.0
+    return monto if monto > 0 else 0.0
+
+
+def _fmt_pct(pct) -> "Optional[str]":
+    """'3.5', '2.75', '3'. Sin ceros de relleno.
+
+    La etiqueta del ticket tiene 20 columnas contadas en papel de 58 mm
+    (`_total_line`), y `COM. TARJETA ` ya gasta 13: el porcentaje no puede
+    pasar de 6 caracteres. Por eso `card_surcharge_pct` es NUMERIC(5,2) y aqui
+    se formatea a dos decimales como maximo. `None` si el valor no es un
+    numero, y entonces la etiqueta se imprime sin porcentaje.
+    """
+    try:
+        texto = f"{Decimal(str(pct)):.2f}"
+    except Exception:  # noqa: BLE001 — nunca reventar una impresion
+        return None
+    # "3.50" -> "3.5"; "3.00" -> "3"; "19.99" -> "19.99". El punto detiene el
+    # rstrip, asi que "20.00" nunca se convierte en "2".
+    return texto.rstrip("0").rstrip(".") or "0"
+
+
 class PosPrinter:
     # Compact OXXO-style layout (2026-04-29 v2):
     # Use the FULL printable width on each paper size so no horizontal whitespace
@@ -200,10 +237,16 @@ class PosPrinter:
         raw += self._total_line("TOTAL", net_total)
         raw += self.CMD["BOLD_OFF"]
 
+        # Comision por pago con tarjeta. Vacio si la venta no la trae, asi que
+        # una organizacion sin comision imprime el ticket de siempre.
+        raw += self._card_surcharge_lines(sale, net_total)
+
         # Equivalente en dolares. Solo si la venta trae el tipo congelado
         # (`sales_documents.usd_rate`); una organizacion sin tipo de cambio ve
-        # el ticket de siempre.
-        raw += self._usd_line(getattr(sale, "usd_rate", None), net_total)
+        # el ticket de siempre. Va DESPUES de la comision y sobre el total a
+        # pagar: el equivalente es lo que el cliente entrega, no la mercancia.
+        raw += self._usd_line(getattr(sale, "usd_rate", None),
+                              net_total + _card_surcharge_amount(sale))
 
         # --- 4. PAYMENT (1 line single, N lines mixed) ---
         raw += self._payment_block(method, float(paid), float(change), payments_detail)
@@ -356,6 +399,30 @@ class PosPrinter:
         equivalente = to_usd(Decimal(str(total_mxn)), tasa)
         return self._total_line(f"USD (T.C. {tasa:.4f})", float(equivalente))
 
+    def _card_surcharge_lines(self, sale, net_total: float) -> bytes:
+        """'COM. TARJETA 3.5%' + 'TOTAL A PAGAR'. Vacio si la venta no trae comision.
+
+        `net_total` es el total de MERCANCIA (ya neto de devoluciones); el
+        renglon "TOTAL A PAGAR" le suma la comision, que es lo que el cliente
+        entrego de verdad.
+
+        La comision NO se devuelve en una devolucion (diseño §7): se imprime el
+        importe congelado en la venta aunque `net_total` haya bajado. En una
+        devolucion total eso imprime TOTAL $0.00 y la comision entera. Es feo, y
+        es verdad: ese dinero se lo quedo el banco.
+        """
+        monto = _card_surcharge_amount(sale)
+        if monto <= 0:
+            return b""
+
+        pct = _fmt_pct(getattr(sale, "card_surcharge_pct", None))
+        etiqueta = f"COM. TARJETA {pct}%" if pct else "COM. TARJETA"
+        raw = self._total_line(etiqueta, monto)
+        raw += self.CMD["BOLD_ON"]
+        raw += self._total_line("TOTAL A PAGAR", net_total + monto)
+        raw += self.CMD["BOLD_OFF"]
+        return raw
+
     def _payment_block(self, method, paid: float, change: float, payments_detail) -> bytes:
         """Single payment → 1 line with REC + CAM. Mixed → N lines, last one carries CAM."""
         method_map = {
@@ -460,9 +527,14 @@ class PosPrinter:
         raw += self._total_line("TOTAL", new_final)
         raw += self.CMD["BOLD_OFF"]
 
+        # Misma comision que el ticket original: viene congelada en la venta y
+        # NO se devuelve (diseño §7).
+        raw += self._card_surcharge_lines(sale, new_final)
+
         # Mismo tipo de cambio que el ticket original: viene congelado en la
         # venta, no se vuelve a resolver.
-        raw += self._usd_line(getattr(sale, "usd_rate", None), new_final)
+        raw += self._usd_line(getattr(sale, "usd_rate", None),
+                              new_final + _card_surcharge_amount(sale))
 
         # Footer
         footer_msg = self._resolve_footer(organization, branch)
@@ -547,6 +619,12 @@ class PosPrinter:
         # metodo que no se imprimio ni de que cuente uno dos veces. Es el
         # numero contra el que se resta "Devoluciones" para llegar a "Ventas
         # Totales", asi que tiene que cuadrar exacto con esa resta.
+        # Comision de tarjeta cobrada al cliente en el turno. Informativa: YA
+        # esta dentro de `payments['card']['total']` (el Payment de CARD se
+        # guarda con ella incluida). `.get` con default para que un corte
+        # reimpreso de antes de la funcion siga funcionando.
+        _comision_tarjeta = audit_data.get('card_surcharges', 0) or 0
+
         _total_cobrado = 0.0
         for m_key, m_label in _method_labels:
             data = payments.get(m_key, {"total": 0, "count": 0})
@@ -554,6 +632,11 @@ class PosPrinter:
             if data['count'] > 0 or data['total'] > 0:
                 line = f"{m_label} ({data['count']})"
                 raw += self._rline(line, data['total'])
+                # NO se suma a `_total_cobrado`: ya esta contada dentro de
+                # `card`. Sumarla romperia la invariante del bloque -- el
+                # desglose tiene que dar EXACTAMENTE el total, ni un peso mas.
+                if m_key == 'card' and _comision_tarjeta > 0:
+                    raw += self._rline("  incl. comision", _comision_tarjeta)
         raw += self._rline("Total cobrado", _total_cobrado)
 
         raw += self.CMD["LF"] + sep

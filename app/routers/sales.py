@@ -1548,7 +1548,13 @@ def export_sales_csv(
     
     # Encabezados (BOM para que Excel reconozca UTF-8 correctamente)
     output.write(u'\ufeff') 
-    writer.writerow(["Folio", "Fecha", "Hora", "Cliente", "Total", "Estatus", "Método Pago", "Vendedor", "Notas"])
+    writer.writerow([
+        "Folio", "Fecha", "Hora", "Cliente", "Total",
+        # `Total` es SOLO mercancia (ver el diseño §2): sin estas dos columnas
+        # el CSV no explicaria por que el corte del dia suma mas.
+        "Comisión tarjeta", "Total cobrado",
+        "Estatus", "Método Pago", "Vendedor", "Notas",
+    ])
 
     # Mapa de traducción
     METHOD_MAP = {
@@ -1580,6 +1586,9 @@ def export_sales_csv(
         hora = local_dt.strftime("%H:%M:%S")
         cliente = sale.customer_name or "Público General"
         total = f"{sale.total_amount:.2f}"
+        comision_dec = Decimal(str(sale.card_surcharge_amount or 0))
+        comision = f"{comision_dec:.2f}"
+        total_cobrado = f"{Decimal(str(sale.total_amount or 0)) + comision_dec:.2f}"
         estatus = sale.status.value
         
         # Método de pago (Concatenar si hay múltiples)
@@ -1602,7 +1611,8 @@ def export_sales_csv(
         # Notas incluye las referencias de pago
         notas = " / ".join(references)
         
-        writer.writerow([folio, fecha, hora, cliente, total, estatus, metodo_pago, vendedor, notas])
+        writer.writerow([folio, fecha, hora, cliente, total, comision, total_cobrado,
+                         estatus, metodo_pago, vendedor, notas])
 
     output.seek(0)
     

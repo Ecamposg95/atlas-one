@@ -68,6 +68,13 @@ def _make_sale(**kwargs):
     # motivo documentado arriba para org.price_includes_tax).
     sale.usd_rate = kwargs.get("usd_rate", None)
 
+    # Comision de tarjeta: EXPLICITA por el mismo motivo que `usd_rate` --
+    # en un MagicMock cualquier atributo no declarado sale truthy. El
+    # `try/except` de `_card_surcharge_amount` ya lo cubriria, pero dejarlo
+    # escrito hace evidente que estas 12 pruebas cubren el ticket SIN comision.
+    sale.card_surcharge_amount = Decimal(kwargs.get("card_surcharge_amount", "0"))
+    sale.card_surcharge_pct = kwargs.get("card_surcharge_pct", None)
+
     import datetime, zoneinfo
     sale.created_at = datetime.datetime(2026, 4, 8, 10, 0, 0,
                                         tzinfo=zoneinfo.ZoneInfo("America/Mexico_City"))

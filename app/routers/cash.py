@@ -639,6 +639,18 @@ def get_session_audit_data(db: Session, session_id: int):
 
     methods_map = {p.method: {"total": float(p.total), "count": p.count} for p in payment_stats}
 
+    # 1b. Comision por pago con tarjeta cobrada en el turno (2026-09-17).
+    # MISMOS estatus que `payment_stats`: la comision viaja DENTRO de esos
+    # Payment de CARD, asi que las dos cifras tienen que hablar del mismo
+    # universo de ventas. NO es efectivo, asi que `compute_expected_cash` ni se
+    # entera y NO se toca (ver tests/test_cash_math.py).
+    card_surcharges = db.query(
+        func.coalesce(func.sum(SalesDocument.card_surcharge_amount), 0)
+    ).filter(
+        _session_filter,
+        SalesDocument.status.in_(CASH_INCLUDED_STATUSES),
+    ).scalar() or 0
+
     # 2. Impuestos y Subtotal (NETOS post-refund).
     # SALES_REPORT_STATUSES aquí (NO PENDING): esto suma `tax_amount`/
     # `subtotal` del SalesDocument completo, no lo realmente cobrado. Para
@@ -863,6 +875,9 @@ def get_session_audit_data(db: Session, session_id: int):
             "check":        methods_map.get("CHECK",                {"total": 0.0, "count": 0}),
             "others":       methods_map.get(PaymentMethod.OTHER,    {"total": 0.0, "count": 0}),
         },
+        # Comision por pago con tarjeta cobrada en el turno. Informativa: YA
+        # esta incluida en `payments["card"]["total"]`, no se suma aparte.
+        "card_surcharges": float(card_surcharges),
         "movements": {
             "inflows": float(total_inflows),
             "outflows": float(total_outflows),
