@@ -5,12 +5,13 @@ el WHERE, asi que hoy `variants[0]` PUEDE ser la correcta por accidente. Esta
 prueba fija el contrato para que no dependa de ese efecto colateral: campos
 aplanados de la variante empatada, `matched_variant_id` explicito y
 `variants[]` completo para el selector del POS."""
+from datetime import datetime, timezone
 from decimal import Decimal
 
 import pytest
 
 from app.models.inventory import StockOnHand
-from app.models.products import ProductBranchStatus, ProductVariant
+from app.models.products import PackagingUnit, ProductBranchStatus, ProductVariant
 from conftest import _make_product
 
 
@@ -67,3 +68,38 @@ def test_variants_viene_completo_aunque_empate_una_sola(client, org, playera, au
 def test_buscar_por_nombre_no_duplica_el_producto(client, org, playera, auth_cajero_a):
     res = _buscar(client, org, auth_cajero_a, q="Playera")
     assert [r["id"] for r in res].count(playera[0].id) == 1
+
+
+def test_variante_dada_de_baja_no_es_escaneable(client, org, db, playera, auth_cajero_a):
+    """Una variante soft-deleted no debe seleccionar el producto por su codigo:
+    el WHERE que la encuentra y el reload que llena `variants[]` (que SI
+    filtra `deleted_at`) deben coincidir, o el producto aparece con datos de
+    otra variante (o vacios) en vez de no aparecer."""
+    p, v_s, v_m = playera
+    v_m.deleted_at = datetime.now(timezone.utc)
+    db.flush()
+
+    res = _buscar(client, org, auth_cajero_a, q="7500000000002", exact="true")
+    assert res == []
+
+    hit = _buscar(client, org, auth_cajero_a, q="7500000000001", exact="true")[0]
+    assert hit["matched_variant_id"] == v_s.id
+    assert hit["sku"] == "PLY-S"
+
+
+def test_escanear_el_codigo_de_una_caja_devuelve_la_variante_de_esa_caja(
+    client, org, db, playera, auth_cajero_a
+):
+    """Rama `PackagingUnit.barcode == q` de `_matched_variant_id`: escanear el
+    codigo de la CAJA de la talla M debe apuntar a la variante M, no a la S."""
+    p, v_s, v_m = playera
+    db.add(PackagingUnit(
+        variant_id=v_m.id, name="Caja", barcode="7500000099999",
+        units_per_package=Decimal("12"), package_price=Decimal("1200"),
+        organization_id=org.id,
+    ))
+    db.flush()
+
+    hit = _buscar(client, org, auth_cajero_a, q="7500000099999", exact="true")[0]
+    assert hit["matched_variant_id"] == v_m.id
+    assert hit["sku"] == "PLY-M"

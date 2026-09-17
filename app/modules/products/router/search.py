@@ -10,7 +10,7 @@ import time
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload, contains_eager
 from sqlalchemy.orm.attributes import set_committed_value
-from sqlalchemy import or_, func
+from sqlalchemy import or_, and_, func
 from typing import List, Literal, Optional, Dict, Tuple
 from decimal import Decimal
 from datetime import datetime, timedelta
@@ -374,7 +374,14 @@ def search_products_pos(
             # adivinar cómo se capturó. Los códigos de barras SÍ se comparan
             # exactos: son dígitos, y aflojar ahí sería aflojar la precisión
             # que justifica todo el modo `exact`.
+            # Una variante dada de baja (soft-delete) no debe ser escaneable:
+            # sin este AND, su sku/barcode/packaging seguiria empatando el
+            # WHERE aunque ya no exista para el negocio, y luego el reload de
+            # `variants` (que SI filtra `deleted_at`) la deja fuera — el
+            # producto aparece con matched_variant_id=None y datos de otra
+            # variante (o vacios) en vez de no aparecer.
             query = query.filter(
+                ProductVariant.deleted_at.is_(None),
                 or_(
                     func.lower(ProductVariant.sku) == q.lower(),
                     ProductVariant.barcode == q,
@@ -385,9 +392,9 @@ def search_products_pos(
             query = query.filter(
                 or_(
                     Product.name.ilike(s),
-                    ProductVariant.sku.ilike(s),
-                    ProductVariant.barcode.ilike(s),
-                    PackagingUnit.barcode.ilike(s),
+                    and_(ProductVariant.deleted_at.is_(None), ProductVariant.sku.ilike(s)),
+                    and_(ProductVariant.deleted_at.is_(None), ProductVariant.barcode.ilike(s)),
+                    and_(ProductVariant.deleted_at.is_(None), PackagingUnit.barcode.ilike(s)),
                 )
             )
 
