@@ -9,6 +9,7 @@ import { PricePickerPopover } from './PricePickerPopover'
 import { formatCurrency } from '../../utils/currency'
 import { confirm } from '../ui/ConfirmDialog'
 import { autoTierTarget, forcedTierMap, cajaTierOf } from '../../pages/pos/cartTiers'
+import { groupCart, type CartGroup } from '../../pages/pos/cartGroups'
 
 type PaymentMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'MIXED'
 
@@ -19,12 +20,6 @@ interface Props {
   onClearCustomer: () => void
   sessionLocked: boolean
   onOpenSession: () => void
-}
-
-interface ProductGroup {
-  productId: string
-  unit: CartItem | null
-  cajas: CartItem[]
 }
 
 export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessionLocked, onOpenSession }: Props) {
@@ -71,20 +66,8 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
   // Detail modal
   const [detailProduct, setDetailProduct] = useState<Product | null>(null)
 
-  // Agrupar ítems por product_id
-  const groups = useMemo((): ProductGroup[] => {
-    const map = new Map<string, ProductGroup>()
-    for (const item of cart) {
-      const g = map.get(item.product_id) ?? { productId: item.product_id, unit: null, cajas: [] }
-      if (!item.cart_key?.includes('::caja::')) {
-        g.unit = item
-      } else {
-        g.cajas.push(item)
-      }
-      map.set(item.product_id, g)
-    }
-    return [...map.values()]
-  }, [cart])
+  // Agrupar ítems por variante (o por product_id si no la hay) — ver cartGroups.ts
+  const groups = useMemo((): CartGroup[] => groupCart(cart), [cart])
 
   // Auto-precio escalonado según total de unidades combinadas.
   // autoTierTarget salta los ítems con precio forzado leyendo el flag del propio
@@ -198,7 +181,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
     if (ok) clearCart()
   }
 
-  const removeGroup = (group: ProductGroup) => {
+  const removeGroup = (group: CartGroup) => {
     if (group.unit) {
       removeItem(ck(group.unit))
     }
@@ -233,7 +216,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
     }
   }
 
-  const toggleCaja = (group: ProductGroup) => {
+  const toggleCaja = (group: CartGroup) => {
     const source = group.unit ?? group.cajas[0]
     const cajaTier = cajaTierOf(source)
     if (!cajaTier) return
@@ -391,7 +374,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
 
               return (
                 <div
-                  key={group.productId}
+                  key={group.key}
                   style={{ borderBottom: '1px solid var(--dax-row-border)' }}
                   className="px-4 pt-4 pb-4"
                 >

@@ -421,18 +421,19 @@ function ProductEditPanel({
   branchId: number | null
   onChanged: (p: Product) => void
 }) {
+  const v = matchedVariant(product)
   return (
     <div className="space-y-3">
       <DaxCard>
         <h2 className="text-lg font-black text-white leading-tight">
           {product.name}
-          {matchedVariant(product)?.variant_name && matchedVariant(product)!.variant_name !== 'Estándar' && (
-            <span className="ml-2 text-sm font-bold text-indigo-300">{matchedVariant(product)!.variant_name}</span>
+          {v?.variant_name && v.variant_name !== 'Estándar' && (
+            <span className="ml-2 text-sm font-bold text-indigo-300">{v.variant_name}</span>
           )}
         </h2>
         <p className="text-xs text-slate-400 font-mono">
-          {matchedVariant(product)?.sku ?? product.sku}
-          {(matchedVariant(product)?.barcode ?? product.barcode) ? ` · ${matchedVariant(product)?.barcode ?? product.barcode}` : ' · sin código'}
+          {v?.sku ?? product.sku}
+          {(v?.barcode ?? product.barcode) ? ` · ${v?.barcode ?? product.barcode}` : ' · sin código'}
         </p>
       </DaxCard>
 
