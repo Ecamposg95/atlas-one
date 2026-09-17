@@ -72,10 +72,28 @@ class ProductVariantRead(BaseModel):
         from_attributes = True
 
 class ProductVariantCreate(BaseModel):
-    sku: str
-    variant_name: str
-    price: Decimal
-    cost: Optional[Decimal] = 0
+    """Una variante de color/talla. `sku` vacio = generado desde el SKU base.
+    `price`/`cost` vacios = heredan de la variante principal."""
+    color: Optional[str] = None
+    size: Optional[str] = None
+    sku: Optional[str] = None
+    barcode: Optional[str] = None
+    price: Optional[Decimal] = None
+    cost: Optional[Decimal] = None
+
+
+class VariantBatchCreate(BaseModel):
+    variants: List[ProductVariantCreate]
+
+
+class ProductVariantUpdate(BaseModel):
+    color: Optional[str] = None
+    size: Optional[str] = None
+    sku: Optional[str] = None
+    barcode: Optional[str] = None
+    price: Optional[Decimal] = None
+    cost: Optional[Decimal] = None
+
 
 class ProductCreate(BaseModel):
     name: str

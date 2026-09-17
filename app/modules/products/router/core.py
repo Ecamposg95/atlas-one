@@ -440,6 +440,13 @@ def create_product(
                 }),
             ))
 
+        # Variantes hermanas (boutique). Heredan precio/costo/IVA y se
+        # habilitan donde quedo la principal. Solo llega con el modulo
+        # `variants`; el formulario de las demas tiendas no manda la lista.
+        if prod_in.extra_variants:
+            from .variants import crear_variantes
+            crear_variantes(db, org_id, new_prod, prod_in.extra_variants)
+
         db.commit() # Ensure Commit at the end of success path
         # Re-fetch to return (though we return Pydantic model manually constructed often, or reload)
         db.refresh(new_prod)

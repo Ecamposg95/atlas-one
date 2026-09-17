@@ -40,6 +40,7 @@ from . import (
     import_export,
     reports,
     audit,
+    variants,
 )
 
 router = APIRouter()
@@ -53,6 +54,7 @@ router.include_router(bulk.router)
 router.include_router(import_export.router)
 router.include_router(reports.router)
 router.include_router(audit.router)
+router.include_router(variants.router)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
