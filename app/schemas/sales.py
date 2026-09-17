@@ -15,6 +15,9 @@ class PaymentMethodSchema(str, Enum):
 
 class SaleItemCreate(BaseModel):
     sku: str
+    # Variante exacta (boutique: la talla/color elegida). Si viene, manda sobre
+    # `sku`, que se conserva como respaldo y para los mensajes de error.
+    variant_id: Optional[str] = None
     quantity: float = 1.0
     unit_price: Optional[Decimal] = None
     discount: Optional[float] = Field(default=0.0, ge=0.0, le=100.0)   # porcentaje 0-100
