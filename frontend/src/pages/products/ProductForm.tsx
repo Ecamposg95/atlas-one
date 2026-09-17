@@ -22,6 +22,9 @@ import {
   type ProductErrors,
   type ProductFormValue,
 } from '../../components/products/types'
+import { useEnabledModulesStore } from '../../store/enabledModulesStore'
+import { ProductVariantsSection } from '../../components/products/ProductVariantsSection'
+import { toExtraVariants, type VariantRow } from '../../components/products/variantMatrix'
 
 const ADMIN_ROLES = new Set(['ADMINISTRADOR', 'DUEÑO'])
 
@@ -43,6 +46,8 @@ export function ProductForm() {
   const [branchActivation, setBranchActivation] = useState<Record<number, BranchActivation>>({})
   const [prices, setPrices] = useState<PriceRow[]>([])
   const [errors, setErrors] = useState<ProductErrors>({})
+  const hasVariantsModule = useEnabledModulesStore((s) => s.enabledModules.includes('variants'))
+  const [variantRows, setVariantRows] = useState<VariantRow[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -163,6 +168,16 @@ export function ProductForm() {
     })
     if (form.has_iva && !Number.isFinite(Number(form.tax_rate)))
       e.tax_rate = 'Escribe un número'
+    if (mode === 'create') {
+      const skus = new Set<string>([form.sku.trim().toLowerCase()])
+      variantRows.forEach((r, i) => {
+        const s = r.sku.trim().toLowerCase()
+        if (!s) e[`variants.${i}.sku`] = 'SKU requerido'
+        else if (skus.has(s)) e[`variants.${i}.sku`] = 'SKU repetido'
+        skus.add(s)
+        if (r.price.trim() && !(Number(r.price) > 0)) e[`variants.${i}.price`] = 'Precio mayor a 0'
+      })
+    }
     return e
   }
 
@@ -202,6 +217,7 @@ export function ProductForm() {
             min_quantity: Number(p.min_quantity),
             unit_price: Number(p.unit_price),
           })),
+          ...(hasVariantsModule && variantRows.length > 0 ? { extra_variants: toExtraVariants(variantRows) } : {}),
         }
         await productsApi.create(payload)
         toast.success('Producto creado.')
@@ -297,6 +313,9 @@ export function ProductForm() {
                 ? 'Para stock en múltiples sucursales, usa el módulo de inventario tras crear.'
                 : 'El stock se aplica a tu sucursal.'}
             />
+          )}
+          {mode === 'create' && hasVariantsModule && (
+            <ProductVariantsSection baseSku={form.sku} rows={variantRows} onRowsChange={setVariantRows} />
           )}
 
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800/60">

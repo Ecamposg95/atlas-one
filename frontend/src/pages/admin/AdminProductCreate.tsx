@@ -21,6 +21,9 @@ import {
   type ProductErrors,
   type ProductFormValue,
 } from '../../components/products/types'
+import { useEnabledModulesStore } from '../../store/enabledModulesStore'
+import { ProductVariantsSection } from '../../components/products/ProductVariantsSection'
+import { toExtraVariants, type VariantRow } from '../../components/products/variantMatrix'
 
 export function AdminProductCreate() {
   const navigate = useNavigate()
@@ -35,6 +38,8 @@ export function AdminProductCreate() {
   const [branchActivation, setBranchActivation] = useState<Record<number, BranchActivation>>({})
   const [prices, setPrices] = useState<PriceRow[]>([])
   const [errors, setErrors] = useState<ProductErrors>({})
+  const hasVariantsModule = useEnabledModulesStore((s) => s.enabledModules.includes('variants'))
+  const [variantRows, setVariantRows] = useState<VariantRow[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -110,6 +115,14 @@ export function AdminProductCreate() {
     })
     if (form.has_iva && !Number.isFinite(Number(form.tax_rate)))
       e.tax_rate = 'Escribe un número'
+    const skus = new Set<string>([form.sku.trim().toLowerCase()])
+    variantRows.forEach((r, i) => {
+      const s = r.sku.trim().toLowerCase()
+      if (!s) e[`variants.${i}.sku`] = 'SKU requerido'
+      else if (skus.has(s)) e[`variants.${i}.sku`] = 'SKU repetido'
+      skus.add(s)
+      if (r.price.trim() && !(Number(r.price) > 0)) e[`variants.${i}.price`] = 'Precio mayor a 0'
+    })
     return e
   }
 
@@ -144,6 +157,7 @@ export function AdminProductCreate() {
         min_quantity: Number(p.min_quantity),
         unit_price: Number(p.unit_price),
       })),
+      ...(hasVariantsModule && variantRows.length > 0 ? { extra_variants: toExtraVariants(variantRows) } : {}),
     }
     try {
       await productsApi.create(payload)
@@ -201,6 +215,9 @@ export function AdminProductCreate() {
             branches={branches} enabledBranchIds={enabledBranchIds}
             footer="Para stock en múltiples sucursales, usa el módulo de inventario tras crear."
           />
+          {hasVariantsModule && (
+            <ProductVariantsSection baseSku={form.sku} rows={variantRows} onRowsChange={setVariantRows} />
+          )}
 
           <p className="text-[11px] text-slate-500">
             Precios escalonados y empaques se configuran desde el catálogo tras crear el producto.
