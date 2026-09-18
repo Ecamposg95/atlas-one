@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { expandVariantRows, grupoDeVariantes } from '../variantRows'
+import { expandVariantRows, grupoDeVariantes, priceRange, sumStock } from '../variantRows'
 import type { Product, ProductVariant } from '../../../types/products'
 
 const playera: Product = {
@@ -71,5 +71,44 @@ describe('grupoDeVariantes', () => {
   })
   it('el color vacío no cuenta como color', () => {
     expect(grupoDeVariantes([v({ color: '', size: 'Ch' }), v({ color: null, size: 'M' })])).toBe('tallas')
+  })
+})
+
+describe('sumStock', () => {
+  it('suma la existencia de todas las tallas, no solo la de la principal', () => {
+    expect(sumStock(playera)).toBe(3)
+    expect(sumStock({
+      ...playera,
+      stock_total: 3,
+      variants: [
+        { id: 'a', product_id: 'p1', sku: 'A', price: 1, cost: 1, stock_total: '3' },
+        { id: 'b', product_id: 'p1', sku: 'B', price: 1, cost: 1, stock_total: '7' },
+        { id: 'c', product_id: 'p1', sku: 'C', price: 1, cost: 1, stock_total: 2 },
+      ],
+    })).toBe(12)
+  })
+  it('sin variantes cae al aplanado del producto', () => {
+    expect(sumStock({ ...gorra, variants: [] })).toBe(9)
+    expect(sumStock({ ...gorra, variants: [], stock_total: undefined, stock: 4 })).toBe(4)
+  })
+  it('una variante sin existencia cuenta como cero', () => {
+    expect(sumStock({ ...gorra, variants: [{ id: 'z', product_id: 'p2', sku: 'Z', price: 1, cost: 1 }] })).toBe(0)
+  })
+})
+
+describe('priceRange', () => {
+  const v = (price: number, id: string): ProductVariant => ({ id, product_id: 'p', sku: id, price, cost: 0 })
+
+  it('sin variantes no hay rango', () => {
+    expect(priceRange([])).toBeNull()
+  })
+  it('con todas al mismo precio el rango es uniforme', () => {
+    expect(priceRange([v(100, 'a'), v(100, 'b')])).toEqual({ min: 100, max: 100, uniforme: true })
+  })
+  it('con precios distintos devuelve mínimo y máximo', () => {
+    expect(priceRange([v(180, 'a'), v(100, 'b'), v(150, 'c')])).toEqual({ min: 100, max: 180, uniforme: false })
+  })
+  it('una sola variante es uniforme', () => {
+    expect(priceRange([v(50, 'a')])).toEqual({ min: 50, max: 50, uniforme: true })
   })
 })

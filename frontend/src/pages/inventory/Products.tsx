@@ -12,7 +12,9 @@ import { formatCurrency } from '../../utils/currency'
 import { sortByName } from '../../utils/sortByName'
 import { toast } from '../../store/toastStore'
 import { ProductImageUploader } from '../../components/products/ProductImageUploader'
-import { grupoDeVariantes } from './variantRows'
+import { expandVariantRows, grupoDeVariantes, priceRange, sumStock } from './variantRows'
+
+const SINGULAR_GRUPO = { tallas: 'talla', colores: 'color', variantes: 'variante' } as const
 
 const HQ_ROLES = ['ADMINISTRADOR', 'DUEÑO']
 const CAN_EDIT_ROLES = ['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO']
@@ -1110,6 +1112,8 @@ function ProductsHQView() {
   const [showImport, setShowImport] = useState(false)
   // CAJERO/GERENTE: id del producto cuya fila está expandida para editar PBS.
   const [expandedPbsProductId, setExpandedPbsProductId] = useState<string | null>(null)
+  // Producto cuyo desglose por talla está abierto en la tabla.
+  const [expandedVariantsId, setExpandedVariantsId] = useState<string | null>(null)
   // CAJERO/GERENTE: modal simplificado para crear producto.
   const [showMiniCreate, setShowMiniCreate] = useState(false)
 
@@ -1315,21 +1319,47 @@ function ProductsHQView() {
                   {p.department_name && <p className="text-slate-600 text-[10px] mt-0.5 truncate">{p.department_name}</p>}
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-emerald-400 text-xs font-bold">{formatCurrency(p.price ?? 0)}</span>
                   {(() => {
-                    const qty = (!isHQ && user?.branch_id && p.stock_levels?.length)
-                      ? (p.stock_levels.find(s => s.branch_id === user.branch_id)?.qty_on_hand ?? p.stock ?? 0)
-                      : (p.stock_total ?? p.stock ?? 0)
-                    const variantCount = p.variants?.length ?? 0
+                    const rango = priceRange(p.variants ?? [])
                     return (
-                      <div className="flex flex-col items-end">
+                      <span className="text-emerald-400 text-xs font-bold">
+                        {rango && !rango.uniforme
+                          ? `${formatCurrency(rango.min)} – ${formatCurrency(rango.max)}`
+                          : formatCurrency(p.price ?? 0)}
+                      </span>
+                    )
+                  })()}
+                  {(() => {
+                    const variantCount = p.variants?.length ?? 0
+                    const qty = variantCount > 1
+                      ? sumStock(p)
+                      : (!isHQ && user?.branch_id && p.stock_levels?.length)
+                        ? (p.stock_levels.find(s => s.branch_id === user.branch_id)?.qty_on_hand ?? p.stock ?? 0)
+                        : (p.stock_total ?? p.stock ?? 0)
+                    if (variantCount <= 1) {
+                      return (
                         <span className={`dax-badge text-[10px] ${qty > 0 ? 'dax-badge-green' : 'dax-badge-red'}`}>
                           {qty}
                         </span>
-                        {variantCount > 1 && (
-                          <span className="text-slate-500 text-[9px] mt-0.5">{variantCount} variantes</span>
-                        )}
-                      </div>
+                      )
+                    }
+                    const grupo = grupoDeVariantes(p.variants ?? [])
+                    return (
+                      <button
+                        type="button"
+                        // La cuadrícula no tiene dónde desplegar el desglose:
+                        // se salta a la lista con ese producto ya abierto.
+                        onClick={() => { setViewMode('list'); setExpandedVariantsId(p.id) }}
+                        title={`Ver la existencia por ${SINGULAR_GRUPO[grupo]}`}
+                        className="flex flex-col items-end group/tallas"
+                      >
+                        <span className={`dax-badge text-[10px] ${qty > 0 ? 'dax-badge-green' : 'dax-badge-red'}`}>
+                          {qty}
+                        </span>
+                        <span className="text-slate-400 text-[10px] mt-0.5 group-hover/tallas:text-indigo-400">
+                          de {variantCount} {grupo}
+                        </span>
+                      </button>
                     )
                   })()}
                 </div>
@@ -1373,6 +1403,7 @@ function ProductsHQView() {
               <tbody>
                 {products.map((p) => {
                   const isExpanded = isBranchEditor && expandedPbsProductId === p.id
+                  const tallasAbiertas = expandedVariantsId === p.id && (p.variants?.length ?? 0) > 1
                   const colCount = 6 + (canEdit ? 1 : 0)
                   return (
                     <Fragment key={p.id}>
@@ -1397,12 +1428,25 @@ function ProductsHQView() {
                               ? p.branch_statuses?.find(s => s.branch_id === user.branch_id)?.price_override
                               : null
                             const effective = override != null ? override : (p.price ?? 0)
+                            // Con varias tallas a distinto precio, un solo número miente:
+                            // el de la fila era el de la principal. Se muestra el rango.
+                            const rango = priceRange(p.variants ?? [])
+                            const mostrarRango = override == null && rango != null && !rango.uniforme
                             return (
                               <div className="flex flex-col items-end leading-tight">
-                                <span>{formatCurrency(effective)}</span>
+                                <span>
+                                  {mostrarRango
+                                    ? `${formatCurrency(rango!.min)} – ${formatCurrency(rango!.max)}`
+                                    : formatCurrency(effective)}
+                                </span>
                                 {override != null && (
                                   <span className="text-[9px] text-indigo-400 font-normal">
                                     override (base {formatCurrency(p.price ?? 0)})
+                                  </span>
+                                )}
+                                {mostrarRango && (
+                                  <span className="text-[9px] text-slate-500 font-normal">
+                                    según la {SINGULAR_GRUPO[grupoDeVariantes(p.variants ?? [])]}
                                   </span>
                                 )}
                               </div>
@@ -1411,19 +1455,38 @@ function ProductsHQView() {
                         </td>
                         <td className="text-right">
                           {(() => {
-                            const qty = (!isHQ && user?.branch_id && p.stock_levels?.length)
-                              ? (p.stock_levels.find(s => s.branch_id === user.branch_id)?.qty_on_hand ?? p.stock ?? 0)
-                              : (p.stock_total ?? p.stock ?? 0)
                             const variantCount = p.variants?.length ?? 0
-                            return (
-                              <div className="flex flex-col items-end leading-tight">
+                            // Con varias tallas la existencia del renglón es la SUMA:
+                            // antes se veía solo la de la principal (3 de 12).
+                            const qty = variantCount > 1
+                              ? sumStock(p)
+                              : (!isHQ && user?.branch_id && p.stock_levels?.length)
+                                ? (p.stock_levels.find(s => s.branch_id === user.branch_id)?.qty_on_hand ?? p.stock ?? 0)
+                                : (p.stock_total ?? p.stock ?? 0)
+                            if (variantCount <= 1) {
+                              return (
                                 <span className={`dax-badge ${qty > 0 ? 'dax-badge-green' : 'dax-badge-red'}`}>
                                   {qty}
                                 </span>
-                                {variantCount > 1 && (
-                                  <span className="text-slate-500 text-[9px] mt-0.5">{variantCount} variantes</span>
-                                )}
-                              </div>
+                              )
+                            }
+                            const grupo = grupoDeVariantes(p.variants ?? [])
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => setExpandedVariantsId(tallasAbiertas ? null : p.id)}
+                                aria-expanded={tallasAbiertas}
+                                title={tallasAbiertas ? 'Ocultar el desglose' : `Ver la existencia por ${SINGULAR_GRUPO[grupo]}`}
+                                className="flex flex-col items-end leading-tight ml-auto group/tallas"
+                              >
+                                <span className={`dax-badge ${qty > 0 ? 'dax-badge-green' : 'dax-badge-red'}`}>
+                                  {qty}
+                                </span>
+                                <span className="text-slate-400 text-[10px] mt-0.5 group-hover/tallas:text-indigo-400">
+                                  de {variantCount} {grupo}
+                                  <i className={`fa-solid ${tallasAbiertas ? 'fa-chevron-up' : 'fa-chevron-down'} ml-1 text-[8px]`} />
+                                </span>
+                              </button>
                             )
                           })()}
                         </td>
@@ -1466,6 +1529,23 @@ function ProductsHQView() {
                           </td>
                         )}
                       </tr>
+                      {tallasAbiertas && expandVariantRows([p]).map((row) => (
+                        <tr key={row.variant.id} className="bg-slate-900/40 text-xs">
+                          <td className="font-mono text-slate-500 pl-6">{row.sku}</td>
+                          <td className="text-slate-300">
+                            <i className="fa-solid fa-turn-up fa-rotate-90 text-slate-600 mr-2 text-[10px]" />
+                            {row.variant.variant_name && row.variant.variant_name !== 'Estándar'
+                              ? row.variant.variant_name
+                              : p.name}
+                          </td>
+                          <td />
+                          <td className="text-right text-emerald-400/80">{formatCurrency(row.variant.price ?? 0)}</td>
+                          <td className={`text-right font-semibold ${row.qty > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {row.qty}
+                          </td>
+                          <td colSpan={colCount - 5} />
+                        </tr>
+                      ))}
                       {isExpanded && user?.branch_id != null && (
                         <tr className="bg-slate-900/40">
                           <td colSpan={colCount} className="px-4 py-3">

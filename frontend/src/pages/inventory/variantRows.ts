@@ -52,3 +52,32 @@ export function grupoDeVariantes(variants: ProductVariant[]): 'tallas' | 'colore
   if (hayColor && !hayTalla) return 'colores'
   return 'variantes'
 }
+
+/**
+ * Existencia del producto sumando TODAS sus tallas.
+ *
+ * El catálogo mostraba `stock_total`, que es el aplanado de la variante
+ * principal: una boutique con 3 en Ch, 7 en M y 2 en G leía "3" y creía que
+ * se estaba quedando sin mercancía.
+ */
+export function sumStock(product: Product): number {
+  const vs = product.variants ?? []
+  if (vs.length === 0) return Number(product.stock_total ?? product.stock ?? 0)
+  return vs.reduce((acc, v) => acc + Number(v.stock_total ?? 0), 0)
+}
+
+export interface RangoPrecio {
+  min: number
+  max: number
+  /** true cuando todas las tallas cuestan lo mismo (se muestra un solo precio). */
+  uniforme: boolean
+}
+
+/** Rango de precios entre las variantes; null si el producto no tiene ninguna. */
+export function priceRange(variants: ProductVariant[]): RangoPrecio | null {
+  if (variants.length === 0) return null
+  const precios = variants.map((v) => Number(v.price ?? 0))
+  const min = Math.min(...precios)
+  const max = Math.max(...precios)
+  return { min, max, uniforme: min === max }
+}
