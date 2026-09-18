@@ -5,6 +5,7 @@ import { salesApi, parkedTicketsApi } from '../../api/sales'
 import type { CartItem } from '../../types/sales'
 import { saleLabel } from '../../types/sales'
 import { buildSaleItems } from './saleItems'
+import { customerFields, customerFromCartJson } from './customerPayload'
 import { printerApi } from '../../api/printer'
 import { requierePin } from '../../utils/reimpresion'
 import { usePOSStore } from '../../store/posStore'
@@ -221,7 +222,7 @@ export function POS() {
         : `${Date.now()}-${Math.random().toString(36).slice(2)}`
     const payload = {
       client_uuid: clientUuid,
-      customer_id: store.customerId ?? undefined,
+      ...customerFields(store.customerId, store.customerName),
       items: buildSaleItems(store.cart, store.globalDiscount),
       payments,
       doc_type: 'SALE',
@@ -357,6 +358,9 @@ export function POS() {
         items: store.cart,
         requires_invoice: store.requiresInvoice,
         global_discount: store.globalDiscount,
+        // El nombre no cabe en `parked_tickets.customer_id`: un cliente sin CRM
+        // se perdía al reanudar. Viaja en el snapshot.
+        customer_name: store.customerName?.trim() || undefined,
       }
       await parkedTicketsApi.park(cartJson, store.customerId, undefined)
       if (existingId) {
@@ -431,11 +435,8 @@ export function POS() {
       if (typeof cartJson.global_discount === 'number') {
         store.setGlobalDiscount(cartJson.global_discount)
       }
-      if (parked.customer_id) {
-        // Nombre del cliente no viene en parked; el carrito lo recupera
-        // si el usuario re-selecciona, pero el id se preserva.
-        store.setCustomer(parked.customer_id, null)
-      }
+      const cliente = customerFromCartJson(cartJson, parked.customer_id ?? null)
+      if (cliente) store.setCustomer(cliente.id, cliente.name)
       store.setCurrentParkedId(parkedId)
       setLeftTab('products')
       showToast('Ticket reanudado')
