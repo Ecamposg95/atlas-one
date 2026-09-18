@@ -368,15 +368,21 @@ def create_product(
         initial_stock = prod_in.initial_stock or Decimal(0)
         _ordered_branches = list(effective_branch_ids)
 
+        # Sucursal destino del stock inicial (una sola, ver [SEMANTICS] arriba):
+        # la que eligio el formulario (`branch_id`), si no la del usuario, si no
+        # la primera objetivo. Antes se ignoraba `branch_id` y un admin con
+        # sucursal HQ veia su existencia inicial aterrizar en HQ en vez de en la
+        # tienda que acababa de elegir en pantalla.
+        _stock_branch_id = None
+        if prod_in.branch_id and prod_in.branch_id in effective_branch_ids:
+            _stock_branch_id = prod_in.branch_id
+        elif current_user.branch_id and current_user.branch_id in effective_branch_ids:
+            _stock_branch_id = current_user.branch_id
+        elif _ordered_branches:
+            _stock_branch_id = _ordered_branches[0]
+
         for bid in _ordered_branches:
-            # Determinar cantidad para esta sucursal
-            if current_user.branch_id == bid:
-                qty = initial_stock
-            elif not current_user.branch_id and initial_stock > 0 and bid == _ordered_branches[0]:
-                # Usuario HQ: el stock inicial va a la primera sucursal seleccionada
-                qty = initial_stock
-            else:
-                qty = Decimal(0)
+            qty = initial_stock if bid == _stock_branch_id else Decimal(0)
 
             stock_record = StockOnHand(
                 branch_id=bid,
@@ -477,7 +483,11 @@ def create_product(
         if prod_in.extra_variants:
             db.flush()
             from .variants import crear_variantes
-            crear_variantes(db, org_id, new_prod, prod_in.extra_variants)
+            # Cada hermana trae su propia existencia inicial y aterriza en la
+            # misma sucursal que la principal (hallazgo #2: antes todo el stock
+            # se quedaba en la talla de la primera fila).
+            crear_variantes(db, org_id, new_prod, prod_in.extra_variants,
+                            stock_branch_id=_stock_branch_id, user_id=current_user.id)
 
         db.commit() # Ensure Commit at the end of success path
         # Re-fetch to return (though we return Pydantic model manually constructed often, or reload)

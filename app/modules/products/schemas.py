@@ -80,10 +80,17 @@ class ProductVariantCreate(BaseModel):
     barcode: Optional[str] = None
     price: Optional[Decimal] = None
     cost: Optional[Decimal] = None
+    # Existencia inicial DE ESTA TALLA en la sucursal destino. Antes el alta
+    # cargaba todo el stock inicial en la principal y M/G nacian en cero, asi
+    # que la boutique tenia las diez prendas en la talla Ch.
+    initial_stock: Decimal = Decimal(0)
 
 
 class VariantBatchCreate(BaseModel):
     variants: List[ProductVariantCreate]
+    # Sucursal donde aterriza `initial_stock`. Opcional: con una sola sucursal
+    # habilitada se deduce sola; con varias hay que decirla (no se adivina).
+    branch_id: Optional[int] = None
 
 
 class ProductVariantUpdate(BaseModel):

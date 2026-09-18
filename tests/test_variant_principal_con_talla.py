@@ -6,6 +6,8 @@ Antes, el alta de una prenda con tallas S/M/L creaba CUATRO variantes: la
 Ahora el alta acepta `color`/`size` para la principal y la matriz manda su
 primera fila ahi, no en `extra_variants`.
 """
+from decimal import Decimal
+
 import pytest
 
 from app.models.modules import Module, OrganizationModule
@@ -111,3 +113,36 @@ class TestEdicionDeLaPrincipal:
         r = client.put(f"/api/products/{pid}", json={"size": "M"}, headers=_h(auth_admin, boutique))
         assert r.status_code == 409, r.text
         assert db.query(ProductVariant).filter(ProductVariant.sku == "FLD").one().size == "S"
+
+
+class TestExistenciaInicialEnElAlta:
+    """El alta reparte la existencia inicial por talla, no toda en la primera.
+
+    La primera fila de la matriz es la principal (`initial_stock` del
+    formulario) y cada hermana trae la suya en `extra_variants`.
+    """
+
+    def test_cada_talla_nace_con_su_existencia_en_la_sucursal_elegida(
+        self, client, db, boutique, branch_a, auth_admin,
+    ):
+        from app.models.inventory import InventoryMovement, StockOnHand
+        r = client.post("/api/products/", json={
+            "name": "Falda", "sku": "FLD", "price": "250", "cost": "100",
+            "size": "Ch",
+            "target_branch_ids": [branch_a.id],
+            "initial_stock": "3", "branch_id": branch_a.id,
+            "extra_variants": [
+                {"size": "M", "initial_stock": "2"},
+                {"size": "G"},
+            ],
+        }, headers=_h(auth_admin, boutique))
+        assert r.status_code in (200, 201), r.text
+
+        esperado = {"FLD": Decimal("3"), "FLD-M": Decimal("2"), "FLD-G": Decimal("0")}
+        for sku, qty in esperado.items():
+            v = db.query(ProductVariant).filter(ProductVariant.sku == sku).one()
+            soh = db.query(StockOnHand).filter(StockOnHand.variant_id == v.id,
+                                               StockOnHand.branch_id == branch_a.id).one()
+            assert soh.qty_on_hand == qty, sku
+            movs = db.query(InventoryMovement).filter(InventoryMovement.variant_id == v.id).count()
+            assert movs == (1 if qty > 0 else 0), sku

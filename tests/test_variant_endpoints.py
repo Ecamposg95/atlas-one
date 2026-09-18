@@ -188,3 +188,70 @@ class TestGuardDeRol:
         assert r.status_code == 403, r.text
         db.refresh(nueva)
         assert nueva.deleted_at is None
+
+
+class TestExistenciaInicialPorVariante:
+    """Existencia inicial por talla (hallazgo #2 de la auditoria de variantes).
+
+    Antes el alta cargaba TODO el stock inicial en la principal y las hermanas
+    nacian en 0: la boutique terminaba con las diez prendas en la talla Ch y
+    M/G invendibles hasta hacer un ajuste manual.
+    """
+
+    def test_cada_hermana_nace_con_su_existencia_y_su_kardex(
+        self, client, db, org, branch_a, playera, auth_admin,
+    ):
+        from app.models.inventory import InventoryMovement, MovementType
+        p, _ = playera
+        r = client.post(f"/api/products/{p.id}/variants", json={"variants": [
+            {"color": "Rojo", "size": "M", "initial_stock": "5"},
+            {"color": "Rojo", "size": "L"},
+        ]}, headers=_h(auth_admin, org))
+        assert r.status_code == 201, r.text
+
+        con_stock = db.query(ProductVariant).filter(ProductVariant.sku == "PLY-ROJO-M").one()
+        soh = db.query(StockOnHand).filter(StockOnHand.variant_id == con_stock.id).one()
+        assert soh.branch_id == branch_a.id
+        assert soh.qty_on_hand == Decimal("5")
+        movs = db.query(InventoryMovement).filter(InventoryMovement.variant_id == con_stock.id).all()
+        assert len(movs) == 1
+        assert movs[0].movement_type == MovementType.ADJUSTMENT_IN
+        assert movs[0].qty_change == Decimal("5")
+        assert movs[0].qty_before == Decimal("0") and movs[0].qty_after == Decimal("5")
+        assert movs[0].branch_id == branch_a.id
+
+        # Neutralidad: sin `initial_stock` todo sigue como antes (0 y sin kardex).
+        sin_stock = db.query(ProductVariant).filter(ProductVariant.sku == "PLY-ROJO-L").one()
+        assert db.query(StockOnHand).filter(StockOnHand.variant_id == sin_stock.id).one().qty_on_hand == Decimal("0")
+        assert db.query(InventoryMovement).filter(InventoryMovement.variant_id == sin_stock.id).count() == 0
+
+    def test_existencia_inicial_negativa_es_422(self, client, db, org, playera, auth_admin):
+        p, _ = playera
+        r = client.post(f"/api/products/{p.id}/variants", json={"variants": [
+            {"color": "Rojo", "size": "M", "initial_stock": "-1"},
+        ]}, headers=_h(auth_admin, org))
+        assert r.status_code == 422, r.text
+        assert db.query(ProductVariant).filter(ProductVariant.sku == "PLY-ROJO-M").count() == 0
+
+    def test_con_varias_sucursales_pide_cual_y_la_respeta(
+        self, client, db, org, branch_a, branch_b, auth_admin,
+    ):
+        _habilitar(db, org, "variants")
+        p, _ = _make_product(db, org, "Vestido", "VST", 400,
+                             [(branch_a.id, True), (branch_b.id, True)])
+        db.commit()
+        # Sin decir a que sucursal, el backend no adivina.
+        r = client.post(f"/api/products/{p.id}/variants", json={"variants": [
+            {"size": "M", "initial_stock": "4"},
+        ]}, headers=_h(auth_admin, org))
+        assert r.status_code == 422, r.text
+
+        r2 = client.post(f"/api/products/{p.id}/variants", json={
+            "branch_id": branch_b.id,
+            "variants": [{"size": "M", "initial_stock": "4"}],
+        }, headers=_h(auth_admin, org))
+        assert r2.status_code == 201, r2.text
+        nueva = db.query(ProductVariant).filter(ProductVariant.sku == "VST-M").one()
+        por_sucursal = {s.branch_id: s.qty_on_hand
+                        for s in db.query(StockOnHand).filter(StockOnHand.variant_id == nueva.id).all()}
+        assert por_sucursal == {branch_a.id: Decimal("0"), branch_b.id: Decimal("4")}

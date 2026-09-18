@@ -20,7 +20,10 @@ from app.core.database import get_db
 from app.core.permissions import require_module
 from app.core.security import get_current_user
 from app.core.tenant_context import get_current_active_organization
-from app.models import Product, ProductBranchStatus, ProductVariant, StockOnHand, User
+from app.models import (
+    InventoryMovement, MovementType, Product, ProductBranchStatus, ProductVariant,
+    StockOnHand, User,
+)
 from app.models.sales import SalesLineItem
 from app.modules.products.schemas import (
     ProductRead, ProductVariantCreate, ProductVariantUpdate, VariantBatchCreate,
@@ -120,6 +123,8 @@ def _pareja_repetida(producto: Product, color: Optional[str], size: Optional[str
 def crear_variantes(
     db: Session, org_id: int, producto: Product, entradas: List[ProductVariantCreate],
     principal_id: Optional[str] = None,
+    stock_branch_id: Optional[int] = None,
+    user_id: Optional[int] = None,
 ) -> List[ProductVariant]:
     """Crea variantes hermanas de la principal. Sin commit: lo hace el caller.
 
@@ -132,6 +137,11 @@ def crear_variantes(
     producto ya tiene mas de una variante — p. ej. cuando el caller invoca
     esta funcion varias veces para el mismo producto, como en la carga
     masiva por fila).
+
+    `initial_stock` de cada entrada aterriza en `stock_branch_id` (o en la
+    unica sucursal habilitada, si solo hay una) con su movimiento de apertura,
+    igual que hace `create_product` con la principal. Sin `initial_stock` todo
+    sigue como antes: existencia 0 y sin kardex.
     """
     if principal_id is not None:
         principal = next(v for v in producto.variants if v.id == principal_id and v.deleted_at is None)
@@ -148,6 +158,16 @@ def crear_variantes(
             "las variantes hermanas nacen sin PBS/stock por sucursal.",
             principal.id,
         )
+    # Sucursal destino de la existencia inicial: la pedida, o la unica
+    # habilitada. Con varias sucursales y sin `branch_id` no se adivina
+    # (mismo criterio que `create_product`, que rechaza el stock ambiguo).
+    sucursales = [pbs.branch_id for pbs in pbs_base]
+    destino_stock: Optional[int] = None
+    if stock_branch_id is not None and stock_branch_id in sucursales:
+        destino_stock = stock_branch_id
+    elif stock_branch_id is None and len(sucursales) == 1:
+        destino_stock = sucursales[0]
+
     nuevas: List[ProductVariant] = []
     vistos: set[tuple[str, str]] = set()
     for i, e in enumerate(entradas):
@@ -161,6 +181,15 @@ def crear_variantes(
 
         if e.price is not None and e.price <= 0:
             raise HTTPException(status_code=422, detail=f"variants[{i}]: el precio debe ser mayor a cero.")
+
+        qty_inicial = Decimal(e.initial_stock or 0)
+        if qty_inicial < 0:
+            raise HTTPException(status_code=422, detail=f"variants[{i}]: la existencia inicial no puede ser negativa.")
+        if qty_inicial > 0 and destino_stock is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Indica en qué sucursal entra la existencia inicial de las variantes.",
+            )
 
         sku = (e.sku or "").strip() or _sku_generado(principal.sku, color, size)
         if _sku_en_uso(db, org_id, sku):
@@ -189,8 +218,20 @@ def crear_variantes(
                 variant_id=v.id, branch_id=pbs.branch_id, organization_id=org_id,
                 is_active_pos=pbs.is_active_pos, is_active_hq=pbs.is_active_hq, is_visible=pbs.is_visible,
             ))
+            qty = qty_inicial if pbs.branch_id == destino_stock else Decimal(0)
             db.add(StockOnHand(variant_id=v.id, branch_id=pbs.branch_id, organization_id=org_id,
-                               qty_on_hand=Decimal(0), is_active=True))
+                               qty_on_hand=qty, is_active=True))
+            # Kardex de apertura, igual que la principal en `create_product`:
+            # sin movimiento, el inventario arranca con una existencia que no
+            # aparece en ningun reporte.
+            if qty > 0:
+                db.add(InventoryMovement(
+                    branch_id=pbs.branch_id, variant_id=v.id, user_id=user_id,
+                    movement_type=MovementType.ADJUSTMENT_IN,
+                    qty_change=qty, qty_before=Decimal(0), qty_after=qty,
+                    reference="Alta Inicial", notes="Creación de variante",
+                    organization_id=org_id,
+                ))
         nuevas.append(v)
     producto.has_variants = True
     db.flush()
@@ -228,7 +269,8 @@ def crear_variantes_endpoint(
     # aqui: no hubo commit todavia, asi que no hay nada que confirmar, y el
     # teardown de `get_db` (finally: db.close()) descarta lo pendiente al
     # cerrar la sesion de la request.
-    crear_variantes(db, org_id, producto, body.variants)
+    crear_variantes(db, org_id, producto, body.variants,
+                    stock_branch_id=body.branch_id, user_id=current_user.id)
     db.commit()
     return _leer(db, current_user, org_id, product_id)
 
