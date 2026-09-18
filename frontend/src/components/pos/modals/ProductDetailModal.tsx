@@ -146,6 +146,12 @@ export function ProductDetailModal({
     product?.matched_variant_id ?? product?.variants?.[0]?.id ?? null
   )
 
+  // Producto recargado tras un ajuste de stock. El `product` de arriba lo manda
+  // el padre y no se entera del movimiento: sin esto, "Agregar 5" dejaba el
+  // número en el mismo 12 de antes y el cajero volvía a agregarlas.
+  const [refreshed, setRefreshed] = useState<Product | null>(null)
+  const live = refreshed ?? product
+
   // Empaques (cajas)
   const [packs, setPacks] = useState<PackRow[]>([])
   // Foto: subida por archivo
@@ -166,6 +172,7 @@ export function ProductDetailModal({
     setBrandId(product?.brand_id ?? '')
     setDepartmentId(product?.department?.id ?? '')
     setSelectedVariantId(product?.matched_variant_id ?? product?.variants?.[0]?.id ?? null)
+    setRefreshed(null)
     setPacks(
       (product?.packaging_units ?? []).map((u: PackagingUnit) => ({
         id: u.id,
@@ -223,7 +230,7 @@ export function ProductDetailModal({
     return () => { cancelled = true }
   }, [editing])
 
-  const variantesVivas = product?.variants ?? []
+  const variantesVivas = live?.variants ?? []
   // Nombre de la talla que representa el número grande — nunca "Estándar".
   const nombreVariante = (() => {
     const v = variantesVivas.find(x => x.id === selectedVariantId)
@@ -237,7 +244,7 @@ export function ProductDetailModal({
     : undefined
   const displayStock = selectedVariantStock != null
     ? Number(selectedVariantStock)
-    : Number(product?.stock_total ?? product?.stock ?? 0)
+    : Number(live?.stock_total ?? live?.stock ?? 0)
   const viewTiers = useMemo(() => {
     const raw = (product?.prices ?? [])
       .slice()
@@ -336,12 +343,24 @@ export function ProductDetailModal({
         branch_id: userBranchId,
         reason: addStockReason.trim() || 'Reposición POS',
       })
-      // Refrescar producto + UI: pedimos al padre que recargue.
       setAddStockQty('')
       setAddStockReason('')
       setAddStockMsg(`+${qty} agregadas al stock`)
-      // Si tenemos producto, llamamos onSaved con el mismo (el padre refrescará grid).
-      if (product) onSaved?.(product)
+      // El producto del padre no sabe del movimiento: se recarga y se pinta el
+      // número nuevo aquí mismo, además de avisarle para que refresque su grid.
+      if (product) {
+        try {
+          const fresh = await productsApi.getById(product.id)
+          setRefreshed({
+            ...fresh,
+            matched_variant_id: product.matched_variant_id ?? fresh.matched_variant_id,
+          })
+          onSaved?.(fresh)
+        } catch {
+          // El ajuste sí se aplicó: no se puede fallar aquí. El padre recarga.
+          onSaved?.(product)
+        }
+      }
     } catch (e: any) {
       setAddStockMsg(e?.response?.data?.detail ?? 'Error al ajustar stock')
     } finally {
@@ -543,7 +562,7 @@ export function ProductDetailModal({
                       onChange={e => setSelectedVariantId(e.target.value || null)}
                     >
                       {variantesVivas.map(v => (
-                        <option key={v.id} value={v.id}>{variantDisplayName(v, product?.name ?? v.sku)}</option>
+                        <option key={v.id} value={v.id}>{variantDisplayName(v, live?.name ?? v.sku)}</option>
                       ))}
                     </select>
                   </label>
@@ -635,7 +654,7 @@ export function ProductDetailModal({
                         return (
                           <tr key={v.id} style={{ borderTop: '1px solid var(--dax-border-dim)', background: esActual ? 'rgba(99,102,241,0.08)' : undefined }}>
                             <td className="px-2 py-1.5 font-semibold" style={{ color: 'var(--dax-text)' }}>
-                              {variantDisplayName(v, product?.name ?? '')}
+                              {variantDisplayName(v, live?.name ?? '')}
                             </td>
                             <td className={`px-2 py-1.5 text-right font-bold tabular-nums ${s > 0 ? '' : 'text-red-600'}`}
                                 style={s > 0 ? { color: 'var(--dax-text)' } : undefined}>
