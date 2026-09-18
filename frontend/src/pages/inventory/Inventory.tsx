@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { productsApi } from '../../api/products'
 import { inventoryApi } from '../../api/inventory'
 import { organizationApi, type Branch } from '../../api/organization'
@@ -7,9 +8,10 @@ import { Spinner } from '../../components/ui/Spinner'
 import { toast } from '../../store/toastStore'
 import type { Product } from '../../types/products'
 import { formatCurrency } from '../../utils/currency'
-import { expandVariantRows, type InventoryRow } from './variantRows'
+import { expandVariantRows, initialInventoryQuery, type InventoryRow } from './variantRows'
 
 export function Inventory() {
+  const location = useLocation()
   const [search, setSearch] = useState('')
   const [products, setProducts] = useState<Product[]>([])
   const [branches, setBranches] = useState<Branch[]>([])
@@ -47,6 +49,21 @@ export function Inventory() {
     try { setKardex(await inventoryApi.getKardex(row.variant.id)) }
     catch { setKardex([]) } finally { setKardexLoading(false) }
   }
+
+  // Entrada desde el editor de variantes ("Ajustar" → /inventory?variant=<id>&q=<sku>):
+  // se siembra el buscador y se abre el kardex de ESA talla. Solo al montar; de
+  // ahí en adelante manda lo que el usuario teclee.
+  useEffect(() => {
+    const { q, variant } = initialInventoryQuery(location.search)
+    if (!q && !variant) return
+    setSearch(q)
+    doSearch(q).then((items) => {
+      if (!variant) return
+      const fila = expandVariantRows(items).find((r) => r.variant.id === variant)
+      if (fila) openKardex(fila)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleAdjust = async () => {
     if (!selected || !adjQty || !adjReason || !adjBranch) return

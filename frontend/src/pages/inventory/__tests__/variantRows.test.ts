@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 
-import { expandVariantRows, grupoDeVariantes, nombreDeVariante, priceRange, sumStock } from '../variantRows'
+import {
+  expandVariantRows, grupoDeVariantes, initialInventoryQuery, nombreDeVariante, priceRange, sumStock,
+} from '../variantRows'
 import type { Product, ProductVariant } from '../../../types/products'
 
 const playera: Product = {
@@ -122,5 +124,43 @@ describe('nombreDeVariante', () => {
   })
   it('sin nombre de variante cae al nombre del producto', () => {
     expect(nombreDeVariante(playera, { id: 'z', product_id: 'p1', sku: 'Z', price: 1, cost: 1 })).toBe('Playera')
+  })
+})
+
+
+// El editor de variantes manda a /inventory?variant=<id>&q=<sku> desde el
+// enlace "Ajustar": la pantalla llegaba vacía porque nadie leía los parámetros.
+describe('initialInventoryQuery', () => {
+  it('lee el sku y la variante del enlace "Ajustar"', () => {
+    expect(initialInventoryQuery('?variant=v-m&q=PLY-M')).toEqual({ q: 'PLY-M', variant: 'v-m' })
+  })
+  it('acepta la cadena sin el signo de interrogación', () => {
+    expect(initialInventoryQuery('variant=v-m&q=PLY-M')).toEqual({ q: 'PLY-M', variant: 'v-m' })
+  })
+  it('decodifica el SKU escapado', () => {
+    expect(initialInventoryQuery('?q=PLY%20M%2F2').q).toBe('PLY M/2')
+  })
+  it('sin parámetros no hay búsqueda que sembrar', () => {
+    expect(initialInventoryQuery('')).toEqual({ q: '', variant: null })
+    expect(initialInventoryQuery('?otra=cosa')).toEqual({ q: '', variant: null })
+  })
+  it('un q en blanco no cuenta como búsqueda', () => {
+    expect(initialInventoryQuery('?q=%20%20')).toEqual({ q: '', variant: null })
+  })
+  it('la variante puede venir sola (sin q)', () => {
+    expect(initialInventoryQuery('?variant=v-m')).toEqual({ q: '', variant: 'v-m' })
+  })
+})
+
+// "Estándar" es jerga del backend; llega con y sin acento y con mayúscula
+// variable segun quien haya sembrado la variante.
+describe('nombreDeVariante con acentos y mayúsculas', () => {
+  const p = { ...playera, name: 'Playera' }
+  const base = playera.variants![0]
+  it.each(['Estándar', 'estandar', 'ESTÁNDAR', ' Estandar '])('%s cae al nombre del producto', (nombre) => {
+    expect(nombreDeVariante(p, { ...base, variant_name: nombre } as ProductVariant)).toBe('Playera')
+  })
+  it('un nombre de verdad se respeta', () => {
+    expect(nombreDeVariante(p, { ...base, variant_name: 'Rojo / S' } as ProductVariant)).toBe('Rojo / S')
   })
 })

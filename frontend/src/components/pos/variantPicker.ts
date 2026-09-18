@@ -27,9 +27,14 @@ export function variantAxisLabel(vs: ProductVariant[], plural = false): string {
   return plural ? `${base}s` : base
 }
 
-/** El backend nombra "Estándar" a la variante sin atributos; el cajero espera el producto. */
-const esEstandar = (nombre: string) => {
-  const n = nombre.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+/**
+ * El backend nombra "Estándar" a la variante sin atributos; el cajero espera el
+ * producto. Llega con y sin acento y con mayúscula variable según quién haya
+ * sembrado la variante (import de Excel, alta a mano, migración), así que se
+ * compara sin acentos y en minúsculas.
+ */
+export const esEstandar = (nombre: string) => {
+  const n = (nombre ?? '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
   return n === 'estandar'
 }
 

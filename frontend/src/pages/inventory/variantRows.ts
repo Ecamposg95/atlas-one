@@ -1,3 +1,4 @@
+import { esEstandar } from '../../components/pos/variantPicker'
 import type { Product, ProductVariant } from '../../types/products'
 
 export interface InventoryRow {
@@ -43,12 +44,31 @@ export function expandVariantRows(products: Product[]): InventoryRow[] {
  *
  * "Estándar" es el nombre que el backend le pone a la variante única de un
  * producto sin atributos: es jerga interna y al dueño no le dice nada, así
- * que en su lugar se muestra el nombre del producto.
+ * que en su lugar se muestra el nombre del producto. La comparación va por
+ * `esEstandar` (sin acentos y en minúsculas): el nombre llega escrito de
+ * varias formas según quién sembró la variante, y comparar contra el literal
+ * "Estándar" dejaba "estandar" colándose al inventario como nombre de fila.
  */
 export function nombreDeVariante(product: Product, variant: ProductVariant): string {
   const nombre = (variant.variant_name ?? '').trim()
-  if (!nombre || nombre === 'Estándar') return product.name
+  if (!nombre || esEstandar(nombre)) return product.name
   return nombre
+}
+
+/**
+ * Qué buscar al entrar a Inventario desde otra pantalla.
+ *
+ * El editor de variantes enlaza a `/inventory?variant=<id>&q=<sku>` con el
+ * botón "Ajustar", pero la pantalla no leía nada: el admin aterrizaba en un
+ * buscador vacío y tenía que teclear el SKU que acababa de ver. Devuelve el
+ * texto a sembrar y la variante a abrir (el kardex de ESA talla, no el de la
+ * primera).
+ */
+export function initialInventoryQuery(search: string): { q: string; variant: string | null } {
+  const params = new URLSearchParams((search ?? '').replace(/^\?/, ''))
+  const q = (params.get('q') ?? '').trim()
+  const variant = (params.get('variant') ?? '').trim()
+  return { q, variant: variant || null }
 }
 
 /**
