@@ -5,7 +5,7 @@ import { inventoryApi } from '../../api/inventory'
 import { toast } from '../../store/toastStore'
 import { ui, brand, fmtMoney } from './branchUI'
 import type { Product, Brand, Department, ProductPrice, PackagingUnit, CatalogKpis, UploadPreviewResponse } from '../../types/products'
-import { expandVariantRows, grupoDeVariantes } from '../../pages/inventory/variantRows'
+import { expandVariantRows, grupoDeVariantes, nombreDeVariante } from '../../pages/inventory/variantRows'
 import { esFilaPrincipal, planIdentidadDeFila } from './variantEdit'
 
 import { TablaDesplazable } from '../ui/TablaDesplazable'
@@ -550,6 +550,9 @@ function ProductFormModal({ mode, product, variantId, departments, brands, onClo
   // producto (`PUT /products/{id}` escribe siempre la principal).
   const filaPrincipal = !product || esFilaPrincipal(product, variantId)
   const variante = product?.variants?.find((v) => v.id === variantId)
+  // Nunca "Estándar" en pantalla: si la variante no tiene nombre propio se
+  // muestra el del producto.
+  const nombreVariante = product && variante ? nombreDeVariante(product, variante) : 'la variante'
   const grupo = grupoDeVariantes(product?.variants ?? [])
   const [form, setForm] = useState({
     name: product?.name ?? '',
@@ -767,16 +770,16 @@ function ProductFormModal({ mode, product, variantId, departments, brands, onClo
         {!filaPrincipal && variante && (
           <p className="text-xs text-amber-700 dark:text-amber-400 mb-3">
             <i className="fa-solid fa-circle-info mr-1.5" aria-hidden="true" />
-            SKU y código de barras son los de <strong>{variante.variant_name ?? 'esta variante'}</strong> y
+            SKU y código de barras son los de <strong>{nombreVariante}</strong> y
             se guardan en esa {SINGULAR_GRUPO[grupo]}.
             Nombre, costo, precio y escalones son del producto completo.
           </p>
         )}
         <div className="grid grid-cols-2 gap-3">
-          <Field label={filaPrincipal ? 'SKU *' : `SKU de ${variante?.variant_name ?? 'la variante'} *`}>
+          <Field label={filaPrincipal ? 'SKU *' : `SKU de ${nombreVariante} *`}>
             <input className={ui.input} value={form.sku} onChange={(e) => set('sku', e.target.value)} />
           </Field>
-          <Field label={filaPrincipal ? 'Código de barras' : `Código de barras de ${variante?.variant_name ?? 'la variante'}`}>
+          <Field label={filaPrincipal ? 'Código de barras' : `Código de barras de ${nombreVariante}`}>
             <input className={ui.input} value={form.barcode} onChange={(e) => set('barcode', e.target.value)} />
           </Field>
           <Field label="Costo *">

@@ -12,7 +12,7 @@ import { formatCurrency } from '../../utils/currency'
 import { sortByName } from '../../utils/sortByName'
 import { toast } from '../../store/toastStore'
 import { ProductImageUploader } from '../../components/products/ProductImageUploader'
-import { expandVariantRows, grupoDeVariantes, priceRange, sumStock } from './variantRows'
+import { expandVariantRows, grupoDeVariantes, nombreDeVariante, priceRange, sumStock } from './variantRows'
 
 const SINGULAR_GRUPO = { tallas: 'talla', colores: 'color', variantes: 'variante' } as const
 
@@ -1534,9 +1534,7 @@ function ProductsHQView() {
                           <td className="font-mono text-slate-500 pl-6">{row.sku}</td>
                           <td className="text-slate-300">
                             <i className="fa-solid fa-turn-up fa-rotate-90 text-slate-600 mr-2 text-[10px]" />
-                            {row.variant.variant_name && row.variant.variant_name !== 'Estándar'
-                              ? row.variant.variant_name
-                              : p.name}
+                            {nombreDeVariante(p, row.variant)}
                           </td>
                           <td />
                           <td className="text-right text-emerald-400/80">{formatCurrency(row.variant.price ?? 0)}</td>

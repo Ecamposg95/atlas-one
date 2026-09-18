@@ -26,15 +26,29 @@ export function expandVariantRows(products: Product[]): InventoryRow[] {
       continue
     }
     for (const v of vs) {
-      const conNombre = vs.length > 1 && v.variant_name && v.variant_name !== 'Estándar'
+      const nombre = nombreDeVariante(p, v)
+      const conNombre = vs.length > 1 && nombre !== p.name
       rows.push({
         product: p, variant: v,
-        label: conNombre ? `${p.name} · ${v.variant_name}` : p.name,
+        label: conNombre ? `${p.name} · ${nombre}` : p.name,
         sku: v.sku, barcode: v.barcode ?? null, qty: Number(v.stock_total ?? 0),
       })
     }
   }
   return rows
+}
+
+/**
+ * Cómo se llama UNA variante en pantalla.
+ *
+ * "Estándar" es el nombre que el backend le pone a la variante única de un
+ * producto sin atributos: es jerga interna y al dueño no le dice nada, así
+ * que en su lugar se muestra el nombre del producto.
+ */
+export function nombreDeVariante(product: Product, variant: ProductVariant): string {
+  const nombre = (variant.variant_name ?? '').trim()
+  if (!nombre || nombre === 'Estándar') return product.name
+  return nombre
 }
 
 /**

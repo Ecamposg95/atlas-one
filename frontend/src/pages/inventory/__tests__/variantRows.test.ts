@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { expandVariantRows, grupoDeVariantes, priceRange, sumStock } from '../variantRows'
+import { expandVariantRows, grupoDeVariantes, nombreDeVariante, priceRange, sumStock } from '../variantRows'
 import type { Product, ProductVariant } from '../../../types/products'
 
 const playera: Product = {
@@ -110,5 +110,17 @@ describe('priceRange', () => {
   })
   it('una sola variante es uniforme', () => {
     expect(priceRange([v(50, 'a')])).toEqual({ min: 50, max: 50, uniforme: true })
+  })
+})
+
+describe('nombreDeVariante', () => {
+  it('nunca dice "Estándar": usa el nombre del producto', () => {
+    expect(nombreDeVariante(gorra, gorra.variants![0])).toBe('Gorra')
+  })
+  it('una variante con talla se llama por su talla', () => {
+    expect(nombreDeVariante(playera, playera.variants![1])).toBe('Rojo / M')
+  })
+  it('sin nombre de variante cae al nombre del producto', () => {
+    expect(nombreDeVariante(playera, { id: 'z', product_id: 'p1', sku: 'Z', price: 1, cost: 1 })).toBe('Playera')
   })
 })
