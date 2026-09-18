@@ -52,7 +52,10 @@ export interface CustomerListResponse {
 
 export const customersApi = {
   search: async (q: string, limit = 10): Promise<Customer[]> => {
-    const { data } = await client.get<Customer[]>('/customers/', { params: { q, limit } })
+    // El backend filtra con `search`, no `q`: con `q` FastAPI lo ignoraba y
+    // devolvía los primeros `limit` clientes en orden alfabético, así que el
+    // POS "encontraba" siempre al mismo cliente equivocado.
+    const { data } = await client.get<Customer[]>('/customers/', { params: { search: q, limit } })
     return Array.isArray(data) ? data : (data as any)?.items ?? []
   },
 

@@ -1347,7 +1347,7 @@ def get_sale_print_view(
     ).options(joinedload(SaleReturn.items)).all()
 
     # Cliente a mostrar: mismo criterio que el ticket térmico
-    # (app/pos_printer.py::_build_header) — "Público General" (con o sin
+    # (app/pos_printer.py::_build_compact_header) — "Público General" (con o sin
     # acento) no es un cliente, no se imprime. La comparación vive una sola
     # vez en `_es_publico_general`; el template solo decide si hay línea.
     from app.pos_printer import _es_publico_general
@@ -1356,12 +1356,13 @@ def get_sale_print_view(
 
     # Sprint 4 (tech-debt): template movido a app/templates/print/ — KEEP-SSR
     # justificado para impresión térmica (HTML estático sin React).
-    # NOTA (fix round 1, item 4): `TemplateResponse(name, context)` es la firma
-    # vieja de Starlette; versiones recientes la eliminaron y solo aceptan
-    # `TemplateResponse(request, name, context)` — con la firma vieja este
-    # endpoint devolvía 500 (`TypeError: unhashable type: 'dict'` al armar la
-    # cache key de Jinja) en cualquier venta, no solo con el nombre de
-    # cliente. Se descubrió al agregar el test de este endpoint.
+    # `TemplateResponse(request, name, context)` es la firma moderna de
+    # Starlette. La pineada (0.50) acepta ambas (la vieja con
+    # DeprecationWarning); Starlette >= 1.0 solo esta. Se cambió para no
+    # depender de la firma deprecada. OJO: el template sigue mezclando float
+    # (quantity) con Decimal (unit_price) en el total por línea, así que este
+    # endpoint devuelve 500 para ventas con partidas — bug preexistente, sin
+    # llamador en el frontend; pendiente de castear en el contexto.
     return templates.TemplateResponse(request, "print/ticket.html", {
         "sale": sale,
         "organization": organization,

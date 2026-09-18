@@ -87,7 +87,12 @@ export function PendingOrders({ onLoadOrder }: Props) {
               return (
                 <div key={ticket.id} className="dax-card p-3 flex items-center justify-between gap-3">
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-mono text-dax-accent-text truncate">{ticket.id.slice(-8).toUpperCase()}</p>
+                    <p className="text-xs font-mono text-dax-accent-text truncate">
+                      {ticket.id.slice(-8).toUpperCase()}
+                      {typeof ticket.cart_json.customer_name === 'string' && ticket.cart_json.customer_name.trim()
+                        ? <span className="font-sans font-semibold text-dax-text"> · {ticket.cart_json.customer_name.trim()}</span>
+                        : null}
+                    </p>
                     <p className="text-base text-dax-text font-bold tabular-nums">{formatCurrency(total)}</p>
                     <p className="text-xs text-dax-muted truncate">
                       {itemCount} {itemCount === 1 ? 'artículo' : 'artículos'}
