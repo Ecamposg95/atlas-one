@@ -496,7 +496,11 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                       ? Math.floor(unitItem.quantity / unitCajaTier.min_quantity)
                       : 0
 
-                    // [+] de la fila fantasma: crea un nuevo ítem de unidades al precio base
+                    // [+] de la fila fantasma: crea un nuevo ítem de unidades al precio base.
+                    // Si la línea tiene talla, el ítem reconstruido la conserva (misma
+                    // forma que ProductSearch: cart_key = variant_id). OJO: nunca copiar
+                    // el `cart_key` de displayItem cuando es una caja — lleva '::caja::'
+                    // y el ítem de piezas volvería a contarse como caja.
                     const addGhostUnit = () => addItem({
                       product_id: displayItem.product_id,
                       base_price: displayItem.base_price ?? displayItem.price,
@@ -508,6 +512,10 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                       subtotal: displayItem.base_price ?? displayItem.price,
                       stock: displayItem.stock,
                       prices: displayItem.prices,
+                      ...(displayItem.variant_id
+                        ? { variant_id: displayItem.variant_id, cart_key: displayItem.variant_id }
+                        : {}),
+                      ...(displayItem.variant_label ? { variant_label: displayItem.variant_label } : {}),
                     })
 
                     return (

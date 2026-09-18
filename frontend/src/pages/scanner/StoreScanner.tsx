@@ -592,10 +592,30 @@ function PricesSection({
       if (variasTallas && variante) {
         // El PUT del producto escribe la variante PRINCIPAL: guardar así el
         // precio de la M lo dejaba en la Ch y la M seguía igual. El precio de
-        // la talla va por su propio endpoint; los escalones son del producto.
+        // la talla va por su propio endpoint; los escalones, en cambio, son
+        // ProductPrice de la variante PRINCIPAL (`crear_variantes` no los copia
+        // a las hermanas), así que siguen viajando en el PUT del producto y
+        // solo rigen para esa talla.
         let actualizado = await productsApi.updateVariant(variante.id, { price: parsed })
         const soloEscalones = buildTierOnlyPayload(product, limpios)
-        if (soloEscalones) actualizado = await productsApi.update(product.id, soloEscalones)
+        if (soloEscalones) {
+          // El precio de la talla YA se guardó. Si el PUT de escalones truena,
+          // decir "no se pudo guardar" a secas haría que el cajero repitiera un
+          // cambio que ya está en la base.
+          try {
+            actualizado = await productsApi.update(product.id, soloEscalones)
+          } catch (err) {
+            const e = err as { response?: { data?: { detail?: unknown } } }
+            onChanged({ ...actualizado, matched_variant_id: variante.id })
+            setMsg(
+              `El precio se guardó; los escalones no: ${errorDetailText(
+                e?.response?.data?.detail,
+                'revisa la conexión.',
+              )}`,
+            )
+            return
+          }
+        }
         onChanged({ ...actualizado, matched_variant_id: variante.id })
       } else {
         onChanged(
@@ -618,7 +638,7 @@ function PricesSection({
           <span className="text-xs text-slate-400">
             Precio menudeo
             {variasTallas && variante && (
-              <span className="text-indigo-300 font-bold"> de {variante.variant_name ?? variante.sku}</span>
+              <span className="text-indigo-300 font-bold"> de {variantDisplayName(variante, product.name)}</span>
             )}
           </span>
           <input
@@ -638,7 +658,11 @@ function PricesSection({
           <div className="space-y-2">
             <span className="text-xs text-slate-400">
               Escalones
-              {variasTallas && <span className="text-slate-500"> · son del producto, aplican a todas las tallas</span>}
+              {variasTallas && (
+                <span className="text-slate-500">
+                  {' '}· son de la talla principal; las demás tallas se venden a precio base
+                </span>
+              )}
             </span>
             {(product.prices ?? []).map((t) => (
               <div key={t.id} className="flex items-center gap-2">

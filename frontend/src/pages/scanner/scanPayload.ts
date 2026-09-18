@@ -83,9 +83,14 @@ export interface TierOnlyPayload {
  *
  * Con varias tallas el precio base no puede viajar aquí: `price` en el PUT del
  * producto escribe la variante PRINCIPAL aunque la ficha esté mostrando la M.
- * El precio de la talla se guarda con `PUT /api/products/variants/{id}`; los
- * escalones siguen siendo del producto y se reemplazan por completo, así que
- * —igual que en `buildPriceUpdatePayload`— viaja la lista ENTERA.
+ * El precio de la talla se guarda con `PUT /api/products/variants/{id}`.
+ *
+ * Los escalones NO son del producto: cada `ProductPrice` cuelga de una variante
+ * y `crear_variantes` no se los copia a las hermanas, así que los que se ven y
+ * se editan aquí son los de la talla PRINCIPAL y solo rigen para ella; las
+ * demás tallas se venden a precio base. Siguen viajando en el PUT del producto
+ * (que escribe la principal) y se reemplazan por completo, así que —igual que
+ * en `buildPriceUpdatePayload`— viaja la lista ENTERA.
  *
  * Devuelve `null` cuando no hay escalones: mandar `prices: []` los borraría.
  */

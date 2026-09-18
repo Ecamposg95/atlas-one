@@ -645,7 +645,7 @@ export function ProductDetailModal({
                     (la escaneada o la primera) y nadie sabía de cuál hablaba. */}
                 {variantesVivas.length > 1 && nombreVariante && (
                   <span className="text-[11px] font-bold px-2 py-0.5 rounded-full"
-                        style={{ background: 'rgba(99,102,241,0.15)', color: '#4338ca' }}>
+                        style={{ background: 'var(--dax-accent-soft)', color: 'var(--dax-accent-text)' }}>
                     {nombreVariante}
                   </span>
                 )}
