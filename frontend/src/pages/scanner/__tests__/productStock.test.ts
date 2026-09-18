@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { currentStock, matchedVariant, parseTierPrice } from '../productStock'
+import { currentStock, matchedVariant, parseTierPrice, withSelectedVariant } from '../productStock'
 import type { Product } from '../../../types/products'
 
 // Dos bugs que llegaron a producción el 2026-08-29 y que estos tests fijan.
@@ -107,5 +107,42 @@ describe('currentStock por variante', () => {
     const p = playera()
     p.stock_levels = [{ branch_id: 20, qty_on_hand: 100, is_active: true }]
     expect(currentStock(p, 20)).toBe(7)
+  })
+})
+
+// Sin código de barras el backend no empata ninguna talla y manda aplanada la
+// principal: el scanner solo dejaba ver y ajustar la Ch. `withSelectedVariant`
+// es lo que deja al cajero pararse en la M sin volver a escanear.
+describe('withSelectedVariant', () => {
+  const p = {
+    id: 'p1', name: 'Blusa', sku: 'BL-CH', price: 300, barcode: null, stock_total: 9,
+    variants: [
+      { id: 'ch', sku: 'BL-CH', variant_name: 'Ch', size: 'Ch', price: 300, stock_total: 9, barcode: null },
+      { id: 'm', sku: 'BL-M', variant_name: 'M', size: 'M', price: 350, stock_total: 2, barcode: '750' },
+    ],
+  } as unknown as Product
+
+  it('aplana la talla elegida sobre el producto', () => {
+    const vista = withSelectedVariant(p, 'm')
+    expect(vista.matched_variant_id).toBe('m')
+    expect(vista.sku).toBe('BL-M')
+    expect(Number(vista.price)).toBe(350)
+    expect(Number(vista.stock_total)).toBe(2)
+    expect(vista.barcode).toBe('750')
+  })
+
+  it('el conteo pasa a ser el de la talla elegida', () => {
+    expect(currentStock(withSelectedVariant(p, 'm'), null)).toBe(2)
+    expect(currentStock(withSelectedVariant(p, 'ch'), null)).toBe(9)
+  })
+
+  it('sin id o con un id desconocido devuelve el producto tal cual', () => {
+    expect(withSelectedVariant(p, null)).toBe(p)
+    expect(withSelectedVariant(p, 'zzz')).toBe(p)
+  })
+
+  it('no toca los escalones del producto (son del producto, no de la talla)', () => {
+    const conEscalones = { ...p, prices: [{ id: 't1', price_name: 'Mayoreo', min_quantity: 3, unit_price: 280, linked_package_id: null }] } as unknown as Product
+    expect(withSelectedVariant(conEscalones, 'm').prices).toEqual(conEscalones.prices)
   })
 })

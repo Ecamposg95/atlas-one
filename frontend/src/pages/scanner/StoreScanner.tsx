@@ -7,12 +7,15 @@ import { Spinner } from '../../components/ui/Spinner'
 import { useAuthStore } from '../../store/authStore'
 import type { Branch } from '../../types/auth'
 import type { Product } from '../../types/products'
+import {
+  variantAxisLabel, variantDisplayName, variantShortLabel,
+} from '../../components/pos/variantPicker'
 import { formatCurrency } from '../../utils/currency'
 import { errorDetailText } from '../../utils/errorDetail'
 import {
   createDetector, isNativeDetectorAvailable, normalizeCode, normalizeTyped,
 } from './barcodeReader'
-import { currentStock, matchedVariant, parseTierPrice } from './productStock'
+import { currentStock, matchedVariant, parseTierPrice, withSelectedVariant } from './productStock'
 import {
   buildDetailsUpdatePayload, buildPriceUpdatePayload, buildTierOnlyPayload, type TierEdits,
 } from './scanPayload'
@@ -466,24 +469,73 @@ function ProductEditPanel({
   branchId: number | null
   onChanged: (p: Product) => void
 }) {
-  const v = matchedVariant(product)
+  const variantes = product.variants ?? []
+  const varias = variantes.length > 1
+  // Elegir una talla equivale a haberla escaneado: `vista` es el producto con
+  // esa variante aplanada, así que precio, existencia y ajuste la siguen.
+  const [selectedId, setSelectedId] = useState<string | null>(matchedVariant(product)?.id ?? null)
+  useEffect(() => {
+    setSelectedId(matchedVariant(product)?.id ?? null)
+  }, [product.id, product.matched_variant_id])
+
+  const vista = withSelectedVariant(product, selectedId)
+  const v = matchedVariant(vista)
+  const etiqueta = variantAxisLabel(variantes)
+  // Sin empate de código el backend aplanó la principal: hay que decirlo, o el
+  // cajero corrige la Ch creyendo que está parado en la M.
+  const sinEmpate = varias && !product.matched_variant_id && v?.id === variantes[0]?.id
+
   return (
     <div className="space-y-3">
       <DaxCard>
         <h2 className="text-lg font-black text-white leading-tight">
           {product.name}
-          {v?.variant_name && v.variant_name !== 'Estándar' && (
-            <span className="ml-2 text-sm font-bold text-indigo-300">{v.variant_name}</span>
+          {v && varias && (
+            <span className="ml-2 text-sm font-bold text-indigo-300">{variantShortLabel(v)}</span>
           )}
         </h2>
         <p className="text-xs text-slate-400 font-mono">
           {v?.sku ?? product.sku}
           {(v?.barcode ?? product.barcode) ? ` · ${v?.barcode ?? product.barcode}` : ' · sin código'}
         </p>
+
+        {varias && (
+          <div className="mt-3 space-y-2">
+            <span className="text-xs text-slate-400">{etiqueta} que estás viendo</span>
+            <div className="flex flex-wrap gap-2">
+              {variantes.map((opt) => {
+                const activa = opt.id === v?.id
+                return (
+                  <button
+                    key={opt.id}
+                    onClick={() => setSelectedId(opt.id)}
+                    aria-pressed={activa}
+                    className={`min-h-[44px] px-3 rounded-lg text-sm font-bold border ${
+                      activa
+                        ? 'bg-indigo-500/20 border-indigo-400 text-indigo-200'
+                        : 'bg-slate-800 border-slate-700 text-slate-300'
+                    }`}
+                  >
+                    {variantDisplayName(opt, product.name)}
+                    <span className="block text-[11px] font-normal text-slate-400">
+                      {Number(opt.stock_total ?? 0)} pz · {formatCurrency(Number(opt.price))}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+            {sinEmpate && (
+              <p className="text-[11px] text-amber-400">
+                Mostrando {variantDisplayName(variantes[0], product.name)}: el código escaneado
+                no empató con ninguna {etiqueta.toLowerCase()}. Elige la que tienes en la mano.
+              </p>
+            )}
+          </div>
+        )}
       </DaxCard>
 
-      <PricesSection product={product} onChanged={onChanged} />
-      <StockSection product={product} branchId={branchId} onChanged={onChanged} />
+      <PricesSection product={vista} onChanged={onChanged} />
+      <StockSection product={vista} branchId={branchId} onChanged={onChanged} />
     </div>
   )
 }
@@ -641,7 +693,7 @@ function StockSection({
   const variantId = matchedVariant(product)?.id ?? null
   const adj = counted.trim() === '' ? null : computeAdjustment(current, Number(counted))
 
-  useEffect(() => { setCounted(''); setNotes(''); setMsg(null) }, [product.id])
+  useEffect(() => { setCounted(''); setNotes(''); setMsg(null) }, [product.id, product.matched_variant_id])
 
   const apply = async () => {
     if (!adj || adj.delta === 0 || !variantId || !branchId) return

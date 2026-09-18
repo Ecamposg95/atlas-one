@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest'
 
-import { groupVariants, needsPicker, pickVariantForCart } from '../variantPicker'
+import {
+  groupVariants, needsPicker, pickVariantForCart, sizeOnly, variantAxisLabel,
+  variantDisplayName, variantShortLabel,
+} from '../variantPicker'
 import type { Product, ProductVariant } from '../../../types/products'
 
 const v = (id: string, color: string | null, size: string | null, stock: number): ProductVariant => ({
@@ -48,5 +51,65 @@ describe('pickVariantForCart', () => {
     expect(p.sku).toBe('PLY-lm')
     expect(Number(p.stock_total)).toBe(5)
     expect(Number(p.price)).toBe(120)
+  })
+})
+
+// Vocabulario: la boutique no usa colores, solo tallas Ch/M/G. Hablar de
+// "variantes" ahí no significa nada, y "Estándar" es un nombre que inventa el
+// backend para el producto sin atributos — el cajero espera ver el producto.
+
+describe('sizeOnly', () => {
+  it('sí cuando ninguna variante tiene color', () => {
+    const tallas = [v('ch', null, 'Ch', 4), v('m', null, 'M', 0), v('g', '', 'G', 2)]
+    expect(sizeOnly(tallas)).toBe(true)
+  })
+  it('no cuando alguna tiene color', () => {
+    expect(sizeOnly(base.variants!)).toBe(false)
+  })
+  it('no cuando no hay tallas tampoco (variante única sin atributos)', () => {
+    expect(sizeOnly([v('u', null, null, 3)])).toBe(false)
+  })
+  it('no con una lista vacía', () => {
+    expect(sizeOnly([])).toBe(false)
+  })
+})
+
+describe('variantAxisLabel', () => {
+  it('habla de tallas cuando no hay colores', () => {
+    const tallas = [v('ch', null, 'Ch', 4), v('m', null, 'M', 0)]
+    expect(variantAxisLabel(tallas)).toBe('Talla')
+    expect(variantAxisLabel(tallas, true)).toBe('Tallas')
+  })
+  it('habla de variantes cuando hay colores', () => {
+    expect(variantAxisLabel(base.variants!)).toBe('Variante')
+    expect(variantAxisLabel(base.variants!, true)).toBe('Variantes')
+  })
+})
+
+describe('variantDisplayName', () => {
+  it('usa el nombre de la variante', () => {
+    expect(variantDisplayName(v('m', 'Rojo', 'M', 1), 'Playera')).toBe('Rojo / M')
+  })
+  it('NUNCA muestra "Estándar": devuelve el nombre del producto', () => {
+    const estandar = { ...v('u', null, null, 3), variant_name: 'Estándar' }
+    expect(variantDisplayName(estandar, 'Playera')).toBe('Playera')
+  })
+  it('también atrapa "Estandar" sin acento y con espacios', () => {
+    const estandar = { ...v('u', null, null, 3), variant_name: '  estandar ' }
+    expect(variantDisplayName(estandar, 'Playera')).toBe('Playera')
+  })
+  it('arma el nombre con color/talla si el backend no mandó variant_name', () => {
+    const sinNombre = { ...v('m', null, 'M', 1), variant_name: null }
+    expect(variantDisplayName(sinNombre, 'Playera')).toBe('M')
+  })
+})
+
+describe('variantShortLabel', () => {
+  it('es la talla, para el badge del carrito', () => {
+    expect(variantShortLabel(v('m', null, 'M', 1))).toBe('M')
+  })
+  it('es null cuando la variante no distingue nada (producto de una sola)', () => {
+    const estandar = { ...v('u', null, null, 3), variant_name: 'Estándar' }
+    expect(variantShortLabel(estandar)).toBeNull()
   })
 })

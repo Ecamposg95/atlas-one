@@ -53,6 +53,29 @@ export function matchedVariant(product: Product): ProductVariant | null {
 }
 
 /**
+ * Producto con los campos aplanados de la talla elegida a mano.
+ *
+ * Sin código de barras el backend no empata ninguna variante y manda aplanada
+ * la principal: la ficha del scanner se quedaba pegada a la Ch y no había
+ * forma de contar ni corregir la M. Elegir una talla en pantalla equivale a
+ * haberla escaneado, así que `currentStock`/`matchedVariant` la toman sin
+ * cambios. Los escalones NO se tocan: son del producto, no de la talla.
+ */
+export function withSelectedVariant(product: Product, variantId: string | null): Product {
+  if (!variantId) return product
+  const v = (product.variants ?? []).find((x) => x.id === variantId)
+  if (!v) return product
+  return {
+    ...product,
+    matched_variant_id: v.id,
+    sku: v.sku,
+    barcode: v.barcode ?? null,
+    price: Number(v.price),
+    stock_total: Number(v.stock_total ?? 0),
+  }
+}
+
+/**
  * Convierte lo tecleado en un escalón a un precio, o `null` si no lo es.
  *
  * `Number('')` es 0, y `edits[id] ?? unit_price` NO rescata el cero (`??` solo
