@@ -5,7 +5,7 @@ import { productsApi } from '../../api/products'
 import type { Product, ProductVariant } from '../../types/products'
 import { errorDetailText } from '../../utils/errorDetail'
 import { ProductVariantsSection } from './ProductVariantsSection'
-import { toExtraVariants, type VariantRow } from './variantMatrix'
+import { toExtraVariants, variantDetailErrors, type VariantRow } from './variantMatrix'
 import { usesColors, variantLabel, variantWords } from './variantWords'
 
 interface Props {
@@ -41,6 +41,10 @@ export function ProductVariantsEditor({ product, onChanged }: Props) {
   const [msg, setMsg] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [rows, setRows] = useState<VariantRow[]>([])
+  // Errores por fila del backend ("variants[1]: el precio debe ser mayor a
+  // cero", "El SKU 'PLY-L' ya existe…"): sin esto el aviso salía suelto arriba
+  // y había que adivinar cuál de las cinco filas corregir.
+  const [errores, setErrores] = useState<Record<string, string>>({})
   const variants = product.variants ?? []
   const principal = variants[0] ?? null
 
@@ -59,7 +63,7 @@ export function ProductVariantsEditor({ product, onChanged }: Props) {
   }
 
   const remove = async (v: ProductVariant) => {
-    if (!window.confirm(`¿Retirar ${palabra.singular === 'talla' ? 'la talla' : 'la variante'} ${variantLabel(v, product.name)}?`)) return
+    if (!window.confirm(`¿Retirar la ${palabra.singular} ${variantLabel(v, product.name)}?`)) return
     setBusyId(v.id); setMsg(null)
     try {
       await productsApi.deleteVariant(v.id)
@@ -68,7 +72,7 @@ export function ProductVariantsEditor({ product, onChanged }: Props) {
       try {
         onChanged(await productsApi.getById(product.id))
       } catch {
-        setMsg(`${palabra.singular === 'talla' ? 'Talla retirada' : 'Variante retirada'}; recarga la página para ver los cambios.`)
+        setMsg(`Se retiró la ${palabra.singular}; recarga la página para ver los cambios.`)
       }
     } catch (err) {
       const e = err as { response?: { data?: { detail?: unknown } } }
@@ -78,7 +82,7 @@ export function ProductVariantsEditor({ product, onChanged }: Props) {
 
   const addRows = async () => {
     if (rows.length === 0) return
-    setBusyId('new'); setMsg(null)
+    setBusyId('new'); setMsg(null); setErrores({})
     let principalAsignada = false
     try {
       let actualizado = product
@@ -98,9 +102,14 @@ export function ProductVariantsEditor({ product, onChanged }: Props) {
         actualizado = await productsApi.createVariants(product.id, toExtraVariants(hermanas))
       }
       onChanged(actualizado)
-      setRows([]); setAdding(false)
+      setRows([]); setAdding(false); setErrores({})
     } catch (err) {
       const e = err as { response?: { data?: { detail?: unknown } } }
+      // `variants[N]` se numera entre las HERMANAS: cuando la primera fila se
+      // le asigna a la prenda que ya existe, esa no viaja en el POST.
+      const porFila = variantDetailErrors(e?.response?.data?.detail,
+                                          asignaPrincipal ? rows.slice(1) : rows)
+      setErrores(porFila)
       // Si la primera talla ya se asignó y falló el resto, la pantalla no
       // puede quedarse con los datos viejos: se relee el producto y se quita
       // esa fila del generador para que un reintento no choque con ella.
@@ -110,8 +119,12 @@ export function ProductVariantsEditor({ product, onChanged }: Props) {
           setRows((prev) => prev.slice(1))
         } catch { /* el mensaje de abajo ya pide recargar */ }
       }
-      setMsg(errorDetailText(e?.response?.data?.detail, `No se pudieron crear las ${palabra.plural}.`)
-        + (principalAsignada ? ' La primera talla sí quedó asignada.' : ''))
+      // Con la fila ya marcada, repetir el texto crudo del backend arriba solo
+      // lo dice dos veces.
+      const aviso = Object.keys(porFila).length > 0
+        ? `Revisa la ${palabra.singular} marcada.`
+        : errorDetailText(e?.response?.data?.detail, `No se pudieron crear las ${palabra.plural}.`)
+      setMsg(aviso + (principalAsignada ? ` La primera ${palabra.singular} sí quedó asignada.` : ''))
     } finally { setBusyId(null) }
   }
 
@@ -141,7 +154,7 @@ export function ProductVariantsEditor({ product, onChanged }: Props) {
         <div className="space-y-2">
           {asignaPrincipal && (
             <p className="rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-3 py-2 text-xs text-indigo-200">
-              Este producto todavía no tiene tallas. La primera que escribas se le asigna a
+              Este producto todavía no tiene {palabra.plural}. La primera que escribas se le asigna a
               «{product.name}» —conserva su SKU, su código y su precio— y las demás se crean nuevas.
             </p>
           )}
@@ -150,6 +163,7 @@ export function ProductVariantsEditor({ product, onChanged }: Props) {
             rows={rows}
             onRowsChange={setRows}
             firstIsPrincipal={asignaPrincipal}
+            errors={errores}
             // Las tallas que ya existen se precargan y no se regeneran: antes
             // el generador las proponía otra vez y el backend respondía 409.
             existing={asignaPrincipal ? [] : variants.map((v) => ({ color: v.color, size: v.size }))}
@@ -159,10 +173,10 @@ export function ProductVariantsEditor({ product, onChanged }: Props) {
           <div className="flex gap-2">
             <button type="button" className="dax-btn-primary" disabled={busyId === 'new' || rows.length === 0} onClick={addRows}>
               {asignaPrincipal && nuevas === 0
-                ? `Asignar ${rows.length === 1 ? 'esta talla' : 'estas tallas'}`
+                ? `Asignar ${rows.length === 1 ? `esta ${palabra.singular}` : `estas ${palabra.plural}`}`
                 : `Crear ${nuevas} ${nuevas === 1 ? palabra.singular : palabra.plural}`}
             </button>
-            <button type="button" className="dax-btn-secondary" onClick={() => { setAdding(false); setRows([]) }}>Cancelar</button>
+            <button type="button" className="dax-btn-secondary" onClick={() => { setAdding(false); setRows([]); setErrores({}); setMsg(null) }}>Cancelar</button>
           </div>
         </div>
       )}
