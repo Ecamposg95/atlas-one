@@ -20,7 +20,10 @@ describe('buildVariantRows', () => {
   it('conserva lo tecleado en filas que ya existían', () => {
     const prev = buildVariantRows('PLY', ['Rojo'], ['S'], [])
     prev[0].barcode = '750'
+    // El SKU escrito a mano viaja con `skuTocado` (así lo marca el formulario):
+    // sin esa marca se recalcula desde el SKU base en cada regeneración.
     prev[0].sku = 'MI-SKU'
+    prev[0].skuTocado = true
     const rows = buildVariantRows('PLY', ['Rojo'], ['S', 'M'], prev)
     expect(rows[0]).toMatchObject({ sku: 'MI-SKU', barcode: '750' })
     expect(rows[1].sku).toBe('PLY-ROJO-M')
@@ -66,5 +69,49 @@ describe('splitPrincipal', () => {
     const rows = buildVariantRows('PLY', ['Rojo'], ['S', 'M'], [])
     splitPrincipal(rows)
     expect(rows).toHaveLength(2)
+  })
+})
+
+describe('SKU sugerido al cambiar el SKU base', () => {
+  it('regenera el SKU de las filas que nadie tocó', () => {
+    const prev = buildVariantRows('PLY', [], ['S', 'M'], [])
+    const rows = buildVariantRows('PLAYERA', [], ['S', 'M'], prev)
+    expect(rows.map((r) => r.sku)).toEqual(['PLAYERA-S', 'PLAYERA-M'])
+  })
+  it('respeta el SKU que el admin escribió a mano', () => {
+    const prev = buildVariantRows('PLY', [], ['S', 'M'], [])
+    prev[0] = { ...prev[0], sku: 'MI-SKU', skuTocado: true }
+    const rows = buildVariantRows('PLAYERA', [], ['S', 'M'], prev)
+    expect(rows.map((r) => r.sku)).toEqual(['MI-SKU', 'PLAYERA-M'])
+  })
+  it('conserva lo demás de la fila al regenerar', () => {
+    const prev = buildVariantRows('PLY', [], ['S'], [])
+    prev[0] = { ...prev[0], barcode: '750', price: '99', initial_stock: '4' }
+    const [row] = buildVariantRows('PLAYERA', [], ['S'], prev)
+    expect(row).toMatchObject({ barcode: '750', price: '99', initial_stock: '4', sku: 'PLAYERA-S' })
+  })
+})
+
+describe('tallas que ya existen en el producto', () => {
+  it('no las vuelve a generar (evita el 409 al agregar variantes)', () => {
+    const rows = buildVariantRows('PLY', [], ['Ch', 'M', 'G'], [], [{ size: 'ch' }, { color: null, size: 'M' }])
+    expect(rows.map((r) => r.size)).toEqual(['G'])
+  })
+  it('sin lista de existentes genera todo', () => {
+    expect(buildVariantRows('PLY', [], ['Ch', 'M'], []).map((r) => r.size)).toEqual(['Ch', 'M'])
+  })
+})
+
+describe('existencia inicial por fila', () => {
+  it('viaja solo cuando es mayor a cero', () => {
+    const [row] = buildVariantRows('PLY', [], ['M'], [])
+    expect(toExtraVariants([row])[0].initial_stock).toBeUndefined()
+    expect(toExtraVariants([{ ...row, initial_stock: '0' }])[0].initial_stock).toBeUndefined()
+    expect(toExtraVariants([{ ...row, initial_stock: '  ' }])[0].initial_stock).toBeUndefined()
+    expect(toExtraVariants([{ ...row, initial_stock: '-3' }])[0].initial_stock).toBeUndefined()
+    expect(toExtraVariants([{ ...row, initial_stock: '7' }])[0].initial_stock).toBe(7)
+  })
+  it('las filas nuevas nacen sin existencia', () => {
+    expect(buildVariantRows('PLY', [], ['M'], [])[0].initial_stock).toBe('')
   })
 })

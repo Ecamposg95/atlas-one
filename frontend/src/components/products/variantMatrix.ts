@@ -11,6 +11,9 @@ export interface VariantRow {
   sku: string
   barcode: string
   price: string // vacío = hereda el precio base
+  initial_stock: string // vacío o 0 = nace sin existencia
+  /** El admin escribió el SKU a mano: cambiar el SKU base ya no lo pisa. */
+  skuTocado?: boolean
 }
 
 export interface ExtraVariantPayload {
@@ -19,6 +22,13 @@ export interface ExtraVariantPayload {
   sku?: string
   barcode?: string
   price?: number
+  initial_stock?: number
+}
+
+/** Pareja color/talla que el producto YA tiene (edición): no se regenera. */
+export interface VariantPair {
+  color?: string | null
+  size?: string | null
 }
 
 export function parseList(text: string): string[] {
@@ -42,27 +52,42 @@ export function skuPart(text: string): string {
 
 const rowKey = (color: string, size: string) => `${color.toLowerCase()}|${size.toLowerCase()}`
 
+const skuSugerido = (baseSku: string, color: string, size: string) =>
+  [baseSku.trim(), ...[color, size].filter(Boolean).map(skuPart)].filter(Boolean).join('-')
+
+/**
+ * Filas de la matriz para los colores × tallas escritos.
+ *
+ * `previous` conserva lo que el admin ya tecleó en filas que siguen vivas. El
+ * SKU sugerido se recalcula al cambiar el SKU base —antes las filas se
+ * quedaban con el prefijo viejo—, salvo en las filas con `skuTocado`.
+ * `existing` son las parejas que el producto ya tiene (edición): se omiten
+ * para no chocar con el 409 "Ya existe la variante".
+ */
 export function buildVariantRows(
   baseSku: string,
   colors: string[],
   sizes: string[],
   previous: VariantRow[],
+  existing: VariantPair[] = [],
 ): VariantRow[] {
   const cs = colors.length ? colors : ['']
   const ss = sizes.length ? sizes : ['']
   const prev = new Map(previous.map((r) => [r.key, r]))
+  const yaExiste = new Set(existing.map((e) => rowKey(e.color ?? '', e.size ?? '')))
   const rows: VariantRow[] = []
   for (const color of cs) {
     for (const size of ss) {
       if (!color && !size) continue
       const key = rowKey(color, size)
+      if (yaExiste.has(key)) continue
+      const sku = skuSugerido(baseSku, color, size)
       const old = prev.get(key)
       if (old) {
-        rows.push({ ...old, color, size })
+        rows.push({ ...old, color, size, sku: old.skuTocado ? old.sku : sku })
         continue
       }
-      const sku = [baseSku.trim(), ...[color, size].filter(Boolean).map(skuPart)].filter(Boolean).join('-')
-      rows.push({ key, color, size, sku, barcode: '', price: '' })
+      rows.push({ key, color, size, sku, barcode: '', price: '', initial_stock: '' })
     }
   }
   return rows
@@ -77,6 +102,8 @@ export function toExtraVariants(rows: VariantRow[]): ExtraVariantPayload[] {
     if (r.barcode.trim()) out.barcode = r.barcode.trim()
     const p = Number(r.price)
     if (r.price.trim() && Number.isFinite(p) && p > 0) out.price = p
+    const s = Number(r.initial_stock)
+    if (r.initial_stock.trim() && Number.isFinite(s) && s > 0) out.initial_stock = s
     return out
   })
 }
