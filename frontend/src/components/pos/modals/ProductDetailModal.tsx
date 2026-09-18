@@ -216,6 +216,24 @@ export function ProductDetailModal({
     }
   }
 
+  // La ficha se abre encima de todo y hasta ahora solo se cerraba con el botón
+  // o clicando el fondo: con el teclado no había salida.
+  const abierto = mode === 'create' || !!product
+  const cardRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!abierto) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [abierto, onClose])
+
+  // Foco inicial dentro del diálogo: sin esto el lector de pantalla y el
+  // tabulador seguían navegando la pantalla de atrás.
+  useEffect(() => {
+    if (abierto) cardRef.current?.focus()
+  }, [abierto, product?.id])
+
   // Cargar catálogos de marca/departamento al entrar en modo edición o creación.
   useEffect(() => {
     if (!editing) return
@@ -456,7 +474,12 @@ export function ProductDetailModal({
       onClick={onClose}
     >
       <div
-        className={`dax-card w-full overflow-hidden max-h-[92vh] flex flex-col ${editing ? 'max-w-3xl' : 'max-w-md'}`}
+        ref={cardRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={headerTitle || 'Ficha del producto'}
+        tabIndex={-1}
+        className={`dax-card w-full overflow-hidden max-h-[92vh] flex flex-col outline-none ${editing ? 'max-w-3xl' : 'max-w-md'}`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Imagen (solo vista o create sin edición aún) */}

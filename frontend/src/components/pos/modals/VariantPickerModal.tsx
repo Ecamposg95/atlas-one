@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { productsApi } from '../../../api/products'
 import type { Product, ProductVariant } from '../../../types/products'
@@ -24,6 +24,9 @@ interface Props {
  */
 export function VariantPickerModal({ product, onPick, onClose }: Props) {
   const [full, setFull] = useState<Product>(product)
+  const cardRef = useRef<HTMLDivElement>(null)
+  // Foco inicial dentro del diálogo: el tabulador seguía en la pantalla de atrás.
+  useEffect(() => { cardRef.current?.focus() }, [])
   useEffect(() => {
     let cancelled = false
     productsApi.getById(product.id).then((p) => { if (!cancelled) setFull(p) }).catch(() => {})
@@ -70,7 +73,16 @@ export function VariantPickerModal({ product, onPick, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-2xl p-4" style={{ background: 'var(--dax-surface)' }} onClick={(e) => e.stopPropagation()}>
+      <div
+        ref={cardRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Elige la ${variantAxisLabel(variantes).toLowerCase()} de ${full.name}`}
+        tabIndex={-1}
+        className="w-full max-w-lg rounded-2xl p-4 outline-none"
+        style={{ background: 'var(--dax-surface)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
         <h3 className="text-base font-black" style={{ color: 'var(--dax-text)' }}>{full.name}</h3>
         <p className="text-xs mb-3" style={{ color: 'var(--dax-text-muted)' }}>
           Elige la {etiqueta.toLowerCase()}
