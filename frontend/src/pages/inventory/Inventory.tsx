@@ -27,13 +27,15 @@ export function Inventory() {
     organizationApi.getBranches().then(setBranches).catch(() => {})
   }, [])
 
-  const doSearch = useCallback(async (q: string) => {
-    if (!q.trim()) { setProducts([]); return }
+  const doSearch = useCallback(async (q: string): Promise<Product[]> => {
+    if (!q.trim()) { setProducts([]); return [] }
     setLoading(true)
     try {
       const res = await productsApi.search(q, 0, 30)
-      setProducts(res.items ?? [])
-    } catch { setProducts([]) } finally { setLoading(false) }
+      const items = res.items ?? []
+      setProducts(items)
+      return items
+    } catch { setProducts([]); return [] } finally { setLoading(false) }
   }, [])
 
   // Products have variants; the inventory API expects a variant UUID, not a product UUID.
@@ -55,6 +57,11 @@ export function Inventory() {
         branch_id: Number(adjBranch), reason: adjReason,
       })
       setModal(false); setAdjQty(''); setAdjReason(''); setAdjBranch('')
+      // Recargar la tabla: sin esto la existencia del renglon seguia mostrando
+      // la de antes del ajuste hasta que el usuario volvia a buscar.
+      const frescos = await doSearch(search)
+      const actualizado = expandVariantRows(frescos).find((r) => r.variant.id === selected.variant.id)
+      if (actualizado) setSelected(actualizado)
       setKardex(await inventoryApi.getKardex(selected.variant.id))
     } catch { toast.error('Error al ajustar el inventario') } finally { setAdjSaving(false) }
   }
@@ -87,7 +94,8 @@ export function Inventory() {
                 <tr key={row.variant.id}>
                   <td className="font-mono text-indigo-400 text-xs">{row.sku}</td>
                   <td className="text-white font-semibold">{row.label}</td>
-                  <td className="text-right text-slate-300 tabular-nums">{formatCurrency(row.product.price ?? 0)}</td>
+                  {/* Precio de ESTA talla: `product.price` es el aplanado de la principal. */}
+                  <td className="text-right text-slate-300 tabular-nums">{formatCurrency(row.variant.price ?? 0)}</td>
                   <td className={`text-right font-bold tabular-nums ${row.qty <= 0 ? 'text-red-400' : 'text-emerald-400'}`}>
                     {row.qty}
                   </td>

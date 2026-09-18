@@ -28,13 +28,15 @@ export function HQInventory() {
     organizationApi.getBranches().then(setBranches).catch(() => {})
   }, [])
 
-  const doSearch = useCallback(async (q: string) => {
-    if (!q.trim()) { setProducts([]); return }
+  const doSearch = useCallback(async (q: string): Promise<Product[]> => {
+    if (!q.trim()) { setProducts([]); return [] }
     setLoading(true)
     try {
       const res = await productsApi.search(q, 0, 30)
-      setProducts(res.items ?? [])
-    } catch { setProducts([]) } finally { setLoading(false) }
+      const items = res.items ?? []
+      setProducts(items)
+      return items
+    } catch { setProducts([]); return [] } finally { setLoading(false) }
   }, [])
 
   // Un renglón por variante — con varias tallas, kardex y ajuste van a la que se eligió, no a la primera.
@@ -60,6 +62,11 @@ export function HQInventory() {
         reason: adjReason,
       })
       setAdjustModal(false); setAdjQty(''); setAdjReason(''); setAdjBranch('')
+      // Recargar la tabla: sin esto la existencia del renglon seguia mostrando
+      // la de antes del ajuste hasta que el usuario volvia a buscar.
+      const frescos = await doSearch(search)
+      const actualizado = expandVariantRows(frescos).find((r) => r.variant.id === selected.variant.id)
+      if (actualizado) setSelected(actualizado)
       const data = await inventoryApi.getKardex(selected.variant.id)
       setKardex(data)
     } catch { toast.error('Error al ajustar el inventario') } finally { setAdjSaving(false) }
@@ -103,7 +110,8 @@ export function HQInventory() {
                   <tr key={row.variant.id}>
                     <td className="font-mono text-indigo-400 text-xs">{row.sku}</td>
                     <td className="text-white font-semibold">{row.label}</td>
-                    <td className="text-right text-slate-300">{formatCurrency(row.product.price ?? 0)}</td>
+                    {/* Precio de ESTA talla: `product.price` es el aplanado de la principal. */}
+                    <td className="text-right text-slate-300">{formatCurrency(row.variant.price ?? 0)}</td>
                     <td className={`text-right font-bold ${row.qty <= 0 ? 'text-red-400' : 'text-emerald-400'}`}>
                       {row.qty}
                     </td>

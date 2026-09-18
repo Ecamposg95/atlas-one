@@ -37,3 +37,18 @@ describe('expandVariantRows', () => {
     expect(rows[0].barcode).toBe('7501234567890')
   })
 })
+
+describe('precio por renglón', () => {
+  it('cada renglón conserva el precio de su propia talla, no el de la principal', () => {
+    const conPrecios: Product = {
+      ...playera,
+      price: 100, // el aplanado del backend = la principal
+      variants: [
+        { id: 'v-s', product_id: 'p1', sku: 'PLY-S', variant_name: 'S', price: 100, cost: 60, stock_total: '3' },
+        { id: 'v-m', product_id: 'p1', sku: 'PLY-M', variant_name: 'M', price: 180, cost: 60, stock_total: '0' },
+      ],
+    }
+    const rows = expandVariantRows([conPrecios])
+    expect(rows.map((r) => r.variant.price)).toEqual([100, 180])
+  })
+})
