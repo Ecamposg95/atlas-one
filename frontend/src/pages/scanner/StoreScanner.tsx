@@ -13,7 +13,9 @@ import {
   createDetector, isNativeDetectorAvailable, normalizeCode, normalizeTyped,
 } from './barcodeReader'
 import { currentStock, matchedVariant, parseTierPrice } from './productStock'
-import { buildDetailsUpdatePayload, buildPriceUpdatePayload, type TierEdits } from './scanPayload'
+import {
+  buildDetailsUpdatePayload, buildPriceUpdatePayload, buildTierOnlyPayload, type TierEdits,
+} from './scanPayload'
 import { computeAdjustment } from './stockAdjust'
 
 /**
@@ -495,7 +497,13 @@ function PricesSection({
   product: Product
   onChanged: (p: Product) => void
 }) {
-  const [base, setBase] = useState(String(product.price ?? 0))
+  // La talla que se está viendo manda sobre el precio aplanado del producto:
+  // con varias tallas, `product.price` es el de la principal.
+  const variante = matchedVariant(product)
+  const variasTallas = (product.variants?.length ?? 0) > 1
+  const precioVisible = variasTallas && variante ? variante.price : product.price
+
+  const [base, setBase] = useState(String(precioVisible ?? 0))
   // Se guarda el TEXTO, no Number(): `Number('')` es 0 y ese 0 llegaba a la
   // base dejando el escalón en $0.00.
   const [edits, setEdits] = useState<Record<string, string>>({})
@@ -503,10 +511,10 @@ function PricesSection({
   const [msg, setMsg] = useState<string | null>(null)
 
   useEffect(() => {
-    setBase(String(product.price ?? 0))
+    setBase(String(precioVisible ?? 0))
     setEdits({})
     setMsg(null)
-  }, [product.id, product.price])
+  }, [product.id, variante?.id, precioVisible])
 
   const save = async () => {
     const parsed = Number(base)
@@ -529,9 +537,19 @@ function PricesSection({
     setBusy(true)
     setMsg(null)
     try {
-      onChanged(
-        await productsApi.update(product.id, buildPriceUpdatePayload(product, parsed, limpios)),
-      )
+      if (variasTallas && variante) {
+        // El PUT del producto escribe la variante PRINCIPAL: guardar así el
+        // precio de la M lo dejaba en la Ch y la M seguía igual. El precio de
+        // la talla va por su propio endpoint; los escalones son del producto.
+        let actualizado = await productsApi.updateVariant(variante.id, { price: parsed })
+        const soloEscalones = buildTierOnlyPayload(product, limpios)
+        if (soloEscalones) actualizado = await productsApi.update(product.id, soloEscalones)
+        onChanged({ ...actualizado, matched_variant_id: variante.id })
+      } else {
+        onChanged(
+          await productsApi.update(product.id, buildPriceUpdatePayload(product, parsed, limpios)),
+        )
+      }
       setMsg('Precios guardados.')
     } catch (err) {
       const e = err as { response?: { data?: { detail?: unknown } } }
@@ -545,18 +563,31 @@ function PricesSection({
     <DaxCard>
       <div className="space-y-3">
         <label className="block">
-          <span className="text-xs text-slate-400">Precio menudeo</span>
+          <span className="text-xs text-slate-400">
+            Precio menudeo
+            {variasTallas && variante && (
+              <span className="text-indigo-300 font-bold"> de {variante.variant_name ?? variante.sku}</span>
+            )}
+          </span>
           <input
             value={base}
             onChange={(e) => setBase(e.target.value)}
             inputMode="decimal"
             className="dax-input mt-1 font-bold text-lg"
           />
+          {variasTallas && (
+            <span className="block text-[11px] text-slate-500 mt-1">
+              Solo cambia el precio de esta talla; las demás quedan como están.
+            </span>
+          )}
         </label>
 
         {(product.prices ?? []).length > 0 && (
           <div className="space-y-2">
-            <span className="text-xs text-slate-400">Escalones</span>
+            <span className="text-xs text-slate-400">
+              Escalones
+              {variasTallas && <span className="text-slate-500"> · son del producto, aplican a todas las tallas</span>}
+            </span>
             {(product.prices ?? []).map((t) => (
               <div key={t.id} className="flex items-center gap-2">
                 <span className="flex-1 text-sm text-slate-200">

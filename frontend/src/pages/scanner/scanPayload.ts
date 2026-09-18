@@ -73,6 +73,38 @@ export function buildDetailsUpdatePayload(
   return payload
 }
 
+/** Escalones sin precio base — lo que se manda cuando el precio es de una talla. */
+export interface TierOnlyPayload {
+  prices: NonNullable<PriceUpdatePayload['prices']>
+}
+
+/**
+ * Body del `PUT /api/products/{id}` que toca SOLO los escalones.
+ *
+ * Con varias tallas el precio base no puede viajar aquí: `price` en el PUT del
+ * producto escribe la variante PRINCIPAL aunque la ficha esté mostrando la M.
+ * El precio de la talla se guarda con `PUT /api/products/variants/{id}`; los
+ * escalones siguen siendo del producto y se reemplazan por completo, así que
+ * —igual que en `buildPriceUpdatePayload`— viaja la lista ENTERA.
+ *
+ * Devuelve `null` cuando no hay escalones: mandar `prices: []` los borraría.
+ */
+export function buildTierOnlyPayload(
+  product: Product,
+  edits: TierEdits,
+): TierOnlyPayload | null {
+  const tiers: ProductPrice[] = product.prices ?? []
+  if (tiers.length === 0) return null
+  return {
+    prices: tiers.map((t) => ({
+      price_name: t.price_name,
+      min_quantity: t.min_quantity,
+      unit_price: edits[t.id] ?? t.unit_price,
+      linked_package_id: t.linked_package_id ?? null,
+    })),
+  }
+}
+
 export function buildPriceUpdatePayload(
   product: Product,
   basePrice: number,

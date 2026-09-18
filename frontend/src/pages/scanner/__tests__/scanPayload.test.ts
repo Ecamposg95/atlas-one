@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { buildDetailsUpdatePayload, buildPriceUpdatePayload } from '../scanPayload'
+import { buildDetailsUpdatePayload, buildPriceUpdatePayload, buildTierOnlyPayload } from '../scanPayload'
 import type { Product } from '../../../types/products'
 
 // `PUT /api/products/{id}` reemplaza los escalones POR COMPLETO: borra todos
@@ -59,6 +59,31 @@ describe('buildPriceUpdatePayload', () => {
     expect(payload.prices).toHaveLength(2)
     // sort numérico explícito: el default de JS ordena como texto y pone 10 antes que 8.
     expect(payload.prices?.map((p) => p.unit_price).sort((a, b) => a - b)).toEqual([8, 10])
+  })
+})
+
+describe('buildTierOnlyPayload', () => {
+  // Con varias tallas el precio base NO puede viajar en el PUT del producto:
+  // ese campo escribe la variante PRINCIPAL aunque la ficha muestre la M.
+  // El precio de la talla va por PUT /products/variants/{id}; aquí solo los
+  // escalones, que siguen siendo del producto.
+  it('nunca manda price', () => {
+    const payload = buildTierOnlyPayload(producto, { t1: 9.5 })
+    expect(payload).not.toBeNull()
+    expect('price' in (payload as object)).toBe(false)
+  })
+
+  it('manda TODOS los escalones con la edición aplicada', () => {
+    const payload = buildTierOnlyPayload(producto, { t1: 9.5 })
+    expect(payload?.prices).toHaveLength(2)
+    expect(payload?.prices.find((p) => p.price_name === 'Mayoreo')?.unit_price).toBe(9.5)
+    expect(payload?.prices.find((p) => p.price_name === 'Caja')?.unit_price).toBe(8)
+    expect(payload?.prices.find((p) => p.price_name === 'Caja')?.linked_package_id).toBe('pk1')
+  })
+
+  it('devuelve null si el producto no tiene escalones (mandar [] los borraría)', () => {
+    const sinEscalones = { ...producto, prices: [] } as unknown as Product
+    expect(buildTierOnlyPayload(sinEscalones, {})).toBeNull()
   })
 })
 
