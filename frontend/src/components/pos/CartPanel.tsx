@@ -7,6 +7,7 @@ import type { Product } from '../../types/products'
 import { ProductDetailModal } from './modals/ProductDetailModal'
 import { PricePickerPopover } from './PricePickerPopover'
 import { formatCurrency } from '../../utils/currency'
+import { cartLineName } from './variantPicker'
 import { confirm } from '../ui/ConfirmDialog'
 import { autoTierTarget, forcedTierMap, cajaTierOf } from '../../pages/pos/cartTiers'
 import { groupCart, type CartGroup } from '../../pages/pos/cartGroups'
@@ -395,7 +396,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                       style={{ color: 'var(--dax-text)' }}
                       title="Ver detalles"
                     >
-                      {displayItem.name}
+                      {cartLineName(displayItem.name, displayItem.variant_label)}
                     </button>
                     <button
                       onClick={() => removeGroup(group)}
@@ -408,6 +409,16 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                   {/* Línea 2: SKU + total piezas + tier badge + precio total */}
                   <div className="flex items-center gap-2 mb-2.5">
                     <p className="text-xs font-mono text-dax-muted">{displayItem.sku}</p>
+                    {/* Talla de la línea: sin esto, dos tallas del mismo
+                        producto eran dos renglones idénticos en el ticket. */}
+                    {displayItem.variant_label && (
+                      <span
+                        className="text-[10px] font-black px-1.5 py-0.5 rounded flex-shrink-0"
+                        style={{ background: 'var(--dax-accent-soft)', color: 'var(--dax-accent-text)' }}
+                      >
+                        {displayItem.variant_label}
+                      </span>
+                    )}
                     {/* Total piezas: siempre visible */}
                     <span className="flex items-center gap-1 text-xs font-semibold tabular-nums" style={{ color: 'var(--dax-text-muted)' }}>
                       <i className="fa-solid fa-cube text-[9px] opacity-60" />

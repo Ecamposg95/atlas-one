@@ -2,10 +2,10 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { productsApi } from '../../api/products'
 import { usePOSStore } from '../../store/posStore'
 import { useAuthStore } from '../../store/authStore'
-import type { Product } from '../../types/products'
+import type { Product, ProductVariant } from '../../types/products'
 import { ProductDetailModal } from './modals/ProductDetailModal'
 import { VariantPickerModal } from './modals/VariantPickerModal'
-import { needsPicker, pickVariantForCart } from './variantPicker'
+import { needsPicker, pickVariantForCart, variantShortLabel } from './variantPicker'
 import { formatCurrency } from '../../utils/currency'
 import { useExchangeRateStore } from '../../store/exchangeRateStore'
 import { formatUsd, usdEquivalent } from '../../utils/usd'
@@ -188,10 +188,13 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
     return total
   }
 
-  const addToCart = (p: Product) => {
-    const variantId = p.matched_variant_id ?? p.variants?.[0]?.id ?? undefined
-    const variant = p.variants?.find((v) => v.id === variantId)
-    const label = variant?.variant_name && variant.variant_name !== 'Estándar' ? variant.variant_name : undefined
+  // `picked` es la variante que el cajero eligió en el modal. Se recibe entera
+  // porque el producto del resultado de búsqueda puede traer la colección de
+  // variantes incompleta: rebuscarla en `p.variants` dejaba la línea sin talla.
+  const addToCart = (p: Product, picked?: ProductVariant) => {
+    const variantId = picked?.id ?? p.matched_variant_id ?? p.variants?.[0]?.id ?? undefined
+    const variant = picked ?? p.variants?.find((v) => v.id === variantId)
+    const label = (variant ? variantShortLabel(variant) : null) ?? undefined
     const stock = Number(p.stock_total ?? 0)
     if (stock > 0 && cartQtyUnits(p.id, variantId) >= stock) {
       setLimitId(p.id)
@@ -465,7 +468,7 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
       {pickerFor && (
         <VariantPickerModal
           product={pickerFor}
-          onPick={(v) => { addToCart(pickVariantForCart(pickerFor, v)); setPickerFor(null) }}
+          onPick={(v) => { addToCart(pickVariantForCart(pickerFor, v), v); setPickerFor(null) }}
           onClose={() => { setPickerFor(null); devolverFoco() }}
         />
       )}

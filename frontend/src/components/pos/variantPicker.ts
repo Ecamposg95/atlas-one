@@ -52,6 +52,21 @@ export function variantShortLabel(v: ProductVariant): string | null {
   return attrs || null
 }
 
+/**
+ * Nombre del ítem para la LÍNEA del carrito.
+ *
+ * El `name` del ítem arrastra la talla entre paréntesis porque es el texto que
+ * se imprime en el ticket. En pantalla la talla va en un badge, así que aquí se
+ * recorta para no decirla dos veces. Solo se quita si el paréntesis es
+ * exactamente la etiqueta.
+ */
+export function cartLineName(name: string, label?: string | null): string {
+  const l = txt(label)
+  if (!l) return name
+  const sufijo = ` (${l})`
+  return name.endsWith(sufijo) ? name.slice(0, -sufijo.length) : name
+}
+
 export function groupVariants(vs: ProductVariant[]) {
   const colors: string[] = []
   const sizes: string[] = []

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
 import {
-  groupVariants, needsPicker, pickVariantForCart, sizeOnly, variantAxisLabel,
+  cartLineName, groupVariants, needsPicker, pickVariantForCart, sizeOnly, variantAxisLabel,
   variantDisplayName, variantShortLabel,
 } from '../variantPicker'
 import type { Product, ProductVariant } from '../../../types/products'
@@ -111,5 +111,21 @@ describe('variantShortLabel', () => {
   it('es null cuando la variante no distingue nada (producto de una sola)', () => {
     const estandar = { ...v('u', null, null, 3), variant_name: 'Estándar' }
     expect(variantShortLabel(estandar)).toBeNull()
+  })
+})
+
+// La línea del carrito lleva la talla en un badge aparte; el nombre del ítem
+// sigue llevándola entre paréntesis porque es lo que se imprime en el ticket.
+describe('cartLineName', () => {
+  it('quita el paréntesis que ya muestra el badge', () => {
+    expect(cartLineName('Playera (M)', 'M')).toBe('Playera')
+    expect(cartLineName('Blusa (Rojo / M)', 'Rojo / M')).toBe('Blusa')
+  })
+  it('deja el nombre intacto si no hay badge', () => {
+    expect(cartLineName('Playera (M)', undefined)).toBe('Playera (M)')
+    expect(cartLineName('Playera', 'M')).toBe('Playera')
+  })
+  it('no recorta un paréntesis que no es la talla', () => {
+    expect(cartLineName('Playera (oferta)', 'M')).toBe('Playera (oferta)')
   })
 })
