@@ -5,7 +5,8 @@ import { inventoryApi } from '../../api/inventory'
 import { toast } from '../../store/toastStore'
 import { ui, brand, fmtMoney } from './branchUI'
 import type { Product, Brand, Department, ProductPrice, PackagingUnit, CatalogKpis, UploadPreviewResponse } from '../../types/products'
-import { expandVariantRows } from '../../pages/inventory/variantRows'
+import { expandVariantRows, grupoDeVariantes } from '../../pages/inventory/variantRows'
+import { esFilaPrincipal, planIdentidadDeFila } from './variantEdit'
 
 import { TablaDesplazable } from '../ui/TablaDesplazable'
 
@@ -96,7 +97,10 @@ export function ProductsBranchView() {
   const [filter, setFilter] = useState<'all' | 'low'>('all')
   const [kpis, setKpis] = useState<CatalogKpis | null>(null)
 
-  const [editing, setEditing] = useState<Product | null>(null)
+  // Qué renglón se está editando: el producto completo + la talla de la que
+  // salió la fila. Sin el `variantId`, el formulario escribía siempre la
+  // identidad de la principal.
+  const [editing, setEditing] = useState<{ product: Product; variantId?: string } | null>(null)
   const [creating, setCreating] = useState(false)
   const [stockTarget, setStockTarget] = useState<ProductRow | null>(null)
   const [showImport, setShowImport] = useState(false)
@@ -159,12 +163,12 @@ export function ProductsBranchView() {
   }, [items, filter])
 
   // ── Edit: cargar producto completo (con prices + packaging_units) ─────────
-  async function openEdit(p: Product) {
+  async function openEdit(p: ProductRow) {
     try {
       const full = await productsApi.getById(p.id)
-      setEditing(full)
+      setEditing({ product: full, variantId: p.variant_id })
     } catch {
-      setEditing(p)
+      setEditing({ product: p, variantId: p.variant_id })
     }
   }
 
@@ -324,7 +328,8 @@ export function ProductsBranchView() {
       {editing && (
         <ProductFormModal
           mode="edit"
-          product={editing}
+          product={editing.product}
+          variantId={editing.variantId}
           departments={departments}
           brands={brands}
           onClose={() => setEditing(null)}
@@ -525,21 +530,31 @@ function ProductFichaModal({ product: p, onClose, onEdit, onAdjustStock }: Ficha
 
 // ─── Product form modal (create + edit) ───────────────────────────────────────
 
+const SINGULAR_GRUPO = { tallas: 'talla', colores: 'color', variantes: 'variante' } as const
+
 interface FormModalProps {
   mode: 'create' | 'edit'
   product?: Product
+  /** Talla de la que salió el renglón; sin ella el formulario es el del producto. */
+  variantId?: string
   departments: Department[]
   brands: Brand[]
   onClose: () => void
   onSaved: () => void
 }
 
-function ProductFormModal({ mode, product, departments, brands, onClose, onSaved }: FormModalProps) {
+function ProductFormModal({ mode, product, variantId, departments, brands, onClose, onSaved }: FormModalProps) {
   const { user } = useAuthStore()
+  // La fila puede ser una talla que NO es la principal. En ese caso el SKU y
+  // el código de barras son los de ESA talla y se guardan en ella, no en el
+  // producto (`PUT /products/{id}` escribe siempre la principal).
+  const filaPrincipal = !product || esFilaPrincipal(product, variantId)
+  const variante = product?.variants?.find((v) => v.id === variantId)
+  const grupo = grupoDeVariantes(product?.variants ?? [])
   const [form, setForm] = useState({
     name: product?.name ?? '',
-    sku: product?.sku ?? '',
-    barcode: product?.barcode ?? '',
+    sku: (filaPrincipal ? product?.sku : variante?.sku) ?? '',
+    barcode: (filaPrincipal ? product?.barcode : variante?.barcode) ?? '',
     cost: String(product?.cost ?? ''),
     price: String(product?.price ?? ''),
     department_id: product?.department?.id ?? '',
@@ -653,10 +668,18 @@ function ProductFormModal({ mode, product, departments, brands, onClose, onSaved
         })
         toast.success('Producto creado')
       } else if (product) {
-        await productsApi.update(product.id, {
-          name: form.name.trim(),
+        // El SKU/código de una talla no principal NO puede viajar en
+        // `PUT /products/{id}`: ahí sobrescribiría los de la principal.
+        const identidad = planIdentidadDeFila(product, variantId, {
           sku: form.sku.trim(),
           barcode: form.barcode.trim() || null,
+        })
+        if (identidad.variantPatch) {
+          await productsApi.updateVariant(identidad.variantPatch.variantId, identidad.variantPatch.patch)
+        }
+        await productsApi.update(product.id, {
+          name: form.name.trim(),
+          ...identidad.productPatch,
           description: form.description.trim() || null,
           cost,
           price,
@@ -741,11 +764,19 @@ function ProductFormModal({ mode, product, departments, brands, onClose, onSaved
             </Field>
           </div>
         </div>
+        {!filaPrincipal && variante && (
+          <p className="text-xs text-amber-700 dark:text-amber-400 mb-3">
+            <i className="fa-solid fa-circle-info mr-1.5" aria-hidden="true" />
+            SKU y código de barras son los de <strong>{variante.variant_name ?? 'esta variante'}</strong> y
+            se guardan en esa {SINGULAR_GRUPO[grupo]}.
+            Nombre, costo, precio y escalones son del producto completo.
+          </p>
+        )}
         <div className="grid grid-cols-2 gap-3">
-          <Field label="SKU *">
+          <Field label={filaPrincipal ? 'SKU *' : `SKU de ${variante?.variant_name ?? 'la variante'} *`}>
             <input className={ui.input} value={form.sku} onChange={(e) => set('sku', e.target.value)} />
           </Field>
-          <Field label="Código de barras">
+          <Field label={filaPrincipal ? 'Código de barras' : `Código de barras de ${variante?.variant_name ?? 'la variante'}`}>
             <input className={ui.input} value={form.barcode} onChange={(e) => set('barcode', e.target.value)} />
           </Field>
           <Field label="Costo *">
