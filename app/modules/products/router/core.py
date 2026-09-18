@@ -279,15 +279,27 @@ def create_product(
                     detail="Una o más sucursales objetivo no pertenecen a tu organización."
                 )
 
-        # [SEMANTICS] A single `initial_stock` value cannot be split
-        # unambiguously across multiple branches. Reject the combination so the
-        # caller sets stock per-branch explicitly instead.
-        if (prod_in.initial_stock and prod_in.initial_stock > 0
+        # [SEMANTICS] La existencia inicial entra en UNA sucursal. Con varias
+        # objetivo y sin `branch_id` no hay forma de saber cual, asi que se
+        # rechaza en vez de repartir a ciegas. Cuenta tambien la de las
+        # hermanas: con `initial_stock` 0 en la principal el guard no se
+        # disparaba y las piezas de la talla M aterrizaban en una sucursal
+        # arbitraria (el orden de un `set`), sin avisar.
+        _stock_hermanas = sum(
+            (v.initial_stock or Decimal(0)) for v in (prod_in.extra_variants or [])
+        )
+        _stock_inicial_total = (prod_in.initial_stock or Decimal(0)) + _stock_hermanas
+        _destino_explicito = (
+            prod_in.branch_id is not None
+            and prod_in.branch_id in set(prod_in.target_branch_ids or [])
+        )
+        if (_stock_inicial_total > 0
                 and prod_in.target_branch_ids
-                and len(set(prod_in.target_branch_ids)) > 1):
+                and len(set(prod_in.target_branch_ids)) > 1
+                and not _destino_explicito):
             raise HTTPException(
                 status_code=422,
-                detail="No se puede asignar stock inicial a múltiples sucursales en una sola creación."
+                detail="Indica en qué sucursal entra la existencia inicial: no se reparte sola entre varias sucursales."
             )
 
         # [MODIFIED] Branch Assignment Logic

@@ -146,3 +146,34 @@ class TestExistenciaInicialEnElAlta:
             assert soh.qty_on_hand == qty, sku
             movs = db.query(InventoryMovement).filter(InventoryMovement.variant_id == v.id).count()
             assert movs == (1 if qty > 0 else 0), sku
+
+    def test_existencia_de_una_hermana_con_dos_sucursales_exige_sucursal(
+        self, client, db, boutique, branch_a, branch_b, auth_admin,
+    ):
+        """El guard de stock ambiguo tambien mira a las hermanas.
+
+        Con `initial_stock` 0 en la principal el guard no se disparaba: las
+        piezas de la talla M aterrizaban en una sucursal cualquiera (el orden
+        de un `set`), en silencio.
+        """
+        from app.models.inventory import StockOnHand
+        base = {
+            "name": "Sueter", "sku": "SUE", "price": "500", "cost": "200",
+            "size": "Ch",
+            "target_branch_ids": [branch_a.id, branch_b.id],
+            "initial_stock": "0",
+            "extra_variants": [{"size": "M", "initial_stock": "5"}],
+        }
+        r = client.post("/api/products/", json=base, headers=_h(auth_admin, boutique))
+        assert r.status_code == 422, r.text
+        assert db.query(ProductVariant).filter(ProductVariant.sku == "SUE").count() == 0
+
+        # Con la sucursal dicha, la existencia entra donde el usuario eligio.
+        r2 = client.post("/api/products/", json={**base, "branch_id": branch_b.id},
+                         headers=_h(auth_admin, boutique))
+        assert r2.status_code in (200, 201), r2.text
+        hermana = db.query(ProductVariant).filter(ProductVariant.sku == "SUE-M").one()
+        por_sucursal = {s.branch_id: s.qty_on_hand
+                        for s in db.query(StockOnHand).filter(StockOnHand.variant_id == hermana.id).all()}
+        assert por_sucursal[branch_b.id] == Decimal("5")
+        assert por_sucursal[branch_a.id] == Decimal("0")

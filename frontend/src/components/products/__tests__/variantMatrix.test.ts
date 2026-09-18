@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 
-import { buildVariantRows, parseList, splitPrincipal, toExtraVariants, variantFieldErrors } from '../variantMatrix'
+import {
+  buildVariantRows, parseList, splitPrincipal, toExtraVariants, variantDetailErrors, variantFieldErrors,
+} from '../variantMatrix'
 
 describe('parseList', () => {
   it('separa por coma o salto de línea y deduplica sin mayúsculas', () => {
@@ -123,5 +125,37 @@ describe('variantFieldErrors', () => {
   })
   it('sin errores devuelve un mapa vacío', () => {
     expect(variantFieldErrors({})).toEqual({})
+  })
+})
+
+describe('variantDetailErrors', () => {
+  const extras = () => {
+    const rows = buildVariantRows('PLY', [], ['M', 'L'], [])
+    rows[1] = { ...rows[1], barcode: '7500000000009' }
+    return rows
+  }
+
+  it('manda el mensaje con índice a la fila y al campo que menciona', () => {
+    expect(variantDetailErrors('variants[1]: el precio debe ser mayor a cero.', extras()))
+      .toEqual({ 'variants.1.price': 'el precio debe ser mayor a cero.' })
+    expect(variantDetailErrors('variants[0]: indica color o talla', extras()))
+      .toEqual({ 'variants.0': 'indica color o talla' })
+  })
+
+  it('marca la fila del SKU duplicado que cita el 409', () => {
+    expect(variantDetailErrors("El SKU 'PLY-L' ya existe en esta organización.", extras()))
+      .toEqual({ 'variants.1.sku': "El SKU 'PLY-L' ya existe en esta organización." })
+  })
+
+  it('marca la fila del código de barras repetido', () => {
+    expect(variantDetailErrors("El código de barras '7500000000009' ya lo tiene otra variante.", extras()))
+      .toEqual({ 'variants.1.barcode': "El código de barras '7500000000009' ya lo tiene otra variante." })
+  })
+
+  it('no inventa filas cuando el mensaje no es de ninguna', () => {
+    expect(variantDetailErrors("El SKU 'OTRO' ya existe en esta organización.", extras())).toEqual({})
+    expect(variantDetailErrors('No se pudo crear el producto.', extras())).toEqual({})
+    expect(variantDetailErrors(undefined, extras())).toEqual({})
+    expect(variantDetailErrors([{ loc: ['body'], msg: 'x' }], extras())).toEqual({})
   })
 })

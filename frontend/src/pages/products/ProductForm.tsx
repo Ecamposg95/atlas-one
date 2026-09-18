@@ -26,7 +26,9 @@ import {
 import { useEnabledModulesStore } from '../../store/enabledModulesStore'
 import { ProductVariantsSection } from '../../components/products/ProductVariantsSection'
 import { ProductVariantsEditor } from '../../components/products/ProductVariantsEditor'
-import { splitPrincipal, toExtraVariants, variantFieldErrors, type VariantRow } from '../../components/products/variantMatrix'
+import {
+  splitPrincipal, toExtraVariants, variantDetailErrors, variantFieldErrors, type VariantRow,
+} from '../../components/products/variantMatrix'
 import { variantLabel } from '../../components/products/variantWords'
 import type { Product } from '../../types/products'
 
@@ -285,7 +287,13 @@ export function ProductForm() {
       const e = err as { response?: { status?: number; data?: { detail?: string } } }
       const status = e?.response?.status
       const detail = e?.response?.data?.detail
-      if (status === 409 || (typeof detail === 'string' && detail.toLowerCase().includes('sku'))) {
+      // Un 409 de la matriz (SKU o código repetido de una talla) cita la fila
+      // culpable: marcarla ahí en vez de acusar al SKU base del producto.
+      const porFila = variantDetailErrors(detail, splitPrincipal(variantRows).extras)
+      if (Object.keys(porFila).length > 0) {
+        setErrors((prev) => ({ ...prev, ...porFila }))
+        toast.error('Revisa la variante marcada.')
+      } else if (status === 409 || (typeof detail === 'string' && detail.toLowerCase().includes('sku'))) {
         setErrors((prev) => ({ ...prev, sku: typeof detail === 'string' ? detail : 'SKU duplicado' }))
       }
       // Un 422 trae `detail` como LISTA de campos. Antes se caia al mensaje

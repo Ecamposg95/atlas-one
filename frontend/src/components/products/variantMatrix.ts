@@ -135,3 +135,47 @@ export function variantFieldErrors(errores: Record<string, string>): Record<stri
   }
   return out
 }
+
+/** Campo de la fila al que apunta un mensaje del backend, si lo dice. */
+function campoDelMensaje(msg: string): string {
+  if (/sku/i.test(msg)) return 'sku'
+  if (/c[oó]digo de barras/i.test(msg)) return 'barcode'
+  if (/precio/i.test(msg)) return 'price'
+  if (/existencia/i.test(msg)) return 'initial_stock'
+  return ''
+}
+
+/**
+ * Marca la fila culpable a partir del `detail` de texto del backend.
+ *
+ * `crear_variantes` responde dos formas: con índice —"variants[1]: el precio
+ * debe ser mayor a cero"— y sin él, citando el dato repetido —"El SKU 'PLY-L'
+ * ya existe…"—. Antes las dos acababan en un toast y el admin tenía que
+ * adivinar qué talla corregir; aquí se traducen a la clave que pinta la matriz.
+ * `extras` son las filas hermanas (la principal no viaja en `extra_variants`).
+ */
+export function variantDetailErrors(detail: unknown, extras: VariantRow[]): Record<string, string> {
+  if (typeof detail !== 'string') return {}
+  const texto = detail.trim()
+  if (!texto) return {}
+
+  const conIndice = texto.match(/^variants\[(\d+)\]:\s*(.+)$/i)
+  if (conIndice) {
+    const n = Number(conIndice[1])
+    const msg = conIndice[2].trim()
+    const campo = campoDelMensaje(msg)
+    return { [campo ? `variants.${n}.${campo}` : `variants.${n}`]: msg }
+  }
+
+  const sku = texto.match(/SKU '([^']+)'/i)
+  if (sku) {
+    const i = extras.findIndex((r) => r.sku.trim().toLowerCase() === sku[1].trim().toLowerCase())
+    if (i >= 0) return { [`variants.${i}.sku`]: texto }
+  }
+  const barcode = texto.match(/c[oó]digo de barras '([^']+)'/i)
+  if (barcode) {
+    const i = extras.findIndex((r) => r.barcode.trim() === barcode[1].trim())
+    if (i >= 0) return { [`variants.${i}.barcode`]: texto }
+  }
+  return {}
+}

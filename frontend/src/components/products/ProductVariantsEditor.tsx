@@ -79,6 +79,7 @@ export function ProductVariantsEditor({ product, onChanged }: Props) {
   const addRows = async () => {
     if (rows.length === 0) return
     setBusyId('new'); setMsg(null)
+    let principalAsignada = false
     try {
       let actualizado = product
       let hermanas = rows
@@ -90,6 +91,7 @@ export function ProductVariantsEditor({ product, onChanged }: Props) {
           color: primera.color || null,
           size: primera.size || null,
         })
+        principalAsignada = true
         hermanas = resto
       }
       if (hermanas.length > 0) {
@@ -99,7 +101,17 @@ export function ProductVariantsEditor({ product, onChanged }: Props) {
       setRows([]); setAdding(false)
     } catch (err) {
       const e = err as { response?: { data?: { detail?: unknown } } }
-      setMsg(errorDetailText(e?.response?.data?.detail, `No se pudieron crear las ${palabra.plural}.`))
+      // Si la primera talla ya se asignó y falló el resto, la pantalla no
+      // puede quedarse con los datos viejos: se relee el producto y se quita
+      // esa fila del generador para que un reintento no choque con ella.
+      if (principalAsignada) {
+        try {
+          onChanged(await productsApi.getById(product.id))
+          setRows((prev) => prev.slice(1))
+        } catch { /* el mensaje de abajo ya pide recargar */ }
+      }
+      setMsg(errorDetailText(e?.response?.data?.detail, `No se pudieron crear las ${palabra.plural}.`)
+        + (principalAsignada ? ' La primera talla sí quedó asignada.' : ''))
     } finally { setBusyId(null) }
   }
 

@@ -109,9 +109,16 @@ export function ProductVariantsSection({
                 const errSku = esPrincipal ? undefined : errors[`variants.${n}.sku`]
                 const errPrecio = esPrincipal ? undefined : errors[`variants.${n}.price`]
                 const errStock = esPrincipal ? undefined : errors[`variants.${n}.initial_stock`]
+                const errBarcode = esPrincipal ? undefined : errors[`variants.${n}.barcode`]
+                // Mensaje del backend que no apunta a un campo concreto
+                // ("indica color o talla"): va bajo el nombre de la fila.
+                const errFila = esPrincipal ? undefined : errors[`variants.${n}`]
                 return (
                   <tr key={r.key}>
-                    <td className="py-1 pr-2 font-semibold text-slate-200">{[r.color, r.size].filter(Boolean).join(' / ')}</td>
+                    <td className="py-1 pr-2 font-semibold text-slate-200">
+                      {[r.color, r.size].filter(Boolean).join(' / ')}
+                      {errFila && <span className="text-rose-400 text-[11px] block font-normal">{errFila}</span>}
+                    </td>
                     <td className="py-1 pr-2">
                       <input className="dax-input" value={esPrincipal ? baseSku : r.sku} disabled={esPrincipal}
                              onChange={(e) => setRow(r.key, { sku: e.target.value, skuTocado: true })} />
@@ -121,7 +128,10 @@ export function ProductVariantsSection({
                     <td className="py-1 pr-2">
                       {esPrincipal
                         ? <span className="text-slate-500">código de arriba</span>
-                        : <input className="dax-input" value={r.barcode} inputMode="numeric" onChange={(e) => setRow(r.key, { barcode: e.target.value })} />}
+                        : <>
+                            <input className="dax-input" value={r.barcode} inputMode="numeric" onChange={(e) => setRow(r.key, { barcode: e.target.value })} />
+                            {errBarcode && <span className="text-rose-400 text-[11px] block">{errBarcode}</span>}
+                          </>}
                     </td>
                     <td className="py-1 pr-2">
                       {esPrincipal
