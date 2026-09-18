@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { buildVariantRows, parseList, splitPrincipal, toExtraVariants } from '../variantMatrix'
+import { buildVariantRows, parseList, splitPrincipal, toExtraVariants, variantFieldErrors } from '../variantMatrix'
 
 describe('parseList', () => {
   it('separa por coma o salto de línea y deduplica sin mayúsculas', () => {
@@ -113,5 +113,15 @@ describe('existencia inicial por fila', () => {
   })
   it('las filas nuevas nacen sin existencia', () => {
     expect(buildVariantRows('PLY', [], ['M'], [])[0].initial_stock).toBe('')
+  })
+})
+
+describe('variantFieldErrors', () => {
+  it('renombra las marcas del backend a las claves de la matriz', () => {
+    expect(variantFieldErrors({ 'extra_variants.1.sku': 'Requerido', sku: 'Duplicado' }))
+      .toEqual({ 'variants.1.sku': 'Requerido', sku: 'Duplicado' })
+  })
+  it('sin errores devuelve un mapa vacío', () => {
+    expect(variantFieldErrors({})).toEqual({})
   })
 })

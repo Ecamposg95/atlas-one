@@ -26,7 +26,8 @@ import {
 import { useEnabledModulesStore } from '../../store/enabledModulesStore'
 import { ProductVariantsSection } from '../../components/products/ProductVariantsSection'
 import { ProductVariantsEditor } from '../../components/products/ProductVariantsEditor'
-import { splitPrincipal, toExtraVariants, type VariantRow } from '../../components/products/variantMatrix'
+import { splitPrincipal, toExtraVariants, variantFieldErrors, type VariantRow } from '../../components/products/variantMatrix'
+import { variantLabel } from '../../components/products/variantWords'
 import type { Product } from '../../types/products'
 
 const ADMIN_ROLES = new Set(['ADMINISTRADOR', 'DUEÑO'])
@@ -141,6 +142,15 @@ export function ProductForm() {
     ? Object.entries(branchActivation).filter(([, v]) => v.enabled).map(([k]) => Number(k))
     : (userBranchId ? [userBranchId] : [])
 
+  // Existencia inicial total del alta: la de la principal (campo de arriba)
+  // mas la que trae cada talla hermana en la matriz.
+  const stockHermanas = splitPrincipal(hasVariantsModule ? variantRows : []).extras
+    .reduce((acc, r) => acc + (Number(r.initial_stock) || 0), 0)
+  const totalInicial = (Number(form.initial_stock || '0') || 0) + stockHermanas
+  const sucursalStock = isAdmin
+    ? branches.find((b) => b.id === Number(form.initial_stock_branch_id)) ?? null
+    : branches.find((b) => b.id === userBranchId) ?? null
+
   const validate = (): ProductErrors => {
     const e: ProductErrors = {}
     if (!form.name.trim()) e.name = 'Requerido'
@@ -155,7 +165,10 @@ export function ProductForm() {
       if (isAdmin) {
         // Admin: matriz debe tener al menos una sucursal activa.
         if (enabledBranchIds.length === 0) e.target_branch_ids = 'Activa al menos una sucursal'
-        if (stockNum > 0 && !form.initial_stock_branch_id) e.initial_stock_branch_id = 'Requerido con stock > 0'
+        // La existencia se reparte por talla: la sucursal hace falta si
+        // cualquiera de las filas trae existencia, no solo la principal.
+        if (totalInicial > 0 && !form.initial_stock_branch_id)
+          e.initial_stock_branch_id = 'Requerido con existencia inicial'
       } else {
         // Cajero: sucursal implícita; solo validar que esté asignada.
         if (!userBranchId) e.target_branch_ids = 'Tu usuario no tiene sucursal asignada'
@@ -182,6 +195,9 @@ export function ProductForm() {
         else if (skus.has(s)) e[`variants.${i}.sku`] = 'SKU repetido'
         skus.add(s)
         if (r.price.trim() && !(Number(r.price) > 0)) e[`variants.${i}.price`] = 'Precio mayor a 0'
+        const st = Number(r.initial_stock)
+        if (r.initial_stock.trim() && !(Number.isFinite(st) && st >= 0))
+          e[`variants.${i}.initial_stock`] = 'Número ≥ 0'
       })
     }
     return e
@@ -208,9 +224,11 @@ export function ProductForm() {
               ...(extras.length > 0 ? { extra_variants: toExtraVariants(extras) } : {}),
             }
           : {}
+        // La sucursal destino viaja si CUALQUIER talla trae existencia: sin
+        // ella el backend no sabria donde meter la de las hermanas.
         const initialStockBranchId = isAdmin
-          ? (stockNum > 0 ? Number(form.initial_stock_branch_id) : null)
-          : (stockNum > 0 ? userBranchId : null)
+          ? (totalInicial > 0 ? Number(form.initial_stock_branch_id) : null)
+          : (totalInicial > 0 ? userBranchId : null)
         const payload = {
           name: form.name.trim(),
           sku: form.sku.trim(),
@@ -272,7 +290,7 @@ export function ProductForm() {
       }
       // Un 422 trae `detail` como LISTA de campos. Antes se caia al mensaje
       // generico y el usuario no sabia que corregir.
-      const porCampo = fieldErrorsFromDetail(detail)
+      const porCampo = variantFieldErrors(fieldErrorsFromDetail(detail))
       if (Object.keys(porCampo).length > 0) {
         setErrors((prev) => ({ ...prev, ...porCampo }))
         toast.error(summarizeFieldErrors(porCampo))
@@ -287,6 +305,15 @@ export function ProductForm() {
   if (loading) {
     return <div className="flex items-center justify-center h-64"><Spinner size="lg" /></div>
   }
+
+  // Aviso #15: arriba de Básicos y dicho como lo diría la dueña — estos
+  // campos son los de la PRIMERA talla, no los del producto entero.
+  const principalCargada = mode === 'edit' && hasVariantsModule && loaded && (loaded.variants?.length ?? 0) > 1
+    ? loaded.variants![0]
+    : null
+  const avisoPrincipal = principalCargada
+    ? `Nombre, precio y código de aquí son los de la talla ${variantLabel(principalCargada, loaded?.name ?? '')}. Las demás tallas, abajo.`
+    : null
 
   const title = mode === 'create' ? 'Nuevo producto' : 'Editar producto'
   const iconCls = mode === 'create' ? 'fa-solid fa-plus' : 'fa-solid fa-pen-to-square'
@@ -303,17 +330,16 @@ export function ProductForm() {
       </div>
       <DaxCard>
         <div className="p-4 space-y-6">
+          {avisoPrincipal && (
+            <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+              {avisoPrincipal}
+            </p>
+          )}
           <ProductBasicsSection value={form} onChange={setField} errors={errors} />
           <ProductCommercialSection
             value={form} onChange={setField} errors={errors}
             departments={departments} brands={brands}
           />
-          {mode === 'edit' && hasVariantsModule && loaded && (loaded.variants?.length ?? 0) > 1 && (
-            <p className="text-[11px] text-amber-400">
-              Estos campos editan la variante principal ({loaded.variants![0].variant_name}). Las demás se
-              editan en la tabla de variantes.
-            </p>
-          )}
           <ProductTieredPricesSection
             prices={prices}
             onChange={setPrices}
@@ -321,7 +347,13 @@ export function ProductForm() {
             help="Para precios por cantidad (mayoreo, promo). Se aplica sobre el precio base."
           />
           {mode === 'create' && hasVariantsModule && (
-            <ProductVariantsSection baseSku={form.sku} rows={variantRows} onRowsChange={setVariantRows} firstIsPrincipal />
+            <ProductVariantsSection
+              baseSku={form.sku} rows={variantRows} onRowsChange={setVariantRows} firstIsPrincipal
+              errors={errors} showInitialStock
+              principalStock={form.initial_stock}
+              onPrincipalStockChange={(v) => setField('initial_stock', v)}
+              stockBranchName={sucursalStock?.name ?? null}
+            />
           )}
           {mode === 'create' && isAdmin && (
             <ProductBranchMatrixSection
@@ -334,6 +366,7 @@ export function ProductForm() {
               value={form} onChange={setField} errors={errors}
               branches={branches} enabledBranchIds={enabledBranchIds}
               lockedBranchId={!isAdmin && userBranchId ? userBranchId : undefined}
+              perVariantTotal={hasVariantsModule && variantRows.length > 0 ? totalInicial : null}
               footer={isAdmin
                 ? 'Para stock en múltiples sucursales, usa el módulo de inventario tras crear.'
                 : 'El stock se aplica a tu sucursal.'}

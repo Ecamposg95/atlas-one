@@ -118,9 +118,11 @@ export function AdminCatalog() {
   }, [listFilters, noBranchOnly, loadList, loadKpis])
 
   const handleEdit = (product: Product) => {
-    // Por ahora usamos el modal completo del módulo /products (con packaging
-    // y precios escalonados). A3+ migrará ese flujo a esta página.
-    navigate(`/products?edit=${product.id}`)
+    // `/products?edit=<id>` no lo lee nadie: el lápiz dejaba al admin en el
+    // listado, sin formulario. La edición completa (precios escalonados,
+    // empaques y tablas de tallas) vive en /products/:id/edit, que admite
+    // ADMINISTRADOR/DUEÑO/GERENTE/CAJERO (ver App.tsx).
+    navigate(`/products/${product.id}/edit`)
   }
 
   const handleMatrix = (product: Product) => {

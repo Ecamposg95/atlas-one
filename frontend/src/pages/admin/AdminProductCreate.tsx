@@ -24,7 +24,7 @@ import {
 } from '../../components/products/types'
 import { useEnabledModulesStore } from '../../store/enabledModulesStore'
 import { ProductVariantsSection } from '../../components/products/ProductVariantsSection'
-import { splitPrincipal, toExtraVariants, type VariantRow } from '../../components/products/variantMatrix'
+import { splitPrincipal, toExtraVariants, variantFieldErrors, type VariantRow } from '../../components/products/variantMatrix'
 
 export function AdminProductCreate() {
   const navigate = useNavigate()
@@ -92,6 +92,13 @@ export function AdminProductCreate() {
     .filter(([, v]) => v.enabled)
     .map(([k]) => Number(k))
 
+  // Existencia inicial total del alta: la de la principal (campo de arriba)
+  // mas la que trae cada talla hermana en la matriz.
+  const stockHermanas = splitPrincipal(hasVariantsModule ? variantRows : []).extras
+    .reduce((acc, r) => acc + (Number(r.initial_stock) || 0), 0)
+  const totalInicial = (Number(form.initial_stock || '0') || 0) + stockHermanas
+  const sucursalStock = branches.find((b) => b.id === Number(form.initial_stock_branch_id)) ?? null
+
   const validate = (): ProductErrors => {
     const e: ProductErrors = {}
     if (!form.name.trim()) e.name = 'Requerido'
@@ -102,7 +109,10 @@ export function AdminProductCreate() {
     if (!Number.isFinite(costNum) || costNum < 0) e.cost = 'Número ≥ 0'
     const stockNum = Number(form.initial_stock || '0')
     if (!Number.isFinite(stockNum) || stockNum < 0) e.initial_stock = 'Número ≥ 0'
-    if (stockNum > 0 && !form.initial_stock_branch_id) e.initial_stock_branch_id = 'Requerido con stock > 0'
+    // La existencia inicial se reparte por talla: la sucursal destino hace
+    // falta si CUALQUIERA de las filas trae existencia, no solo la principal.
+    if (totalInicial > 0 && !form.initial_stock_branch_id)
+      e.initial_stock_branch_id = 'Requerido con existencia inicial'
     if (enabledBranchIds.length === 0) e.target_branch_ids = 'Activa al menos una sucursal'
     // Los renglones de precios extra (Mayoreo, Caja) no se validaban: un valor
     // no numerico llegaba al backend como null y volvia un 422 que la pantalla
@@ -124,6 +134,9 @@ export function AdminProductCreate() {
       else if (skus.has(s)) e[`variants.${i}.sku`] = 'SKU repetido'
       skus.add(s)
       if (r.price.trim() && !(Number(r.price) > 0)) e[`variants.${i}.price`] = 'Precio mayor a 0'
+      const st = Number(r.initial_stock)
+      if (r.initial_stock.trim() && !(Number.isFinite(st) && st >= 0))
+        e[`variants.${i}.initial_stock`] = 'Número ≥ 0'
     })
     return e
   }
@@ -161,7 +174,9 @@ export function AdminProductCreate() {
       has_iva: form.has_iva,
       tax_rate: form.has_iva ? Number(form.tax_rate) : 0,
       initial_stock: stockNum,
-      branch_id: stockNum > 0 ? Number(form.initial_stock_branch_id) : null,
+      // La sucursal destino viaja si CUALQUIER talla trae existencia: sin ella
+      // el backend no sabria donde meter la de las hermanas.
+      branch_id: totalInicial > 0 ? Number(form.initial_stock_branch_id) : null,
       target_branch_ids: enabledBranchIds,
       uses_inventory: true,
       prices: prices.map((p) => ({
@@ -183,7 +198,7 @@ export function AdminProductCreate() {
       }
       // Un 422 trae `detail` como LISTA de campos. Antes se caia al mensaje
       // generico y el usuario no sabia que corregir.
-      const porCampo = fieldErrorsFromDetail(detail)
+      const porCampo = variantFieldErrors(fieldErrorsFromDetail(detail))
       if (Object.keys(porCampo).length > 0) {
         setErrors((prev) => ({ ...prev, ...porCampo }))
         toast.error(summarizeFieldErrors(porCampo))
@@ -219,7 +234,13 @@ export function AdminProductCreate() {
             help="Para precios por cantidad (mayoreo, promo). Se aplica sobre el precio base."
           />
           {hasVariantsModule && (
-            <ProductVariantsSection baseSku={form.sku} rows={variantRows} onRowsChange={setVariantRows} firstIsPrincipal />
+            <ProductVariantsSection
+              baseSku={form.sku} rows={variantRows} onRowsChange={setVariantRows} firstIsPrincipal
+              errors={errors} showInitialStock
+              principalStock={form.initial_stock}
+              onPrincipalStockChange={(v) => setField('initial_stock', v)}
+              stockBranchName={sucursalStock?.name ?? null}
+            />
           )}
           <ProductBranchMatrixSection
             branches={branches} activation={branchActivation}
@@ -228,6 +249,7 @@ export function AdminProductCreate() {
           <ProductInitialStockSection
             value={form} onChange={setField} errors={errors}
             branches={branches} enabledBranchIds={enabledBranchIds}
+            perVariantTotal={hasVariantsModule && variantRows.length > 0 ? totalInicial : null}
             footer="Para stock en múltiples sucursales, usa el módulo de inventario tras crear."
           />
 

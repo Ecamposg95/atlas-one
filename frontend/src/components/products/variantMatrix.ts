@@ -121,3 +121,17 @@ export function splitPrincipal(rows: VariantRow[]): { principal: VariantRow | nu
   if (rows.length === 0) return { principal: null, extras: [] }
   return { principal: rows[0], extras: rows.slice(1) }
 }
+
+/**
+ * Traduce las marcas de campo que devuelve el backend a las claves que pinta
+ * la matriz: un 422 llega como `extra_variants.0.sku` y la tabla busca
+ * `variants.0.sku`. Sin esto el error se quedaba en el aviso de arriba y la
+ * fila culpable no se marcaba.
+ */
+export function variantFieldErrors(errores: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const [campo, msg] of Object.entries(errores)) {
+    out[campo.startsWith('extra_variants.') ? campo.replace('extra_variants.', 'variants.') : campo] = msg
+  }
+  return out
+}
