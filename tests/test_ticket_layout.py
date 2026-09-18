@@ -187,12 +187,15 @@ class TestPreCutMargin:
 class TestOverallCompaction:
     def test_ten_item_ticket_line_count_under_threshold(self):
         """10-item ticket should fit under the post-redesign ceiling.
-        Pre-redesign: ~46 lines. Post-redesign target: <= 22."""
+        Pre-redesign: ~46 lines. Post-redesign target: <= 22.
+        Ceiling bumped to 23: `_make_sale` fija `customer_name="Cliente Test"`,
+        y ahora el encabezado agrega una línea `Cliente: ...` cuando hay nombre
+        (2026-09-17, task-1 de "Cliente en el POS")."""
         lines = [_line(f"Producto {i}", 2, 10) for i in range(10)]
         sale = _make_sale(lines)
         raw = _build(sale)
         line_count = raw.count(b"\n")
-        assert line_count <= 22, f"Ticket grew to {line_count} lines; regression"
+        assert line_count <= 23, f"Ticket grew to {line_count} lines; regression"
 
 
 class TestDefaultWidthAndFont:
@@ -238,3 +241,23 @@ class TestDefaultWidthAndFont:
         assert raw[next_esc : next_esc + 3] == b"\x1b\x4d\x00", (
             "Se esperaba FONT_A (regular) después de RESET para 58mm"
         )
+
+
+class TestClienteEnEncabezado:
+    def test_imprime_cliente_cuando_hay_nombre(self):
+        sale = _make_sale([_line("Playera", 1, 100)])
+        sale.customer_name = "Patricio Pérez"
+        decoded = _decode(_build(sale))
+        assert "Cliente: Patricio P" in decoded  # latin-1 conserva la é; se busca el prefijo por si el ancho recorta
+
+    def test_no_imprime_publico_general(self):
+        sale = _make_sale([_line("Playera", 1, 100)])
+        sale.customer_name = " público general "
+        decoded = _decode(_build(sale))
+        assert "Cliente:" not in decoded
+
+    def test_sin_nombre_no_agrega_linea(self):
+        sale = _make_sale([_line("Playera", 1, 100)])
+        sale.customer_name = None
+        decoded = _decode(_build(sale))
+        assert "Cliente:" not in decoded

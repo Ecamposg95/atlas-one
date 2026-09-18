@@ -325,6 +325,12 @@ class PosPrinter:
         line3_parts = [fecha, folio, cashier_short]
         line3 = " | ".join(p for p in line3_parts if p)
         raw += (self._truncate(line3, self.cols) + "\n").encode("latin-1", "replace")
+
+        # Line 4 (opcional): cliente. "Público General" es el valor por defecto
+        # del historial, no un cliente: no se imprime.
+        cliente = (getattr(sale, "customer_name", None) or "").strip()
+        if cliente and cliente.casefold() != "público general":
+            raw += (self._truncate(f"Cliente: {cliente}", self.cols) + "\n").encode("latin-1", "replace")
         return raw
 
     def _truncate(self, text: str, width: int) -> str:

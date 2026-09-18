@@ -821,6 +821,20 @@ def create_sale(
                     organization_id=org_id
                 ))
 
+    # --- 2b. Nombre del cliente ---
+    # El POS manda `customer_id` y no el nombre: sin esto la venta quedaba con
+    # `customer_name = NULL` y el historial y el ticket decían "Público general"
+    # aunque el cliente estuviera en CRM. Un nombre explícito (libre o el que
+    # eligió la cajera) gana; solo se rellena cuando viene vacío.
+    nombre_cliente = (sale_in.customer_name or "").strip() or None
+    if nombre_cliente is None and sale_in.customer_id:
+        _cli = db.query(Customer.name).filter(
+            Customer.id == sale_in.customer_id,
+            Customer.organization_id == org_id,
+        ).first()
+        if _cli and _cli[0]:
+            nombre_cliente = _cli[0].strip() or None
+
     # --- 3. Guardar / Actualizar Cabecera ---
     # Redondeo a centavos UNA sola vez, ya pasada la validación de pagos, para
     # que el total que se compara contra lo que cobró el cajero sea exactamente
@@ -835,7 +849,7 @@ def create_sale(
         sales_doc = existing_sale
         sales_doc.status = doc_status
         sales_doc.customer_id = sale_in.customer_id
-        sales_doc.customer_name = sale_in.customer_name
+        sales_doc.customer_name = nombre_cliente
         sales_doc.total_amount = total_sale
         sales_doc.subtotal = accumulated_subtotal
         sales_doc.tax_amount = accumulated_tax
@@ -872,7 +886,7 @@ def create_sale(
         sales_doc = SalesDocument(
             id=sale_in.id, doc_type=DocumentType.INVOICE, status=doc_status,
             branch_id=current_user.branch_id, seller_id=current_user.id,
-            customer_id=sale_in.customer_id, customer_name=sale_in.customer_name,
+            customer_id=sale_in.customer_id, customer_name=nombre_cliente,
             total_amount=total_sale, subtotal=accumulated_subtotal,
             tax_amount=accumulated_tax, requires_invoice=sale_in.requires_invoice,
             series=current_series, folio=next_folio, organization_id=org_id,
