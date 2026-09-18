@@ -116,11 +116,15 @@ def _compute_product_read(
     # Determinar qué sucursal mostrar: La solicitada o la del usuario
     real_branch_id = target_branch_id if target_branch_id is not None else current_user.branch_id
 
-    variantes_vivas = [v for v in p.variants if v.deleted_at is None]
-    if variantes_vivas:
+    # Multi-tenancy: todo lo que se consulte por variante se acota ademas a la
+    # org del producto (los `variant_id` son UUID, pero el filtro es la regla).
+    org_de_p = p.organization_id
+
+    vivas = variantes_vivas(p)
+    if vivas:
         # La variante "principal" es la pedida (p. ej. la que empato un
         # escaneo) o, si no, la primera viva en orden de creacion.
-        v = next((x for x in variantes_vivas if x.id == primary_variant_id), variantes_vivas[0])
+        v = next((x for x in vivas if x.id == primary_variant_id), vivas[0])
         # `matched_variant_id` SOLO cuando hubo empate real: el POS lo usa como
         # senal de "ya se que talla es" (`needsPicker`). Si lo fijamos siempre,
         # el selector de talla nunca abre y se vende `variants[0]`.
@@ -160,14 +164,13 @@ def _compute_product_read(
             # Fallback a query individual (si no se usa cache)
             # Solo consultamos si hay un ID de sucursal válido (puede ser None para usuarios globales sin sucursal)
             if real_branch_id:
-                stock = (
-                    db.query(StockOnHand)
-                    .filter(
-                        StockOnHand.variant_id == v.id,
-                        StockOnHand.branch_id == real_branch_id
-                    )
-                    .first()
+                q_stock = db.query(StockOnHand).filter(
+                    StockOnHand.variant_id == v.id,
+                    StockOnHand.branch_id == real_branch_id,
                 )
+                if org_de_p is not None:
+                    q_stock = q_stock.filter(StockOnHand.organization_id == org_de_p)
+                stock = q_stock.first()
                 qty = stock.qty_on_hand if stock else Decimal(0)
                 is_active = stock.is_active if (stock and stock.is_active is not None) else True
 
@@ -243,14 +246,13 @@ def _compute_product_read(
             # Sin cache (callers de un solo producto, p. ej. read_product):
             # una sola query cubre todas las variantes de este producto.
             directo: dict[str, Decimal] = {}
-            for row in (
-                db.query(StockOnHand.variant_id, StockOnHand.qty_on_hand)
-                .filter(
-                    StockOnHand.variant_id.in_([vr.id for vr in p_read.variants]),
-                    StockOnHand.branch_id == real_branch_id,
-                )
-                .all()
-            ):
+            q_directo = db.query(StockOnHand.variant_id, StockOnHand.qty_on_hand).filter(
+                StockOnHand.variant_id.in_([vr.id for vr in p_read.variants]),
+                StockOnHand.branch_id == real_branch_id,
+            )
+            if org_de_p is not None:
+                q_directo = q_directo.filter(StockOnHand.organization_id == org_de_p)
+            for row in q_directo.all():
                 directo[row.variant_id] = row.qty_on_hand
             for vr in p_read.variants:
                 vr.stock_total = directo.get(vr.id, Decimal(0))

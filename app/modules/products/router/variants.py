@@ -197,8 +197,16 @@ def crear_variantes(
     return nuevas
 
 
-def _leer(db: Session, current_user: User, producto_id: str) -> ProductRead:
-    p = db.query(Product).filter(Product.id == producto_id).first()
+def _leer(db: Session, current_user: User, org_id: int, producto_id: str) -> ProductRead:
+    # Multi-tenancy: el producto se relee acotado a la org (regla de oro #5),
+    # no solo por su UUID.
+    p = (
+        db.query(Product)
+        .filter(Product.id == producto_id, Product.organization_id == org_id)
+        .first()
+    )
+    if p is None:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
     db.refresh(p)
     return _compute_product_read(p, db, current_user)
 
@@ -222,7 +230,7 @@ def crear_variantes_endpoint(
     # cerrar la sesion de la request.
     crear_variantes(db, org_id, producto, body.variants)
     db.commit()
-    return _leer(db, current_user, product_id)
+    return _leer(db, current_user, org_id, product_id)
 
 
 @router.put("/variants/{variant_id}", response_model=ProductRead,
@@ -263,7 +271,7 @@ def editar_variante(
     v.color, v.size = color, size
     v.variant_name = variant_label(color, size)
     db.commit()
-    return _leer(db, current_user, v.product_id)
+    return _leer(db, current_user, org_id, v.product_id)
 
 
 @router.delete("/variants/{variant_id}", status_code=204,

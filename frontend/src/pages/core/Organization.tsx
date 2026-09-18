@@ -46,7 +46,13 @@ export function Organization() {
   const saveOrg = async () => {
     setSaving(true)
     try {
-      const updated = await organizationApi.updateOrg(orgForm)
+      // Borrar el ajuste sobre el FIX deja '' en el input numerico, y el PUT
+      // responde 422 ("Input should be a valid decimal"): vacio = sin ajuste.
+      const margen = orgForm.usd_rate_margin
+      const updated = await organizationApi.updateOrg({
+        ...orgForm,
+        usd_rate_margin: margen === '' || margen == null ? 0 : margen,
+      })
       setOrg(updated); setOrgForm(updated)
       await cargarFx()
     } catch (e: any) {
