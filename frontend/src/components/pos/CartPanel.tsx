@@ -311,8 +311,10 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
 
   return (
     <div className="relative flex flex-col h-full" style={{ background: 'var(--dax-card)', borderLeft: '1px solid var(--dax-border-dim)' }}>
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid var(--dax-border-dim)' }}>
+      {/* Header. `relative z-30` lo deja por encima del velo de caja cerrada
+          (`absolute inset-0 z-20` más abajo), que si no se comía el clic en
+          "Cliente" — y anotar el cliente no cobra nada. */}
+      <div className="relative z-30 flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid var(--dax-border-dim)' }}>
         <div className="flex items-center gap-2">
           <i className="fa-solid fa-shopping-cart text-indigo-400" />
           <span className="text-sm font-black" style={{ color: 'var(--dax-text)' }}>Carrito</span>
@@ -356,7 +358,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
 
       {/* Cliente — solo visible cuando hay uno seleccionado */}
       {customerName && (
-        <div className="px-4 py-2.5 flex items-center gap-2" style={{ borderBottom: '1px solid var(--dax-row-border)' }}>
+        <div className="relative z-30 px-4 py-2.5 flex items-center gap-2" style={{ borderBottom: '1px solid var(--dax-row-border)' }}>
           <i className="fa-solid fa-user text-dax-muted text-sm" />
           <button
             onClick={() => setClienteAbierto(true)}
@@ -970,10 +972,11 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
         </div>
       </div>
 
-      {/* Overlay: procesando */}
+      {/* Overlay: procesando. Sube a z-40 para seguir tapando el header, que
+          ahora va en z-30: durante un cobro nada del carrito se toca. */}
       {isProcessing && (
         <div
-          className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 backdrop-blur-sm"
+          className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 backdrop-blur-sm"
           style={{ background: 'rgba(0,0,0,0.55)' }}
         >
           <div className="flex flex-col items-center gap-2 px-6 py-4 rounded-2xl"

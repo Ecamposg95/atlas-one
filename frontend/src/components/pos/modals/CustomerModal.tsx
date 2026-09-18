@@ -39,25 +39,31 @@ export function CustomerModal({ onClose }: Props) {
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  // Búsqueda con debounce de 300 ms. El primer fallo marca `sinCrm` y ya no
-  // se vuelve a molestar al cajero con el error en cada tecla.
+  // Búsqueda con debounce de 300 ms. `vivo` descarta la respuesta de una
+  // consulta que quedó atrás (una lenta no puede repintar sobre una nueva) y
+  // evita tocar estado tras cerrar. El primer fallo marca `sinCrm` y ya no se
+  // vuelve a pegar al CRM: el nombre libre sigue funcionando y reabrir el
+  // modal lo reintenta (el componente se desmonta y el estado nace limpio).
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    if (!nombre) { setResultados([]); return }
+    if (!nombre || sinCrm) { setResultados([]); return }
+    let vivo = true
     debounceRef.current = setTimeout(async () => {
       setBuscando(true)
       try {
-        setResultados(await customersApi.search(nombre))
-        setSinCrm(false)
+        const encontrados = await customersApi.search(nombre)
+        if (vivo) setResultados(encontrados)
       } catch {
-        setResultados([])
-        setSinCrm(true)
+        if (vivo) { setResultados([]); setSinCrm(true) }
       } finally {
-        setBuscando(false)
+        if (vivo) setBuscando(false)
       }
     }, 300)
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
-  }, [nombre])
+    return () => {
+      vivo = false
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [nombre, sinCrm])
 
   const elegir = (c: Customer) => {
     setCustomer(c.id, c.name)
@@ -68,6 +74,12 @@ export function CustomerModal({ onClose }: Props) {
     if (!nombre) return
     setCustomer(null, nombre)
     onClose()
+  }
+
+  /** Enter: si el CRM ya devolvió algo, gana el primer resultado; si no, el nombre libre. */
+  const confirmarConEnter = () => {
+    if (resultados.length > 0) elegir(resultados[0])
+    else usarSoloNombre()
   }
 
   const quitarCliente = () => {
@@ -95,9 +107,14 @@ export function CustomerModal({ onClose }: Props) {
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
       style={{ background: 'var(--dax-modal-backdrop)' }}
-      onClick={onClose}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="dax-card p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="dax-card p-6 w-full max-w-md"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Cliente de la venta"
+      >
         <h3 className="text-lg font-black mb-1" style={{ color: 'var(--dax-text)' }}>
           Cliente de la venta
         </h3>
@@ -110,7 +127,7 @@ export function CustomerModal({ onClose }: Props) {
             type="text"
             value={texto}
             onChange={(e) => { setTexto(e.target.value); setError(null) }}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !modoAlta) usarSoloNombre() }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !modoAlta) confirmarConEnter() }}
             className="dax-input"
             placeholder="Nombre o teléfono del cliente"
             autoFocus
@@ -122,6 +139,12 @@ export function CustomerModal({ onClose }: Props) {
             />
           )}
         </div>
+
+        {!modoAlta && nombre && (
+          <p className="text-[11px] mt-1.5" style={{ color: 'var(--dax-text-muted)' }}>
+            {resultados.length > 0 ? 'Enter: elegir el primero' : 'Enter: usar el nombre'}
+          </p>
+        )}
 
         {sinCrm && (
           <p className="text-[11px] mt-1.5" style={{ color: 'var(--dax-text-muted)' }}>
@@ -138,7 +161,7 @@ export function CustomerModal({ onClose }: Props) {
               <button
                 key={c.id}
                 onClick={() => elegir(c)}
-                className="w-full text-left px-3 py-2.5 min-h-[44px] transition-colors hover:brightness-110"
+                className="w-full text-left px-3 py-2.5 min-h-[44px] transition-colors hover:bg-indigo-500/10 focus:bg-indigo-500/10 focus:outline-none"
                 style={{ borderBottom: '1px solid var(--dax-row-border)' }}
               >
                 <p className="text-sm font-medium" style={{ color: 'var(--dax-text)' }}>{c.name}</p>

@@ -22,13 +22,16 @@ export interface SaleCreateResponse {
 }
 
 interface CreateSalePayload {
+  client_uuid?: string                  // idempotencia: un id por INTENTO de cobro
   customer_id?: number | null
+  customer_name?: string                // cliente sin CRM (o nombre del de CRM)
   items: CartItem[]
   payments: { method: string; amount: number; reference?: string }[]
   notes?: string
   doc_type?: string
   requires_invoice?: boolean
   global_discount_pct?: number          // % aplicado al ticket; backend lo persiste para auditoría
+  tip_amount?: number
   parked_ticket_id?: string             // si la venta resuelve un ticket pausado, marcar CONVERTED
 }
 
