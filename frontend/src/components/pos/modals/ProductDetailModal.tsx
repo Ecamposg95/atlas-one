@@ -5,6 +5,7 @@ import { sortByName } from '../../../utils/sortByName'
 import { productsApi } from '../../../api/products'
 import { inventoryApi } from '../../../api/inventory'
 import { useAuthStore } from '../../../store/authStore'
+import { variantAxisLabel, variantDisplayName, variantShortLabel } from '../variantPicker'
 
 interface PackRow {
   id?: string
@@ -222,10 +223,17 @@ export function ProductDetailModal({
     return () => { cancelled = true }
   }, [editing])
 
+  const variantesVivas = product?.variants ?? []
+  // Nombre de la talla que representa el número grande — nunca "Estándar".
+  const nombreVariante = (() => {
+    const v = variantesVivas.find(x => x.id === selectedVariantId)
+    return v ? variantShortLabel(v) : null
+  })()
+
   // Con varias tallas, "Stock actual" debe seguir a la variante elegida en el
   // selector, no quedarse pegado a la que matcheó el escaneo (o la primera).
   const selectedVariantStock = selectedVariantId
-    ? product?.variants?.find(v => v.id === selectedVariantId)?.stock_total
+    ? variantesVivas.find(v => v.id === selectedVariantId)?.stock_total
     : undefined
   const displayStock = selectedVariantStock != null
     ? Number(selectedVariantStock)
@@ -524,18 +532,18 @@ export function ProductDetailModal({
                     {displayStock}
                   </span>
                 </div>
-                {(product?.variants?.length ?? 0) > 1 && (
+                {variantesVivas.length > 1 && (
                   <label className="block mb-2">
                     <span className="text-[9px] font-bold uppercase tracking-wider block mb-1" style={{ color: 'var(--dax-text-faint)' }}>
-                      Variante a ajustar
+                      {variantAxisLabel(variantesVivas)} a ajustar
                     </span>
                     <select
                       className="dax-input w-full text-xs"
                       value={selectedVariantId ?? ''}
                       onChange={e => setSelectedVariantId(e.target.value || null)}
                     >
-                      {product?.variants?.map(v => (
-                        <option key={v.id} value={v.id}>{v.variant_name ?? v.sku}</option>
+                      {variantesVivas.map(v => (
+                        <option key={v.id} value={v.id}>{variantDisplayName(v, product?.name ?? v.sku)}</option>
                       ))}
                     </select>
                   </label>
@@ -589,12 +597,60 @@ export function ProductDetailModal({
               </div>
             )
           ) : (
-            <div className="flex items-center justify-end">
-              <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-                displayStock > 0 ? 'bg-emerald-600/20 text-emerald-700' : 'bg-red-600/20 text-red-600'
-              }`}>
-                {displayStock > 0 ? `${displayStock} en stock` : 'Sin stock'}
-              </span>
+            <div className="space-y-2">
+              <div className="flex items-center justify-end gap-2">
+                {/* Sin el nombre, "12 en stock" era el de una talla cualquiera
+                    (la escaneada o la primera) y nadie sabía de cuál hablaba. */}
+                {variantesVivas.length > 1 && nombreVariante && (
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full"
+                        style={{ background: 'rgba(99,102,241,0.15)', color: '#4338ca' }}>
+                    {nombreVariante}
+                  </span>
+                )}
+                <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                  displayStock > 0 ? 'bg-emerald-600/20 text-emerald-700' : 'bg-red-600/20 text-red-600'
+                }`}>
+                  {displayStock > 0 ? `${displayStock} en stock` : 'Sin stock'}
+                </span>
+              </div>
+
+              {/* Existencia y precio de TODAS las tallas: es lo que el cajero
+                  necesita para contestar "¿y en M?" sin salir de la ficha. */}
+              {variantesVivas.length > 1 && (
+                <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--dax-border-dim)' }}>
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr style={{ background: 'var(--dax-elevated)' }}>
+                        <th className="text-left font-bold px-2 py-1.5" style={{ color: 'var(--dax-text-muted)' }}>
+                          {variantAxisLabel(variantesVivas)}
+                        </th>
+                        <th className="text-right font-bold px-2 py-1.5" style={{ color: 'var(--dax-text-muted)' }}>Existencia</th>
+                        <th className="text-right font-bold px-2 py-1.5" style={{ color: 'var(--dax-text-muted)' }}>Precio</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {variantesVivas.map((v) => {
+                        const s = Number(v.stock_total ?? 0)
+                        const esActual = v.id === selectedVariantId
+                        return (
+                          <tr key={v.id} style={{ borderTop: '1px solid var(--dax-border-dim)', background: esActual ? 'rgba(99,102,241,0.08)' : undefined }}>
+                            <td className="px-2 py-1.5 font-semibold" style={{ color: 'var(--dax-text)' }}>
+                              {variantDisplayName(v, product?.name ?? '')}
+                            </td>
+                            <td className={`px-2 py-1.5 text-right font-bold tabular-nums ${s > 0 ? '' : 'text-red-600'}`}
+                                style={s > 0 ? { color: 'var(--dax-text)' } : undefined}>
+                              {s > 0 ? s : 'sin existencia'}
+                            </td>
+                            <td className="px-2 py-1.5 text-right font-bold tabular-nums" style={{ color: 'var(--dax-text)' }}>
+                              {formatCurrency(Number(v.price))}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 
