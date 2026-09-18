@@ -152,7 +152,9 @@
     </div>
 
     <div class="details">
-        <span>Cliente: {{ sale.customer_name or 'Público General' }}</span><br>
+        {% if cliente_display %}
+        <span>Cliente: {{ cliente_display }}</span><br>
+        {% endif %}
         <span>Cajero: {{ seller.username if seller else 'N/A' }}</span>
     </div>
 

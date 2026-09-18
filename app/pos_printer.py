@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import logging
 import platform
+import unicodedata
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
@@ -17,6 +18,15 @@ from decimal import Decimal
 
 # Importamos tus modelos reales
 from app.models import SalesDocument, Payment, SalesLineItem
+
+
+def _es_publico_general(nombre) -> bool:
+    """True si `nombre` es el valor por defecto "Público General" del historial,
+    no un cliente real. Ignora mayúsculas/minúsculas y acentos ("PUBLICO GENERAL",
+    "público general", "Público General" cuentan igual) — lo reutiliza también el
+    ticket HTML (`app/templates/print/ticket.html`) vía el router que lo renderiza."""
+    limpio = unicodedata.normalize("NFKD", (nombre or "")).encode("ascii", "ignore").decode()
+    return limpio.casefold().strip() == "publico general"
 
 
 def _describe_variant(variant) -> str:
@@ -327,9 +337,9 @@ class PosPrinter:
         raw += (self._truncate(line3, self.cols) + "\n").encode("latin-1", "replace")
 
         # Line 4 (opcional): cliente. "Público General" es el valor por defecto
-        # del historial, no un cliente: no se imprime.
+        # del historial, no un cliente: no se imprime (ni con o sin acento).
         cliente = (getattr(sale, "customer_name", None) or "").strip()
-        if cliente and cliente.casefold() != "público general":
+        if cliente and not _es_publico_general(cliente):
             raw += (self._truncate(f"Cliente: {cliente}", self.cols) + "\n").encode("latin-1", "replace")
         return raw
 

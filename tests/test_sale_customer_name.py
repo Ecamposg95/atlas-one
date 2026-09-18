@@ -16,6 +16,7 @@ from conftest import _make_product
 from app.modules.customers.models import Customer
 from app.models.cash import CashSession
 from app.models.modules import Module, OrganizationModule
+from app.models.organization import Organization
 from app.models.sales import SalesDocument
 
 
@@ -76,3 +77,67 @@ def test_nombre_explicito_gana_sobre_el_del_cliente(client, auth_cajero_a, db, o
     assert r.status_code == 200, r.text
     doc = db.query(SalesDocument).filter(SalesDocument.customer_id == cliente.id).one()
     assert doc.customer_name == "Como lo dijo la cajera"
+
+
+def test_customer_id_de_otra_organizacion_no_filtra_el_nombre(client, auth_cajero_a, db, org, branch_a, cajero_a):
+    """Un `customer_id` que existe pero pertenece a OTRA organización no debe
+    rellenar `customer_name` (la query de la venta filtra `organization_id`,
+    ver regla de oro #5) — la venta igual se completa, solo sin nombre."""
+    _preparar_pos(db, org, branch_a, cajero_a)
+    _make_product(db, org, "Pluma", "SKU-CLI-4", 10.0, branches_active=[(branch_a.id, True)])
+    otra_org = Organization(name="Otra Org", status="ACTIVE")
+    db.add(otra_org); db.flush()
+    cliente_ajeno = Customer(name="Cliente de Otra Org", organization_id=otra_org.id)
+    db.add(cliente_ajeno); db.flush()
+    r = _venta(client, auth_cajero_a, "SKU-CLI-4", customer_id=cliente_ajeno.id)
+    assert r.status_code == 200, r.text
+    doc = db.query(SalesDocument).filter(
+        SalesDocument.organization_id == org.id,
+        SalesDocument.customer_id == cliente_ajeno.id,
+    ).one()
+    assert doc.customer_name is None
+
+
+def _render_ticket_html(cliente_display):
+    """Renderiza app/templates/print/ticket.html directo (sin pasar por el
+    router/DB) para probar solo la línea `Cliente:` — igual de aislado que
+    `tests/test_ticket_layout.py` prueba `_build_header` con SimpleNamespace.
+
+    No se usa el endpoint `/print-view` real: la venta de prueba (SQLite +
+    `SaleItemCreate.quantity: float`) dispara un bug preexistente y ajeno a
+    esta tarea en el bloque de totales del template (`remaining_qty *
+    line_price` mezcla `float` con `Decimal`, línea ~201) — ver "Fix round 1"
+    en el reporte."""
+    from datetime import datetime, timezone
+    from decimal import Decimal
+    from types import SimpleNamespace
+    from starlette.templating import Jinja2Templates
+
+    templates = Jinja2Templates(directory="app/templates")
+    line = SimpleNamespace(description="Playera", quantity=Decimal("1"),
+                            unit_price=Decimal("100"), variant_id=1)
+    sale = SimpleNamespace(
+        series="A", folio=1, created_at=datetime(2026, 9, 17, 12, 0, tzinfo=timezone.utc),
+        requires_invoice=False, tax_amount=Decimal("0"), subtotal=Decimal("100"),
+        lines=[line], payments=[],
+    )
+    tpl = templates.get_template("print/ticket.html")
+    return tpl.render({
+        "sale": sale, "organization": None, "branch": None, "seller": None,
+        "approved_returns": None, "cliente_display": cliente_display,
+    })
+
+
+def test_print_view_html_imprime_cliente_cuando_hay_nombre():
+    """El ticket HTML sigue el mismo criterio que el térmico: imprime
+    "Cliente: <nombre>" cuando `get_sale_print_view` pasó un nombre limpio
+    (ver app/routers/sales.py::get_sale_print_view, ~línea 1349)."""
+    html = _render_ticket_html("Ana López")
+    assert "Cliente: Ana López" in html
+
+
+def test_print_view_html_sin_nombre_no_imprime_linea():
+    """`cliente_display=None` (sin nombre, o "Público General") no agrega la
+    línea — ni el `or 'Público General'` que había antes en el template."""
+    html = _render_ticket_html(None)
+    assert "Cliente:" not in html

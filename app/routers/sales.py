@@ -834,6 +834,10 @@ def create_sale(
         ).first()
         if _cli and _cli[0]:
             nombre_cliente = _cli[0].strip() or None
+    # `sales_documents.customer_name` es String(255): un nombre más largo
+    # (libre o de CRM) reventaría el INSERT en Postgres sin este tope.
+    if nombre_cliente is not None:
+        nombre_cliente = nombre_cliente[:255]
 
     # --- 3. Guardar / Actualizar Cabecera ---
     # Redondeo a centavos UNA sola vez, ya pasada la validación de pagos, para
@@ -1342,16 +1346,30 @@ def get_sale_print_view(
         SaleReturn.status == "APPROVED"
     ).options(joinedload(SaleReturn.items)).all()
 
+    # Cliente a mostrar: mismo criterio que el ticket térmico
+    # (app/pos_printer.py::_build_header) — "Público General" (con o sin
+    # acento) no es un cliente, no se imprime. La comparación vive una sola
+    # vez en `_es_publico_general`; el template solo decide si hay línea.
+    from app.pos_printer import _es_publico_general
+    _nombre_cliente = (sale.customer_name or "").strip()
+    cliente_display = _nombre_cliente if _nombre_cliente and not _es_publico_general(_nombre_cliente) else None
+
     # Sprint 4 (tech-debt): template movido a app/templates/print/ — KEEP-SSR
     # justificado para impresión térmica (HTML estático sin React).
-    return templates.TemplateResponse("print/ticket.html", {
-        "request": request,
+    # NOTA (fix round 1, item 4): `TemplateResponse(name, context)` es la firma
+    # vieja de Starlette; versiones recientes la eliminaron y solo aceptan
+    # `TemplateResponse(request, name, context)` — con la firma vieja este
+    # endpoint devolvía 500 (`TypeError: unhashable type: 'dict'` al armar la
+    # cache key de Jinja) en cualquier venta, no solo con el nombre de
+    # cliente. Se descubrió al agregar el test de este endpoint.
+    return templates.TemplateResponse(request, "print/ticket.html", {
         "sale": sale,
         "organization": organization,
         "branch": branch,
         "seller": sale.seller,
         "payments": sale.payments,
-        "approved_returns": returns
+        "approved_returns": returns,
+        "cliente_display": cliente_display,
     })
 
 # --------------------------------------------------------------------------

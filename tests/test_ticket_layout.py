@@ -256,6 +256,13 @@ class TestClienteEnEncabezado:
         decoded = _decode(_build(sale))
         assert "Cliente:" not in decoded
 
+    def test_no_imprime_publico_general_sin_acento(self):
+        """"PUBLICO GENERAL" (sin tilde) debe tratarse igual que "Público General"."""
+        sale = _make_sale([_line("Playera", 1, 100)])
+        sale.customer_name = "PUBLICO GENERAL"
+        decoded = _decode(_build(sale))
+        assert "Cliente:" not in decoded
+
     def test_sin_nombre_no_agrega_linea(self):
         sale = _make_sale([_line("Playera", 1, 100)])
         sale.customer_name = None
