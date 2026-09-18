@@ -60,6 +60,11 @@ class ProductVariantRead(BaseModel):
     color: Optional[str] = None
     size: Optional[str] = None
     price: Decimal
+    # Lo que el POS COBRA por esta variante en la sucursal objetivo: el
+    # `price_override` del ProductBranchStatus si lo hay, y si no el precio
+    # base. `price` se deja intacto porque es el que edita la ficha de
+    # variantes. La llena `_compute_product_read`; no existe en el ORM.
+    effective_price: Optional[Decimal] = None
     cost: Decimal
     has_iva: bool = False
     tax_rate: Decimal = 16.0

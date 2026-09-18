@@ -5,7 +5,7 @@ import { sortByName } from '../../../utils/sortByName'
 import { productsApi } from '../../../api/products'
 import { inventoryApi } from '../../../api/inventory'
 import { useAuthStore } from '../../../store/authStore'
-import { variantAxisLabel, variantDisplayName, variantShortLabel } from '../variantPicker'
+import { variantAxisLabel, variantDisplayName, variantPrice, variantShortLabel } from '../variantPicker'
 
 interface PackRow {
   id?: string
@@ -683,8 +683,10 @@ export function ProductDetailModal({
                                 style={s > 0 ? { color: 'var(--dax-text)' } : undefined}>
                               {s > 0 ? s : 'sin existencia'}
                             </td>
+                            {/* Precio de la SUCURSAL (`effective_price`): es el que
+                                cobra el ticket cuando hay override. */}
                             <td className="px-2 py-1.5 text-right font-bold tabular-nums" style={{ color: 'var(--dax-text)' }}>
-                              {formatCurrency(Number(v.price))}
+                              {formatCurrency(variantPrice(v))}
                             </td>
                           </tr>
                         )

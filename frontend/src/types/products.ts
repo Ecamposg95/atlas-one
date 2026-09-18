@@ -45,6 +45,11 @@ export interface ProductVariant {
   color?: string | null
   size?: string | null
   price: number
+  /** Precio que el POS COBRA en la sucursal activa: el `price_override` de la
+   *  sucursal si lo hay, y si no `price`. El editor de variantes sigue usando
+   *  `price` (el base). Ausente en respuestas que no pasan por
+   *  `_compute_product_read`: usar `effective_price ?? price`. */
+  effective_price?: number | null
   cost: number
   barcode?: string | null
   has_iva?: boolean

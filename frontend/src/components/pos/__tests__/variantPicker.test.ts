@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 
 import {
   cartLineName, groupVariants, needsPicker, pickVariantForCart, sizeOnly, variantAxisLabel,
-  variantDisplayName, variantShortLabel,
+  variantDisplayName, variantPrice, variantShortLabel,
 } from '../variantPicker'
 import type { Product, ProductVariant } from '../../../types/products'
 
@@ -51,6 +51,29 @@ describe('pickVariantForCart', () => {
     expect(p.sku).toBe('PLY-lm')
     expect(Number(p.stock_total)).toBe(5)
     expect(Number(p.price)).toBe(120)
+  })
+  // El backend cobra el price_override de la sucursal (sales.py::create_sale);
+  // mandar `price` al carrito dejaba al cajero viendo un precio y cobrando otro.
+  it('manda al carrito el precio de la sucursal, no el base', () => {
+    const conOverride = { ...base.variants![2], effective_price: 99 }
+    const p = pickVariantForCart(base, conOverride)
+    expect(Number(p.price)).toBe(99)
+  })
+  it('sin override el carrito sigue con el precio base', () => {
+    const p = pickVariantForCart(base, { ...base.variants![2], effective_price: null })
+    expect(Number(p.price)).toBe(120)
+  })
+})
+
+describe('variantPrice', () => {
+  it('prefiere el precio de la sucursal', () => {
+    expect(variantPrice({ ...base.variants![0], effective_price: 80 })).toBe(80)
+  })
+  it('cae al base cuando el backend no lo manda (respuesta vieja)', () => {
+    expect(variantPrice(base.variants![0])).toBe(120)
+  })
+  it('respeta un override de cero (regalo/promoción), no lo confunde con ausente', () => {
+    expect(variantPrice({ ...base.variants![0], effective_price: 0 })).toBe(0)
   })
 })
 

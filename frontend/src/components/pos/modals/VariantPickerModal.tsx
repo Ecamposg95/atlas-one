@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { productsApi } from '../../../api/products'
 import type { Product, ProductVariant } from '../../../types/products'
 import { formatCurrency } from '../../../utils/currency'
-import { groupVariants, sizeOnly, variantAxisLabel, variantShortLabel } from '../variantPicker'
+import { groupVariants, sizeOnly, variantAxisLabel, variantPrice, variantShortLabel } from '../variantPicker'
 
 interface Props {
   product: Product
@@ -65,7 +65,7 @@ export function VariantPickerModal({ product, onPick, onClose }: Props) {
           </span>
         )}
         <span className="text-[11px] font-semibold leading-none" style={{ color: agotada ? '#dc2626' : 'var(--dax-text-muted)' }}>
-          {agotada ? 'sin existencia' : `${stock} pz`} · {formatCurrency(Number(v.price))}
+          {agotada ? 'sin existencia' : `${stock} pz`} · {formatCurrency(variantPrice(v))}
         </span>
       </button>
     )

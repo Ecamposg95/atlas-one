@@ -82,6 +82,19 @@ export function groupVariants(vs: ProductVariant[]) {
   return { colors, sizes, at: (c: string, s: string) => idx.get(k(c, s)) }
 }
 
+/**
+ * Precio que el POS debe MOSTRAR y mandar al carrito por esta variante.
+ *
+ * `price` es el precio base del catálogo, pero `create_sale` cobra el
+ * `price_override` de la sucursal cuando existe: pintar `price` dejaba al
+ * cajero viendo un precio y cobrando otro. El backend manda ya resuelto
+ * `effective_price`; si no viene (respuesta que no pasa por
+ * `_compute_product_read`) se cae al base, que es el comportamiento de antes.
+ */
+export function variantPrice(v: ProductVariant): number {
+  return Number(v.effective_price ?? v.price)
+}
+
 /** Producto con los campos aplanados de la variante elegida (lo que consume addToCart). */
 export function pickVariantForCart(p: Product, v: ProductVariant): Product {
   return {
@@ -89,7 +102,7 @@ export function pickVariantForCart(p: Product, v: ProductVariant): Product {
     matched_variant_id: v.id,
     sku: v.sku,
     barcode: v.barcode ?? null,
-    price: Number(v.price),
+    price: variantPrice(v),
     stock_total: Number(v.stock_total ?? 0),
     prices: v.prices ?? p.prices,
     packaging_units: v.packaging_units ?? p.packaging_units,

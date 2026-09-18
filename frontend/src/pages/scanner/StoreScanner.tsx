@@ -8,7 +8,7 @@ import { useAuthStore } from '../../store/authStore'
 import type { Branch } from '../../types/auth'
 import type { Product } from '../../types/products'
 import {
-  variantAxisLabel, variantDisplayName, variantShortLabel,
+  variantAxisLabel, variantDisplayName, variantPrice, variantShortLabel,
 } from '../../components/pos/variantPicker'
 import { formatCurrency } from '../../utils/currency'
 import { errorDetailText } from '../../utils/errorDetail'
@@ -518,7 +518,7 @@ function ProductEditPanel({
                   >
                     {variantDisplayName(opt, product.name)}
                     <span className="block text-[11px] font-normal text-slate-400">
-                      {Number(opt.stock_total ?? 0)} pz · {formatCurrency(Number(opt.price))}
+                      {Number(opt.stock_total ?? 0)} pz · {formatCurrency(variantPrice(opt))}
                     </span>
                   </button>
                 )
@@ -553,7 +553,10 @@ function PricesSection({
   // con varias tallas, `product.price` es el de la principal.
   const variante = matchedVariant(product)
   const variasTallas = (product.variants?.length ?? 0) > 1
-  const precioVisible = variasTallas && variante ? variante.price : product.price
+  // SIEMPRE el precio BASE de la variante: `product.price` trae ya aplicado el
+  // `price_override` de la sucursal, y usarlo como base del campo guardaba el
+  // override como precio de catálogo del producto.
+  const precioVisible = variante?.price ?? product.price
 
   const [base, setBase] = useState(String(precioVisible ?? 0))
   // Se guarda el TEXTO, no Number(): `Number('')` es 0 y ese 0 llegaba a la

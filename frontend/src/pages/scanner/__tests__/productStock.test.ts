@@ -141,6 +141,20 @@ describe('withSelectedVariant', () => {
     expect(withSelectedVariant(p, 'zzz')).toBe(p)
   })
 
+  // El ticket cobra el `price_override` de la sucursal; la ficha del scanner
+  // mostraba el precio base y el cajero cotizaba de más (o de menos).
+  it('aplana el precio de la sucursal cuando la talla trae override', () => {
+    const conOverride = {
+      ...p,
+      variants: [p.variants![0], { ...p.variants![1], effective_price: 299 }],
+    } as unknown as Product
+    expect(Number(withSelectedVariant(conOverride, 'm').price)).toBe(299)
+  })
+
+  it('sin override sigue aplanando el precio base', () => {
+    expect(Number(withSelectedVariant(p, 'm').price)).toBe(350)
+  })
+
   it('no toca los escalones del producto (son del producto, no de la talla)', () => {
     const conEscalones = { ...p, prices: [{ id: 't1', price_name: 'Mayoreo', min_quantity: 3, unit_price: 280, linked_package_id: null }] } as unknown as Product
     expect(withSelectedVariant(conEscalones, 'm').prices).toEqual(conEscalones.prices)

@@ -1,3 +1,4 @@
+import { variantPrice } from '../../components/pos/variantPicker'
 import type { Product, ProductVariant } from '../../types/products'
 
 /**
@@ -60,6 +61,10 @@ export function matchedVariant(product: Product): ProductVariant | null {
  * forma de contar ni corregir la M. Elegir una talla en pantalla equivale a
  * haberla escaneado, así que `currentStock`/`matchedVariant` la toman sin
  * cambios. Los escalones NO se tocan: son del producto, no de la talla.
+ *
+ * El precio aplanado es el EFECTIVO de la sucursal (`effective_price`), igual
+ * que el que el backend pone en `ProductRead.price` de la principal: es lo que
+ * se cobra. El editor de precios sigue leyendo el base de la variante.
  */
 export function withSelectedVariant(product: Product, variantId: string | null): Product {
   if (!variantId) return product
@@ -70,7 +75,7 @@ export function withSelectedVariant(product: Product, variantId: string | null):
     matched_variant_id: v.id,
     sku: v.sku,
     barcode: v.barcode ?? null,
-    price: Number(v.price),
+    price: variantPrice(v),
     stock_total: Number(v.stock_total ?? 0),
   }
 }

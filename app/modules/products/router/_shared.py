@@ -231,6 +231,40 @@ def _compute_product_read(
                 p_read.price = bs_for_branch.price_override
                 p_read.prices = []  # Tier prices don't apply when override is active
 
+        # [PRECIO POR SUCURSAL EN CADA TALLA] El POS pinta `variants[*].price`
+        # (el precio BASE), pero `create_sale` cobra el `price_override` de la
+        # sucursal: con varias tallas el cajero veia un precio y el ticket
+        # salia con otro. `effective_price` es lo que se cobra; `price` no se
+        # toca porque es el que edita la ficha de variantes.
+        pbs_por_variante: dict[str, list] = {}
+        if real_branch_id:
+            if branch_statuses_cache is not None:
+                # list/search ya precargaron TODAS las variantes de la pagina.
+                for vr in p_read.variants:
+                    pbs_por_variante[vr.id] = branch_statuses_cache.get(vr.id, [])
+            else:
+                # Un solo producto (read_product y demas): una query cubre
+                # todas sus tallas. Multi-tenancy: acotada a la org del producto.
+                q_pbs = db.query(ProductBranchStatus).filter(
+                    ProductBranchStatus.variant_id.in_([vr.id for vr in p_read.variants]),
+                    ProductBranchStatus.branch_id == real_branch_id,
+                )
+                if org_de_p is not None:
+                    q_pbs = q_pbs.filter(ProductBranchStatus.organization_id == org_de_p)
+                for bs in q_pbs.all():
+                    pbs_por_variante.setdefault(bs.variant_id, []).append(bs)
+
+        for vr in p_read.variants:
+            override = next(
+                (
+                    bs.price_override
+                    for bs in pbs_por_variante.get(vr.id, [])
+                    if bs.branch_id == real_branch_id and bs.price_override is not None
+                ),
+                None,
+            )
+            vr.effective_price = override if override is not None else vr.price
+
         # Existencia por variante en la sucursal objetivo. Con una sola
         # variante coincide con stock_total; con varias es lo que permite al
         # POS mostrar cuantas piezas hay de cada talla.
