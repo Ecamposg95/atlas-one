@@ -677,9 +677,9 @@ function ProductFormModal({ mode, product, variantId, departments, brands, onClo
           sku: form.sku.trim(),
           barcode: form.barcode.trim() || null,
         })
-        if (identidad.variantPatch) {
-          await productsApi.updateVariant(identidad.variantPatch.variantId, identidad.variantPatch.patch)
-        }
+        // Primero el producto: si revienta (409 por SKU/nombre duplicado, por
+        // ejemplo) la talla se queda intacta en vez de quedar ya renombrada
+        // con el producto sin guardar.
         await productsApi.update(product.id, {
           name: form.name.trim(),
           ...identidad.productPatch,
@@ -692,6 +692,9 @@ function ProductFormModal({ mode, product, variantId, departments, brands, onClo
           packaging_units: cleanPacks,
           image_url: imageUrl ?? null,
         })
+        if (identidad.variantPatch) {
+          await productsApi.updateVariant(identidad.variantPatch.variantId, identidad.variantPatch.patch)
+        }
         toast.success('Producto actualizado')
       }
       onSaved()

@@ -211,6 +211,13 @@ function pickBranchStatus(p: Product, branchId: number | null): ProductBranchSta
   return p.branch_statuses?.find(s => s.branch_id === branchId) ?? null
 }
 
+function mensajeDeError(e: any): string {
+  const detail = e?.response?.data?.detail
+  if (e?.response?.status === 403) return 'No tienes permiso para editar esta sucursal.'
+  if (e?.response?.status === 404) return 'Producto no disponible en tu sucursal.'
+  return typeof detail === 'string' ? detail : 'Error al guardar los cambios.'
+}
+
 interface BranchStatusEditorProps {
   product: Product
   branchId: number
@@ -288,29 +295,35 @@ function BranchStatusEditor({ product, branchId, onSaved, onCancel }: BranchStat
 
     setSaving(true); setError(null)
     try {
-      // Una escritura por talla: el endpoint es por variante y no hay bulk
-      // disponible para este rol. La primera (la principal) es la que la
-      // tabla muestra, así que es la que devolvemos.
-      let principal: ProductBranchStatus | null = null
-      for (const vid of variantIds) {
-        const res = await productsApi.updateBranchStatus(vid, patch)
-        if (principal === null) principal = res
+      // Una escritura por talla (el endpoint es por variante y el bulk es
+      // admin-only). En paralelo y con `allSettled`: si una talla falla, las
+      // demás ya quedaron escritas y hay que decir cuántas entraron en vez de
+      // abortar a la mitad sin avisar qué quedó divergente.
+      const res = await Promise.allSettled(
+        variantIds.map((vid) => productsApi.updateBranchStatus(vid, patch)),
+      )
+      const fallidas = res.filter((r) => r.status === 'rejected') as PromiseRejectedResult[]
+      if (fallidas.length === variantIds.length) {
+        setError(mensajeDeError(fallidas[0].reason))
+        return
       }
+      if (fallidas.length > 0) {
+        setError(
+          `Se aplicó a ${variantIds.length - fallidas.length} de ${variantIds.length} ` +
+          `${grupo}: ${mensajeDeError(fallidas[0].reason)}`,
+        )
+        return
+      }
+      // La primera (la principal) es la que la tabla muestra.
+      const principal = (res[0] as PromiseFulfilledResult<ProductBranchStatus>).value
       toast.success(
         variantIds.length > 1
           ? `Cambios guardados en tu sucursal para las ${variantIds.length} ${grupo}.`
           : 'Cambios guardados en tu sucursal.',
       )
-      onSaved(principal as ProductBranchStatus)
+      onSaved(principal)
     } catch (e: any) {
-      const detail = e?.response?.data?.detail
-      if (e?.response?.status === 403) {
-        setError('No tienes permiso para editar esta sucursal.')
-      } else if (e?.response?.status === 404) {
-        setError('Producto no disponible en tu sucursal.')
-      } else {
-        setError(typeof detail === 'string' ? detail : 'Error al guardar los cambios.')
-      }
+      setError(mensajeDeError(e))
     } finally {
       setSaving(false)
     }
@@ -1320,12 +1333,18 @@ function ProductsHQView() {
                 </div>
                 <div className="flex items-center justify-between">
                   {(() => {
+                    // Con precio de sucursal (override) manda el override, igual
+                    // que en la lista: el rango solo se muestra sin override.
+                    const override = user?.branch_id
+                      ? p.branch_statuses?.find(s => s.branch_id === user.branch_id)?.price_override
+                      : null
                     const rango = priceRange(p.variants ?? [])
+                    const mostrarRango = override == null && rango != null && !rango.uniforme
                     return (
                       <span className="text-emerald-400 text-xs font-bold">
-                        {rango && !rango.uniforme
-                          ? `${formatCurrency(rango.min)} – ${formatCurrency(rango.max)}`
-                          : formatCurrency(p.price ?? 0)}
+                        {mostrarRango
+                          ? `${formatCurrency(rango!.min)} – ${formatCurrency(rango!.max)}`
+                          : formatCurrency(override ?? p.price ?? 0)}
                       </span>
                     )
                   })()}

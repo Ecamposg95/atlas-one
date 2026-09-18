@@ -10,7 +10,9 @@ import type { BranchStatusPatch } from '../../api/products'
  * de dinero, así que el cambio viaja a todas.
  *
  * - `is_active_pos` tiene endpoint masivo (`/branch-status/bulk-toggle`): un
- *   solo request para las N tallas.
+ *   solo request para las N tallas. Pero ese endpoint es admin-only y la
+ *   matriz también la abre un CAJERO desde el catálogo, así que `canBulk`
+ *   decide si se puede usar; si no, el POS también va talla por talla.
  * - El resto de campos no lo tiene: un `PATCH .../branch-status` por talla.
  * - Con UNA sola talla todo va por PATCH, igual que antes del fix (mismo
  *   endpoint, misma bitácora `PBS_UPDATE`).
@@ -23,13 +25,14 @@ export interface BranchStatusPlan {
 export function planBranchStatusWrites(
   variantIds: string[],
   patch: BranchStatusPatch,
+  canBulk = true,
 ): BranchStatusPlan {
   if (variantIds.length === 0) return { bulk: null, patches: null }
 
   const resto: BranchStatusPatch = { ...patch }
   let bulk: BranchStatusPlan['bulk'] = null
 
-  if (variantIds.length > 1 && patch.is_active_pos !== undefined) {
+  if (canBulk && variantIds.length > 1 && patch.is_active_pos !== undefined) {
     bulk = { variantIds, isActivePos: patch.is_active_pos }
     delete resto.is_active_pos
   }

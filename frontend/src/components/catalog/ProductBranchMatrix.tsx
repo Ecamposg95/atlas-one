@@ -6,8 +6,17 @@ import { organizationApi, type Branch } from '../../api/organization'
 import { Spinner } from '../ui/Spinner'
 import { TablaDesplazable } from '../ui/TablaDesplazable'
 import { toast } from '../../store/toastStore'
+import { useAuthStore } from '../../store/authStore'
 import type { Product, ProductBranchStatus } from '../../types/products'
 import { formatCurrency } from '../../utils/currency'
+
+/** Roles que el backend acepta en `/branch-status/bulk-toggle`. */
+const ROLES_BULK = ['ADMINISTRADOR', 'GERENTE', 'DUEÑO']
+
+function detalleDeError(e: any): string {
+  const detail = e?.response?.data?.detail
+  return typeof detail === 'string' ? detail : 'Error al guardar cambios.'
+}
 
 interface Props {
   product: Product
@@ -23,6 +32,10 @@ export function ProductBranchMatrix({ product, onClose, onSaved }: Props) {
   const variantes = useMemo(() => product.variants ?? [], [product.variants])
   const variant = variantes[0]
   const variasTallas = variantes.length > 1
+  // El endpoint masivo es admin-only y a esta matriz también llega un CAJERO
+  // desde el catálogo: para él el toggle de POS va por PATCH.
+  const { user } = useAuthStore()
+  const puedeBulk = ROLES_BULK.includes(user?.role ?? '')
 
   const [branches, setBranches] = useState<Branch[]>([])
   const [pbsRows, setPbsRows] = useState<ProductBranchStatus[]>([])
@@ -67,27 +80,52 @@ export function ProductBranchMatrix({ product, onClose, onSaved }: Props) {
     // Dinero: el cambio aplica a TODAS las tallas vivas, no solo a la
     // principal. Antes, apagar el POS o fijar un precio de sucursal dejaba
     // M y G vendiéndose al precio viejo.
-    const plan = planBranchStatusWrites(variantes.map((v) => v.id), patch)
+    const ids = variantes.map((v) => v.id)
+    let plan = planBranchStatusWrites(ids, patch, puedeBulk)
     setSaving(true)
     try {
       if (plan.bulk) {
-        await productsApi.bulkToggleBranchStatus({
-          variant_ids: plan.bulk.variantIds,
-          branch_ids: [branchId],
-          is_active_pos: plan.bulk.isActivePos,
-        })
-      }
-      if (plan.patches) {
-        for (const vid of plan.patches.variantIds) {
-          await productsApi.updateBranchStatus(vid, plan.patches.patch, branchId)
+        try {
+          await productsApi.bulkToggleBranchStatus({
+            variant_ids: plan.bulk.variantIds,
+            branch_ids: [branchId],
+            is_active_pos: plan.bulk.isActivePos,
+          })
+        } catch (e: any) {
+          // `/branch-status/bulk-toggle` es admin-only. Si el rol no alcanza,
+          // el PATCH por variante sí lo permite: reintentamos talla por talla
+          // en vez de dejar el producto a medio apagar.
+          if (e?.response?.status !== 403) throw e
+          plan = planBranchStatusWrites(ids, patch, false)
         }
       }
+      if (plan.patches) {
+        // En paralelo y con `allSettled`: si una talla falla, las demás ya
+        // quedaron escritas y hay que decir cuántas entraron — un `for` con
+        // await abortaba a la mitad sin avisar qué quedó divergente.
+        const objetivo = plan.patches.variantIds
+        const cuerpo = plan.patches.patch
+        const res = await Promise.allSettled(
+          objetivo.map((vid) => productsApi.updateBranchStatus(vid, cuerpo, branchId)),
+        )
+        const fallidas = res.filter((r) => r.status === 'rejected') as PromiseRejectedResult[]
+        if (fallidas.length === objetivo.length) {
+          throw fallidas[0].reason
+        }
+        if (fallidas.length > 0) {
+          toast.error(
+            `Aplicado a ${objetivo.length - fallidas.length} de ${objetivo.length} ` +
+            `${grupoDeVariantes(variantes)}: ${detalleDeError(fallidas[0].reason)}`,
+          )
+        }
+      }
+    } catch (e: any) {
+      toast.error(detalleDeError(e))
+    } finally {
+      // Siempre refrescar: tras un fallo parcial la matriz tiene que mostrar
+      // lo que de verdad quedó guardado.
       await load()
       onSaved?.()
-    } catch (e: any) {
-      const detail = e?.response?.data?.detail
-      toast.error(typeof detail === 'string' ? detail : 'Error al guardar cambios.')
-    } finally {
       setSaving(false)
     }
   }

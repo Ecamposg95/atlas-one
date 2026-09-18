@@ -46,3 +46,25 @@ describe('planBranchStatusWrites', () => {
     expect(patch).toEqual({ is_active_pos: true, price_override: 10 })
   })
 })
+
+describe('planBranchStatusWrites · canBulk', () => {
+  it('sin permiso de bulk, el POS de varias tallas viaja por PATCH talla por talla', () => {
+    const plan = planBranchStatusWrites(['v1', 'v2'], { is_active_pos: false }, false)
+    expect(plan.bulk).toBeNull()
+    expect(plan.patches).toEqual({ variantIds: ['v1', 'v2'], patch: { is_active_pos: false } })
+  })
+
+  it('sin permiso de bulk, un patch mixto va entero por PATCH', () => {
+    const plan = planBranchStatusWrites(['v1', 'v2'], { is_active_pos: true, price_override: 50 }, false)
+    expect(plan.bulk).toBeNull()
+    expect(plan.patches).toEqual({ variantIds: ['v1', 'v2'], patch: { is_active_pos: true, price_override: 50 } })
+  })
+
+  it('por omisión se permite el bulk (comportamiento previo)', () => {
+    expect(planBranchStatusWrites(['v1', 'v2'], { is_active_pos: true }).bulk).not.toBeNull()
+  })
+
+  it('con una sola talla el permiso de bulk da igual', () => {
+    expect(planBranchStatusWrites(['v1'], { is_active_pos: true }, true).bulk).toBeNull()
+  })
+})
