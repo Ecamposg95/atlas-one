@@ -5,6 +5,7 @@ import { productsApi } from '../../api/products'
 import type { CartItem } from '../../types/sales'
 import type { Product } from '../../types/products'
 import { ProductDetailModal } from './modals/ProductDetailModal'
+import { CustomerModal } from './modals/CustomerModal'
 import { PricePickerPopover } from './PricePickerPopover'
 import { formatCurrency } from '../../utils/currency'
 import { cartLineName } from './variantPicker'
@@ -44,6 +45,8 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
   const usdRate = useExchangeRateStore((s) => s.rate)
   const usdLine = usdSummary(total, usdRate)
   const [editingGlobalDisc, setEditingGlobalDisc] = useState(false)
+  // El cliente se asigna desde aquí: el cajero no tenía dónde hacerlo.
+  const [clienteAbierto, setClienteAbierto] = useState(false)
   const [globalDiscInput, setGlobalDiscInput] = useState('0')
 
   const ck = (item: CartItem) => item.cart_key ?? item.product_id
@@ -320,6 +323,17 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
           )}
         </div>
         <div className="flex items-center gap-2">
+          {/* Siempre visible: se puede anotar el cliente con el carrito vacío
+              y sin caja abierta (no cobra nada). */}
+          {!customerName && (
+            <button
+              onClick={() => setClienteAbierto(true)}
+              className="text-dax-muted hover:text-dax-accent text-sm min-h-[44px] flex items-center gap-1 transition-colors font-semibold"
+              title="Asignar cliente a la venta"
+            >
+              <i className="fa-solid fa-user-plus text-[11px]" /> Cliente
+            </button>
+          )}
           {!isEmpty && (
             <button
               onClick={onPark}
@@ -344,7 +358,14 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
       {customerName && (
         <div className="px-4 py-2.5 flex items-center gap-2" style={{ borderBottom: '1px solid var(--dax-row-border)' }}>
           <i className="fa-solid fa-user text-dax-muted text-sm" />
-          <span className="text-sm flex-1 truncate font-medium" style={{ color: 'var(--dax-text)' }}>{customerName}</span>
+          <button
+            onClick={() => setClienteAbierto(true)}
+            className="text-sm flex-1 truncate text-left font-medium min-h-[44px] hover:brightness-110 transition-colors"
+            style={{ color: 'var(--dax-text)' }}
+            title="Cambiar cliente"
+          >
+            {customerName}
+          </button>
           <button onClick={onClearCustomer} className="text-dax-muted hover:text-dax-danger text-sm">
             <i className="fa-solid fa-xmark" />
           </button>
@@ -1000,6 +1021,8 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
         onClose={() => setDetailProduct(null)}
         canEdit={true}
       />
+
+      {clienteAbierto && <CustomerModal onClose={() => setClienteAbierto(false)} />}
     </div>
   )
 }
