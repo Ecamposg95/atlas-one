@@ -14,6 +14,7 @@ import time
 from app.core.database import get_db
 from app.models.organization import Organization
 from app.schemas.organization import (
+    CardSurchargeRead,
     ExchangeRateRead,
     OrganizationCreate,
     OrganizationRead,
@@ -101,6 +102,21 @@ def update_organization(
         if "usd_rate_mode" in data_to_update:
             data_to_update["usd_rate_mode"] = modo  # normalizado a minusculas
 
+    # Comision por pago con tarjeta: se valida ANTES del setattr, para no dejar
+    # la organizacion a medio escribir y tener que hacer rollback a media
+    # peticion. `None` = "no tocar": la columna es NOT NULL y el panel manda el
+    # objeto completo, asi que escribir None seria un 500 al commitear.
+    if "card_surcharge_pct" in data_to_update:
+        if data_to_update["card_surcharge_pct"] is None:
+            data_to_update.pop("card_surcharge_pct")
+        else:
+            from app.services.card_surcharge import validar_pct
+
+            try:
+                validar_pct(data_to_update["card_surcharge_pct"])
+            except ValueError as e:
+                raise HTTPException(status_code=422, detail=str(e))
+
     for key, value in data_to_update.items():
         setattr(org, key, value)
 
@@ -154,6 +170,28 @@ def get_exchange_rate(
         margin=org.usd_rate_margin or 0,
         manual_rate=org.usd_rate_manual,
     )
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# COMISION POR PAGO CON TARJETA (2026-09-17)
+# Endpoint propio y barato para el POS, por el mismo motivo que el del tipo de
+# cambio: lo consume la cajera, que NO es admin y no tiene por que leer RFC ni
+# configuracion fiscal solo para cobrar. Un SELECT y cero llamadas de red.
+# ═════════════════════════════════════════════════════════════════════════════
+@router.get("/card-surcharge", response_model=CardSurchargeRead)
+def get_card_surcharge(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+    org_id: int = Depends(get_current_active_organization),
+):
+    """Porcentaje de comisión por pago con tarjeta. `pct = 0` = apagado."""
+    from app.services.card_surcharge import pct_de_organizacion
+
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization context not found")
+
+    return CardSurchargeRead(pct=pct_de_organizacion(org))
 
 
 @router.post("/exchange-rate/refresh")

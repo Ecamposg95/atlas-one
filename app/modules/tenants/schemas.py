@@ -76,6 +76,11 @@ class OrganizationUpdate(BaseModel):
     usd_rate_manual: Optional[Decimal] = None
     usd_rate_margin: Optional[Decimal] = None
 
+    # Comision por pago con tarjeta (2026-09-17). Cae FUERA de la whitelist de
+    # no-admins del router (linea 76 de router.py), asi que solo
+    # ADMINISTRADOR/DUEÑO puede cambiarla: no hace falta guardia nueva.
+    card_surcharge_pct: Optional[Decimal] = None
+
     model_config = {"extra": "ignore"}
 
 
@@ -89,6 +94,10 @@ class OrganizationRead(OrganizationBase):
     usd_rate_mode: str = "off"
     usd_rate_manual: Optional[Decimal] = None
     usd_rate_margin: Decimal = Decimal("0")
+
+    # Comision por pago con tarjeta. Se expone en la lectura para que el panel
+    # de Empresa arme el formulario sin un GET extra.
+    card_surcharge_pct: Decimal = Decimal("0")
 
     class Config:
         from_attributes = True
@@ -108,3 +117,12 @@ class ExchangeRateRead(BaseModel):
     fix_date: Optional[date] = None
     margin: Decimal = Decimal("0")
     manual_rate: Optional[Decimal] = None
+
+
+class CardSurchargeRead(BaseModel):
+    """Lo unico que el POS necesita para cobrar la comision de tarjeta.
+
+    `pct = 0` significa "no mostrar ni cobrar nada", que es el estado de toda
+    organizacion que no la configuro.
+    """
+    pct: Decimal = Decimal("0")

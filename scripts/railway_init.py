@@ -109,6 +109,14 @@ def run_migrations():
         ("organization", "usd_rate_manual", "ALTER TABLE organization ADD COLUMN usd_rate_manual NUMERIC(10,4);"),
         ("organization", "usd_rate_margin", "ALTER TABLE organization ADD COLUMN usd_rate_margin NUMERIC(10,4) NOT NULL DEFAULT 0;"),
         ("sales_documents", "usd_rate", "ALTER TABLE sales_documents ADD COLUMN usd_rate NUMERIC(10,4);"),
+        # Comision por pago con tarjeta 2026-09-17. DEFAULT 0 a proposito:
+        # ninguna organizacion viva cobra nada hasta que su dueño lo encienda.
+        # `card_surcharge_amount` es NOT NULL DEFAULT 0 para que el histórico
+        # entero quede en 0.00 sin backfill; en Postgres >= 11 un ADD COLUMN
+        # NOT NULL con DEFAULT constante no reescribe la tabla.
+        ("organization", "card_surcharge_pct", "ALTER TABLE organization ADD COLUMN card_surcharge_pct NUMERIC(5,2) NOT NULL DEFAULT 0;"),
+        ("sales_documents", "card_surcharge_pct", "ALTER TABLE sales_documents ADD COLUMN card_surcharge_pct NUMERIC(5,2);"),
+        ("sales_documents", "card_surcharge_amount", "ALTER TABLE sales_documents ADD COLUMN card_surcharge_amount NUMERIC(10,2) NOT NULL DEFAULT 0;"),
     ]
 
     # Track 1 — Audit + cleanup de Payment huérfanos antes de NOT NULL.

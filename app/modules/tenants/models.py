@@ -200,6 +200,17 @@ class Organization(Base):
     # negocio). Puede ser negativo.
     usd_rate_margin = Column(Numeric(10, 4), default=0, server_default="0", nullable=False)
 
+    # Comision por pago con tarjeta (2026-09-17). Porcentaje que se suma a la
+    # parte de la venta cobrada con TARJETA (solo `PaymentMethod.CARD`; en un
+    # pago mixto, solo a esa parte). 0 = apagado, y es el DEFAULT para todas
+    # las organizaciones ya existentes.
+    #
+    # NUMERIC(5,2) y no (6,3) a proposito: `app/pos_printer.py::_total_line` da
+    # 20 columnas de etiqueta en papel de 58 mm y NO trunca, asi que un tercer
+    # decimal desbordaria el renglon "COM. TARJETA 19.999%" del ticket.
+    # La regla de calculo vive en app/services/card_surcharge.py.
+    card_surcharge_pct = Column(Numeric(5, 2), default=0, server_default="0", nullable=False)
+
     # SaaS
     status = Column(String, default="ACTIVE", index=True)  # ACTIVE, SUSPENDED
     plan = Column(String, default="FREE")
