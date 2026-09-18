@@ -235,6 +235,10 @@ export function ProductBranchMatrix({ product, onClose, onSaved }: Props) {
               </span>{' '}
               sucursales
             </div>
+            {/* Activar/desactivar en masa y replicar van contra endpoints
+                admin-only: al CAJERO, que también abre esta matriz desde el
+                catálogo, le respondían 403 después de confirmar el diálogo. */}
+            {puedeBulk && (
             <div className="inline-flex gap-2">
               <button
                 onClick={() => bulkEnableAll(true)}
@@ -251,9 +255,11 @@ export function ProductBranchMatrix({ product, onClose, onSaved }: Props) {
                 <i className="fa-solid fa-ban mr-1" /> Desactivar todas
               </button>
             </div>
+            )}
           </div>
 
           {/* Clone from branch */}
+          {puedeBulk && (
           <div className="rounded-xl border border-slate-700 p-3 bg-slate-900/30">
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">
               Replicar configuración
@@ -294,6 +300,7 @@ export function ProductBranchMatrix({ product, onClose, onSaved }: Props) {
               </button>
             </div>
           </div>
+          )}
 
           {/* Matrix table */}
           {loading ? (
