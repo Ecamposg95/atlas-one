@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
-import { expandVariantRows } from '../variantRows'
-import type { Product } from '../../../types/products'
+import { expandVariantRows, grupoDeVariantes } from '../variantRows'
+import type { Product, ProductVariant } from '../../../types/products'
 
 const playera: Product = {
   id: 'p1', sku: 'PLY-S', name: 'Playera', description: null, brand_id: null, brand_name: null, department: null,
@@ -50,5 +50,26 @@ describe('precio por renglón', () => {
     }
     const rows = expandVariantRows([conPrecios])
     expect(rows.map((r) => r.variant.price)).toEqual([100, 180])
+  })
+})
+
+describe('grupoDeVariantes', () => {
+  const v = (extra: Partial<ProductVariant>): ProductVariant =>
+    ({ id: 'x', product_id: 'p', sku: 'X', price: 1, cost: 1, ...extra })
+
+  it('sin ningún color, la palabra es "tallas"', () => {
+    expect(grupoDeVariantes([v({ size: 'Ch' }), v({ size: 'M' })])).toBe('tallas')
+  })
+  it('sin ninguna talla, la palabra es "colores"', () => {
+    expect(grupoDeVariantes([v({ color: 'Rojo' }), v({ color: 'Azul' })])).toBe('colores')
+  })
+  it('con color y talla mezclados, la palabra genérica es "variantes"', () => {
+    expect(grupoDeVariantes([v({ color: 'Rojo', size: 'Ch' }), v({ color: 'Rojo', size: 'M' })])).toBe('variantes')
+  })
+  it('sin atributos cae en "variantes"', () => {
+    expect(grupoDeVariantes([v({}), v({})])).toBe('variantes')
+  })
+  it('el color vacío no cuenta como color', () => {
+    expect(grupoDeVariantes([v({ color: '', size: 'Ch' }), v({ color: null, size: 'M' })])).toBe('tallas')
   })
 })

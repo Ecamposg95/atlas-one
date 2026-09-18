@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { productsApi } from '../../api/products'
+import { productsApi, type BranchStatusPatch } from '../../api/products'
+import { planBranchStatusWrites } from './branchFanout'
+import { grupoDeVariantes } from '../../pages/inventory/variantRows'
 import { organizationApi, type Branch } from '../../api/organization'
 import { Spinner } from '../ui/Spinner'
 import { TablaDesplazable } from '../ui/TablaDesplazable'
@@ -14,7 +16,13 @@ interface Props {
 }
 
 export function ProductBranchMatrix({ product, onClose, onSaved }: Props) {
-  const variant = product.variants?.[0]
+  // `product.variants` ya viene sin las retiradas (el backend filtra
+  // `deleted_at`), así que son las tallas vivas. La primera es la principal:
+  // es la que el backend usa para el PBS que se lee, pero lo que se ESCRIBE
+  // va a todas (ver `planBranchStatusWrites`).
+  const variantes = useMemo(() => product.variants ?? [], [product.variants])
+  const variant = variantes[0]
+  const variasTallas = variantes.length > 1
 
   const [branches, setBranches] = useState<Branch[]>([])
   const [pbsRows, setPbsRows] = useState<ProductBranchStatus[]>([])
@@ -54,14 +62,26 @@ export function ProductBranchMatrix({ product, onClose, onSaved }: Props) {
     [pbsRows],
   )
 
-  const saveCell = async (
-    branchId: number,
-    patch: Partial<{ is_active_pos: boolean; price_override: number | null; min_stock_alert: number | null; max_stock_limit: number | null }>,
-  ) => {
+  const saveCell = async (branchId: number, patch: BranchStatusPatch) => {
     if (!variant) return
+    // Dinero: el cambio aplica a TODAS las tallas vivas, no solo a la
+    // principal. Antes, apagar el POS o fijar un precio de sucursal dejaba
+    // M y G vendiéndose al precio viejo.
+    const plan = planBranchStatusWrites(variantes.map((v) => v.id), patch)
     setSaving(true)
     try {
-      await productsApi.updateBranchStatus(variant.id, patch, branchId)
+      if (plan.bulk) {
+        await productsApi.bulkToggleBranchStatus({
+          variant_ids: plan.bulk.variantIds,
+          branch_ids: [branchId],
+          is_active_pos: plan.bulk.isActivePos,
+        })
+      }
+      if (plan.patches) {
+        for (const vid of plan.patches.variantIds) {
+          await productsApi.updateBranchStatus(vid, plan.patches.patch, branchId)
+        }
+      }
       await load()
       onSaved?.()
     } catch (e: any) {
@@ -151,6 +171,11 @@ export function ProductBranchMatrix({ product, onClose, onSaved }: Props) {
               <p className="text-xs text-slate-500 mt-1 truncate max-w-[420px]">
                 {product.name} · SKU <span className="font-mono">{variant?.sku ?? '—'}</span>
               </p>
+              {variasTallas && (
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Lo que cambies aquí se aplica a las {variantes.length} {grupoDeVariantes(variantes)} del producto.
+                </p>
+              )}
             </div>
             <button
               onClick={onClose}

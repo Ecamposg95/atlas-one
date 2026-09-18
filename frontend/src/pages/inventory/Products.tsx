@@ -12,6 +12,7 @@ import { formatCurrency } from '../../utils/currency'
 import { sortByName } from '../../utils/sortByName'
 import { toast } from '../../store/toastStore'
 import { ProductImageUploader } from '../../components/products/ProductImageUploader'
+import { grupoDeVariantes } from './variantRows'
 
 const HQ_ROLES = ['ADMINISTRADOR', 'DUEÑO']
 const CAN_EDIT_ROLES = ['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO']
@@ -181,14 +182,22 @@ function ImportModal({ onClose, onDone, isHQ }: { onClose: () => void; onDone: (
 // ─── Branch Status Editor (CAJERO/GERENTE) ─────────────────────────────────────
 
 /**
- * Deriva el variant_id "primario" de un producto para editar su PBS.
- * Estrategia: primero el variant de la variant principal (si hay), luego
- * el primer branch_status existente (si ya tiene uno), por último null.
+ * Variantes sobre las que hay que escribir el PBS del producto.
+ *
+ * Antes esto devolvía solo `variants[0]`: apagar el POS o fijar un precio de
+ * sucursal dejaba las demás tallas vendiéndose, y al precio viejo. Es un bug
+ * de dinero, así que el cambio va a TODAS las tallas vivas (el backend ya
+ * excluye las retiradas de `variants`).
+ *
+ * Aquí no se usa `/branch-status/bulk-toggle` a propósito: ese endpoint es
+ * admin-only y esta ficha la usan CAJERO/GERENTE, que sí pueden hacer el
+ * PATCH de su propia sucursal.
  */
-function pickVariantId(p: Product): string | null {
-  if (p.variants && p.variants.length > 0) return p.variants[0].id
-  if (p.branch_statuses && p.branch_statuses.length > 0) return p.branch_statuses[0].variant_id
-  return null
+function pickVariantIds(p: Product): string[] {
+  const vivas = (p.variants ?? []).map((v) => v.id)
+  if (vivas.length > 0) return vivas
+  const primero = p.branch_statuses?.[0]?.variant_id
+  return primero ? [primero] : []
 }
 
 /**
@@ -209,7 +218,8 @@ interface BranchStatusEditorProps {
 
 function BranchStatusEditor({ product, branchId, onSaved, onCancel }: BranchStatusEditorProps) {
   const existing = pickBranchStatus(product, branchId)
-  const variantId = pickVariantId(product)
+  const variantIds = pickVariantIds(product)
+  const grupo = grupoDeVariantes(product.variants ?? [])
 
   const [priceOverride, setPriceOverride] = useState<string>(
     existing?.price_override != null ? String(existing.price_override) : ''
@@ -254,7 +264,7 @@ function BranchStatusEditor({ product, branchId, onSaved, onCancel }: BranchStat
   }
 
   const handleSave = async () => {
-    if (!variantId) { setError('No se encontró una variante editable para este producto.'); return }
+    if (variantIds.length === 0) { setError('No se encontró una variante editable para este producto.'); return }
 
     const patch = buildPatch()
     if (Object.keys(patch).length === 0) {
@@ -276,9 +286,20 @@ function BranchStatusEditor({ product, branchId, onSaved, onCancel }: BranchStat
 
     setSaving(true); setError(null)
     try {
-      const updated = await productsApi.updateBranchStatus(variantId, patch)
-      toast.success('Cambios guardados en tu sucursal.')
-      onSaved(updated)
+      // Una escritura por talla: el endpoint es por variante y no hay bulk
+      // disponible para este rol. La primera (la principal) es la que la
+      // tabla muestra, así que es la que devolvemos.
+      let principal: ProductBranchStatus | null = null
+      for (const vid of variantIds) {
+        const res = await productsApi.updateBranchStatus(vid, patch)
+        if (principal === null) principal = res
+      }
+      toast.success(
+        variantIds.length > 1
+          ? `Cambios guardados en tu sucursal para las ${variantIds.length} ${grupo}.`
+          : 'Cambios guardados en tu sucursal.',
+      )
+      onSaved(principal as ProductBranchStatus)
     } catch (e: any) {
       const detail = e?.response?.data?.detail
       if (e?.response?.status === 403) {
@@ -307,6 +328,11 @@ function BranchStatusEditor({ product, branchId, onSaved, onCancel }: BranchStat
             Los cambios aquí afectan únicamente a <span className="text-white font-semibold">tu sucursal</span>.
             El precio base del producto no se modifica.
           </p>
+          {variantIds.length > 1 && (
+            <p className="text-slate-400 text-xs mt-0.5">
+              Se aplican a las <span className="text-white font-semibold">{variantIds.length} {grupo}</span> del producto.
+            </p>
+          )}
         </div>
         <span className="text-[10px] text-slate-500 font-mono">
           Base: {formatCurrency(product.price ?? 0)}
@@ -418,7 +444,7 @@ function BranchStatusEditor({ product, branchId, onSaved, onCancel }: BranchStat
         <button
           type="button"
           onClick={handleSave}
-          disabled={saving || !variantId}
+          disabled={saving || variantIds.length === 0}
           className="dax-btn text-xs flex items-center gap-1.5 disabled:opacity-50"
         >
           {saving ? <i className="fa-solid fa-spinner fa-spin text-[10px]" /> : <i className="fa-solid fa-floppy-disk text-[10px]" />}

@@ -36,3 +36,19 @@ export function expandVariantRows(products: Product[]): InventoryRow[] {
   }
   return rows
 }
+
+/**
+ * Cómo llamarle al conjunto de variantes en la UI.
+ *
+ * La boutique que motivó esto vende tallas y no usa colores: decirle
+ * "variantes" a Ch/M/G no le dice nada. Si ninguna variante tiene color,
+ * hablamos de "tallas"; si ninguna tiene talla, de "colores"; y solo cuando
+ * se mezclan (o no hay atributos) caemos en el genérico "variantes".
+ */
+export function grupoDeVariantes(variants: ProductVariant[]): 'tallas' | 'colores' | 'variantes' {
+  const hayColor = variants.some((v) => (v.color ?? '').trim() !== '')
+  const hayTalla = variants.some((v) => (v.size ?? '').trim() !== '')
+  if (hayTalla && !hayColor) return 'tallas'
+  if (hayColor && !hayTalla) return 'colores'
+  return 'variantes'
+}
