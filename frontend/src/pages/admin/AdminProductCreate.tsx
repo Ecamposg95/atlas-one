@@ -200,8 +200,12 @@ export function AdminProductCreate() {
       const porFila = variantDetailErrors(detail, splitPrincipal(variantRows).extras)
       if (Object.keys(porFila).length > 0) {
         setErrors((e) => ({ ...e, ...porFila }))
+        // Un solo aviso: la fila ya quedó marcada, el `else` de abajo repetiría
+        // el texto crudo del backend en un segundo toast encimado.
         toast.error('Revisa la variante marcada.')
-      } else if (status === 409 || (typeof detail === 'string' && detail.toLowerCase().includes('sku'))) {
+        return
+      }
+      if (status === 409 || (typeof detail === 'string' && detail.toLowerCase().includes('sku'))) {
         setErrors((e) => ({ ...e, sku: typeof detail === 'string' ? detail : 'SKU duplicado' }))
       }
       // Un 422 trae `detail` como LISTA de campos. Antes se caia al mensaje
