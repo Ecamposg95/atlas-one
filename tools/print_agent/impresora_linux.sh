@@ -18,7 +18,7 @@ cd "$AGENT_DIR"
 cat << 'EOF'
 
 ╭────────────────────────────────────────────────────────╮
-│ ✦ ATLAS TECH × RMAZH                                   │
+│ ✦ ATLAS ONE                                            │
 │ Agente Local de Impresión                              │
 ╰────────────────────────────────────────────────────────╯
 
@@ -29,14 +29,14 @@ cat << 'EOF'
 ██║  ██║   ██║   ███████╗██║  ██║███████║
 ╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═╝  ╚═╝╚══════╝
 
-         RMAZH POS - AGENTE LOCAL DE IMPRESION
+         ATLAS ONE - AGENTE LOCAL DE IMPRESION
          Conectando tu computadora con tu impresora
 
 ──────────────────────────────────────────────────────────
  Este agente permite que tu computadora se comunique con
  tu impresora de tickets.
 
- Atlas POS / RMAZH POS podra enviar tickets desde el navegador
+ Atlas One POS podra enviar tickets desde el navegador
  hacia la impresora termica conectada a esta PC.
 ──────────────────────────────────────────────────────────
 

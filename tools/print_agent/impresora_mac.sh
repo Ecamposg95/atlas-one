@@ -1,6 +1,7 @@
 #!/bin/bash
 # Atlas POS - Agente Local de Impresión para macOS
-# Requiere: Python 3.10+, CUPS (incluido en macOS)
+# Requiere: Python 3.9+ (el 3.9.6 de las herramientas de Xcode sirve),
+#           CUPS (incluido en macOS)
 set -e
 AGENT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CORE_DIR="$AGENT_DIR/core"
@@ -9,7 +10,7 @@ cd "$AGENT_DIR"
 cat << 'EOF'
 
 ╭────────────────────────────────────────────────────────╮
-│ ✦ ATLAS TECH × RMAZH                                   │
+│ ✦ ATLAS ONE                                            │
 │ Agente Local de Impresión                              │
 ╰────────────────────────────────────────────────────────╯
 
@@ -20,7 +21,7 @@ cat << 'EOF'
 ██║  ██║   ██║   ███████╗██║  ██║███████║
 ╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═╝  ╚═╝╚══════╝
 
-         RMAZH POS - AGENTE LOCAL DE IMPRESION
+         ATLAS ONE - AGENTE LOCAL DE IMPRESION
          macOS — Conectando tu computadora con tu impresora
 
 ──────────────────────────────────────────────────────────
@@ -30,13 +31,31 @@ echo
 # ── 0. ¿Ya está instalado como servicio? ─────────────────────────────────────
 # En las Macs ya convertidas al autoarranque, la cajera va a seguir buscando
 # este archivo y abriéndolo por costumbre durante semanas. Sin esta guarda
-# vería un error de puerto ocupado y levantaría el teléfono. Con ella ve que
-# todo está bien y cierra la ventana.
+# vería un error de puerto ocupado y levantaría el teléfono.
+#
+# No basta con que `launchctl print` encuentre el servicio: devuelve 0 también
+# cuando está CARGADO PERO CAÍDO. Si saliéramos ahí, la cajera cerraría la
+# ventana creyendo que todo está bien y se quedaría sin imprimir. Se exige
+# `state = running` Y que /health conteste de verdad.
 #
 # En las Macs NO convertidas la condición es falsa y el script sigue haciendo
 # exactamente lo de siempre.
-if launchctl print "gui/$(id -u)/com.atlasone.print-agent" >/dev/null 2>&1; then
-    cat << 'EOF'
+AGENTE_LABEL="com.atlasone.print-agent"
+AGENTE_PUERTO="${ATLAS_AGENT_PORT:-9100}"
+
+agente_responde() {
+    local cuerpo
+    cuerpo="$(curl -sk --max-time 2 "https://127.0.0.1:$AGENTE_PUERTO/health" 2>/dev/null)" || true
+    [ -n "$cuerpo" ] && return 0
+    cuerpo="$(curl -s --max-time 2 "http://127.0.0.1:$AGENTE_PUERTO/health" 2>/dev/null)" || true
+    [ -n "$cuerpo" ] && return 0
+    return 1
+}
+
+if launchctl print "gui/$(id -u)/$AGENTE_LABEL" >/dev/null 2>&1; then
+    if launchctl print "gui/$(id -u)/$AGENTE_LABEL" 2>/dev/null | grep -q "state = running" \
+       && agente_responde; then
+        cat << 'EOF'
 
  ╭────────────────────────────────────────────────────────╮
  │  El agente YA ESTA ACTIVO                              │
@@ -48,9 +67,26 @@ if launchctl print "gui/$(id -u)/com.atlasone.print-agent" >/dev/null 2>&1; then
  Puedes cerrar esta ventana.
 
 EOF
-    read -r -t 60 -p " Presiona ENTER para cerrar… " _ || true
-    echo
-    exit 0
+        read -r -t 60 -p " Presiona ENTER para cerrar… " _ || true
+        echo
+        exit 0
+    fi
+
+    # Instalado pero sin responder. No se sale: se arranca el modo manual para
+    # que la caja pueda imprimir HOY, y se deja dicho qué revisar después.
+    cat << 'EOF'
+
+ ╭────────────────────────────────────────────────────────╮
+ │  El servicio esta instalado pero NO responde           │
+ ╰────────────────────────────────────────────────────────╯
+
+ Revisa:   ~/Library/Logs/AtlasPrintAgent/agent.err.log
+ O reinstala:  bash core/instalar-servicio-mac.sh
+
+ Mientras tanto se arranca el modo manual para que puedas
+ seguir imprimiendo. NO cierres esta ventana.
+
+EOF
 fi
 
 echo "[INICIO]  Iniciando agente de impresion..."

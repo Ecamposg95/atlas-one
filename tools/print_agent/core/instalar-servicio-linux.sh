@@ -26,6 +26,10 @@
 
 set -uo pipefail
 
+# Bajo `set -u`, $USER no está garantizado (una shell no interactiva puede no
+# traerlo). Se le da valor una sola vez para poder usarlo sin guardas.
+USER="${USER:-$(id -un)}"
+
 SERVICE_NAME="atlas-print-agent"
 DEFAULT_ORIGINS="https://app.atlasone.com.mx"
 AGENT_PORT="${ATLAS_AGENT_PORT:-9100}"
@@ -39,18 +43,26 @@ CERTS_FROM=""
 DRY_RUN=0
 TARGET_USER=""
 
+# `warn` va a stderr a propósito: find_existing_certs lo llama y su salida se
+# captura con $(...). En stdout, el texto del aviso acababa pegado a la ruta del
+# certificado y el `cp` posterior fallaba con un mensaje incomprensible.
+# `log`/`ok` no se llaman desde ninguna sustitución; se dejan en stdout.
 log()   { echo "[INFO]  $*"; }
 ok()    { echo "[OK]    $*"; }
-warn()  { echo "[AVISO] $*"; }
+warn()  { echo "[AVISO] $*" >&2; }
 die()   { echo "[ERROR] $*" >&2; exit 1; }
 
 # ── Argumentos ────────────────────────────────────────────────────────────────
 while [ $# -gt 0 ]; do
     case "$1" in
-        --origins)    ORIGINS="${2:-}"; shift 2 ;;
-        --certs-from) CERTS_FROM="${2:-}"; shift 2 ;;
+        --origins)    [ $# -ge 2 ] || die "--origins requiere un valor, p. ej. --origins \"https://app.atlasone.com.mx\""
+                      ORIGINS="$2"; shift 2 ;;
+        --certs-from) [ $# -ge 2 ] || die "--certs-from requiere una ruta, p. ej. --certs-from ~/Descargas/print_agent/core/certs"
+                      CERTS_FROM="$2"; shift 2 ;;
         --dry-run)    DRY_RUN=1; shift ;;
-        -h|--help)    sed -n '2,28p' "$0"; exit 0 ;;
+        # El encabezado se imprime entero, sea cual sea su largo: se corta en la
+        # primera línea que ya no empieza con '#'. Un rango fijo se desincroniza.
+        -h|--help)    awk 'NR>1 { if ($0 ~ /^#/) print; else exit }' "$0"; exit 0 ;;
         -*)           die "Opción desconocida: $1" ;;
         *)            TARGET_USER="$1"; shift ;;
     esac
@@ -165,17 +177,38 @@ command -v python3 >/dev/null 2>&1 || die "python3 no está instalado."
 # ── 3. Detener cualquier agente manual en el puerto ──────────────────────────
 # La cajera pudo dejar abierta la ventana del modo manual. Si no se detiene,
 # el servicio no puede tomar el 9100 y el diagnóstico se vuelve confuso.
-stop_manual_agent() {
+#
+# OJO: impresora_linux.sh NO es el agente, es un `while true` que lo relanza a
+# los 5 segundos. Matando solo el python, el envoltorio lo resucita y se pone a
+# competir con el servicio por el 9100: /health puede acabar respondiendo desde
+# el agente manual mientras systemd reinicia el suyo en bucle. Por eso se mata
+# PRIMERO el envoltorio y luego el agente.
+# El '$' final no es decorativo: sin él, cualquier shell cuya línea de
+# comando MENCIONE el launcher (un `zsh -c '…'`, un editor, un script de
+# arranque) entraría en la redada. Anclado al final solo casa la invocación
+# real, donde el script es el último argumento.
+PAT_ENVOLTORIO='(bash|sh|zsh) .*impresora_linux\.sh$'
+PAT_AGENTE='python3? .*(atlas-print-agent|print_agent)/core/main\.py$'
+
+_matar() {
     local pids
-    pids="$(pgrep -f "print_agent.*core/main\.py" 2>/dev/null | tr '\n' ' ')"
-    [ -z "${pids// /}" ] && return 0
-    log "Deteniendo agente manual en curso (PID: ${pids})…"
+    pids="$(pgrep -f "$1" 2>/dev/null | tr '\n' ' ')"
+    [ -z "${pids// /}" ] && return 1
+    log "Deteniendo $2 (PID: ${pids})…"
     # shellcheck disable=SC2086
     kill $pids 2>/dev/null
     sleep 2
     # shellcheck disable=SC2086
     kill -9 $pids 2>/dev/null
-    ok "Agente manual detenido."
+    return 0
+}
+
+stop_manual_agent() {
+    local algo=1
+    _matar "$PAT_ENVOLTORIO" "la ventana del modo manual (impresora_linux.sh)" && algo=0
+    _matar "$PAT_AGENTE"     "el agente manual en curso"                       && algo=0
+    [ "$algo" -eq 0 ] && ok "Modo manual detenido."
+    return 0
 }
 "${SCTL[@]}" stop "$SERVICE_NAME" 2>/dev/null
 stop_manual_agent
@@ -234,13 +267,19 @@ log "Instalando dependencias (puede tardar varios minutos en una PC lenta)…"
 ok "Dependencias instaladas."
 
 # ── 6. Certificado ───────────────────────────────────────────────────────────
-if [ ! -f "$WORKDIR/certs/cert.pem" ]; then
+# Se exigen los DOS archivos: con cert.pem pero sin key.pem, uvicorn no arranca
+# en TLS y el agente caía a HTTP sin que nadie entendiera por qué.
+if [ ! -f "$WORKDIR/certs/cert.pem" ] || [ ! -f "$WORKDIR/certs/key.pem" ]; then
     log "Generando certificado local…"
     "$VENV/bin/python3" "$WORKDIR/generate_cert.py" \
         || warn "Falló la generación del certificado; el agente arrancará en HTTP."
 fi
 [ "$MODE" = "system" ] && chown -R "$TARGET_USER":"$TARGET_USER" "$INSTALL_DIR"
-ok "Certificado listo."
+if [ -f "$WORKDIR/certs/cert.pem" ] && [ -f "$WORKDIR/certs/key.pem" ]; then
+    ok "Certificado listo."
+else
+    warn "Sin certificado completo: el agente arrancará en HTTP."
+fi
 
 # ── 7. Unidad systemd ────────────────────────────────────────────────────────
 log "Escribiendo $UNIT_PATH…"

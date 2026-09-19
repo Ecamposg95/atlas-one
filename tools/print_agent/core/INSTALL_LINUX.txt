@@ -38,6 +38,11 @@ El runbook de la conversión tienda por tienda vive en:
   encuentra y conserva el certificado que el navegador de esa PC ya
   aceptó, y nadie tiene que volver a aceptarlo.
 
+  ANTES: cierra la ventana de Terminal del modo manual (la que dice
+  "No cierres esta ventana"). Esa ventana es un bucle que relanza el
+  agente cada 5 s y le pelearía el puerto 9100 al servicio. El
+  instalador intenta cerrarla, pero es más limpio hacerlo a mano.
+
   1. Ver qué haría, sin tocar nada:
 
          bash core/instalar-servicio-linux.sh --dry-run

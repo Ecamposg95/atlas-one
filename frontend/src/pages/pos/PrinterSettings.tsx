@@ -704,7 +704,10 @@ export function PrinterSettings() {
                     'Se instala en ~/Library/Application Support/AtlasPrintAgent, no en Descargas.',
                     'Arranca al iniciar sesión y launchd lo revive si se cae.',
                     'Conserva el certificado que este navegador ya aceptó.',
-                    'No uses sudo: es un servicio de tu usuario.',
+                    'No uses sudo para instalarlo: es un servicio de tu usuario. Y córrelo en la Mac, no por SSH.',
+                    'macOS 14+ ya no admite colas raw: la cola se crea con un PPD genérico y el agente fuerza el raw en cada impresión.',
+                    'Alta de la cola: sudo lpadmin -p ticket -E -v "<uri de lpinfo -v>" -P /System/Library/Frameworks/ApplicationServices.framework/Versions/A/Frameworks/PrintCore.framework/Versions/A/Resources/Generic.ppd',
+                    'Prueba a mano: printf \'PRUEBA\\n\\n\\n\\n\' | lp -d ticket -o raw',
                   ]}
                   onToast={showToast}
                 />
@@ -1257,7 +1260,8 @@ function AutostartCard({
           <li key={i} className="flex items-start gap-2 text-[11px] leading-relaxed"
               style={{ color: 'var(--dax-text-faint)' }}>
             <i className="fa-solid fa-check text-emerald-400 text-[9px] mt-1 flex-shrink-0" />
-            <span>{texto}</span>
+            {/* break-words: la ruta del PPD genérico de macOS mide ~130 caracteres */}
+            <span className="min-w-0 break-words">{texto}</span>
           </li>
         ))}
       </ul>

@@ -23,10 +23,21 @@ El runbook de la conversión Mac por Mac vive en:
 ────────────────────────────────────────────────────────────────────
 
   • macOS 12 (Monterey) o posterior.
-  • Python 3.10+. Si no lo tienes:
-        xcode-select --install
+  • Python 3.9 o superior. El 3.9.6 que traen las herramientas de
+    Xcode sirve; no hace falta nada más. Si no tienes python3:
+        https://python.org/downloads/macos/
+        o bien:  brew install python@3.12
+    (si el instalador se queja de la VERSIÓN de Python, el remedio
+     NO es xcode-select: esas herramientas dan 3.9.6 y punto.)
   • CUPS: viene incluido en macOS, no hay que instalar nada.
   • NO se necesita sudo. Es un LaunchAgent de tu usuario.
+  • **Sesión gráfica.** Hay que correr el instalador desde la Mac
+    (Terminal en la propia Mac o por Compartir pantalla). Por SSH
+    launchd rechaza cargar el LaunchAgent con
+    "Bootstrap failed: 5: Input/output error".
+  • **Cierra la ventana de Terminal del modo manual antes de
+    instalar.** Esa ventana es un bucle que relanza el agente cada
+    5 s y le pelearía el puerto 9100 al servicio.
 
 
 ────────────────────────────────────────────────────────────────────
@@ -37,8 +48,12 @@ El runbook de la conversión Mac por Mac vive en:
   encuentra y conserva el certificado que el navegador de esa Mac ya
   aceptó, y nadie tiene que volver a aceptarlo.
 
-  1. Abre Terminal (Finder → Aplicaciones → Utilidades → Terminal) y
-     entra a la carpeta del agente:
+  0. Si hay una ventana de Terminal con el modo manual abierta
+     (la que dice "No cierres esta ventana"), CIÉRRALA. El
+     instalador intenta detenerla, pero es más limpio así.
+
+  1. Abre Terminal EN LA MAC (Finder → Aplicaciones → Utilidades →
+     Terminal), no por SSH, y entra a la carpeta del agente:
 
          cd ~/Downloads/print_agent      # ajustar a la ruta real
 
@@ -73,6 +88,9 @@ El runbook de la conversión Mac por Mac vive en:
     bash core/instalar-servicio-mac.sh --uninstall
         Quita el servicio y deja los archivos donde están.
 
+    bash core/instalar-servicio-mac.sh --dry-run --uninstall
+        Enseña qué quitaría, sin quitar nada.
+
 
 ────────────────────────────────────────────────────────────────────
   VERIFICAR
@@ -86,6 +104,36 @@ El runbook de la conversión Mac por Mac vive en:
 
   La prueba de verdad: CIERRA SESIÓN o reinicia la Mac y, al volver a
   entrar y ANTES de abrir nada, comprueba que /health ya responde.
+
+
+────────────────────────────────────────────────────────────────────
+  SI FALLA "launchctl bootstrap"
+────────────────────────────────────────────────────────────────────
+
+  Mensaje típico:  Bootstrap failed: 5: Input/output error
+
+  Casi siempre significa que estás por SSH. Un LaunchAgent solo se
+  carga desde la sesión GRÁFICA de la Mac.
+
+    1. Entra a la Mac en persona (Terminal) o por Compartir pantalla.
+    2. Limpia lo que haya quedado a medias:
+           launchctl bootout gui/$(id -u)/com.atlasone.print-agent
+    3. Vuelve a correr el instalador.
+
+  El plist YA quedó escrito aunque el comando falle, así que el
+  agente arrancará solo en el próximo inicio de sesión gráfico.
+
+  ¿Plists viejos de otra instalación?
+
+         ls ~/Library/LaunchAgents | grep -i atlas
+
+  Solo debe aparecer com.atlasone.print-agent.plist. Cualquier otro
+  sobra y hay que quitarlo con bootout + rm.
+
+  macOS 15 (Sequoia) o posterior avisa con una notificación de
+  "Elementos de inicio" la primera vez. Es lo esperado: NO hay que
+  desactivar el elemento — si se desactiva, el agente deja de
+  arrancar solo y la caja vuelve al modo manual sin avisar.
 
 
 ────────────────────────────────────────────────────────────────────
@@ -105,21 +153,49 @@ El runbook de la conversión Mac por Mac vive en:
 
 
 ────────────────────────────────────────────────────────────────────
-  DAR DE ALTA LA IMPRESORA (cola raw)
+  DAR DE ALTA LA IMPRESORA
 ────────────────────────────────────────────────────────────────────
 
-  El agente escribe bytes ESC/POS crudos, así que la impresora tiene
-  que estar en CUPS como cola RAW, sin driver que reinterprete nada.
+  OJO — esto NO es como en Linux. Desde macOS 14, CUPS rechaza las
+  colas raw:
 
-         lpinfo -v                          # ver los URIs disponibles
-         lpadmin -p ticket -E -v <uri> -m raw
-         lpstat -p ticket                   # debe decir "idle"
+      "Raw queues are no longer supported on macOS"
 
-  <uri> es lo que devuelve lpinfo, por ejemplo
-  usb://EPSON/TM-T20II?serial=XXXX o socket://192.168.1.50:9100.
+  Así que la cola se crea con un PPD GENÉRICO y el modo raw se fuerza
+  en cada impresión: el agente manda siempre `lp -o raw`, que salta
+  los filtros de ese PPD y entrega los bytes ESC/POS tal cual.
+
+  1. Ver los URIs disponibles:
+
+         lpinfo -v
+
+     Devuelve cosas como usb://EPSON/TM-T20II?serial=XXXX o
+     socket://192.168.1.50:9100.
+
+  2. Crear la cola (una sola línea):
+
+         sudo lpadmin -p ticket -E -v "<uri de lpinfo -v>" \
+           -P /System/Library/Frameworks/ApplicationServices.framework/Versions/A/Frameworks/PrintCore.framework/Versions/A/Resources/Generic.ppd
+
+     Si ese PPD no existiera en tu versión de macOS:
+
+         lpinfo -m | grep -i generic
+
+     y usa el que aparezca con  -m <modelo>  en vez de  -P <ruta>.
+
+  3. Comprobar y probar a mano:
+
+         lpstat -p ticket                    # debe decir "idle"
+         printf 'PRUEBA\n\n\n\n' | lp -d ticket -o raw
+
+     Si sale papel con "PRUEBA", la cola está bien. Si sale basura o
+     una hoja con códigos, falta el  -o raw.
 
   El nombre de la cola (aquí "ticket") es el que se selecciona después
   en el POS, en Configuración → Impresora.
+
+  El wizard de instalación del POS hace todo esto solo: en macOS usa
+  el PPD genérico automáticamente, no  -m raw.
 
 
 ────────────────────────────────────────────────────────────────────

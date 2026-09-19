@@ -5,18 +5,18 @@ cls
 
 echo.
 echo ============================================================
-echo   ATLAS TECH x RMAZH
+echo   ATLAS ONE
 echo   Agente Local de Impresion
 echo ============================================================
 echo.
-echo   RMAZH POS - AGENTE LOCAL DE IMPRESION
+echo   ATLAS ONE - AGENTE LOCAL DE IMPRESION
 echo   Conectando tu computadora con tu impresora
 echo.
 echo ------------------------------------------------------------
 echo   Este agente permite que tu computadora se comunique con
 echo   tu impresora de tickets.
 echo.
-echo   Atlas POS / RMAZH POS podra enviar tickets desde el
+echo   Atlas One POS podra enviar tickets desde el
 echo   navegador hacia la impresora termica conectada a esta PC.
 echo ------------------------------------------------------------
 echo.

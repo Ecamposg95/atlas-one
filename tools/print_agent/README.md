@@ -5,7 +5,7 @@ Puente local entre el navegador y la impresora térmica. Corre en la PC de la ca
 ```
 Navegador (SPA)  ──POST /print {printer_name, content_base64}──▶  Agente :9100  ──bytes crudos──▶  Impresora
        ▲                                                                                  Windows: win32print RAW
-       └── los bytes los genera el backend (/api/printer/*) o, sin red, el propio navegador   Linux/mac: lp -d <cola> (raw)
+       └── los bytes los genera el backend (/api/printer/*) o, sin red, el propio navegador   Linux: lp -d <cola>  ·  macOS: lp -d <cola> -o raw
 ```
 
 El agente **no** genera tickets ni habla con el backend: recibe bytes y los entrega. El sello `ticket_printed_at` lo pone el backend solo cuando el navegador confirma que el agente respondió 2xx.
@@ -24,7 +24,9 @@ Descarga el ZIP desde `/printer-settings` en la app (`GET /api/printer/download-
 | macOS (manual — el modo de hoy) | `bash impresora_mac.sh` | Equivalente a Linux sobre el CUPS que ya trae macOS. **La ventana debe quedar abierta** |
 | macOS (servicio — el destino) | `bash core/instalar-servicio-mac.sh` | LaunchAgent `com.atlasone.print-agent` (`RunAtLoad` + `KeepAlive`): arranca al iniciar sesión y launchd lo revive. **Sin sudo** — es un servicio del usuario. Instala en `~/Library/Application Support/AtlasPrintAgent`, conserva el certificado ya aceptado y verifica `/health` antes de declarar éxito. Ver `core/INSTALL_MAC.txt` y el runbook `docs/superpowers/runbooks/print-agent-autostart.md` |
 
-Requisitos: Python 3.10+. En Linux/mac, CUPS activo y la impresora dada de alta como cola **raw**.
+Requisitos: Python 3.10+ (en macOS basta el 3.9.6 que traen las herramientas de Xcode; el agente no usa sintaxis de 3.10+). En Linux, CUPS activo y la impresora dada de alta como cola **raw**.
+
+**macOS 14+ ya no admite colas raw** (`lpadmin … -m raw` responde *"Raw queues are no longer supported on macOS"*). Ahí la cola se crea con un **PPD genérico** y el agente fuerza el modo raw en cada impresión mandando `lp -o raw`, que salta los filtros de ese PPD. Por eso, en macOS, el diagnóstico marca **todas** las colas como `raw`: el raw no es propiedad de la cola sino del envío (`raw_mode` lo explica). Ver `core/INSTALL_MAC.txt`.
 
 Verificación:
 ```bash
@@ -69,7 +71,7 @@ Certificado: `core/generate_cert.py` genera uno autofirmado si falta y lo renuev
 | POST | `/printers/{name}/clear-queue` | Cancela trabajos pendientes |
 | POST | `/drawer/open` | Pulso ESC/POS de apertura de cajón |
 | GET | `/printers/detect` | Dispositivos USB/serie detectados (Linux/mac) |
-| POST | `/printers/install` | Da de alta una cola raw en CUPS (Linux/mac) |
+| POST | `/printers/install` | Da de alta la cola en CUPS: raw en Linux, PPD genérico en macOS |
 | POST | `/printers/{queue}/pause`, `/resume`, `/uninstall` | Administración de colas CUPS |
 
 Sin autenticación: el agente confía en que solo escucha en loopback y en el permiso de red local del navegador.
@@ -94,4 +96,4 @@ Sin autenticación: el agente confía en que solo escucha en loopback y en el pe
 python -m pytest tests/test_print_agent_origins.py tests/test_print_agent_bundle.py -q
 ```
 
-Cubren los orígenes CORS, el nombre de cola y el bundle (nombres de script citados en la UI, contenido del ZIP por plataforma, placeholders y `ATLAS_AGENT_ORIGINS` de la unidad, guardas de los launchers). La escritura real (`_print_windows`, `_print_unix`) y los instaladores de shell no tienen pruebas automatizadas — cada instalador se verifica corriéndolo en una caja.
+Cubren los orígenes CORS, el nombre de cola y el bundle (nombres de script citados en la UI, contenido del ZIP por plataforma, placeholders y `ATLAS_AGENT_ORIGINS` de la unidad, guardas de los launchers e instaladores, y la forma de los comandos `lp`/`lpadmin` en macOS). La escritura real (`_print_windows`, `_print_unix`) y los instaladores de shell no tienen pruebas automatizadas — cada instalador se verifica corriéndolo en una caja.

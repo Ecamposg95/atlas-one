@@ -32,6 +32,10 @@
 
 set -uo pipefail
 
+# Bajo `set -u`, $USER no está garantizado (una shell no interactiva puede no
+# traerlo). Se le da valor una sola vez para poder usarlo sin guardas.
+USER="${USER:-$(id -un)}"
+
 LABEL="com.atlasone.print-agent"
 DEFAULT_ORIGINS="https://app.atlasone.com.mx"
 AGENT_PORT="${ATLAS_AGENT_PORT:-9100}"
@@ -50,19 +54,25 @@ PRESERVED_CERTS=""
 DRY_RUN=0
 UNINSTALL=0
 
+# `warn` va a stderr a propósito: se le llama desde funciones cuyo resultado
+# podría capturarse con $(...) y el texto del aviso acabaría pegado al valor.
 log()   { echo "[INFO]  $*"; }
 ok()    { echo "[OK]    $*"; }
-warn()  { echo "[AVISO] $*"; }
+warn()  { echo "[AVISO] $*" >&2; }
 die()   { echo "[ERROR] $*" >&2; exit 1; }
 
 # ── Argumentos ────────────────────────────────────────────────────────────────
 while [ $# -gt 0 ]; do
     case "$1" in
-        --origins)    ORIGINS="${2:-}"; shift 2 ;;
-        --certs-from) CERTS_FROM="${2:-}"; shift 2 ;;
+        --origins)    [ $# -ge 2 ] || die "--origins requiere un valor, p. ej. --origins \"https://app.atlasone.com.mx\""
+                      ORIGINS="$2"; shift 2 ;;
+        --certs-from) [ $# -ge 2 ] || die "--certs-from requiere una ruta, p. ej. --certs-from ~/Downloads/print_agent/core/certs"
+                      CERTS_FROM="$2"; shift 2 ;;
         --dry-run)    DRY_RUN=1; shift ;;
         --uninstall)  UNINSTALL=1; shift ;;
-        -h|--help)    sed -n '2,30p' "$0"; exit 0 ;;
+        # El encabezado se imprime entero, sea cual sea su largo: se corta en la
+        # primera línea que ya no empieza con '#'. Un rango fijo se desincroniza.
+        -h|--help)    awk 'NR>1 { if ($0 ~ /^#/) print; else exit }' "$0"; exit 0 ;;
         *)            die "Opción desconocida: $1" ;;
     esac
 done
@@ -82,6 +92,14 @@ fi
 # ── 2. Desinstalar (antes de cualquier chequeo: revertir debe funcionar
 #       siempre, incluso en una Mac donde python3 o CUPS ya no estén) ─────────
 if [ "$UNINSTALL" -eq 1 ]; then
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log "--dry-run --uninstall: esto es lo que se haría, sin tocar nada:"
+        echo "    launchctl bootout $GUI_TARGET/$LABEL"
+        echo "    rm -f \"$PLIST\""
+        echo
+        log "Los archivos de $DEST y los logs de $LOGDIR NO se borrarían."
+        exit 0
+    fi
     log "Quitando el servicio $LABEL…"
     launchctl bootout "$GUI_TARGET/$LABEL" 2>/dev/null
     rm -f "$PLIST"
@@ -95,10 +113,15 @@ if [ "$UNINSTALL" -eq 1 ]; then
 fi
 
 # ── 3. Python ────────────────────────────────────────────────────────────────
+# El mínimo real es 3.9: las Command Line Tools de Xcode traen 3.9.6 y el
+# agente no usa sintaxis de 3.10+. Exigir 3.10 abortaba en una Mac de fábrica
+# y el mensaje mandaba de vuelta a xcode-select, que vuelve a dar 3.9.6: un
+# callejón sin salida. Por eso el remedio nunca es xcode-select.
+PY_MIN_MSG="Instala Python desde https://python.org/downloads/macos/ o con Homebrew:  brew install python@3.12"
 command -v python3 >/dev/null 2>&1 \
-    || die "python3 no está instalado. Instala las herramientas de Apple con:  xcode-select --install"
-python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' \
-    || die "Se necesita Python 3.10 o superior (esta Mac tiene $(python3 -V 2>&1)). Instala las herramientas de Apple con:  xcode-select --install"
+    || die "python3 no está instalado. $PY_MIN_MSG"
+python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' \
+    || die "Se necesita Python 3.9 o superior (esta Mac tiene $(python3 -V 2>&1)). $PY_MIN_MSG"
 
 # ── 4. CUPS ──────────────────────────────────────────────────────────────────
 # macOS trae CUPS de fábrica; que el planificador esté caído es raro pero
@@ -159,13 +182,15 @@ else
 fi
 
 # ── 6. Ensayo en seco ────────────────────────────────────────────────────────
+# La plantilla se valida ANTES de salir del dry-run: si falta, el ensayo tiene
+# que decirlo, no fingir que todo está bien y reventar en la instalación real.
+[ -f "$PLIST_TEMPLATE" ] || die "Bundle incompleto: no se encuentra $PLIST_TEMPLATE"
+
 if [ "$DRY_RUN" -eq 1 ]; then
     echo
     log "--dry-run: no se modificó nada. Vuelve a correr sin --dry-run para instalar."
     exit 0
 fi
-
-[ -f "$PLIST_TEMPLATE" ] || die "Bundle incompleto: no se encuentra $PLIST_TEMPLATE"
 
 # ── 7. Copiar el agente a una ruta estable ───────────────────────────────────
 # El servicio NO puede apuntar a ~/Downloads: esa carpeta se vacía y el
@@ -219,12 +244,18 @@ ok "Dependencias instaladas."
 # ── 9. Certificado ───────────────────────────────────────────────────────────
 # generate_cert.py resuelve la carpeta como os.path.dirname(__file__)/certs,
 # así que vivir en $DEST basta para que el certificado caiga en $DEST/certs.
-if [ ! -f "$DEST/certs/cert.pem" ]; then
+# Se exigen los DOS archivos: con cert.pem pero sin key.pem, uvicorn no arranca
+# en TLS y el agente caía a HTTP sin que nadie entendiera por qué.
+if [ ! -f "$DEST/certs/cert.pem" ] || [ ! -f "$DEST/certs/key.pem" ]; then
     log "Generando certificado local…"
     ( cd "$DEST" && "$VENV_PY" "$DEST/generate_cert.py" ) \
         || warn "Falló la generación del certificado; el agente arrancará en HTTP."
 fi
-[ -f "$DEST/certs/cert.pem" ] && ok "Certificado listo."
+if [ -f "$DEST/certs/cert.pem" ] && [ -f "$DEST/certs/key.pem" ]; then
+    ok "Certificado listo."
+else
+    warn "Sin certificado completo: el agente arrancará en HTTP."
+fi
 
 # ── 10. Escribir el LaunchAgent ──────────────────────────────────────────────
 log "Escribiendo $PLIST…"
@@ -261,38 +292,102 @@ fi
 
 # ── 11. Cargar en launchd ────────────────────────────────────────────────────
 # Si quedó una ventana de Terminal con el modo manual, ocupa el 9100 y el
-# servicio no arrancaría; se cierra antes de cargar el nuevo.
-detener_agente_manual() {
+# servicio no arranca; se cierra antes de cargar el nuevo.
+#
+# OJO: impresora_mac.sh NO es el agente, es un `while true` que lo relanza a los
+# 5 segundos. Matando solo el python, el envoltorio lo resucita y se pone a
+# competir con el servicio por el 9100: /health puede acabar respondiendo desde
+# el agente manual mientras launchd reinicia el suyo en bucle. Por eso se mata
+# PRIMERO el envoltorio y luego el agente.
+# El '$' final no es decorativo: sin él, cualquier shell cuya línea de
+# comando MENCIONE el launcher (un `zsh -c '…'`, un editor, un script de
+# arranque) entraría en la redada. Anclado al final solo casa la invocación
+# real, donde el script es el último argumento.
+PAT_ENVOLTORIO='(bash|sh|zsh) .*impresora_mac\.sh$'
+PAT_AGENTE='python3? .*(AtlasPrintAgent|print_agent/core)/main\.py$'
+
+_matar() {
     local pids
-    pids="$(pgrep -f 'AtlasPrintAgent/main\.py|print_agent/core/main\.py' 2>/dev/null | tr '\n' ' ')"
-    [ -z "${pids// /}" ] && return 0
-    log "Deteniendo agente manual en curso (PID: ${pids})…"
+    pids="$(pgrep -f "$1" 2>/dev/null | tr '\n' ' ')"
+    [ -z "${pids// /}" ] && return 1
+    log "Deteniendo $2 (PID: ${pids})…"
     # shellcheck disable=SC2086
     kill $pids 2>/dev/null
     sleep 2
     # shellcheck disable=SC2086
     kill -9 $pids 2>/dev/null
-    ok "Agente manual detenido."
+    return 0
+}
+
+detener_agente_manual() {
+    local algo=1
+    _matar "$PAT_ENVOLTORIO" "la ventana del modo manual (impresora_mac.sh)" && algo=0
+    _matar "$PAT_AGENTE"     "el agente manual en curso"                     && algo=0
+    [ "$algo" -eq 0 ] && ok "Modo manual detenido."
+    return 0
 }
 
 launchctl bootout "$GUI_TARGET/$LABEL" 2>/dev/null
 detener_agente_manual
 sleep 1
 
-launchctl bootstrap "$GUI_TARGET" "$PLIST" \
-    || die "launchctl bootstrap falló. Revisa $PLIST y vuelve a intentar."
+# ── FIX 4: bootstrap falla por SSH ("Bootstrap failed: 5: Input/output error").
+# launchd no deja cargar un LaunchAgent en el dominio gui desde una sesión sin
+# GUI. El plist ya está escrito, así que cargará solo en el siguiente inicio de
+# sesión gráfico; el mensaje tiene que decir eso en vez de mandar a "reintentar".
+BOOTSTRAP_SALIDA="$(launchctl bootstrap "$GUI_TARGET" "$PLIST" 2>&1)"
+if [ $? -ne 0 ]; then
+    echo
+    echo "════════════════════════════════════════════════════════════"
+    echo "  ✗ launchctl bootstrap falló"
+    echo "════════════════════════════════════════════════════════════"
+    echo "  ${BOOTSTRAP_SALIDA:-(sin mensaje)}"
+    echo
+    case "$BOOTSTRAP_SALIDA" in
+        *"Bootstrap failed: 5"*|*"Input/output error"*)
+            echo "  Casi siempre es esto: estás por SSH. Un LaunchAgent solo se"
+            echo "  carga desde la sesión GRÁFICA de la Mac."
+            echo
+            echo "  1. Entra a la Mac en persona (Terminal) o por Compartir pantalla."
+            echo "  2. Corre:  launchctl bootout $GUI_TARGET/$LABEL"
+            echo "  3. Vuelve a correr este instalador."
+            ;;
+        *)
+            echo "  Corre este instalador desde la sesión GRÁFICA de la Mac"
+            echo "  (Terminal en la Mac o Compartir pantalla), NO por SSH."
+            echo "  Si insiste:  launchctl bootout $GUI_TARGET/$LABEL  y reintenta."
+            ;;
+    esac
+    echo
+    echo "  El plist YA quedó escrito en:"
+    echo "    $PLIST"
+    echo "  Así que el agente arrancará solo en el próximo inicio de sesión"
+    echo "  gráfico de esta Mac, aunque este comando haya fallado."
+    echo
+    die "launchctl bootstrap falló; ver arriba."
+fi
 launchctl kickstart -k "$GUI_TARGET/$LABEL" \
     || warn "launchctl kickstart falló; launchd debería arrancarlo igual por RunAtLoad."
 
 # ── 12. Verificación real — no declarar victoria sin respuesta ───────────────
 log "Verificando que el agente responda (hasta 60 s)…"
+# Cualquier cosa que conteste en el 9100 no sirve: tiene que ser NUESTRO
+# /health. Un cuerpo vacío, un 404 de otro servicio o una página de error
+# darían un falso "instalado y respondiendo".
+_es_health() {
+    case "$1" in
+        *'"status"'*|*'"ok"'*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
 HEALTH=""
 LIMITE=$(( $(date +%s) + 60 ))
 while [ "$(date +%s)" -lt "$LIMITE" ]; do
     HEALTH="$(curl -sk --max-time 2 "https://127.0.0.1:$AGENT_PORT/health" 2>/dev/null)"
-    [ -n "$HEALTH" ] && break
+    _es_health "$HEALTH" && break
     HEALTH="$(curl -s --max-time 2 "http://127.0.0.1:$AGENT_PORT/health" 2>/dev/null)"
-    [ -n "$HEALTH" ] && break
+    _es_health "$HEALTH" && break
+    HEALTH=""
     sleep 2
 done
 

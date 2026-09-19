@@ -322,7 +322,15 @@ def _cups_queues_info() -> list[dict]:
         pass
 
     # lpoptions -p NAME -l → detect "raw" via printer-make-and-model
+    #
+    # En macOS no existen las colas raw (macOS 14+ las rechaza) y el agente
+    # fuerza el raw con `lp -o raw` en cada impresión. Marcar las colas como
+    # "driver" asustaría al usuario con un problema que no tiene: ahí toda cola
+    # es raw de facto.
     for name, q in queues.items():
+        if _IS_MAC:
+            q["is_raw"] = True
+            continue
         try:
             r = _cups_query(["lpstat", "-l", "-p", name])
             blob = (r.stdout or "") + (r.stderr or "")
@@ -443,6 +451,10 @@ def diagnostics():
         diag["queues_count"] = len(queues)
         diag["queues"] = queues
         diag["raw_queues_count"] = sum(1 for q in queues if q.get("is_raw"))
+        diag["raw_mode"] = (
+            "lp -o raw (macOS sin colas raw)" if _IS_MAC
+            else "cola creada con lpadmin -m raw"
+        )
 
     # Checklist — surface issues the UI can render
     issues: list[str] = []
@@ -459,7 +471,14 @@ def diagnostics():
         if not diag.get("cups_daemon_running"):
             issues.append("CUPS no está corriendo. sudo systemctl start cups")
         if diag.get("queues_count", 0) == 0:
-            warnings.append("Sin colas CUPS instaladas. Usa el wizard del POS o `sudo lpadmin -p NAME -E -v URI -m raw`.")
+            if _IS_MAC:
+                warnings.append(
+                    "Sin colas CUPS instaladas. Usa el wizard del POS o "
+                    "`sudo lpadmin -p ticket -E -v URI -P " + _MAC_GENERIC_PPD + "` "
+                    "(macOS ya no admite `-m raw`; el agente fuerza raw con `lp -o raw`)."
+                )
+            else:
+                warnings.append("Sin colas CUPS instaladas. Usa el wizard del POS o `sudo lpadmin -p NAME -E -v URI -m raw`.")
         elif diag.get("raw_queues_count", 0) == 0:
             warnings.append("Ninguna cola está en modo raw. Para térmicas POS re-crea la cola con `-m raw`.")
 
@@ -746,13 +765,36 @@ def detect_printers():
     return {"candidates": candidates, "count": len(candidates)}
 
 
+# PPD genérico de macOS. Desde macOS 14 `lpadmin -m raw` responde "Raw queues
+# are no longer supported on macOS", así que la cola se crea con este PPD y el
+# raw lo fuerza `lp -o raw` en cada impresión.
+_MAC_GENERIC_PPD = (
+    "/System/Library/Frameworks/ApplicationServices.framework/Versions/A"
+    "/Frameworks/PrintCore.framework/Versions/A/Resources/Generic.ppd"
+)
+
+
+def _mac_generic_ppd_args() -> Optional[list[str]]:
+    """Argumentos de modelo para `lpadmin` en macOS, o None si no hay ninguno."""
+    if Path(_MAC_GENERIC_PPD).exists():
+        return ["-P", _MAC_GENERIC_PPD]
+    # Respaldo: el driver de ejemplo que CUPS trae compilado.
+    return ["-m", "drv:///sample.drv/generic.ppd"]
+
+
 @app.post("/printers/install")
 def install_printer(req: InstallPrinterRequest):
     """
-    Crea una cola CUPS en modo raw + enable + accept.
+    Crea una cola CUPS + enable + accept.
+
+    Linux: cola en modo raw (`-m raw`), que es lo que quiere una térmica.
+
+    macOS 14+: CUPS ya NO admite colas raw ("Raw queues are no longer supported
+    on macOS"), así que la cola se crea con un PPD genérico y el modo raw se
+    fuerza en cada impresión con `lp -o raw` (ver `_print_unix`).
 
     Requiere que el usuario que ejecuta el agente tenga `lpadmin` en sus
-    grupos (el launcher `run_agent_linux.sh` lo agrega automáticamente).
+    grupos (el launcher `impresora_linux.sh` lo agrega automáticamente).
     Si no, los comandos `lpadmin` fallarán con permiso denegado.
     """
     if _IS_WINDOWS:
@@ -793,10 +835,24 @@ def install_printer(req: InstallPrinterRequest):
             steps.append({"label": label, "cmd": " ".join(cmd), "ok": False, "error": str(e)})
             return False
 
-    # 1. lpadmin -p NAME -E -v URI -m raw
+    # 1. lpadmin -p NAME -E -v URI  (+ modelo según el sistema)
+    if _IS_MAC:
+        modelo = _mac_generic_ppd_args()
+        if modelo is None:
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "macOS ya no admite colas raw. Crea la cola con un PPD genérico: "
+                    "lpinfo -m | grep -i generic  — y después "
+                    f"sudo lpadmin -p {qname} -E -v {req.uri} -P <ruta del PPD genérico>"
+                ),
+            )
+    else:
+        modelo = ["-m", "raw"]
+
     ok1 = _run_step(
         "lpadmin",
-        ["lpadmin", "-p", qname, "-E", "-v", req.uri, "-m", "raw"],
+        ["lpadmin", "-p", qname, "-E", "-v", req.uri, *modelo],
     )
     if not ok1:
         err = steps[-1].get("stderr") or steps[-1].get("error") or "unknown"
@@ -1190,14 +1246,22 @@ def _print_unix(printer_name: str, raw_data: bytes) -> dict:
     """
     Envía bytes directamente a la cola CUPS.
 
-    Nota: no se pasa `-o raw` al `lp` porque la cola debe estar creada en
-    modo raw (el flag forzaría raw contra drivers no-raw). Si la cola tiene
-    driver (no-raw), CUPS intentará procesarla como texto y puede salir
-    texto corrupto — es síntoma de configuración incorrecta, no del agente.
+    Linux: no se pasa `-o raw`. La cola debe estar creada en modo raw
+    (`lpadmin -m raw`); el flag forzaría raw contra drivers no-raw. Si la cola
+    tiene driver, CUPS intentará procesarla como texto y puede salir texto
+    corrupto — es síntoma de configuración incorrecta, no del agente.
+
+    macOS: sí se pasa `-o raw`, y es obligatorio. Desde macOS 14 CUPS rechaza
+    crear colas raw ("Raw queues are no longer supported on macOS"), así que la
+    cola de la térmica se crea con un PPD genérico. `-o raw` le dice a CUPS que
+    salte los filtros de ese PPD y entregue los bytes ESC/POS tal cual. Sin el
+    flag, el PPD genérico reinterpreta el ticket y sale basura.
     """
     with PRINTER_LOCK:
         try:
-            cmd = ["lp", "-d", printer_name, "-"]
+            # macOS: el PPD genérico filtraría los bytes ESC/POS; -o raw lo evita.
+            cmd = (["lp", "-d", printer_name, "-o", "raw", "-"] if _IS_MAC
+                   else ["lp", "-d", printer_name, "-"])
             proc = subprocess.run(
                 cmd, input=raw_data, capture_output=True, timeout=10,
             )

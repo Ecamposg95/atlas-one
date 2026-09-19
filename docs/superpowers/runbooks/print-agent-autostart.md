@@ -32,6 +32,20 @@ puedes cerrar esta ventana"*. No es un error y no rompe nada.
       visita, hazlo **antes** de instalar el servicio.
 - [ ] Llevar el ZIP del agente actualizado, o ubicar la carpeta que esa caja
       ya venía usando (mejor: el certificado ya aceptado está ahí).
+- [ ] **Cerrar la ventana de Terminal del modo manual antes de instalar.** Esa
+      ventana no es el agente: es un `while true` que lo relanza cada 5 s. Si
+      sigue viva, le pelea el 9100 al servicio y `/health` puede acabar
+      respondiendo desde el agente manual mientras el servicio se reinicia en
+      bucle. El instalador intenta cerrarla (mata el envoltorio y después el
+      agente), pero es más limpio hacerlo a mano.
+- [ ] **macOS: hay que estar frente a la Mac.** El instalador tiene que correr
+      desde la sesión gráfica (Terminal en la Mac o Compartir pantalla). Por SSH
+      launchd rechaza el LaunchAgent con `Bootstrap failed: 5: Input/output
+      error`.
+- [ ] **macOS: Python.** Basta el 3.9.6 que traen las herramientas de Xcode. Si
+      el instalador se queja de la versión, se instala desde
+      <https://python.org/downloads/macos/> o con `brew install python@3.12` —
+      **nunca** `xcode-select --install`, que vuelve a dar 3.9.6.
 
 ## Procedimiento por caja — Linux (systemd)
 
@@ -145,15 +159,50 @@ Al volver a iniciar sesión, **antes de abrir nada**:
 ```bash
 launchctl print gui/$(id -u)/com.atlasone.print-agent   # state = running
 curl -k https://127.0.0.1:9100/health
+ls ~/Library/LaunchAgents | grep -i atlas               # solo com.atlasone.print-agent.plist
 ```
 
-**5. Dar de alta la impresora como cola raw**, si esa Mac aún no la tiene:
+`launchctl print` devuelve 0 también con el servicio **cargado pero caído**; lo
+que hay que leer es `state = running`. El propio `impresora_mac.sh` aplica ese
+mismo criterio: si el servicio está instalado pero no responde, avisa y arranca
+el modo manual para que la caja pueda imprimir hoy.
+
+Si `ls` muestra algún otro plist de Atlas, es de una instalación vieja y sobra:
+`launchctl bootout gui/$(id -u)/<label>` y borrarlo.
+
+**macOS 15 (Sequoia) o posterior** muestra una notificación de *Elementos de
+inicio* la primera vez que se carga el LaunchAgent. Es lo esperado. **No lo
+desactives** en Ajustes → General → Elementos de inicio: si se desactiva, el
+agente deja de arrancar solo y la caja vuelve al modo manual sin avisar a nadie.
+
+**Si `launchctl bootstrap` falla** (`Bootstrap failed: 5: Input/output error`)
+es que estás por SSH. Entra a la Mac en persona o por Compartir pantalla, corre
+`launchctl bootout gui/$(id -u)/com.atlasone.print-agent` y reintenta. El plist
+ya quedó escrito, así que el agente arrancará solo en el próximo inicio de
+sesión gráfico aunque el comando haya fallado.
+
+**5. Dar de alta la impresora**, si esa Mac aún no la tiene. **No es como en
+Linux:** desde macOS 14 CUPS rechaza las colas raw (`Raw queues are no longer
+supported on macOS`). La cola se crea con un **PPD genérico** y el modo raw lo
+fuerza el agente en cada impresión con `lp -o raw`, que salta los filtros de
+ese PPD.
 
 ```bash
 lpinfo -v                                 # ver los URIs disponibles
-lpadmin -p ticket -E -v <uri> -m raw
+sudo lpadmin -p ticket -E -v "<uri de lpinfo -v>" \
+  -P /System/Library/Frameworks/ApplicationServices.framework/Versions/A/Frameworks/PrintCore.framework/Versions/A/Resources/Generic.ppd
 lpstat -p ticket                          # debe decir "idle"
+
+# Prueba a mano, sin pasar por el POS:
+printf 'PRUEBA\n\n\n\n' | lp -d ticket -o raw
 ```
+
+Si ese PPD no existe en esa versión de macOS: `lpinfo -m | grep -i generic` y
+usar `-m <modelo>` en vez de `-P <ruta>`. El wizard del POS hace lo mismo solo.
+
+En el panel de diagnóstico del agente, en macOS **todas** las colas salen
+marcadas como `raw`: es correcto, ahí el raw no es propiedad de la cola sino
+del envío (`raw_mode: "lp -o raw (macOS sin colas raw)"`).
 
 **6. Prueba de punta a punta desde el POS.** Entra al POS como la cajera, ve al
 módulo de impresora, confirma que aparece la impresora y **manda una impresión
@@ -186,6 +235,7 @@ sudo systemctl disable --now atlas-print-agent
 macOS (sin sudo):
 
 ```bash
+bash core/instalar-servicio-mac.sh --dry-run --uninstall   # solo enseña qué haría
 bash core/instalar-servicio-mac.sh --uninstall
 # equivale a: launchctl bootout gui/$(id -u)/com.atlasone.print-agent
 #             rm -f ~/Library/LaunchAgents/com.atlasone.print-agent.plist
