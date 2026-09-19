@@ -187,6 +187,14 @@ supported on macOS`). La cola se crea con un **PPD genérico** y el modo raw lo
 fuerza el agente en cada impresión con `lp -o raw`, que salta los filtros de
 ese PPD.
 
+**Ruta recomendada (verificada en macOS 14, MacBook Air M1, impresora SPRT
+SP-EP):** Ajustes del Sistema → Impresoras y escáneres → Agregar impresora →
+seleccionar la USB → en "Uso" elegir "Seleccionar software…" → **Epson 9-Pin
+Series** → Agregar. El driver no interviene; el nombre de la cola queda como lo
+muestre `lpstat -v` (p. ej. `SPRT_SP_EP`) y ese es el que se elige en el POS.
+
+Ruta por terminal (alternativa):
+
 ```bash
 lpinfo -v                                 # ver los URIs disponibles
 sudo lpadmin -p ticket -E -v "<uri de lpinfo -v>" \

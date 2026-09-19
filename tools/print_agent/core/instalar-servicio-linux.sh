@@ -337,6 +337,14 @@ if [ -z "$HEALTH" ]; then
     else
         echo "  Revisa:  journalctl --user -u $SERVICE_NAME -n 50 --no-pager"
     fi
+    echo
+    echo "  Para volver atrás (modo manual como antes):"
+    if [ "$MODE" = "system" ]; then
+        echo "           sudo systemctl disable --now $SERVICE_NAME"
+    else
+        echo "           systemctl --user disable --now $SERVICE_NAME"
+    fi
+    echo "  Mientras tanto el modo manual sigue funcionando: bash impresora_linux.sh"
     exit 1
 fi
 

@@ -398,6 +398,10 @@ if [ -z "$HEALTH" ]; then
     echo "════════════════════════════════════════════════════════════"
     echo "  Revisa:  tail -n 50 \"$LOGDIR/agent.err.log\""
     echo "           launchctl print $GUI_TARGET/$LABEL"
+    echo
+    echo "  Para volver atrás (deja la Mac como estaba, en modo manual):"
+    echo "           bash core/instalar-servicio-mac.sh --uninstall"
+    echo "  Mientras tanto el modo manual sigue funcionando: bash impresora_mac.sh"
     die "El agente no respondió; revisa $LOGDIR/agent.err.log"
 fi
 

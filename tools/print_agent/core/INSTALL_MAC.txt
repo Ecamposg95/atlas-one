@@ -165,6 +165,15 @@ El runbook de la conversión Mac por Mac vive en:
   en cada impresión: el agente manda siempre `lp -o raw`, que salta
   los filtros de ese PPD y entrega los bytes ESC/POS tal cual.
 
+  RUTA RECOMENDADA (verificada en macOS 14, MacBook Air M1):
+  Ajustes del Sistema → Impresoras y escáneres → Agregar impresora →
+  selecciona la impresora USB → en "Uso" elige "Seleccionar software…"
+  → "Epson 9-Pin Series" → Agregar. El driver no interviene: el agente
+  imprime con -o raw. El nombre de la cola queda como lo muestre
+  `lpstat -v` (p. ej. SPRT_SP_EP); ese es el que se elige en el POS.
+
+  RUTA POR TERMINAL (alternativa):
+
   1. Ver los URIs disponibles:
 
          lpinfo -v

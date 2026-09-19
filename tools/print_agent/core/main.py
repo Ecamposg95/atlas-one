@@ -856,6 +856,16 @@ def install_printer(req: InstallPrinterRequest):
     )
     if not ok1:
         err = steps[-1].get("stderr") or steps[-1].get("error") or "unknown"
+        if _IS_MAC:
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "No se pudo crear la cola en macOS (" + err[:160] + "). "
+                    "Agrégala desde Ajustes del Sistema → Impresoras y escáneres → "
+                    "Agregar impresora, con el driver 'Epson 9-Pin Series'; el agente "
+                    "imprime con -o raw y el driver no interviene."
+                ),
+            )
         if "denied" in err.lower() or "permission" in err.lower():
             raise HTTPException(
                 status_code=500,
