@@ -53,6 +53,12 @@ interface OrgDetails {
 type AgentMode = 'local' | 'server'
 type Tab = 'windows' | 'linux' | 'mac' | 'bluetooth'
 
+/** Comandos de conversión al autoarranque. Los nombres de archivo que aparecen
+ *  en esta pantalla están cubiertos por `tests/test_print_agent_bundle.py`: en
+ *  el repo de origen un renombrado dejó la pantalla dictando archivos
+ *  inexistentes durante dos meses y el autoarranque quedó inalcanzable. */
+const AUTOSTART_CMD_LINUX = 'sudo bash core/instalar-servicio-linux.sh'
+
 type BtState = 'idle' | 'scanning' | 'connected' | 'error'
 interface BtDevice { name: string; device: BluetoothDevice; char: BluetoothRemoteGATTCharacteristic }
 
@@ -66,7 +72,10 @@ const SAMPLE_IVA = 12.97
 const SAMPLE_TOTAL = 94.0
 
 export function PrinterSettings() {
-  const { branch, org } = useAuthStore()
+  const { branch, org, user } = useAuthStore()
+  // El bloque de autoarranque se le oculta a la cajera: su rutina de cada
+  // mañana no cambia hasta que el dueño convierta la caja en persona.
+  const esAdmin = user?.role === 'ADMINISTRADOR' || user?.role === 'DUEÑO'
   const setPrinterName = usePOSStore(s => s.setPrinterName)
   const detectedOS = detectOS()
   const initialTab: Tab = detectedOS === 'linux' ? 'linux' : detectedOS === 'mac' ? 'mac' : 'windows'
@@ -563,10 +572,10 @@ export function PrinterSettings() {
                     {[
                       'Descomprime el ZIP y entra a la carpeta print_agent.',
                       'Instala CUPS si no lo tienes: sudo apt install cups',
-                      'Ejecuta el agente: bash run_agent_linux.sh',
+                      'Ejecuta el agente: bash impresora_linux.sh',
                       'Acepta el certificado haciendo clic en el botón de abajo.',
                       'Deja la terminal abierta y haz clic en «Buscar impresoras».',
-                      'Para que arranque solo al prender la PC: sudo ./install_systemd.sh (ver INSTALL_LINUX.txt).',
+                      'Para que arranque solo al prender la PC: sudo bash core/instalar-servicio-linux.sh (ver INSTALL_LINUX.txt).',
                     ].map((step, i) => (
                       <div key={i} className="flex items-start gap-2.5">
                         <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black"
@@ -614,6 +623,19 @@ export function PrinterSettings() {
                 </DaxCard>
               )}
 
+              {esAdmin && (
+                <AutostartCard
+                  cmd={AUTOSTART_CMD_LINUX}
+                  bullets={[
+                    'Conserva el certificado que este navegador ya aceptó — no hay que volver a aceptarlo.',
+                    'Sin sudo también funciona: instala un servicio de usuario con arranque al prender.',
+                    'Deja el agente en /opt/atlas-print-agent, no en Descargas.',
+                    'Después de esto, abrir el .sh a mano muestra «ya está activo» en vez de un error.',
+                  ]}
+                  onToast={showToast}
+                />
+              )}
+
               {/* Track 4: server-side CUPS mode eliminado. Solo agente local. */}
             </>
           )}
@@ -647,7 +669,7 @@ export function PrinterSettings() {
                   {[
                     'Descomprime el ZIP y entra a la carpeta print_agent.',
                     'Abre Terminal (Finder → Aplicaciones → Utilidades → Terminal).',
-                    'Arrastra run_agent_mac.sh a la terminal y presiona Enter.',
+                    'Arrastra impresora_mac.sh a la terminal y presiona Enter.',
                     'Acepta el certificado haciendo clic en el botón de abajo.',
                     'Deja la terminal abierta y haz clic en «Buscar impresoras».',
                   ].map((step, i) => (
@@ -1159,6 +1181,74 @@ function TkSep() {
 }
 
 // ─── PrinterList Component ───────────────────────────────────────────────────
+
+/**
+ * Bloque "Instalación automática" — solo ADMINISTRADOR/DUEÑO.
+ *
+ * La cajera NO ve este bloque a propósito: su flujo de cada mañana (abrir el
+ * launcher a mano) no debe cambiar hasta que el dueño visite la caja y haga la
+ * conversión él mismo. Ver docs/superpowers/runbooks/print-agent-autostart.md
+ *
+ * Es el mismo bloque para Linux y macOS: solo cambian el comando y las viñetas.
+ */
+function AutostartCard({
+  cmd,
+  bullets,
+  onToast,
+}: {
+  cmd: string
+  bullets: string[]
+  onToast: (msg: string, type?: 'success' | 'error') => void
+}) {
+  return (
+    <DaxCard>
+      <div className="flex items-start gap-3 mb-3">
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+             style={{ background: 'rgba(99,102,241,0.12)' }}>
+          <i className="fa-solid fa-bolt text-indigo-400 text-lg" />
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-bold" style={{ color: 'var(--dax-text)' }}>
+            Instalación automática <span className="text-[10px] font-bold px-1.5 py-0.5 rounded ml-1"
+              style={{ background: 'rgba(99,102,241,0.2)', color: '#a5b4fc' }}>solo admin</span>
+          </p>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--dax-text-muted)' }}>
+            El agente arranca solo. La cajera ya no abre nada.
+          </p>
+        </div>
+      </div>
+      <p className="text-xs leading-relaxed mb-3" style={{ color: 'var(--dax-text-muted)' }}>
+        En la carpeta donde ya está el agente de esta PC, abre una terminal y corre:
+      </p>
+      <div className="flex items-center gap-2 p-2.5 rounded-xl mb-3"
+           style={{ background: 'var(--dax-elevated)', border: '1px solid var(--dax-border-dim)' }}>
+        <code className="flex-1 text-[11px] font-mono break-all" style={{ color: '#a5b4fc' }}>
+          {cmd}
+        </code>
+        <button
+          onClick={() => {
+            navigator.clipboard?.writeText(cmd)
+              .then(() => onToast('Comando copiado', 'success'))
+              .catch(() => onToast('No se pudo copiar', 'error'))
+          }}
+          className="flex-shrink-0 text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-colors"
+          style={{ background: 'rgba(99,102,241,0.15)', color: '#a5b4fc' }}
+        >
+          <i className="fa-solid fa-copy" /> Copiar
+        </button>
+      </div>
+      <ul className="space-y-1.5">
+        {bullets.map((texto, i) => (
+          <li key={i} className="flex items-start gap-2 text-[11px] leading-relaxed"
+              style={{ color: 'var(--dax-text-faint)' }}>
+            <i className="fa-solid fa-check text-emerald-400 text-[9px] mt-1 flex-shrink-0" />
+            <span>{texto}</span>
+          </li>
+        ))}
+      </ul>
+    </DaxCard>
+  )
+}
 
 function PrinterList({
   printers,

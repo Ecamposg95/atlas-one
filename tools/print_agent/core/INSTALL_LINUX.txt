@@ -2,12 +2,19 @@
   ATLAS PRINT AGENT — INSTALACIÓN EN LINUX
 ════════════════════════════════════════════════════════════════════
 
-Este documento explica cómo instalar el agente de impresión como
-servicio systemd para que:
+Hay DOS modos. Hoy las cajas usan el manual; el de servicio es al que se
+migra caja por caja.
 
-  • Arranque automáticamente al prender la PC (sin login).
-  • Se reinicie solo si se cae (Restart=always, cada 5 segundos).
-  • Corra en segundo plano (sobrevive cerrar la terminal / logout).
+  MANUAL (el de hoy)
+    La cajera abre impresora_linux.sh y deja la ventana abierta toda
+    la jornada. Al apagar la PC hay que repetirlo cada mañana.
+
+  SERVICIO (el destino)
+    El agente arranca solo al prender la PC, antes de que nadie inicie
+    sesión, y systemd lo revive si se cae. La cajera no abre nada.
+
+El runbook de la conversión tienda por tienda vive en:
+  docs/superpowers/runbooks/print-agent-autostart.md
 
 
 ────────────────────────────────────────────────────────────────────
@@ -15,103 +22,101 @@ servicio systemd para que:
 ────────────────────────────────────────────────────────────────────
 
   • Linux con systemd (Ubuntu 20.04+, Debian 11+, Fedora, etc.)
-  • Python 3.10 o superior
+  • Python 3.10+ y el paquete python3-venv
   • CUPS instalado y corriendo:
-        sudo apt install cups
+        sudo apt install cups cups-client cups-bsd
         sudo systemctl enable --now cups
-  • Acceso sudo
+  • sudo (recomendado). Sin sudo el instalador cae a servicio de
+    usuario, que también arranca al prender la PC.
 
 
 ────────────────────────────────────────────────────────────────────
-  INSTALACIÓN (1 comando)
+  INSTALACIÓN
 ────────────────────────────────────────────────────────────────────
 
-  1. Descomprime el ZIP descargado y entra a la carpeta:
+  Córrelo desde la MISMA carpeta que la caja ya venía usando: así
+  encuentra y conserva el certificado que el navegador de esa PC ya
+  aceptó, y nadie tiene que volver a aceptarlo.
 
-         cd print_agent
+  1. Ver qué haría, sin tocar nada:
 
-  2. Ejecuta el instalador (vive dentro de core/):
+         bash core/instalar-servicio-linux.sh --dry-run
 
-         sudo ./core/instalar-servicio-linux.sh
+     Confirma la línea "Certificado existente encontrado". Si dice
+     "No se encontró certificado previo", habrá que re-aceptarlo en
+     el navegador al terminar.
 
-  Eso crea el venv, genera el certificado HTTPS local, instala el
-  servicio en /etc/systemd/system/atlas-print-agent.service y lo
-  habilita para el arranque. En ~15 segundos está corriendo.
+  2. Instalar:
 
-  Para instalar bajo un usuario específico (ej. "cajero"):
+         sudo bash core/instalar-servicio-linux.sh
 
-         sudo ./core/instalar-servicio-linux.sh cajero
+  El script copia el agente a /opt/atlas-print-agent, crea el entorno
+  Python, conserva el certificado, escribe la unidad systemd, la
+  habilita al arranque y NO declara éxito hasta que /health responde.
+
+  Opciones:
+
+    sudo bash core/instalar-servicio-linux.sh cajero
+        Instala bajo otro usuario del sistema.
+
+    sudo bash core/instalar-servicio-linux.sh --origins "https://mi.dominio"
+        Dominios desde los que se sirve el POS. Por omisión
+        https://app.atlasone.com.mx. SIN el dominio correcto aquí una
+        caja servida desde otro dominio VENDE PERO NO IMPRIME.
+
+    sudo bash core/instalar-servicio-linux.sh --certs-from /ruta/core/certs
+        Fuerza qué certificado conservar.
 
 
 ────────────────────────────────────────────────────────────────────
-  VERIFICAR QUE ESTÁ CORRIENDO
+  VERIFICAR
 ────────────────────────────────────────────────────────────────────
 
          systemctl status atlas-print-agent
+         curl -k https://127.0.0.1:9100/health
 
-  Debe mostrar:  "Active: active (running)"  y  "enabled"
+  Debe decir "Active: active (running)" y "enabled".
+
+  La prueba de verdad: REINICIA la PC, no inicies sesión, y desde el
+  navegador de otra máquina no se puede — inicia sesión y comprueba
+  que /health ya responde sin que nadie haya abierto nada.
 
 
 ────────────────────────────────────────────────────────────────────
   COMANDOS ÚTILES
 ────────────────────────────────────────────────────────────────────
 
-  Ver logs en vivo:
-         journalctl -u atlas-print-agent -f
+  Logs en vivo:     journalctl -u atlas-print-agent -f
+  Reiniciar:        sudo systemctl restart atlas-print-agent
+  Detener:          sudo systemctl stop atlas-print-agent
+  Desinstalar:      sudo systemctl disable --now atlas-print-agent
 
-  Reiniciar:
-         sudo systemctl restart atlas-print-agent
-
-  Detener temporalmente:
-         sudo systemctl stop atlas-print-agent
-
-  Desinstalar (desactivar boot + parar):
-         sudo systemctl disable --now atlas-print-agent
+  Servicio de usuario (instalación sin root): los mismos comandos con
+  `systemctl --user` y `journalctl --user`.
 
 
 ────────────────────────────────────────────────────────────────────
-  MODO MANUAL (solo para testing, NO usar en producción)
+  DESPUÉS DE CONVERTIR UNA CAJA
 ────────────────────────────────────────────────────────────────────
 
-  Si solo quieres probar el agente sin instalarlo como servicio:
+  La cajera va a seguir buscando impresora_linux.sh por costumbre.
+  Eso ya no falla: el script detecta que el servicio está activo y
+  muestra "El agente YA ESTA ACTIVO / puedes cerrar esta ventana".
+
+  Lo que el autoarranque NO resuelve, y sigue siendo por PC:
+    • Aceptar el certificado en el navegador (se conserva si el
+      instalador encontró el certificado viejo).
+    • El permiso "Acceso a la red local" de Chrome, que se pide por
+      sitio y por PC. Si además cambias el dominio del POS, hay que
+      concederlo de nuevo en esa terminal.
+
+
+────────────────────────────────────────────────────────────────────
+  MODO MANUAL (el de hoy, y para diagnóstico)
+────────────────────────────────────────────────────────────────────
 
          bash impresora_linux.sh
 
-  Esto lo corre en primer plano. Al cerrar la terminal se detiene.
-
-
-────────────────────────────────────────────────────────────────────
-  CREAR ACCESO DIRECTO (OPCIONAL)
-────────────────────────────────────────────────────────────────────
-
-  Para crear un acceso directo en el escritorio que inicie el agente:
-
-  1. Copia el archivo de acceso directo a tu carpeta de aplicaciones:
-
-         cp core/atlas-print-agent.desktop ~/.local/share/applications/
-
-     (o usa /usr/share/applications/ para disponibilidad global)
-
-  2. Hazlo ejecutable:
-
-         chmod +x ~/.local/share/applications/atlas-print-agent.desktop
-
-  3. Actualiza la base de datos de aplicaciones:
-
-         update-desktop-database ~/.local/share/applications/
-
-  Después verás "Atlas Print Agent" en el menú de aplicaciones de tu
-  escritorio, y podrás hacerle clic para iniciar el agente.
-
-
-────────────────────────────────────────────────────────────────────
-  SIGUIENTE PASO — ACEPTAR CERTIFICADO
-────────────────────────────────────────────────────────────────────
-
-  Abre en el navegador:
-
-         https://127.0.0.1:9100/health
-
-  El navegador dirá "no es seguro" — es normal, el certificado es
-  local. Haz clic en "Avanzado" → "Continuar de todos modos".
-  Después el POS podrá detectar las impresoras del agente.
+  Corre en primer plano; al cerrar la ventana se detiene. Instala CUPS
+  y el entorno si faltan. En una caja ya convertida, avisa y sale sin
+  hacer nada.

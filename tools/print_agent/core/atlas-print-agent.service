@@ -2,28 +2,34 @@
 Description=Atlas POS Local Print Agent
 Documentation=https://github.com/Ecamposg95/Atlas-API/blob/main/context/contexto_agente_impresion_linux.md
 After=network-online.target cups.service
-Wants=cups.service
+Wants=network-online.target cups.service
 
 [Service]
-# %i = nombre de usuario bajo el que corre el agente (p.ej. cajero, rmazh).
-# Se invoca como: sudo systemctl enable --now atlas-print-agent@<usuario>
+# Plantilla: instalar-servicio-linux.sh sustituye {WORKDIR}, {ORIGINS} y {PORT},
+# y ajusta User/Group. NO editar a mano el archivo instalado en
+# /etc/systemd/system — se sobrescribe en la siguiente instalación.
 User=%i
 Group=%i
 
-# El working dir es donde vive main.py; ajusta si lo pones en otra ruta.
-# El script install_systemd.sh genera este valor a partir de la ruta actual.
 WorkingDirectory={WORKDIR}
 ExecStart={WORKDIR}/venv/bin/python3 {WORKDIR}/main.py
 
-# Env que el agente lee (opcional):
 Environment=ATLAS_AGENT_HOST=127.0.0.1
-Environment=ATLAS_AGENT_PORT=9100
+Environment=ATLAS_AGENT_PORT={PORT}
+# Dominios desde los que se sirve el POS. Sin el dominio correcto aquí, una
+# caja servida desde un dominio ajeno VENDE PERO NO IMPRIME: el navegador
+# manda ese Origin y el agente lo rechaza en el preflight CORS. El regex de
+# fábrica del agente ya cubre localhost, *.up.railway.app y
+# (*.)atlasone.com.mx — o sea app.atlasone.com.mx entra sin esta variable.
+# Se graba de todos modos como refuerzo explícito, y es el ÚNICO camino para
+# un dominio propio distinto (p. ej. https://pos.micliente.com).
+Environment=ATLAS_AGENT_ORIGINS={ORIGINS}
 
 # Que systemd reinicie si el proceso muere.
 Restart=always
 RestartSec=5
 
-# Guarda logs bajo journal (además del agent.log del WorkingDirectory).
+# Logs al journal, además del agent.log del WorkingDirectory.
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=atlas-print-agent

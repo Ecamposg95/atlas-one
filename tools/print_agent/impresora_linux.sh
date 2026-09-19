@@ -50,6 +50,34 @@ cat << 'EOF'
 EOF
 echo
 
+# ── 0. ¿Ya está instalado como servicio? ─────────────────────────────────────
+# En las cajas ya convertidas al autoarranque, la cajera va a seguir buscando
+# este archivo y dándole doble clic por costumbre durante semanas. Sin esta
+# guarda vería un error de puerto ocupado y levantaría el teléfono. Con ella ve
+# que todo está bien y cierra la ventana.
+#
+# En las cajas NO convertidas la condición es falsa y el script sigue haciendo
+# exactamente lo de siempre.
+if systemctl is-active --quiet atlas-print-agent 2>/dev/null \
+   || systemctl --user is-active --quiet atlas-print-agent 2>/dev/null; then
+    cat << 'EOF'
+
+ ╭────────────────────────────────────────────────────────╮
+ │  El agente YA ESTA ACTIVO                              │
+ ╰────────────────────────────────────────────────────────╯
+
+ Esta computadora ya arranca el agente sola al prenderse.
+ No necesitas abrir nada: enciende la PC, abre el navegador
+ y vende normal.
+
+ Puedes cerrar esta ventana.
+
+EOF
+    read -r -t 60 -p " Presiona ENTER para cerrar… " _ || true
+    echo
+    exit 0
+fi
+
 # ── 1. Python ─────────────────────────────────────────────────────────────────
 echo "[INICIO]  Iniciando agente de impresion..."
 if ! command -v python3 >/dev/null 2>&1; then
