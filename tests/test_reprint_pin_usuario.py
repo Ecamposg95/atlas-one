@@ -146,11 +146,12 @@ class TestElPinAutoriza:
     def test_el_pin_de_un_cajero_no_autoriza(
         self, client, org, venta, auth_admin, auth_cajero_a, cajero_a
     ):
-        """El PIN se guarda para cualquier rol, pero solo se compara contra
-        roles gerenciales activos — igual que la contrasena."""
+        """Un PIN solo tiene sentido en roles gerenciales: al guardarlo en un
+        cajero el router lo descarta (no queda huerfano) y, aunque quedara,
+        la verificacion solo compara contra roles gerenciales activos."""
         alta = _poner_pin(client, auth_admin, org, cajero_a.id, "5678")
         assert alta.status_code == 200, alta.text
-        assert alta.json()["has_reprint_pin"] is True
+        assert alta.json()["has_reprint_pin"] is False
 
         resp = _reimprimir(client, auth_cajero_a, org, venta.id, pin="5678")
         assert resp.status_code == 403, resp.text
@@ -208,4 +209,27 @@ class TestValidacionDelPin:
             },
             headers={**auth_admin, "X-Organization-ID": str(org.id)},
         )
+        assert resp.status_code == 422, resp.text
+
+
+class TestQuienPuedeFijarlo:
+    def test_un_cajero_no_puede_tocar_usuarios(self, client, org, admin_user, auth_cajero_a):
+        """Sin este guard la cajera le fijaba el PIN al dueno y autorizaba sus
+        propias reimpresiones con la bitacora senalando al dueno."""
+        resp = _poner_pin(client, auth_cajero_a, org, admin_user.id, "1111")
+        assert resp.status_code == 403, resp.text
+
+    def test_degradar_al_gerente_borra_su_pin(self, client, org, gerente_a, auth_admin):
+        alta = _poner_pin(client, auth_admin, org, gerente_a.id, "2468")
+        assert alta.status_code == 200 and alta.json()["has_reprint_pin"] is True
+        baja = client.put(
+            f"/api/users/{gerente_a.id}",
+            json={"role": "CAJERO"},
+            headers={**auth_admin, "X-Organization-ID": str(org.id)},
+        )
+        assert baja.status_code == 200, baja.text
+        assert baja.json()["has_reprint_pin"] is False
+
+    def test_un_salto_de_linea_no_pasa_el_validador(self, client, org, admin_user, auth_admin):
+        resp = _poner_pin(client, auth_admin, org, admin_user.id, "1234\n")
         assert resp.status_code == 422, resp.text

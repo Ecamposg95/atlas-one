@@ -14,6 +14,7 @@ from app.models.organization import Organization, Branch
 from app.models.users import UserOrganization
 from app.schemas.users import UserCreate, UserRead, UserUpdate
 from app.core.security import get_current_user, get_password_hash
+from app.core.security.guards import require_admin_or_owner
 from app.core.tenant_context import get_current_active_organization
 
 router = APIRouter()
@@ -158,7 +159,7 @@ def read_user_by_id(
     return user
 
 # --- 4. CREAR USUARIO (CREATE) ---
-@router.post("/", response_model=UserRead)
+@router.post("/", response_model=UserRead, dependencies=[Depends(require_admin_or_owner)])
 def create_user(
     user: UserCreate,
     db: Session = Depends(get_db),
@@ -210,7 +211,7 @@ def create_user(
     return new_user
 
 # --- 5. ACTUALIZAR USUARIO (UPDATE) ---
-@router.put("/{user_id}", response_model=UserRead)
+@router.put("/{user_id}", response_model=UserRead, dependencies=[Depends(require_admin_or_owner)])
 def update_user(
     user_id: int,
     user_in: UserUpdate,
@@ -246,13 +247,19 @@ def update_user(
         if hasattr(user_db, field):
             setattr(user_db, field, value)
 
+    # Un PIN no se queda huérfano: si el usuario deja de ser gerencial, se
+    # borra. Si algún día vuelve a serlo, tendrá que fijar uno nuevo.
+    from app.services.reprint_auth import ROLES_GERENCIALES
+    if user_db.reprint_pin_hash and user_db.role not in ROLES_GERENCIALES:
+        user_db.reprint_pin_hash = None
+
     db.add(user_db)
     db.commit()
     db.refresh(user_db)
     return user_db
 
 # --- 6. ELIMINAR/DESACTIVAR (SOFT DELETE) ---
-@router.delete("/{user_id}", response_model=UserRead)
+@router.delete("/{user_id}", response_model=UserRead, dependencies=[Depends(require_admin_or_owner)])
 def delete_user(
     user_id: int,
     db: Session = Depends(get_db),

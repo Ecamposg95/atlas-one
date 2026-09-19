@@ -113,7 +113,9 @@ def _supervisores_activos(db: Session, org_id: int, branch_id: Optional[int] = N
     )
     if branch_id is not None:
         q = q.filter(User.branch_id == branch_id)
-    return q.all()
+    # Orden estable: con PIN de 4 dígitos una colisión entre supervisores es
+    # plausible y la bitácora debe señalar siempre al mismo.
+    return q.order_by(User.id).all()
 
 
 def _primer_match(pin: str, candidatos: list[User], campo: str = "password_hash") -> Optional[User]:

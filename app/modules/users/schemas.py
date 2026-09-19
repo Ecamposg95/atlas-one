@@ -7,14 +7,17 @@ from datetime import datetime
 
 # PIN de reimpresión: 4-8 dígitos numéricos. La cadena vacía también es válida
 # a nivel de schema — es la señal de "borrar el PIN" que usan UserCreate/
-# UserUpdate. El campo ausente (None) significa "no tocar".
-REPRINT_PIN_PATTERN = re.compile(r"^\d{4,8}$")
+# UserUpdate. Un campo AUSENTE significa "no tocar"; un null explícito borra
+# igual que "" (ver el router).
+REPRINT_PIN_PATTERN = re.compile(r"[0-9]{4,8}")
 
 
 def _validar_reprint_pin(value: Optional[str]) -> Optional[str]:
     if value is None or value == "":
         return value
-    if not REPRINT_PIN_PATTERN.match(value):
+    # fullmatch y [0-9]: `match` + `$` dejaba pasar "1234\n" y `\d` acepta
+    # dígitos Unicode; ambos guardan un hash que nunca va a coincidir en el POS.
+    if not REPRINT_PIN_PATTERN.fullmatch(value):
         raise ValueError('reprint_pin debe ser de 4 a 8 dígitos numéricos (o "" para borrarlo)')
     return value
 
