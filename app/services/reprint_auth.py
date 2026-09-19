@@ -5,11 +5,17 @@ reimpresion no pedia nada. Es un control anti-fraude clasico — sin el, un
 cajero reimprime un ticket y lo entrega como comprobante de una venta que no
 ocurrio.
 
-A diferencia del origen, aqui NO hay columna `reprint_pin_hash`: el "PIN" es la
-contrasena de un usuario con rol gerencial de la misma organizacion, validada
-con la misma funcion que el login (`app.core.security.verify_pin`). No se
-guarda nada nuevo en la base. Consecuencia directa: como lo que se teclea es
-una contrasena real, el limite anti fuerza-bruta de abajo no es un adorno.
+Lo que se teclea se prueba contra dos hashes de los usuarios con rol gerencial
+de la misma organizacion, ambos con la misma funcion que el login
+(`app.core.security.verify_pin`):
+
+  1. `users.reprint_pin_hash` — el PIN numerico propio que el dueno fija desde
+     el panel de Usuarios. Es lo que el mostrador usa a diario.
+  2. `users.password_hash` — el camino historico, cuando esta columna no
+     existia. Se conserva porque es la unica llave de quien no se puso PIN.
+
+Consecuencia directa del punto 2: como lo que se teclea puede ser una
+contrasena real, el limite anti fuerza-bruta de abajo no es un adorno.
 
 LIMITACION CONOCIDA del limite: el contador vive en un dict en memoria del
 proceso. Se pierde en cada redespliegue (un reinicio "perdona" los intentos
@@ -110,13 +116,19 @@ def _supervisores_activos(db: Session, org_id: int, branch_id: Optional[int] = N
     return q.all()
 
 
-def _primer_match(pin: str, candidatos: list[User]) -> Optional[User]:
-    """Primer supervisor de la lista cuyo PIN coincide, o None."""
+def _primer_match(pin: str, candidatos: list[User], campo: str = "password_hash") -> Optional[User]:
+    """Primer supervisor de la lista cuyo hash `campo` coincide, o None.
+
+    `campo` es `reprint_pin_hash` (el PIN propio, si lo configuro) o
+    `password_hash` (el camino historico). Quien no tenga ese hash se salta sin
+    gastar un bcrypt.
+    """
     for supervisor in candidatos:
-        if not supervisor.password_hash:
+        hash_guardado = getattr(supervisor, campo, None)
+        if not hash_guardado:
             continue
         try:
-            if verify_pin(pin, supervisor.password_hash):
+            if verify_pin(pin, hash_guardado):
                 return supervisor
         except Exception:
             # Hash con formato inesperado: ese usuario simplemente no hace
@@ -138,6 +150,13 @@ def verificar_pin_supervisor(
     ahorra es el bcrypt de los gerentes de las otras 28 sucursales en el caso
     normal, que es el gerente de la sucursal autorizando.
 
+    Dentro de cada lista se prueba PRIMERO el `reprint_pin_hash` de quien lo
+    tenga y DESPUES el `password_hash`. El PIN propio es lo que el dueno
+    configura desde el panel de Usuarios y lo que el mostrador teclea a diario;
+    la contrasena sigue sirviendo para quien no se puso PIN (era el unico
+    camino antes de la columna) y no se puede quitar sin romper esas
+    organizaciones.
+
     La respuesta no revela cual supervisor existe ni cual hizo match: solo el
     resultado.
     """
@@ -147,13 +166,18 @@ def verificar_pin_supervisor(
     de_sucursal: list[User] = (
         _supervisores_activos(db, org_id, branch_id) if branch_id is not None else []
     )
-    encontrado = _primer_match(pin, de_sucursal)
-    if encontrado is not None:
-        return encontrado
+    for campo in ("reprint_pin_hash", "password_hash"):
+        encontrado = _primer_match(pin, de_sucursal, campo)
+        if encontrado is not None:
+            return encontrado
 
     ya_probados = {u.id for u in de_sucursal}
     resto = [u for u in _supervisores_activos(db, org_id) if u.id not in ya_probados]
-    return _primer_match(pin, resto)
+    for campo in ("reprint_pin_hash", "password_hash"):
+        encontrado = _primer_match(pin, resto, campo)
+        if encontrado is not None:
+            return encontrado
+    return None
 
 
 def _vigentes(marcas: list[float], ahora: float) -> list[float]:

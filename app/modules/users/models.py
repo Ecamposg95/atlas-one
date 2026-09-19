@@ -63,6 +63,13 @@ class User(Base):
 
     password_hash = Column(String, nullable=False)
 
+    # PIN de reimpresion PROPIO, independiente de la contrasena (mismo hash
+    # bcrypt, nunca el PIN en claro). NULL = sin PIN: ese usuario solo autoriza
+    # una reimpresion tecleando su contrasena, como antes de esta columna.
+    # Ver app/services/reprint_auth.py. NUNCA se expone: UserRead publica el
+    # derivado `has_reprint_pin`.
+    reprint_pin_hash = Column(String, nullable=True)
+
     # create_type=False: enum type is created externally by init_db.py
     role = Column(
         Enum(Role, name="role", create_type=False),
@@ -87,6 +94,15 @@ class User(Base):
     @property
     def branch_name(self) -> str | None:
         return self.branch.name if self.branch else None
+
+    @property
+    def has_reprint_pin(self) -> bool:
+        """Derivado para el API: si el usuario tiene PIN de reimpresion.
+
+        El hash nunca sale de aqui; el panel de Usuarios solo necesita saber si
+        hay uno configurado para mostrar "PIN configurado" y ofrecer borrarlo.
+        """
+        return bool(self.reprint_pin_hash)
 
     # Multi-tenant relation
     organizations = relationship(

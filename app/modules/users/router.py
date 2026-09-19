@@ -187,7 +187,10 @@ def create_user(
         role=user.role,
         is_active=user.is_active,
         password_hash=hashed_password,
-        branch_id=effective_branch_id
+        branch_id=effective_branch_id,
+        # El PIN de reimpresión se hashea igual que la contraseña y nunca se
+        # guarda en claro. Sin PIN en el alta queda NULL.
+        reprint_pin_hash=get_password_hash(user.reprint_pin) if user.reprint_pin else None,
     )
 
     db.add(new_user)
@@ -230,6 +233,14 @@ def update_user(
         password_raw = update_data.pop('password')
         if password_raw:
             user_db.password_hash = get_password_hash(password_raw)
+
+    # El PIN de reimpresión nunca pasa por el setattr genérico de abajo: el
+    # modelo no tiene atributo `reprint_pin` (solo el hash), así que un setattr
+    # crudo no persistiría nada. "" o null explícito borra el PIN; un valor
+    # válido (ya filtrado por el schema) lo fija.
+    if 'reprint_pin' in update_data:
+        pin_raw = update_data.pop('reprint_pin')
+        user_db.reprint_pin_hash = get_password_hash(pin_raw) if pin_raw else None
 
     for field, value in update_data.items():
         if hasattr(user_db, field):

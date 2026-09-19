@@ -117,6 +117,10 @@ def run_migrations():
         ("organization", "card_surcharge_pct", "ALTER TABLE organization ADD COLUMN card_surcharge_pct NUMERIC(5,2) NOT NULL DEFAULT 0;"),
         ("sales_documents", "card_surcharge_pct", "ALTER TABLE sales_documents ADD COLUMN card_surcharge_pct NUMERIC(5,2);"),
         ("sales_documents", "card_surcharge_amount", "ALTER TABLE sales_documents ADD COLUMN card_surcharge_amount NUMERIC(10,2) NOT NULL DEFAULT 0;"),
+        # PIN de reimpresion por usuario 2026-09-19. NULL a proposito: quien no
+        # se ponga PIN sigue autorizando con su contrasena, que es como funciono
+        # hasta hoy (app/services/reprint_auth.py). Nunca se expone el hash.
+        ("users", "reprint_pin_hash", "ALTER TABLE users ADD COLUMN reprint_pin_hash VARCHAR;"),
     ]
 
     # Track 1 — Audit + cleanup de Payment huérfanos antes de NOT NULL.

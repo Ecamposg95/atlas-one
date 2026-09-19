@@ -9,6 +9,8 @@ export interface SystemUser {
   branch_name: string | null
   is_active: boolean
   created_at: string
+  /** Derivado: el backend nunca devuelve el hash ni el PIN en claro. */
+  has_reprint_pin?: boolean
 }
 
 export interface CreateUserPayload {
@@ -17,6 +19,8 @@ export interface CreateUserPayload {
   full_name?: string
   role: string
   branch_id?: number | null
+  /** PIN de reimpresion, 4-8 digitos. Solo-escritura. */
+  reprint_pin?: string
 }
 
 export interface UpdateUserPayload {
@@ -25,6 +29,8 @@ export interface UpdateUserPayload {
   branch_id?: number | null
   is_active?: boolean
   password?: string
+  /** PIN de reimpresion: 4-8 digitos lo fija, "" lo borra, ausente no lo toca. */
+  reprint_pin?: string
 }
 
 export const usersApi = {

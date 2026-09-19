@@ -7,15 +7,24 @@ import { Badge } from '../../components/ui/Badge'
 import { toast } from '../../store/toastStore'
 
 const ROLES = ['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO', 'VENDEDOR', 'SOPORTE_OPERATIVO']
+// Solo estos roles pueden autorizar una reimpresión desde el POS (mismo
+// conjunto que ROLES_GERENCIALES en app/services/reprint_auth.py): en
+// cualquier otro rol el PIN se guardaría sin servir para nada.
+const ROLES_CON_PIN = ['ADMINISTRADOR', 'DUEÑO', 'GERENTE']
+const PIN_VALIDO = /^\d{4,8}$/
 const roleVariant = (r: string) =>
   r === 'ADMINISTRADOR' ? 'red' : r === 'DUEÑO' ? 'yellow' : r === 'GERENTE' ? 'blue' : r === 'CAJERO' ? 'green' : 'slate'
 
 interface UserForm {
   username: string; password: string; full_name: string
   role: string; branch_id: string; is_active: boolean
+  reprintPin: string; clearReprintPin: boolean
 }
 
-const EMPTY_FORM: UserForm = { username: '', password: '', full_name: '', role: 'CAJERO', branch_id: '', is_active: true }
+const EMPTY_FORM: UserForm = {
+  username: '', password: '', full_name: '', role: 'CAJERO', branch_id: '', is_active: true,
+  reprintPin: '', clearReprintPin: false,
+}
 
 export function Users() {
   const [users, setUsers] = useState<SystemUser[]>([])
@@ -41,11 +50,31 @@ export function Users() {
 
   const openCreate = () => { setForm(EMPTY_FORM); setEditing(null); setModal('create') }
   const openEdit = (u: SystemUser) => {
-    setForm({ username: u.username, password: '', full_name: u.full_name ?? '', role: u.role, branch_id: u.branch_id ? String(u.branch_id) : '', is_active: u.is_active })
+    setForm({
+      username: u.username, password: '', full_name: u.full_name ?? '', role: u.role,
+      branch_id: u.branch_id ? String(u.branch_id) : '', is_active: u.is_active,
+      // El PIN nunca se lee de vuelta (el backend solo expone has_reprint_pin):
+      // en blanco significa "no cambiarlo".
+      reprintPin: '', clearReprintPin: false,
+    })
     setEditing(u); setModal('edit')
   }
 
+  const rolConPin = ROLES_CON_PIN.includes(form.role)
+  const errorPin = rolConPin && !form.clearReprintPin && form.reprintPin && !PIN_VALIDO.test(form.reprintPin)
+    ? 'El PIN debe ser de 4 a 8 dígitos.'
+    : null
+
   const handleSave = async () => {
+    if (errorPin) { toast.error(errorPin); return }
+    // El PIN solo viaja si el usuario escribió uno o pidió quitarlo; en un rol
+    // que no autoriza reimpresiones no se manda nunca, aunque se hubiera
+    // tecleado antes de cambiar el rol.
+    let reprintPin: string | undefined
+    if (rolConPin) {
+      if (form.clearReprintPin) reprintPin = ''
+      else if (form.reprintPin) reprintPin = form.reprintPin
+    }
     setSaving(true)
     try {
       if (modal === 'create') {
@@ -53,6 +82,7 @@ export function Users() {
           username: form.username, password: form.password, full_name: form.full_name || undefined,
           role: form.role, branch_id: form.branch_id ? Number(form.branch_id) : null,
         }
+        if (reprintPin !== undefined) payload.reprint_pin = reprintPin
         await usersApi.create(payload)
       } else if (editing) {
         const payload: UpdateUserPayload = {
@@ -61,6 +91,7 @@ export function Users() {
           is_active: form.is_active,
         }
         if (form.password) payload.password = form.password
+        if (reprintPin !== undefined) payload.reprint_pin = reprintPin
         await usersApi.update(editing.id, payload)
       }
       setModal(null); load()
@@ -178,11 +209,61 @@ export function Users() {
                   <label htmlFor="active-chk" className="text-sm text-slate-400">Usuario activo</label>
                 </div>
               )}
+
+              {/* PIN de reimpresión: lo teclea el cajero en el POS para que un
+                  gerente autorice reimprimir un ticket. Es independiente de la
+                  contraseña — así el dueño no tiene que compartir la suya. */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label htmlFor="reprint-pin" className="dax-label mb-0">PIN de reimpresión (4–8 dígitos)</label>
+                  {modal === 'edit' && rolConPin && (
+                    <span className={`text-[10px] font-bold uppercase tracking-wider ${editing?.has_reprint_pin ? 'text-emerald-400' : 'text-slate-500'}`}>
+                      {editing?.has_reprint_pin ? 'PIN configurado' : 'Sin PIN'}
+                    </span>
+                  )}
+                </div>
+                {!rolConPin ? (
+                  <p className="text-xs text-slate-500 italic">
+                    Solo aplica a ADMINISTRADOR, DUEÑO o GERENTE — son los únicos roles que pueden autorizar una reimpresión.
+                  </p>
+                ) : form.clearReprintPin ? (
+                  <div className="rounded-lg px-3 py-2 flex items-center justify-between gap-2 bg-red-500/10 border border-red-500/30">
+                    <span className="text-xs text-red-400">Se quitará el PIN al guardar.</span>
+                    <button type="button" onClick={() => f('clearReprintPin', false)}
+                      className="text-[10px] font-bold text-slate-400 hover:text-white uppercase transition flex-shrink-0">
+                      Cancelar
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex gap-2">
+                      <input
+                        id="reprint-pin"
+                        type="password"
+                        inputMode="numeric"
+                        autoComplete="new-password"
+                        value={form.reprintPin}
+                        onChange={(e) => f('reprintPin', e.target.value.replace(/\D/g, '').slice(0, 8))}
+                        placeholder={modal === 'edit' ? 'Dejar en blanco para no cambiarlo' : 'Opcional'}
+                        aria-invalid={!!errorPin}
+                        className={`dax-input w-full ${errorPin ? 'border-red-500' : ''}`}
+                      />
+                      {modal === 'edit' && editing?.has_reprint_pin && (
+                        <button type="button" onClick={() => f('clearReprintPin', true)}
+                          className="text-[11px] font-bold text-red-500 hover:text-red-400 uppercase transition whitespace-nowrap px-2 flex-shrink-0">
+                          Quitar PIN
+                        </button>
+                      )}
+                    </div>
+                    {errorPin && <p className="text-xs text-red-400 mt-1">{errorPin}</p>}
+                  </>
+                )}
+              </div>
             </div>
 
             <div className="flex gap-2 mt-5">
               <button onClick={() => setModal(null)} className="dax-btn-secondary flex-1">Cancelar</button>
-              <button onClick={handleSave} disabled={saving || !form.username || (modal === 'create' && !form.password)} className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
+              <button onClick={handleSave} disabled={saving || !form.username || !!errorPin || (modal === 'create' && !form.password)} className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
                 {saving ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Guardar</>}
               </button>
             </div>
