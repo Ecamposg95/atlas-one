@@ -196,8 +196,11 @@ def create_product(
     # strictly for the user's own branch.
     # - Without a branch_id: forbidden (no sensible default for a branch-
     #   scoped writer).
-    # - Required fields enforced at 422: name, sku, price, cost,
-    #   department_id, brand_id. ADMIN keeps the legacy permissive contract.
+    # - Required fields enforced at 422: name, sku, price, cost — los mismos
+    #   que para ADMIN. Marca y departamento NO son obligatorios: una tienda
+    #   recién dada de alta no los tiene y el cajero no puede crearlos
+    #   (pantallas de admin), así que exigirlos lo dejaba sin forma de
+    #   registrar productos (Novedades Imaltzin, 2026-09-19).
     is_caller_admin = _is_admin(current_user)
     if not is_caller_admin:
         if not current_user.branch_id:
@@ -210,8 +213,6 @@ def create_product(
             "sku": prod_in.sku,
             "price": prod_in.price,
             "cost": prod_in.cost,
-            "department_id": prod_in.department_id,
-            "brand_id": prod_in.brand_id,
         }
         missing = [
             k for k, v in _required.items()

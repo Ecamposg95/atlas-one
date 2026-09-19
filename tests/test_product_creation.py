@@ -211,6 +211,25 @@ class TestProductCreationRBAC:
 
 # ── Validation ───────────────────────────────────────────────────────────────
 class TestProductCreationValidation:
+    def test_cajero_crea_sin_marca_ni_departamento(
+        self, client, catalog_module_enabled, org, cajero_a, auth_cajero_a,
+    ):
+        """Una tienda nueva no tiene marcas ni departamentos y el cajero no
+        puede crearlos: exigirlos lo dejaba sin forma de registrar nada."""
+        r = client.post(
+            "/api/products/", json=_payload(sku="SM-1"),
+            headers=_with_org(auth_cajero_a, org),
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["brand_id"] is None
+
+    def test_cajero_sin_costo_sigue_rechazado(
+        self, client, catalog_module_enabled, org, cajero_a, auth_cajero_a,
+    ):
+        body = _payload(sku="SC-1"); body.pop("cost")
+        r = client.post("/api/products/", json=body, headers=_with_org(auth_cajero_a, org))
+        assert r.status_code == 422
+
     def test_zero_price_rejected(
         self, client, catalog_module_enabled, org, cajero_a, auth_cajero_a,
     ):
