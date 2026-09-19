@@ -22,6 +22,7 @@ Descarga el ZIP desde `/printer-settings` en la app (`GET /api/printer/download-
 | Linux (manual — el modo de hoy) | `bash impresora_linux.sh` | Instala CUPS si falta, venv, dependencias, certificado, grupo `lpadmin`, arranca con auto-restart. **La ventana debe quedar abierta**; hay que repetirlo cada mañana |
 | Linux (servicio — el destino) | `sudo bash core/instalar-servicio-linux.sh` | Unidad systemd `atlas-print-agent` habilitada al arranque: la cajera no abre nada. Conserva el certificado ya aceptado, cae a servicio de usuario si no hay root, y verifica `/health` antes de declarar éxito. Ver `core/INSTALL_LINUX.txt` y el runbook `docs/superpowers/runbooks/print-agent-autostart.md` |
 | macOS (manual — el modo de hoy) | `bash impresora_mac.sh` | Equivalente a Linux sobre el CUPS que ya trae macOS. **La ventana debe quedar abierta** |
+| macOS (servicio — el destino) | `bash core/instalar-servicio-mac.sh` | LaunchAgent `com.atlasone.print-agent` (`RunAtLoad` + `KeepAlive`): arranca al iniciar sesión y launchd lo revive. **Sin sudo** — es un servicio del usuario. Instala en `~/Library/Application Support/AtlasPrintAgent`, conserva el certificado ya aceptado y verifica `/health` antes de declarar éxito. Ver `core/INSTALL_MAC.txt` y el runbook `docs/superpowers/runbooks/print-agent-autostart.md` |
 
 Requisitos: Python 3.10+. En Linux/mac, CUPS activo y la impresora dada de alta como cola **raw**.
 

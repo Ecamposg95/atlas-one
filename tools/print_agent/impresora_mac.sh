@@ -27,6 +27,32 @@ cat << 'EOF'
 EOF
 echo
 
+# ── 0. ¿Ya está instalado como servicio? ─────────────────────────────────────
+# En las Macs ya convertidas al autoarranque, la cajera va a seguir buscando
+# este archivo y abriéndolo por costumbre durante semanas. Sin esta guarda
+# vería un error de puerto ocupado y levantaría el teléfono. Con ella ve que
+# todo está bien y cierra la ventana.
+#
+# En las Macs NO convertidas la condición es falsa y el script sigue haciendo
+# exactamente lo de siempre.
+if launchctl print "gui/$(id -u)/com.atlasone.print-agent" >/dev/null 2>&1; then
+    cat << 'EOF'
+
+ ╭────────────────────────────────────────────────────────╮
+ │  El agente YA ESTA ACTIVO                              │
+ ╰────────────────────────────────────────────────────────╯
+
+ Esta Mac ya arranca el agente sola al iniciar sesion.
+ No necesitas abrir nada: abre el navegador y vende normal.
+
+ Puedes cerrar esta ventana.
+
+EOF
+    read -r -t 60 -p " Presiona ENTER para cerrar… " _ || true
+    echo
+    exit 0
+fi
+
 echo "[INICIO]  Iniciando agente de impresion..."
 # Verificar Python 3
 if ! command -v python3 &>/dev/null; then

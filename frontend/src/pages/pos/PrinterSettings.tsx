@@ -58,6 +58,8 @@ type Tab = 'windows' | 'linux' | 'mac' | 'bluetooth'
  *  el repo de origen un renombrado dejó la pantalla dictando archivos
  *  inexistentes durante dos meses y el autoarranque quedó inalcanzable. */
 const AUTOSTART_CMD_LINUX = 'sudo bash core/instalar-servicio-linux.sh'
+/** macOS instala un LaunchAgent del usuario: sin sudo a propósito. */
+const AUTOSTART_CMD_MAC = 'bash core/instalar-servicio-mac.sh'
 
 type BtState = 'idle' | 'scanning' | 'connected' | 'error'
 interface BtDevice { name: string; device: BluetoothDevice; char: BluetoothRemoteGATTCharacteristic }
@@ -694,6 +696,19 @@ export function PrinterSettings() {
                   </a>
                 </div>
               </DaxCard>
+
+              {esAdmin && (
+                <AutostartCard
+                  cmd={AUTOSTART_CMD_MAC}
+                  bullets={[
+                    'Se instala en ~/Library/Application Support/AtlasPrintAgent, no en Descargas.',
+                    'Arranca al iniciar sesión y launchd lo revive si se cae.',
+                    'Conserva el certificado que este navegador ya aceptó.',
+                    'No uses sudo: es un servicio de tu usuario.',
+                  ]}
+                  onToast={showToast}
+                />
+              )}
 
               <DaxCard>
                 <div className="flex items-center justify-between mb-3">

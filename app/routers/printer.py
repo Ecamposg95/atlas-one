@@ -322,24 +322,34 @@ def download_print_agent(
     ALWAYS_EXCLUDE_FILES: set[str] = set()
 
     # Launcher por plataforma — los demás se excluyen para no confundir al usuario.
+    # Archivos del autoarranque, por plataforma. Cada ZIP lleva SOLO los suyos:
+    # una caja no debe recibir un instalador que no puede correr.
+    AUTOSTART_LINUX = {
+        "instalar-servicio-linux.sh", "atlas-print-agent.service",
+        "atlas-print-agent.desktop", "INSTALL_LINUX.txt",
+    }
+    AUTOSTART_MAC = {
+        "instalar-servicio-mac.sh", "com.atlasone.print-agent.plist",
+        "INSTALL_MAC.txt",
+    }
+
     if plat == "windows":
         platform_exclude = {
             "impresora_linux.sh", "impresora_mac.sh",
             "requirements_linux.txt", "requirements_mac.txt",
-            "atlas-print-agent.service", "atlas-print-agent.desktop",
-            "instalar-servicio-linux.sh", "INSTALL_LINUX.txt",
+            *AUTOSTART_LINUX, *AUTOSTART_MAC,
         }
     elif plat == "mac":
         platform_exclude = {
             "impresora_win.bat", "impresora_linux.sh",
             "requirements_linux.txt",
-            "atlas-print-agent.service", "atlas-print-agent.desktop",
-            "instalar-servicio-linux.sh", "INSTALL_LINUX.txt",
+            *AUTOSTART_LINUX,
         }
     else:  # linux
         platform_exclude = {
             "impresora_win.bat", "impresora_mac.sh",
             "requirements_mac.txt",
+            *AUTOSTART_MAC,
         }
 
     buf = io.BytesIO()

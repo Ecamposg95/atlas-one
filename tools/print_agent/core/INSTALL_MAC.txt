@@ -1,0 +1,149 @@
+════════════════════════════════════════════════════════════════════
+  ATLAS PRINT AGENT — INSTALACIÓN EN macOS
+════════════════════════════════════════════════════════════════════
+
+Hay DOS modos. Hoy las cajas usan el manual; el de servicio es al que
+se migra Mac por Mac.
+
+  MANUAL (el de hoy)
+    La cajera abre impresora_mac.sh y deja la ventana de Terminal
+    abierta toda la jornada. Al apagar la Mac hay que repetirlo cada
+    mañana.
+
+  SERVICIO (el destino)
+    El agente arranca solo al iniciar sesión y launchd lo revive si se
+    cae. La cajera no abre nada.
+
+El runbook de la conversión Mac por Mac vive en:
+  docs/superpowers/runbooks/print-agent-autostart.md
+
+
+────────────────────────────────────────────────────────────────────
+  PREREQUISITOS
+────────────────────────────────────────────────────────────────────
+
+  • macOS 12 (Monterey) o posterior.
+  • Python 3.10+. Si no lo tienes:
+        xcode-select --install
+  • CUPS: viene incluido en macOS, no hay que instalar nada.
+  • NO se necesita sudo. Es un LaunchAgent de tu usuario.
+
+
+────────────────────────────────────────────────────────────────────
+  INSTALACIÓN
+────────────────────────────────────────────────────────────────────
+
+  Córrelo desde la MISMA carpeta que la caja ya venía usando: así
+  encuentra y conserva el certificado que el navegador de esa Mac ya
+  aceptó, y nadie tiene que volver a aceptarlo.
+
+  1. Abre Terminal (Finder → Aplicaciones → Utilidades → Terminal) y
+     entra a la carpeta del agente:
+
+         cd ~/Downloads/print_agent      # ajustar a la ruta real
+
+  2. Ver qué haría, sin tocar nada:
+
+         bash core/instalar-servicio-mac.sh --dry-run
+
+     Confirma la línea "Certificado existente encontrado". Si dice
+     "No se encontró certificado previo", habrá que re-aceptarlo en
+     el navegador al terminar.
+
+  3. Instalar (SIN sudo):
+
+         bash core/instalar-servicio-mac.sh
+
+  El script copia el agente a
+  ~/Library/Application Support/AtlasPrintAgent, crea el entorno
+  Python, conserva el certificado, escribe el LaunchAgent en
+  ~/Library/LaunchAgents/com.atlasone.print-agent.plist, lo carga con
+  launchctl y NO declara éxito hasta que /health responde.
+
+  Opciones:
+
+    bash core/instalar-servicio-mac.sh --origins "https://mi.dominio"
+        Dominios desde los que se sirve el POS. Por omisión
+        https://app.atlasone.com.mx. SIN el dominio correcto aquí una
+        caja servida desde otro dominio VENDE PERO NO IMPRIME.
+
+    bash core/instalar-servicio-mac.sh --certs-from /ruta/core/certs
+        Fuerza qué certificado conservar.
+
+    bash core/instalar-servicio-mac.sh --uninstall
+        Quita el servicio y deja los archivos donde están.
+
+
+────────────────────────────────────────────────────────────────────
+  VERIFICAR
+────────────────────────────────────────────────────────────────────
+
+         launchctl print gui/$(id -u)/com.atlasone.print-agent
+         curl -k https://127.0.0.1:9100/health
+
+  El primero debe encontrar el servicio (state = running); el segundo
+  debe responder el JSON de estado.
+
+  La prueba de verdad: CIERRA SESIÓN o reinicia la Mac y, al volver a
+  entrar y ANTES de abrir nada, comprueba que /health ya responde.
+
+
+────────────────────────────────────────────────────────────────────
+  COMANDOS ÚTILES
+────────────────────────────────────────────────────────────────────
+
+  Logs:         tail -f ~/Library/Logs/AtlasPrintAgent/agent.err.log
+                tail -f ~/Library/Logs/AtlasPrintAgent/agent.out.log
+  Reiniciar:    launchctl kickstart -k gui/$(id -u)/com.atlasone.print-agent
+  Detener:      launchctl bootout gui/$(id -u)/com.atlasone.print-agent
+  Arrancar:     launchctl bootstrap gui/$(id -u) \
+                  ~/Library/LaunchAgents/com.atlasone.print-agent.plist
+  Desinstalar:  bash core/instalar-servicio-mac.sh --uninstall
+
+  NO uses sudo con ninguno de estos: el servicio es de tu usuario y
+  con sudo launchctl apuntaría al dominio de root, donde no existe.
+
+
+────────────────────────────────────────────────────────────────────
+  DAR DE ALTA LA IMPRESORA (cola raw)
+────────────────────────────────────────────────────────────────────
+
+  El agente escribe bytes ESC/POS crudos, así que la impresora tiene
+  que estar en CUPS como cola RAW, sin driver que reinterprete nada.
+
+         lpinfo -v                          # ver los URIs disponibles
+         lpadmin -p ticket -E -v <uri> -m raw
+         lpstat -p ticket                   # debe decir "idle"
+
+  <uri> es lo que devuelve lpinfo, por ejemplo
+  usb://EPSON/TM-T20II?serial=XXXX o socket://192.168.1.50:9100.
+
+  El nombre de la cola (aquí "ticket") es el que se selecciona después
+  en el POS, en Configuración → Impresora.
+
+
+────────────────────────────────────────────────────────────────────
+  DESPUÉS DE CONVERTIR UNA MAC
+────────────────────────────────────────────────────────────────────
+
+  La cajera va a seguir buscando impresora_mac.sh por costumbre. Eso
+  ya no falla: el script detecta que el servicio está activo y muestra
+  "El agente YA ESTA ACTIVO / puedes cerrar esta ventana".
+
+  Lo que el autoarranque NO resuelve, y sigue siendo por Mac:
+    • Aceptar el certificado en el navegador (se conserva si el
+      instalador encontró el certificado viejo).
+    • El permiso "Acceso a la red local" de Chrome, que se pide por
+      sitio y por equipo. Si además cambias el dominio del POS, hay
+      que concederlo de nuevo en esa terminal.
+
+
+────────────────────────────────────────────────────────────────────
+  MODO MANUAL (el de hoy, y para diagnóstico)
+────────────────────────────────────────────────────────────────────
+
+         bash impresora_mac.sh
+
+  Corre en primer plano; al cerrar la ventana se detiene. Prepara el
+  entorno y el certificado si faltan. En una Mac ya convertida, avisa
+  y sale sin hacer nada.

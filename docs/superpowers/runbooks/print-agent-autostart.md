@@ -15,7 +15,7 @@ instalar → verificar tras reiniciar.
 | Al prender la PC | Buscar el `.sh`, doble clic, esperar el OK verde | Nada |
 | Ventana del agente | Debe quedar abierta toda la jornada | No existe |
 | Módulo de impresora | Entra, acepta protocolo, selecciona impresora, prueba | No entra; la impresora ya está guardada |
-| Si el agente se cae | Vuelve a abrir el `.sh` | systemd lo revive en 5 s |
+| Si el agente se cae | Vuelve a abrir el `.sh` | systemd (Linux) o launchd (macOS) lo revive en 5 s |
 | Su mañana | Prender → navegador → POS → **módulo impresora** → vender | Prender → navegador → POS → vender |
 
 Si por costumbre vuelve a abrir el `.sh`, ve *"El agente YA ESTA ACTIVO,
@@ -23,7 +23,8 @@ puedes cerrar esta ventana"*. No es un error y no rompe nada.
 
 ## Antes de salir
 
-- [ ] Saber la contraseña de sudo de esa PC (todas usan el usuario administrador).
+- [ ] **Linux:** saber la contraseña de sudo de esa PC. **macOS:** NO hace falta —
+      y NO se debe usar sudo, el LaunchAgent es del usuario de la caja.
 - [ ] Saber con qué dominio entra esa caja al POS. Por omisión el instalador
       graba `https://app.atlasone.com.mx`, que además ya está cubierto por el
       regex de fábrica del agente. Si esa caja entra por un dominio propio
@@ -90,6 +91,79 @@ impresión de prueba**. Que `/health` responda no garantiza que salga papel.
 que si abre el `.sh` por costumbre verá el aviso. Deja la carpeta vieja donde
 está — el servicio ya corre desde `/opt/atlas-print-agent`, no desde ahí.
 
+## Procedimiento por caja — macOS (launchd)
+
+Mismo espíritu que Linux; cambian el instalador y los comandos de verificación.
+**Nunca con sudo:** el LaunchAgent vive en el home del usuario de la caja; con
+sudo se instalaría en el de root y la cajera nunca lo vería arrancar.
+
+**1. Ubicar la carpeta que ya usan.** Es la que contiene `impresora_mac.sh`;
+típicamente `~/Downloads/print_agent` (o `~/Descargas/print_agent` si el macOS
+está en español). Abre Terminal ahí.
+
+```bash
+cd ~/Downloads/print_agent      # ajustar a la ruta real
+```
+
+**2. Ensayo en seco.**
+
+```bash
+bash core/instalar-servicio-mac.sh --dry-run
+```
+
+Verifica dos líneas:
+- `Certificado existente encontrado: …` → **bien**, no habrá que re-aceptar nada.
+  Si dice *"No se encontró certificado previo"*, busca la carpeta correcta antes
+  de seguir; instalar así obliga a re-aceptar el certificado en el navegador.
+- `Orígenes: …` → debe incluir el dominio con el que esa caja entra al POS.
+
+**3. Instalar (sin sudo).**
+
+```bash
+bash core/instalar-servicio-mac.sh
+```
+
+Toma unos minutos (crea el entorno Python). Termina con `✓ Agente instalado y
+respondiendo` y el JSON de `/health`. **Si termina en rojo, no sigas** — corre
+`tail -n 50 ~/Library/Logs/AtlasPrintAgent/agent.err.log` y resuelve antes de
+irte.
+
+Si esa caja entra por un dominio propio distinto y el dry-run no lo mostró:
+
+```bash
+bash core/instalar-servicio-mac.sh --origins "https://pos.micliente.com"
+```
+
+**4. La prueba que importa: cerrar sesión o reiniciar.**
+
+```bash
+sudo reboot
+```
+
+Al volver a iniciar sesión, **antes de abrir nada**:
+
+```bash
+launchctl print gui/$(id -u)/com.atlasone.print-agent   # state = running
+curl -k https://127.0.0.1:9100/health
+```
+
+**5. Dar de alta la impresora como cola raw**, si esa Mac aún no la tiene:
+
+```bash
+lpinfo -v                                 # ver los URIs disponibles
+lpadmin -p ticket -E -v <uri> -m raw
+lpstat -p ticket                          # debe decir "idle"
+```
+
+**6. Prueba de punta a punta desde el POS.** Entra al POS como la cajera, ve al
+módulo de impresora, confirma que aparece la impresora y **manda una impresión
+de prueba**. Que `/health` responda no garantiza que salga papel.
+
+**7. Cerrar el ciclo con la cajera.** Enséñale que ya no tiene que abrir nada y
+que si abre `impresora_mac.sh` por costumbre verá el aviso. Deja la carpeta
+vieja donde está — el servicio ya corre desde
+`~/Library/Application Support/AtlasPrintAgent`, no desde ahí.
+
 ## Lo que el autoarranque NO resuelve
 
 - **Permiso "Acceso a la red local" de Chrome.** Se concede por sitio y por PC.
@@ -103,15 +177,25 @@ está — el servicio ya corre desde `/opt/atlas-print-agent`, no desde ahí.
 
 ## Revertir
 
+Linux:
+
 ```bash
 sudo systemctl disable --now atlas-print-agent
 ```
 
-La carpeta vieja y `impresora_linux.sh` siguen intactas: con el servicio
+macOS (sin sudo):
+
+```bash
+bash core/instalar-servicio-mac.sh --uninstall
+# equivale a: launchctl bootout gui/$(id -u)/com.atlasone.print-agent
+#             rm -f ~/Library/LaunchAgents/com.atlasone.print-agent.plist
+```
+
+La carpeta vieja y el `impresora_*.sh` siguen intactos: con el servicio
 detenido, el doble clic de siempre vuelve a funcionar igual que antes.
 
 ## Bitácora de conversión
 
-| Tienda | Fecha | Usuario | Dominio | Cert conservado | Reboot verificado |
-|---|---|---|---|---|---|
-| _(pendiente)_ | | | | | |
+| Tienda | SO | Fecha | Usuario | Dominio | Cert conservado | Reboot verificado |
+|---|---|---|---|---|---|---|
+| _(pendiente)_ | | | | | | |
