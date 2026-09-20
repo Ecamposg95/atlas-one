@@ -268,10 +268,8 @@ class PosPrinter:
         footer_msg = self._resolve_footer(organization, branch)
         if footer_msg:
             raw += self.CMD["CENTER"]
-            footer_full = f"{footer_msg} | rmazh.mx"
-            if len(footer_full) > self.cols:
-                footer_full = footer_msg[: self.cols - 12].rstrip() + " | rmazh.mx"
-            raw += (footer_full + "\n").encode("latin-1", "replace")
+            # Sin sufijo de marca del proveedor: el pie es del negocio.
+            raw += (self._truncate(footer_msg, self.cols) + "\n").encode("latin-1", "replace")
             raw += self.CMD["LEFT"]
 
         raw += self.CMD["LF"] * 3
@@ -293,7 +291,7 @@ class PosPrinter:
             raw += self._generate_image_bytes(effective_logo)
 
         # Line 1: org name (bold). If a distinct legal_name exists and both fit,
-        # prepend as "LEGAL | NAME" (e.g. "RMAZH | EL MUNDO DE LA TAZA").
+        # prepend as "LEGAL | NAME" (e.g. "ELEVEN FASHION SA DE CV | ELEVEN FASHION").
         org_name = (organization.name if organization else None) or "ATLAS POS"
         legal_name = (organization.legal_name if organization else None)
         if legal_name and legal_name != org_name:
@@ -556,10 +554,8 @@ class PosPrinter:
         footer_msg = self._resolve_footer(organization, branch)
         if footer_msg:
             raw += self.CMD["CENTER"]
-            footer_full = f"{footer_msg} | rmazh.mx"
-            if len(footer_full) > self.cols:
-                footer_full = footer_msg[: self.cols - 12].rstrip() + " | rmazh.mx"
-            raw += (footer_full + "\n").encode("latin-1", "replace")
+            # Sin sufijo de marca del proveedor: el pie es del negocio.
+            raw += (self._truncate(footer_msg, self.cols) + "\n").encode("latin-1", "replace")
             raw += self.CMD["LEFT"]
 
         raw += self.CMD["LF"] * 3 + self.CMD["CUT"]
@@ -964,7 +960,7 @@ class PosPrinter:
             footer_text = organization.ticket_footer
         if footer_text:
             raw += self.CMD["CENTER"]
-            raw += (self._truncate(f"{footer_text} | rmazh.mx", self.cols) + "\n").encode("latin-1", "replace")
+            raw += (self._truncate(footer_text, self.cols) + "\n").encode("latin-1", "replace")
 
         raw += self.CMD["LF"] * 3 + self.CMD["CUT"]
         return raw
