@@ -31,7 +31,7 @@ class OrganizationBase(BaseModel):
     # Secciones boutique del ticket (2026-09-19). None = la seccion no se
     # imprime; la linea del proveedor viene apagada, como en la base.
     ticket_terms: Optional[str] = Field(default=None, max_length=TERMS_MAX_LEN)
-    ticket_terms_url: Optional[str] = None
+    ticket_terms_url: Optional[str] = Field(default=None, max_length=255)
     ticket_instagram: Optional[str] = None
     ticket_facebook: Optional[str] = None
     ticket_tiktok: Optional[str] = None
@@ -75,7 +75,7 @@ class OrganizationUpdate(BaseModel):
     # Secciones boutique del ticket (2026-09-19). Caen FUERA de la whitelist de
     # no-admins del router, asi que solo ADMINISTRADOR/DUEÑO las cambia.
     ticket_terms: Optional[str] = Field(default=None, max_length=TERMS_MAX_LEN)
-    ticket_terms_url: Optional[str] = None
+    ticket_terms_url: Optional[str] = Field(default=None, max_length=255)
     ticket_instagram: Optional[str] = None
     ticket_facebook: Optional[str] = None
     ticket_tiktok: Optional[str] = None

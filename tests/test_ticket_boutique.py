@@ -445,3 +445,36 @@ def test_proveedor_apagado_por_defecto():
     )
     assert "Atlas" not in _decode(_build(_make_sale(), organization=org))
     assert "Atlas" not in _decode(_build(_make_sale(), organization=_org()))
+
+
+def test_solo_website_no_enciende_siguenos():
+    """`website` es una columna vieja: una org viva con sitio web y sin redes
+    capturadas debe seguir imprimiendo el ticket de siempre."""
+    sale = _make_sale()
+    con_web = _build(sale, organization=_org(website="novedadeskaory.mx"))
+    sin_web = _build(_make_sale(), organization=_org())
+    assert con_web == sin_web
+    assert b"SIGUENOS" not in con_web
+
+
+def test_web_acompana_a_las_redes_capturadas():
+    out = _decode(_build(_make_sale(), organization=_org(ticket_instagram="@eleven", website="eleven.mx")))
+    assert "Instagram: @eleven" in out and "Web: eleven.mx" in out
+
+
+def test_qr_va_centrado_y_regresa_a_la_izquierda():
+    from app.pos_printer import PosPrinter
+    p = PosPrinter(paper_width_mm=80)
+    raw = _build(_make_sale(), organization=_org(ticket_terms_url="elevenboutique.mx/terminos"))
+    i = raw.find(b"\x1d\x28\x6b\x04\x00\x31\x41\x32\x00")
+    assert i > 0
+    assert raw.rfind(p.CMD["CENTER"], 0, i) > raw.rfind(p.CMD["LEFT"], 0, i)
+    j = raw.find(b"\x1d\x28\x6b\x03\x00\x31\x51\x30", i)
+    assert raw.find(p.CMD["LEFT"], j) > 0
+
+
+def test_url_demasiado_larga_no_emite_qr_pero_si_texto():
+    url = "elevenboutique.mx/" + "a" * 300
+    raw = _build(_make_sale(), organization=_org(ticket_terms_url=url))
+    assert b"\x1d\x28\x6b" not in raw
+    assert b"elevenboutique.mx/" in raw

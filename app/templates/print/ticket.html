@@ -275,13 +275,14 @@
     </div>
 
     {# Redes sociales. Cada una sale solo si el negocio la capturó. #}
-    {% set redes = [
+    {% set redes_propias = [
         ('Instagram', organization.ticket_instagram),
         ('Facebook', organization.ticket_facebook),
         ('TikTok', organization.ticket_tiktok),
         ('WhatsApp', organization.ticket_whatsapp),
-        ('Web', organization.website),
     ] | selectattr('1') | list %}
+    {# El sitio web es una columna vieja: solo acompaña a redes capturadas a propósito. #}
+    {% set redes = redes_propias + ([('Web', organization.website)] if (redes_propias and organization.website) else []) %}
     {% if redes %}
     <div class="separator"></div>
     <div class="footer text-center">
@@ -299,7 +300,7 @@
 {{ organization.ticket_terms or '' }}</div>
     {% if organization.ticket_terms_url %}
     {% set _url = organization.ticket_terms_url %}
-    {% set _href = _url if _url.startswith('http') else 'https://' + _url %}
+    {% set _href = _url if (_url | lower).startswith('http') else 'https://' + _url %}
     <div class="footer text-center" style="font-size: 9px;">
         Consulta la política completa:<br>
         <a href="{{ _href }}">{{ _url }}</a>
@@ -307,7 +308,7 @@
     {% endif %}
     {% endif %}
 
-    {# Proveedor tecnológico: encendido por defecto, se apaga en Empresa. #}
+    {# Proveedor tecnológico: apagado por defecto, se enciende en Empresa. #}
     {% if organization.ticket_show_vendor %}
     <div class="separator"></div>
     <div class="footer text-center">

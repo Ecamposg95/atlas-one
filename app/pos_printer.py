@@ -522,6 +522,10 @@ class PosPrinter:
         linea es el llamador; aqui solo va la secuencia del QR.
         """
         carga = self._ascii_safe(data).encode("latin-1", "replace")
+        if not carga or len(carga) > 255:
+            # Mas alla de esto pL/pH se desbordan y la impresora se traba o
+            # escupe basura a media venta. La URL en texto sigue saliendo.
+            return b""
         largo = len(carga) + 3
         raw = b"\x1d\x28\x6b\x04\x00\x31\x41\x32\x00"                    # modelo 2
         raw += b"\x1d\x28\x6b\x03\x00\x31\x43" + bytes([size])            # tamaño de modulo
@@ -587,6 +591,12 @@ class PosPrinter:
             valor = self._texto_config(organization, attr)
             if valor:
                 redes.append(self._ascii_safe(f"{etiqueta}: {valor}"))
+        # `website` es una columna VIEJA de la organizacion (la llenan desde
+        # onboarding y el panel de plataforma): sola NO enciende la seccion,
+        # o una tienda que nunca toco Empresa estrenaria un bloque SIGUENOS.
+        # Solo acompana a las redes que si se capturaron a proposito.
+        if redes and all(r.startswith("Web: ") for r in redes):
+            redes = []
         if redes:
             raw += self.CMD["CENTER"] + self.CMD["BOLD_ON"]
             raw += b"SIGUENOS\n"
@@ -605,10 +615,8 @@ class PosPrinter:
             raw += self.CMD["BOLD_OFF"] + self.CMD["LEFT"]
 
         if terminos:
-            # En 80 mm el cuerpo va en Font B (compact): son parrafos largos y
-            # el papel se agradece. En 58 mm se queda la fuente por defecto.
-            if self.paper_width_mm >= 70:
-                raw += self.CMD["FONT_B"]
+            # Misma fuente que el resto del ticket: en 80 mm ya es la compacta
+            # (Font B, 56 columnas), asi que no hay una "mas chica" que valga.
             for parrafo in terminos.splitlines():
                 parrafo = parrafo.strip()
                 if not parrafo:
@@ -616,8 +624,6 @@ class PosPrinter:
                     continue
                 for linea in self._wrap_text(parrafo, self.cols):
                     raw += (linea + "\n").encode("latin-1", "replace")
-            if self.paper_width_mm >= 70:
-                raw += self._default_font
 
         if url_terminos:
             # QR nativo + la URL en texto debajo: una impresora sin soporte de
