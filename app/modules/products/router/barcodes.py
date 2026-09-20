@@ -14,7 +14,7 @@ import csv
 import io
 from datetime import date
 from decimal import Decimal
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
@@ -41,10 +41,15 @@ class AsignarCodigosRequest(BaseModel):
     product_id: Optional[str] = None
 
 
-def _ids_visibles(db: Session, current_user: User, org_id: int) -> List[str]:
-    """Productos que este usuario puede ver (CAJERO/GERENTE: su sucursal)."""
+def _ids_visibles(db: Session, current_user: User, org_id: int):
+    """`SELECT` de los productos que este usuario puede ver.
+
+    Se devuelve la subconsulta y no la lista de ids: materializarla convierte
+    el filtro en un `IN (…)` con el catálogo entero (miles de UUID viajando en
+    la sentencia) cuando el usuario es admin y ve todo.
+    """
     q = query_visible_products(db, current_user, org_id, include_inactive=True)
-    return [row[0] for row in q.with_entities(Product.id).all()]
+    return q.with_entities(Product.id).scalar_subquery()
 
 
 def _fmt_cantidad(qty) -> str:

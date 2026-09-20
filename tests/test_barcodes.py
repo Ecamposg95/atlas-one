@@ -269,3 +269,194 @@ class TestEtiquetasCsv:
         assert r.status_code == 200, r.text
         lineas = r.content.decode("utf-8-sig").strip().splitlines()
         assert len(lineas) == 2 and lineas[1].startswith("PLY,")
+
+
+# ── Asignación masiva: un solo MAX, contador en memoria ──────────────────────
+def _codigo_de(org_id: int, n: int) -> str:
+    """El código que le toca a la secuencia `n` de esta organización."""
+    from app.services.barcodes import prefijo_org
+    base = f"{prefijo_org(org_id)}{n:08d}"
+    return base + ean13_check_digit(base)
+
+
+class TestAsignacionMasiva:
+    def test_cincuenta_faltantes_reciben_codigos_consecutivos(self, db, org, branch_a):
+        for i in range(50):
+            _make_product(db, org, f"Prenda {i}", f"SKU-{i:03d}", 100, [(branch_a.id, True)])
+        db.flush()
+
+        assert asignar_codigos_faltantes(db, org.id) == 50
+
+        codigos = [
+            v.barcode for v in db.query(ProductVariant)
+            .filter(ProductVariant.organization_id == org.id).all()
+        ]
+        assert len(codigos) == 50 and len(set(codigos)) == 50, "ningún código se repite"
+        secuencias = sorted(int(c[4:12]) for c in codigos)
+        assert secuencias == list(range(secuencias[0], secuencias[0] + 50)), "consecutivos"
+        assert all(ean13_check_digit(c[:12]) == c[12] for c in codigos)
+
+    def test_un_ean_de_fabrica_ocupando_el_numero_se_salta(self, db, org, branch_a):
+        """El contador vive en memoria (el MAX se lee una sola vez), así que
+        un código escrito DESPUÉS por otra caja no lo ve — pero el chequeo de
+        duplicados sí, y la secuencia avanza hasta el siguiente libre."""
+        from app.services.barcodes import AsignadorDeCodigos
+        _, ocupante = _make_product(db, org, "Ocupante", "OCU", 10, [(branch_a.id, True)])
+        asignador = AsignadorDeCodigos(db, org.id)
+        c1 = asignador.siguiente()
+        siguiente_numero = int(c1[4:12]) + 1
+
+        ocupante.barcode = _codigo_de(org.id, siguiente_numero)
+        db.flush()
+
+        c2 = asignador.siguiente()
+        assert c2 != ocupante.barcode
+        assert int(c2[4:12]) == siguiente_numero + 1
+
+    def test_codigo_de_solo_espacios_cuenta_como_faltante(self, client, db, org, branch_a, auth_admin):
+        _, v = _make_product(db, org, "Playera", "PLY", 100, [(branch_a.id, True)])
+        v.barcode = "   "
+        db.commit()
+        assert client.get("/api/products/barcodes/missing-count",
+                          headers=_h(auth_admin, org)).json() == {"missing": 1}
+        r = client.post("/api/products/barcodes/assign-missing", json={}, headers=_h(auth_admin, org))
+        assert r.json() == {"assigned": 1}
+        db.refresh(v)
+        assert es_codigo_interno(org.id, v.barcode)
+
+    def test_no_toca_el_catalogo_de_otra_org(self, client, db, org, branch_a,
+                                             catalogo_sin_codigos, auth_admin):
+        otra = Organization(name="Otra Tienda", status="ACTIVE")
+        db.add(otra); db.flush()
+        _, ajena = _make_product(db, otra, "Ajena", "AJ-1", 10)
+        db.commit()
+
+        r = client.post("/api/products/barcodes/assign-missing", json={}, headers=_h(auth_admin, org))
+        assert r.json() == {"assigned": 3}, "solo las 3 de la org del usuario"
+        db.refresh(ajena)
+        assert not ajena.barcode, "la variante de la otra org sigue sin código"
+
+
+# ── Edición: duplicado en la org ─────────────────────────────────────────────
+class TestEdicionDeProducto:
+    def test_put_producto_con_codigo_repetido_es_409(self, client, db, org, branch_a, auth_admin):
+        p, v = _make_product(db, org, "Playera", "PLY", 100, [(branch_a.id, True)])
+        _, otra = _make_product(db, org, "Gorra", "GOR", 50, [(branch_a.id, True)])
+        otra.barcode = "7500000000077"
+        db.commit()
+        r = client.put(f"/api/products/{p.id}", json={"barcode": "7500000000077"},
+                       headers=_h(auth_admin, org))
+        assert r.status_code == 409, r.text
+        db.refresh(v)
+        assert v.barcode != "7500000000077"
+
+    def test_put_producto_con_su_propio_codigo_no_falla(self, client, db, org, branch_a, auth_admin):
+        p, v = _make_product(db, org, "Playera", "PLY", 100, [(branch_a.id, True)])
+        v.barcode = "7500000000088"
+        db.commit()
+        r = client.put(f"/api/products/{p.id}", json={"barcode": "7500000000088"},
+                       headers=_h(auth_admin, org))
+        assert r.status_code == 200, r.text
+
+
+# ── Importación ──────────────────────────────────────────────────────────────
+CABECERAS = ["SKU", "Nombre", "Departamento", "Precio Base", "Costo", "Stock", "Codigo Barras"]
+
+
+def _csv(filas, cabeceras=CABECERAS):
+    import io as _io
+    buf = _io.StringIO()
+    buf.write(",".join(cabeceras) + "\n")
+    for f in filas:
+        buf.write(",".join(str(f.get(c, "")) for c in cabeceras) + "\n")
+    return buf.getvalue().encode("utf-8")
+
+
+def _subir(client, auth, org, filas, cabeceras=CABECERAS):
+    return client.post(
+        "/api/products/upload",
+        headers=_h(auth, org),
+        files={"file": ("catalogo.csv", _csv(filas, cabeceras), "text/csv")},
+    )
+
+
+class TestImportacion:
+    def test_filas_nuevas_sin_codigo_reciben_uno_distinto(self, client, db, org, auth_admin):
+        filas = [
+            {"SKU": "IMP-1", "Nombre": "Uno", "Departamento": "General", "Precio Base": "10", "Costo": "5", "Stock": "1"},
+            {"SKU": "IMP-2", "Nombre": "Dos", "Departamento": "General", "Precio Base": "10", "Costo": "5", "Stock": "1"},
+            {"SKU": "IMP-3", "Nombre": "Tres", "Departamento": "General", "Precio Base": "10", "Costo": "5", "Stock": "1"},
+        ]
+        r = _subir(client, auth_admin, org, filas)
+        assert r.status_code == 200, r.text
+        assert r.json()["created"] == 3
+        codigos = [
+            v.barcode for v in db.query(ProductVariant)
+            .filter(ProductVariant.organization_id == org.id,
+                    ProductVariant.sku.in_(["IMP-1", "IMP-2", "IMP-3"])).all()
+        ]
+        assert len(codigos) == 3 and len(set(codigos)) == 3
+        assert all(es_codigo_interno(org.id, c) for c in codigos)
+
+    def test_fila_nueva_con_codigo_ya_usado_se_rechaza(self, client, db, org, branch_a, auth_admin):
+        _, existente = _make_product(db, org, "Gorra", "GOR", 50, [(branch_a.id, True)])
+        existente.barcode = "7501111111111"
+        db.commit()
+        filas = [{"SKU": "IMP-DUP", "Nombre": "Copiona", "Departamento": "General",
+                  "Precio Base": "10", "Costo": "5", "Stock": "1",
+                  "Codigo Barras": "7501111111111"}]
+        r = _subir(client, auth_admin, org, filas)
+        assert r.status_code == 200, r.text
+        cuerpo = r.json()
+        assert cuerpo["created"] == 0 and cuerpo["failed"] == 1
+        assert "codigo de barras" in str(cuerpo["details"]).lower()
+        assert db.query(ProductVariant).filter(ProductVariant.sku == "IMP-DUP").count() == 0
+
+    def test_fila_que_actualiza_no_puede_robar_el_codigo_de_otra(self, client, db, org, branch_a, auth_admin):
+        _, uno = _make_product(db, org, "Playera", "PLY", 100, [(branch_a.id, True)])
+        uno.barcode = "7502222222222"
+        _, dos = _make_product(db, org, "Gorra", "GOR", 50, [(branch_a.id, True)])
+        dos.barcode = "7503333333333"
+        db.commit()
+
+        filas = [{"SKU": "GOR", "Nombre": "Gorra", "Departamento": "General",
+                  "Precio Base": "55", "Costo": "25", "Stock": "1",
+                  "Codigo Barras": "7502222222222"}]
+        r = _subir(client, auth_admin, org, filas)
+        assert r.status_code == 200, r.text
+        assert r.json()["failed"] == 1
+        db.refresh(dos)
+        assert dos.barcode == "7503333333333", "conserva el suyo"
+        assert float(dos.price) == 50.0, "la fila entera se revierte"
+
+    def test_fila_que_repite_su_propio_codigo_se_actualiza(self, client, db, org, branch_a, auth_admin):
+        _, dos = _make_product(db, org, "Gorra", "GOR", 50, [(branch_a.id, True)])
+        dos.barcode = "7503333333333"
+        db.commit()
+        filas = [{"SKU": "GOR", "Nombre": "Gorra", "Departamento": "General",
+                  "Precio Base": "55", "Costo": "25", "Stock": "1",
+                  "Codigo Barras": "7503333333333"}]
+        r = _subir(client, auth_admin, org, filas)
+        assert r.status_code == 200, r.text
+        assert r.json()["updated"] == 1 and r.json()["failed"] == 0
+        db.refresh(dos)
+        assert dos.barcode == "7503333333333" and float(dos.price) == 55.0
+
+
+class TestCsvComillas:
+    def test_nombre_con_coma_y_comillas_queda_escapado(self, client, db, org, branch_a, auth_admin):
+        """El CSV lo abre Excel: un nombre con coma partiría la fila en dos
+        columnas y el código de barras aterrizaría en la columna del nombre."""
+        p, v = _make_product(db, org, 'Blusa "Lujo", roja', "BLS", 100, [(branch_a.id, True)])
+        v.barcode = "7501234567890"
+        db.commit()
+        r = client.get("/api/products/export/labels.csv", headers=_h(auth_admin, org))
+        assert r.status_code == 200, r.text
+        texto = r.content.decode("utf-8-sig")
+        assert '"Blusa ""Lujo"", roja"' in texto
+
+        import csv as _csv
+        import io as _io
+        filas = list(_csv.reader(_io.StringIO(texto)))
+        assert filas[0] == ENCABEZADO.split(",")
+        assert filas[1][:3] == ["BLS", "7501234567890", 'Blusa "Lujo", roja']

@@ -1262,13 +1262,21 @@ function ProductsHQView() {
     try {
       const n = await productsApi.assignMissingBarcodes()
       toast.success(`${n} códigos generados`)
-      // El código nuevo vive en la variante: hay que releer la lista para que
-      // el desglose por talla lo muestre, y el contador para ocultar el botón.
-      await load(search, deptId, page)
-      setCodigosFaltantes(await productsApi.barcodesMissingCount())
     } catch (e: any) {
       const detail = e?.response?.data?.detail
       toast.error(typeof detail === 'string' ? detail : 'No se pudieron generar los códigos.')
+      setGenerandoCodigos(false)
+      return
+    }
+    // Refresco APARTE del try de arriba: los códigos ya se generaron, así que
+    // si la relectura falla no debe salir un "no se pudieron generar" falso.
+    // El código nuevo vive en la variante: hay que releer la lista para que el
+    // desglose por talla lo muestre, y el contador para ocultar el botón.
+    try {
+      await load(search, deptId, page)
+      setCodigosFaltantes(await productsApi.barcodesMissingCount())
+    } catch {
+      /* el catálogo se recarga solo al siguiente filtro o navegación */
     } finally {
       setGenerandoCodigos(false)
     }

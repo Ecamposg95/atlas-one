@@ -29,7 +29,7 @@ from ._shared import _safe_str, _is_na, _safe_decimal
 from app.modules.products.schemas import ProductVariantCreate
 from app.modules.products.variant_label import COLOR_MAX, SIZE_MAX, clean_attr, variant_label
 from .variants import crear_variantes, _pareja_repetida
-from app.services.barcodes import siguiente_codigo_interno
+from app.services.barcodes import AsignadorDeCodigos, barcode_en_uso
 
 router = APIRouter()
 
@@ -323,6 +323,10 @@ async def upload_products(
     updated_count = 0
     failed_count = 0
     failed_details = []
+    # Un solo asignador para todo el archivo: un catalogo grande tiene miles de
+    # filas nuevas y releer el MAX de codigos en cada una es un recorrido de
+    # tabla por fila.
+    asignador = AsignadorDeCodigos(db, org_id)
     preview_rows: list[dict] = []
 
     # (nombre_lower, department_id) -> (Product, id de su variante principal)
@@ -450,7 +454,16 @@ async def upload_products(
                     existing_variant.price = price_base
                     existing_variant.cost = cost
                     raw_barcode = _safe_str(row.get("codigo barras", ""))
-                    if raw_barcode:
+                    if raw_barcode and raw_barcode != (existing_variant.barcode or ""):
+                        # El archivo trae OTRO codigo para esta variante. Si ya
+                        # lo tiene otra variante de la org, la fila se rechaza:
+                        # dos tallas con el mismo codigo hacen que el escaner
+                        # cobre la equivocada.
+                        if barcode_en_uso(db, org_id, raw_barcode, excepto_id=existing_variant.id):
+                            raise _FilaInvalida(
+                                f"'{raw_sku}': el codigo de barras '{raw_barcode}' "
+                                f"ya lo tiene otra variante."
+                            )
                         existing_variant.barcode = raw_barcode
                     if raw_color or raw_talla:
                         # Celda vacía no borra; para quitar color/talla usar
@@ -499,7 +512,8 @@ async def upload_products(
                         price=price_base,
                         cost=cost,
                     )
-                    nuevas = crear_variantes(db, org_id, prod, [entrada], principal_id=principal_id)
+                    nuevas = crear_variantes(db, org_id, prod, [entrada],
+                                             principal_id=principal_id, asignador=asignador)
                     variant = nuevas[0]
                     variant.has_iva = has_iva_val
                     created_count += 1
@@ -536,10 +550,17 @@ async def upload_products(
                     db.add(prod)
                     db.flush()
 
+                    nuevo_barcode = _safe_str(row.get("codigo barras")) or None
+                    if nuevo_barcode and barcode_en_uso(db, org_id, nuevo_barcode):
+                        raise _FilaInvalida(
+                            f"'{raw_sku}': el codigo de barras '{nuevo_barcode}' "
+                            f"ya lo tiene otra variante."
+                        )
+
                     variant = ProductVariant(
                         product_id=prod.id,
                         sku=raw_sku,
-                        barcode=_safe_str(row.get("codigo barras")) or None,
+                        barcode=nuevo_barcode,
                         color=raw_color,
                         size=raw_talla,
                         variant_name=variant_label(raw_color, raw_talla),
@@ -555,7 +576,7 @@ async def upload_products(
                         # interno de la org, igual que en el alta manual. Las
                         # filas que ACTUALIZAN una variante existente no se
                         # tocan (arriba): un código nunca se sobrescribe.
-                        variant.barcode = siguiente_codigo_interno(db, org_id)
+                        variant.barcode = asignador.siguiente()
                         db.flush()
                     created_count += 1
                     is_new = True

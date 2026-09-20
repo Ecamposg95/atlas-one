@@ -29,7 +29,7 @@ from app.modules.products.schemas import (
     ProductRead, ProductVariantCreate, ProductVariantUpdate, VariantBatchCreate,
 )
 from app.modules.products.variant_label import COLOR_MAX, SIZE_MAX, clean_attr, variant_label
-from app.services.barcodes import barcode_en_uso, siguiente_codigo_interno
+from app.services.barcodes import AsignadorDeCodigos, barcode_en_uso, siguiente_codigo_interno
 
 from ._shared import _PRODUCT_ADVANCED_ROLES, _compute_product_read
 
@@ -121,6 +121,7 @@ def crear_variantes(
     principal_id: Optional[str] = None,
     stock_branch_id: Optional[int] = None,
     user_id: Optional[int] = None,
+    asignador: Optional[AsignadorDeCodigos] = None,
 ) -> List[ProductVariant]:
     """Crea variantes hermanas de la principal. Sin commit: lo hace el caller.
 
@@ -198,7 +199,10 @@ def crear_variantes(
             # distinguirlas en el anaquel. Se genera uno interno (EAN-13) aquí
             # mismo: el `db.flush()` de abajo lo deja visible para la siguiente
             # vuelta del bucle, así que no se repiten entre hermanas.
-            barcode = siguiente_codigo_interno(db, org_id)
+            # `asignador`: la importación pasa el suyo (uno por request) para
+            # no releer el MAX del catálogo en cada fila del archivo.
+            barcode = (asignador.siguiente() if asignador is not None
+                       else siguiente_codigo_interno(db, org_id))
 
         v = ProductVariant(
             product_id=producto.id,
