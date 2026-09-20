@@ -179,6 +179,11 @@ export function Organization() {
                 <label className="dax-label">Email</label>
                 <input type="email" value={orgForm.email ?? ''} onChange={(e) => of('email', e.target.value)} className="dax-input w-full" />
               </div>
+              <div>
+                <label className="dax-label">Sitio web</label>
+                <input value={orgForm.website ?? ''} onChange={(e) => of('website', e.target.value)} className="dax-input w-full" placeholder="mitienda.mx" />
+                <p className="text-[10px] mt-1 text-slate-600">Se imprime en el ticket como «Web: …».</p>
+              </div>
               <div className="sm:col-span-2">
                 <label className="dax-label">Dirección</label>
                 <input value={orgForm.address ?? ''} onChange={(e) => of('address', e.target.value)} className="dax-input w-full" />
@@ -379,6 +384,69 @@ export function Organization() {
                   placeholder={"Gracias por su compra!\nwww.mitienda.mx"}
                 />
                 <p className="text-[10px] mt-1 text-slate-600">Hasta 2 líneas · se muestra al final del ticket.</p>
+              </div>
+              <div>
+                <label className="dax-label">Términos y condiciones</label>
+                <textarea
+                  value={orgForm.ticket_terms ?? ''}
+                  onChange={e => setOrgForm(p => ({ ...p, ticket_terms: e.target.value || null }))}
+                  rows={5}
+                  maxLength={600}
+                  className="dax-input w-full resize-none font-mono text-xs"
+                  placeholder={'Cambios dentro de los 15 días presentando este ticket.\nNo se aceptan cambios en ropa interior ni liquidación.'}
+                />
+                <p className="text-[10px] mt-1 text-slate-600">Se imprimen al final del ticket. Cambios, garantías, política de devolución…</p>
+              </div>
+              <div>
+                <p className="dax-label mb-2">Redes sociales</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] text-slate-500"><i className="fa-brands fa-instagram mr-1" />Instagram</label>
+                    <input
+                      value={orgForm.ticket_instagram ?? ''}
+                      onChange={e => setOrgForm(p => ({ ...p, ticket_instagram: e.target.value || null }))}
+                      className="dax-input w-full" placeholder="@tu_tienda"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-500"><i className="fa-brands fa-facebook mr-1" />Facebook</label>
+                    <input
+                      value={orgForm.ticket_facebook ?? ''}
+                      onChange={e => setOrgForm(p => ({ ...p, ticket_facebook: e.target.value || null }))}
+                      className="dax-input w-full" placeholder="Tu Tienda"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-500"><i className="fa-brands fa-tiktok mr-1" />TikTok</label>
+                    <input
+                      value={orgForm.ticket_tiktok ?? ''}
+                      onChange={e => setOrgForm(p => ({ ...p, ticket_tiktok: e.target.value || null }))}
+                      className="dax-input w-full" placeholder="@tu_tienda"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-500"><i className="fa-brands fa-whatsapp mr-1" />WhatsApp</label>
+                    <input
+                      value={orgForm.ticket_whatsapp ?? ''}
+                      onChange={e => setOrgForm(p => ({ ...p, ticket_whatsapp: e.target.value || null }))}
+                      className="dax-input w-full" placeholder="55 1234 5678"
+                    />
+                  </div>
+                </div>
+                <p className="text-[10px] mt-2 text-slate-600">
+                  Cada red se imprime solo si la capturas. El sitio web se toma del campo <b>Sitio web</b> de arriba.
+                </p>
+              </div>
+              <div className="flex items-start gap-3 pt-1">
+                <input
+                  type="checkbox" id="ticket-vendor-chk" className="w-4 h-4 mt-0.5"
+                  checked={orgForm.ticket_show_vendor ?? true}
+                  onChange={e => setOrgForm(p => ({ ...p, ticket_show_vendor: e.target.checked }))}
+                />
+                <label htmlFor="ticket-vendor-chk" className="text-xs text-slate-300 cursor-pointer">
+                  Mostrar «Sistema: Atlas One | Atlas Tech» al pie
+                  <span className="block text-[10px] text-slate-600">Dos líneas al final del ticket con el proveedor del sistema.</span>
+                </label>
               </div>
               <div className="flex justify-end">
                 <button onClick={saveOrg} disabled={saving} className="dax-btn-primary disabled:opacity-40">

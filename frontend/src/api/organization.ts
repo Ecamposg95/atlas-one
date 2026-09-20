@@ -8,9 +8,18 @@ export interface Organization {
   phone: string | null
   email: string | null
   logo_url: string | null
+  website: string | null
   ticket_header: string | null
   ticket_footer: string | null
   industry_type: string | null
+  // Secciones boutique del ticket (2026-09-19). Vacías = la sección no se
+  // imprime. `Web:` del ticket sale de `website`, no de un campo aparte.
+  ticket_terms?: string | null
+  ticket_instagram?: string | null
+  ticket_facebook?: string | null
+  ticket_tiktok?: string | null
+  ticket_whatsapp?: string | null
+  ticket_show_vendor?: boolean
   // Equivalente en dólares (2026-09-17). 'off' = la función está apagada y no
   // se muestra nada en el POS ni en el ticket.
   usd_rate_mode?: 'off' | 'auto' | 'manual'
