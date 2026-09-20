@@ -29,6 +29,7 @@ from app.modules.products.schemas import (
     ProductRead, ProductVariantCreate, ProductVariantUpdate, VariantBatchCreate,
 )
 from app.modules.products.variant_label import COLOR_MAX, SIZE_MAX, clean_attr, variant_label
+from app.services.barcodes import barcode_en_uso, siguiente_codigo_interno
 
 from ._shared import _PRODUCT_ADVANCED_ROLES, _compute_product_read
 
@@ -90,15 +91,10 @@ def _sku_en_uso(db: Session, org_id: int, sku: str, excepto_id: Optional[str] = 
     return db.query(q.exists()).scalar()
 
 
-def _barcode_en_uso(db: Session, org_id: int, barcode: str, excepto_id: Optional[str] = None) -> bool:
-    q = db.query(ProductVariant).filter(
-        ProductVariant.organization_id == org_id,
-        ProductVariant.barcode == barcode,
-        ProductVariant.deleted_at.is_(None),
-    )
-    if excepto_id:
-        q = q.filter(ProductVariant.id != excepto_id)
-    return db.query(q.exists()).scalar()
+# El chequeo de duplicados vive en `app/services/barcodes.py` (lo comparten el
+# alta de productos, la edición y la asignación masiva). Se mantiene el alias
+# privado para no tocar los tres llamados de este módulo.
+_barcode_en_uso = barcode_en_uso
 
 
 def _atributos(color: Optional[str], size: Optional[str], contexto: str) -> tuple[Optional[str], Optional[str]]:
@@ -197,6 +193,12 @@ def crear_variantes(
         barcode = (e.barcode or "").strip() or None
         if barcode and _barcode_en_uso(db, org_id, barcode):
             raise HTTPException(status_code=409, detail=f"El código de barras '{barcode}' ya lo tiene otra variante.")
+        if not barcode:
+            # Cada talla necesita su propio código o la etiquetadora no puede
+            # distinguirlas en el anaquel. Se genera uno interno (EAN-13) aquí
+            # mismo: el `db.flush()` de abajo lo deja visible para la siguiente
+            # vuelta del bucle, así que no se repiten entre hermanas.
+            barcode = siguiente_codigo_interno(db, org_id)
 
         v = ProductVariant(
             product_id=producto.id,

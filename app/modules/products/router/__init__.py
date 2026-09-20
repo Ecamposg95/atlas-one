@@ -30,6 +30,7 @@ from app.schemas.departments import (
 from app.schemas.brands import BrandCreate, BrandUpdate, BrandResponse
 
 from . import (
+    barcodes,
     core,
     departments,
     stats,
@@ -55,6 +56,7 @@ router.include_router(import_export.router)
 router.include_router(reports.router)
 router.include_router(audit.router)
 router.include_router(variants.router)
+router.include_router(barcodes.router)
 
 
 # ═════════════════════════════════════════════════════════════════════════════

@@ -46,6 +46,7 @@ from app.modules.products.schemas import (
 from app.modules.products.variant_label import (
     COLOR_MAX, SIZE_MAX, clean_attr, variant_label,
 )
+from app.services.barcodes import barcode_en_uso, siguiente_codigo_interno
 
 from ._shared import (
     _MANAGER_ROLES, _PRODUCT_ADVANCED_ROLES, _compute_product_read,
@@ -335,6 +336,16 @@ def create_product(
             if not brand:
                 raise HTTPException(status_code=422, detail="Marca no encontrada en tu organización.")
 
+        # Código de barras: único DENTRO de la organización (dos tiendas sí
+        # pueden vender el mismo EAN de fábrica). Mismo mensaje que el alta de
+        # tallas para que la pantalla lo muestre igual.
+        _barcode_in = (prod_in.barcode or "").strip() or None
+        if _barcode_in and barcode_en_uso(db, org_id, _barcode_in):
+            raise HTTPException(
+                status_code=409,
+                detail=f"El código de barras '{_barcode_in}' ya lo tiene otra variante.",
+            )
+
         # Crear producto padre — defaults explícitos (no depender del ORM default).
         # approval_status: siempre APPROVED. CAJERO/GERENTE pueden crear y ver
         # su producto al instante sin bloqueo de aprobación. El workflow de
@@ -363,7 +374,7 @@ def create_product(
         new_variant = ProductVariant(
             product_id=new_prod.id,
             sku=prod_in.sku,
-            barcode=prod_in.barcode,
+            barcode=_barcode_in,
             color=_color_pal,
             size=_size_pal,
             variant_name=variant_label(_color_pal, _size_pal),
@@ -375,6 +386,14 @@ def create_product(
         )
         db.add(new_variant)
         db.flush()
+
+        # Sin código de fábrica se genera uno interno (EAN-13 de la org): toda
+        # variante tiene que poder escanearse e imprimirse en etiqueta. Va
+        # después del flush para que las hermanas de `extra_variants` (abajo)
+        # lo vean y no repitan la secuencia.
+        if not new_variant.barcode:
+            new_variant.barcode = siguiente_codigo_interno(db, org_id)
+            db.flush()
 
         # [NEW] Create StockOnHand + Kardex de apertura por sucursal efectiva
         # El stock inicial va a la sucursal del cajero (o a la primera objetivo si es HQ).
@@ -1017,6 +1036,11 @@ def update_product(
         if "barcode" in _campos_enviados:
             # Tanto null como cadena vacía significan "quítalo".
             _bc = (prod_in.barcode or "").strip()
+            if _bc and barcode_en_uso(db, org_id, _bc, excepto_id=v.id):
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"El código de barras '{_bc}' ya lo tiene otra variante.",
+                )
             v.barcode = _bc or None
 
         # Color/talla de la principal: mismo trato que en `PUT /variants/{id}`

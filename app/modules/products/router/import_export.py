@@ -29,6 +29,7 @@ from ._shared import _safe_str, _is_na, _safe_decimal
 from app.modules.products.schemas import ProductVariantCreate
 from app.modules.products.variant_label import COLOR_MAX, SIZE_MAX, clean_attr, variant_label
 from .variants import crear_variantes, _pareja_repetida
+from app.services.barcodes import siguiente_codigo_interno
 
 router = APIRouter()
 
@@ -538,7 +539,7 @@ async def upload_products(
                     variant = ProductVariant(
                         product_id=prod.id,
                         sku=raw_sku,
-                        barcode=_safe_str(row.get("codigo barras")),
+                        barcode=_safe_str(row.get("codigo barras")) or None,
                         color=raw_color,
                         size=raw_talla,
                         variant_name=variant_label(raw_color, raw_talla),
@@ -549,6 +550,13 @@ async def upload_products(
                     )
                     db.add(variant)
                     db.flush()
+                    if not variant.barcode:
+                        # Fila nueva sin "Codigo Barras": se le genera el
+                        # interno de la org, igual que en el alta manual. Las
+                        # filas que ACTUALIZAN una variante existente no se
+                        # tocan (arriba): un código nunca se sobrescribe.
+                        variant.barcode = siguiente_codigo_interno(db, org_id)
+                        db.flush()
                     created_count += 1
                     is_new = True
                     registrar_grupo = con_variante
