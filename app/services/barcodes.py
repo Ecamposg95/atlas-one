@@ -154,6 +154,11 @@ class AsignadorDeCodigos:
             # ocupando justo este número. Se avanza hasta uno libre.
             if not barcode_en_uso(self._db, self._org_id, codigo):
                 return codigo
+            # Ocupado: si otro proceso emitió códigos entre nuestros commits (el
+            # lock se suelta en cada commit del importador) el contador quedó
+            # atrás; se resincroniza con el máximo real en vez de sondear de
+            # uno en uno con el lock tomado.
+            self._secuencia = max(self._secuencia, _max_secuencia(self._db, self._org_id))
         raise RuntimeError(
             f"La organización {self._org_id} agotó la secuencia de códigos internos."
         )
