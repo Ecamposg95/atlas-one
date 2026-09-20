@@ -123,14 +123,15 @@ def run_migrations():
         ("users", "reprint_pin_hash", "ALTER TABLE users ADD COLUMN reprint_pin_hash VARCHAR;"),
         # Secciones boutique del ticket 2026-09-19. Los cinco campos de texto
         # nacen NULL: quien no los capture imprime el ticket de siempre.
-        # `ticket_show_vendor` nace TRUE porque el ticket HTML ya imprimia
-        # "Software: Atlas One" para todos; apagarlo es una decision del dueño.
+        # `ticket_show_vendor` nace FALSE: ningun negocio vivo estrena lineas en
+        # su ticket por un deploy; su dueño lo enciende desde Empresa.
         ("organization", "ticket_terms",       "ALTER TABLE organization ADD COLUMN ticket_terms TEXT;"),
+        ("organization", "ticket_terms_url",   "ALTER TABLE organization ADD COLUMN ticket_terms_url VARCHAR;"),
         ("organization", "ticket_instagram",   "ALTER TABLE organization ADD COLUMN ticket_instagram VARCHAR;"),
         ("organization", "ticket_facebook",    "ALTER TABLE organization ADD COLUMN ticket_facebook VARCHAR;"),
         ("organization", "ticket_tiktok",      "ALTER TABLE organization ADD COLUMN ticket_tiktok VARCHAR;"),
         ("organization", "ticket_whatsapp",    "ALTER TABLE organization ADD COLUMN ticket_whatsapp VARCHAR;"),
-        ("organization", "ticket_show_vendor", "ALTER TABLE organization ADD COLUMN ticket_show_vendor BOOLEAN NOT NULL DEFAULT TRUE;"),
+        ("organization", "ticket_show_vendor", "ALTER TABLE organization ADD COLUMN ticket_show_vendor BOOLEAN NOT NULL DEFAULT FALSE;"),
     ]
 
     # Track 1 — Audit + cleanup de Payment huérfanos antes de NOT NULL.

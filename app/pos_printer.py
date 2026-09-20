@@ -494,6 +494,43 @@ class PosPrinter:
     # una organizacion que no configuro nada recibe el ticket de siempre, byte
     # por byte (tests/test_ticket_boutique.py).
 
+    # Caracteres que el dueño escribe desde el teclado de su computadora y que
+    # NO existen en latin-1: encodearlos con `replace` imprimia un "?" en el
+    # papel. El bullet es el caso real (los terminos vienen en vinetas).
+    _ASCII_SUSTITUTOS = {
+        "\u2022": "-",   # • bullet
+        "\u00b7": "-",   # · punto medio
+        "\u2013": "-",   # – en dash
+        "\u2014": "-",   # — em dash
+        "\u2026": "...",  # … puntos suspensivos
+        "\u2018": "'", "\u2019": "'",   # comillas simples tipograficas
+        "\u201c": '"', "\u201d": '"',   # comillas dobles tipograficas
+    }
+
+    @classmethod
+    def _ascii_safe(cls, texto: str) -> str:
+        """Texto imprimible en latin-1 sin "?" a media palabra."""
+        for origen, destino in cls._ASCII_SUSTITUTOS.items():
+            texto = texto.replace(origen, destino)
+        return texto
+
+    def _qr_bytes(self, data: str, size: int = 4) -> bytes:
+        """Codigo QR NATIVO de la impresora (GS ( k, modelo 2, correccion M).
+
+        Nativo y no imagen: no depende del renderizador de graficos ni de que
+        el agente de impresion sepa dibujar. Quien centra y deja el salto de
+        linea es el llamador; aqui solo va la secuencia del QR.
+        """
+        carga = self._ascii_safe(data).encode("latin-1", "replace")
+        largo = len(carga) + 3
+        raw = b"\x1d\x28\x6b\x04\x00\x31\x41\x32\x00"                    # modelo 2
+        raw += b"\x1d\x28\x6b\x03\x00\x31\x43" + bytes([size])            # tamaño de modulo
+        raw += b"\x1d\x28\x6b\x03\x00\x31\x45\x31"                        # correccion M
+        raw += (b"\x1d\x28\x6b" + bytes([largo & 0xFF, (largo >> 8) & 0xFF])
+                + b"\x31\x50\x30" + carga)                                   # datos
+        raw += b"\x1d\x28\x6b\x03\x00\x31\x51\x30"                        # imprimir
+        return raw
+
     @staticmethod
     def _texto_config(obj, attr: str) -> str:
         """Valor de configuracion como texto limpio.
@@ -549,7 +586,7 @@ class PosPrinter:
         for etiqueta, attr in etiquetas:
             valor = self._texto_config(organization, attr)
             if valor:
-                redes.append(f"{etiqueta}: {valor}")
+                redes.append(self._ascii_safe(f"{etiqueta}: {valor}"))
         if redes:
             raw += self.CMD["CENTER"] + self.CMD["BOLD_ON"]
             raw += b"SIGUENOS\n"
@@ -558,13 +595,16 @@ class PosPrinter:
                 raw += (self._truncate(red, self.cols) + "\n").encode("latin-1", "replace")
             raw += self.CMD["LEFT"]
 
-        # --- Terminos y condiciones ---
-        terminos = self._texto_config(organization, "ticket_terms")
-        if terminos:
+        # --- Terminos de compra (+ enlace a la politica completa) ---
+        terminos = self._ascii_safe(self._texto_config(organization, "ticket_terms"))
+        url_terminos = self._ascii_safe(self._texto_config(organization, "ticket_terms_url"))
+        if terminos or url_terminos:
             raw += self.CMD["LEFT"] + sep
             raw += self.CMD["CENTER"] + self.CMD["BOLD_ON"]
-            raw += b"TERMINOS Y CONDICIONES\n"
+            raw += b"TERMINOS DE COMPRA\n"
             raw += self.CMD["BOLD_OFF"] + self.CMD["LEFT"]
+
+        if terminos:
             # En 80 mm el cuerpo va en Font B (compact): son parrafos largos y
             # el papel se agradece. En 58 mm se queda la fuente por defecto.
             if self.paper_width_mm >= 70:
@@ -579,6 +619,17 @@ class PosPrinter:
             if self.paper_width_mm >= 70:
                 raw += self._default_font
 
+        if url_terminos:
+            # QR nativo + la URL en texto debajo: una impresora sin soporte de
+            # QR se come la secuencia en silencio, y el cliente todavia puede
+            # teclear la direccion.
+            raw += self.CMD["CENTER"]
+            raw += b"Consulta la politica completa:\n"
+            raw += self._qr_bytes(url_terminos)
+            raw += self.CMD["LF"]
+            raw += (self._truncate(url_terminos, self.cols) + "\n").encode("latin-1", "replace")
+            raw += self.CMD["LEFT"]
+
         # --- Proveedor tecnologico ---
         if self._mostrar_proveedor(organization):
             raw += self.CMD["LEFT"] + sep + self.CMD["CENTER"]
@@ -590,14 +641,19 @@ class PosPrinter:
 
     @staticmethod
     def _mostrar_proveedor(organization) -> bool:
-        """TRUE por defecto: el ticket HTML ya imprimia "Software: Atlas One"
-        para todos, asi que apagarlo es una decision explicita del dueño."""
+        """APAGADO por defecto: encenderlo agrega dos lineas al ticket de un
+        negocio vivo, y eso lo decide su dueño desde Empresa, no un deploy.
+
+        Solo un booleano (o un 0/1 de SQL crudo) enciende la seccion: cualquier
+        otro valor cuenta como apagado, que es lo que devuelven los mocks de
+        las pruebas y cualquier objeto a medio construir.
+        """
         if organization is None:
             return False
-        val = getattr(organization, "ticket_show_vendor", True)
-        if val is None:
-            return True
-        return bool(val)
+        val = getattr(organization, "ticket_show_vendor", False)
+        if isinstance(val, (bool, int)):
+            return bool(val)
+        return False
 
     def _resolve_footer(self, organization, branch) -> str:
         if branch and getattr(branch, 'ticket_footer', None):

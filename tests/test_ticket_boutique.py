@@ -70,11 +70,12 @@ def _org(**kwargs):
         ticket_header=None,
         ticket_footer="Gracias por su compra!",
         ticket_terms=None,
+        ticket_terms_url=None,
         ticket_instagram=None,
         ticket_facebook=None,
         ticket_tiktok=None,
         ticket_whatsapp=None,
-        ticket_show_vendor=True,
+        ticket_show_vendor=False,
     )
     base.update(kwargs)
     return SimpleNamespace(**base)
@@ -135,7 +136,7 @@ def test_sin_campos_configurados_el_ticket_no_cambia():
 def test_sin_campos_configurados_no_imprime_titulos_boutique():
     decoded = _decode(_build(_make_sale(), organization=_org()))
     assert "SIGUENOS" not in decoded
-    assert "TERMINOS Y CONDICIONES" not in decoded
+    assert "TERMINOS DE COMPRA" not in decoded
 
 
 # ─── 2. Encabezado personalizado ──────────────────────────────────────────
@@ -215,7 +216,7 @@ def test_terminos_se_envuelven_sin_pasarse_del_ancho(ancho):
     p = PosPrinter(paper_width_mm=ancho)
     raw = _build(_make_sale(), ancho=ancho, organization=_org(ticket_terms=TERMINOS))
     lineas = _lineas_visibles(raw, ancho)
-    assert "TERMINOS Y CONDICIONES" in lineas
+    assert "TERMINOS DE COMPRA" in lineas
     for l in lineas:
         assert len(l) <= p.cols, f"Linea de {len(l)} > {p.cols}: {l!r}"
 
@@ -223,7 +224,7 @@ def test_terminos_se_envuelven_sin_pasarse_del_ancho(ancho):
 def test_terminos_conservan_el_texto_completo():
     raw = _build(_make_sale(), organization=_org(ticket_terms=TERMINOS))
     lineas = _lineas_visibles(raw)
-    inicio = lineas.index("TERMINOS Y CONDICIONES")
+    inicio = lineas.index("TERMINOS DE COMPRA")
     cuerpo = " ".join(lineas[inicio + 1:])
     assert TERMINOS.split() == cuerpo.split()[: len(TERMINOS.split())]
 
@@ -257,7 +258,7 @@ def test_orden_pie_redes_terminos_proveedor_y_corte():
                                                       ticket_show_vendor=True))
     i_pie = raw.find(b"Gracias por su compra!")
     i_redes = raw.find(b"SIGUENOS")
-    i_terms = raw.find(b"TERMINOS Y CONDICIONES")
+    i_terms = raw.find(b"TERMINOS DE COMPRA")
     i_prov = raw.find(b"Sistema: Atlas One | Atlas Tech")
     i_cierre = raw.find(p.CMD["LF"] * 3 + p.CMD["CUT"])
     assert -1 < i_pie < i_redes < i_terms < i_prov < i_cierre
@@ -276,7 +277,7 @@ def test_ticket_reemitido_lleva_el_mismo_bloque():
     decoded = _decode(raw)
     assert "SIGUENOS" in decoded
     assert "Instagram: @elevenfashion" in decoded
-    assert "TERMINOS Y CONDICIONES" in decoded
+    assert "TERMINOS DE COMPRA" in decoded
     assert "Sistema: Atlas One | Atlas Tech" in decoded
 
 
@@ -307,7 +308,7 @@ def _render_html(organization):
 def test_html_sin_configurar_no_trae_secciones_boutique():
     html = _render_html(_org(ticket_show_vendor=False))
     assert "Síguenos" not in html
-    assert "Términos y condiciones" not in html
+    assert "Términos de compra" not in html
     assert "Atlas One" not in html
 
 
@@ -319,7 +320,7 @@ def test_html_trae_redes_terminos_y_proveedor_cuando_estan_configurados():
     assert "@eleven" in html
     assert "55 1234 5678" in html
     assert "elevenfashion.mx" in html
-    assert "Términos y condiciones" in html
+    assert "Términos de compra" in html
     assert "Cambios y devoluciones" in html
     assert "Atlas One" in html
     assert "atlasone.com.mx" in html
@@ -327,6 +328,120 @@ def test_html_trae_redes_terminos_y_proveedor_cuando_estan_configurados():
 
 def test_html_proveedor_apagado_no_muestra_atlas():
     html = _render_html(_org_redes(ticket_terms=TERMINOS, ticket_show_vendor=False))
-    assert "Términos y condiciones" in html
+    assert "Términos de compra" in html
     assert "Atlas One" not in html
     assert "atlasone.com.mx" not in html
+
+
+# ─── 9. Enlace a la política completa (QR nativo) ─────────────────────────
+
+URL_TERMINOS = "elevenboutique.mx/terminos"
+GS_K = b"\x1d\x28\x6b"           # GS ( k — prefijo de todos los comandos QR
+QR_PRINT = b"\x1d\x28\x6b\x03\x00\x31\x51\x30"
+
+
+def test_sin_url_no_hay_ningun_comando_qr():
+    raw = _build(_make_sale(), organization=_org(ticket_terms=TERMINOS))
+    assert GS_K not in raw
+
+
+def test_url_imprime_invitacion_qr_y_la_url_en_texto():
+    org = _org(ticket_terms=TERMINOS, ticket_terms_url=URL_TERMINOS)
+    raw = _build(_make_sale(), organization=org)
+    # Los datos viajan en el comando de almacenamiento (cn=49 fn=80 m=48).
+    assert b"\x31\x50\x30" + URL_TERMINOS.encode("latin-1") in raw
+    assert QR_PRINT in raw
+    lineas = _lineas_visibles(raw)
+    assert "Consulta la politica completa:" in lineas
+    assert URL_TERMINOS in lineas
+
+
+def test_la_url_va_despues_del_texto_de_los_terminos():
+    org = _org(ticket_terms=TERMINOS, ticket_terms_url=URL_TERMINOS,
+               ticket_show_vendor=True)
+    raw = _build(_make_sale(), organization=org)
+    i_titulo = raw.find(b"TERMINOS DE COMPRA")
+    i_cuerpo = raw.find(b"Cambios y devoluciones")
+    i_invita = raw.find(b"Consulta la politica completa:")
+    i_qr = raw.find(QR_PRINT)
+    i_prov = raw.find(b"Sistema: Atlas One | Atlas Tech")
+    assert -1 < i_titulo < i_cuerpo < i_invita < i_qr < i_prov
+
+
+def test_qr_bytes_arma_la_secuencia_esperada():
+    p = PosPrinter(paper_width_mm=80)
+    raw = p._qr_bytes(URL_TERMINOS)
+    largo = len(URL_TERMINOS) + 3
+    assert raw.startswith(b"\x1d\x28\x6b\x04\x00\x31\x41\x32\x00")   # modelo 2
+    assert b"\x1d\x28\x6b\x03\x00\x31\x43\x04" in raw                # modulo 4
+    assert b"\x1d\x28\x6b\x03\x00\x31\x45\x31" in raw                # correccion M
+    assert (b"\x1d\x28\x6b" + bytes([largo & 0xFF, (largo >> 8) & 0xFF])
+            + b"\x31\x50\x30" + URL_TERMINOS.encode("latin-1")) in raw
+    assert raw.endswith(QR_PRINT)
+
+
+def test_url_sin_terminos_tambien_se_imprime():
+    """El enlace vale por si solo: un negocio puede publicar la politica sin
+    copiarla entera en el papel."""
+    raw = _build(_make_sale(), organization=_org(ticket_terms_url=URL_TERMINOS))
+    assert QR_PRINT in raw
+    assert URL_TERMINOS in _lineas_visibles(raw)
+
+
+def test_ticket_reemitido_lleva_el_qr():
+    p = PosPrinter(paper_width_mm=80)
+    raw = p.build_reissued_ticket_bytes(
+        _make_sale(), cashier="Cajero Test",
+        organization=_org(ticket_terms=TERMINOS, ticket_terms_url=URL_TERMINOS),
+        branch=None, returns=[],
+    )
+    assert QR_PRINT in raw
+
+
+# ─── 10. Caracteres fuera de latin-1 ──────────────────────────────────────
+
+def test_vinetas_y_rayas_se_vuelven_ascii():
+    """El bullet "•" no existe en latin-1: encodearlo con `replace` imprimia
+    "?" en el papel."""
+    texto = "\u2022 Cambios en 15 dias \u2013 con ticket\u2026\n\n\u2022 Sin cambios en liquidacion."
+    lineas = _lineas_visibles(_build(_make_sale(), organization=_org(ticket_terms=texto)))
+    cuerpo = "\n".join(lineas)
+    assert "?" not in cuerpo
+    assert "- Cambios en 15 dias - con ticket..." in lineas
+    assert "- Sin cambios en liquidacion." in lineas
+
+
+def test_vinetas_en_las_redes_tambien():
+    org = _org(ticket_instagram="\u2022 @elevenfashion")
+    lineas = _lineas_visibles(_build(_make_sale(), organization=org))
+    assert "Instagram: - @elevenfashion" in lineas
+
+
+# ─── 11. Enlace en el ticket HTML ─────────────────────────────────────────
+
+def test_html_muestra_el_enlace_de_la_politica():
+    html = _render_html(_org(ticket_terms=TERMINOS, ticket_terms_url=URL_TERMINOS))
+    assert "Términos de compra" in html
+    assert URL_TERMINOS in html
+    assert f'href="https://{URL_TERMINOS}"' in html
+
+
+def test_html_sin_enlace_no_pinta_link():
+    html = _render_html(_org(ticket_terms=TERMINOS))
+    assert "Términos de compra" in html
+    assert "elevenboutique" not in html
+
+
+# ─── 12. El proveedor nace apagado ────────────────────────────────────────
+
+def test_proveedor_apagado_por_defecto():
+    """Una organizacion que nunca toco el campo (ni siquiera tiene el atributo)
+    no estrena lineas en su ticket por un deploy."""
+    org = SimpleNamespace(
+        name="Eleven Fashion", legal_name=None, tax_id=None, tax_regime=None,
+        address=None, phone=None, logo_url=None, website=None,
+        price_includes_tax=False,
+        ticket_header=None, ticket_footer="Gracias por su compra!",
+    )
+    assert "Atlas" not in _decode(_build(_make_sale(), organization=org))
+    assert "Atlas" not in _decode(_build(_make_sale(), organization=_org()))

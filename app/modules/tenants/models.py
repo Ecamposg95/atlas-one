@@ -181,13 +181,16 @@ class Organization(Base):
     # organizacion que no las capture imprime el ticket de siempre, byte por
     # byte (app/pos_printer.py::_build_boutique_footer).
     ticket_terms = Column(Text, nullable=True)
+    # Enlace a la politica completa: el ticket lo imprime como QR nativo mas la
+    # URL en texto, para no gastar papel copiando el reglamento entero.
+    ticket_terms_url = Column(String, nullable=True)
     ticket_instagram = Column(String, nullable=True)
     ticket_facebook = Column(String, nullable=True)
     ticket_tiktok = Column(String, nullable=True)
     ticket_whatsapp = Column(String, nullable=True)
-    # La linea del proveedor SI viene encendida: el ticket HTML ya la traia
-    # siempre ("Software: Atlas One"), asi que TRUE es el comportamiento vivo.
-    ticket_show_vendor = Column(Boolean, nullable=False, default=True, server_default="true")
+    # La linea del proveedor viene APAGADA: encenderla agrega dos lineas al
+    # ticket de un negocio vivo, y eso lo decide su dueño desde Empresa.
+    ticket_show_vendor = Column(Boolean, nullable=False, default=False, server_default="false")
 
     # Geolocalización
     latitude = Column(Numeric(9, 6), nullable=True)

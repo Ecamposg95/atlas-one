@@ -2,9 +2,14 @@
 from datetime import date
 from decimal import Decimal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from app.models.organization import IndustryType
+
+# Tope de los terminos de compra. El mismo numero vive en el `maxLength` del
+# panel de Empresa: API y pantalla tienen que coincidir o el dueño escribe un
+# texto que el PUT rechaza.
+TERMS_MAX_LEN = 2000
 
 
 class OrganizationBase(BaseModel):
@@ -24,13 +29,14 @@ class OrganizationBase(BaseModel):
     printer_name: Optional[str] = None
 
     # Secciones boutique del ticket (2026-09-19). None = la seccion no se
-    # imprime; `ticket_show_vendor` viene encendido como en la base.
-    ticket_terms: Optional[str] = None
+    # imprime; la linea del proveedor viene apagada, como en la base.
+    ticket_terms: Optional[str] = Field(default=None, max_length=TERMS_MAX_LEN)
+    ticket_terms_url: Optional[str] = None
     ticket_instagram: Optional[str] = None
     ticket_facebook: Optional[str] = None
     ticket_tiktok: Optional[str] = None
     ticket_whatsapp: Optional[str] = None
-    ticket_show_vendor: bool = True
+    ticket_show_vendor: bool = False
 
     latitude: Optional[float] = None
     longitude: Optional[float] = None
@@ -68,7 +74,8 @@ class OrganizationUpdate(BaseModel):
 
     # Secciones boutique del ticket (2026-09-19). Caen FUERA de la whitelist de
     # no-admins del router, asi que solo ADMINISTRADOR/DUEÑO las cambia.
-    ticket_terms: Optional[str] = None
+    ticket_terms: Optional[str] = Field(default=None, max_length=TERMS_MAX_LEN)
+    ticket_terms_url: Optional[str] = None
     ticket_instagram: Optional[str] = None
     ticket_facebook: Optional[str] = None
     ticket_tiktok: Optional[str] = None

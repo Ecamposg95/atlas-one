@@ -292,11 +292,19 @@
     </div>
     {% endif %}
 
-    {# Términos y condiciones: respetan los saltos de línea del usuario. #}
-    {% if organization.ticket_terms %}
+    {# Términos de compra: respetan los saltos de línea del usuario. #}
+    {% if organization.ticket_terms or organization.ticket_terms_url %}
     <div class="separator"></div>
-    <div class="footer" style="font-size: 9px; white-space: pre-line; text-align: left;"><span class="bold">Términos y condiciones</span>
-{{ organization.ticket_terms }}</div>
+    <div class="footer" style="font-size: 9px; white-space: pre-line; text-align: left;"><span class="bold">Términos de compra</span>
+{{ organization.ticket_terms or '' }}</div>
+    {% if organization.ticket_terms_url %}
+    {% set _url = organization.ticket_terms_url %}
+    {% set _href = _url if _url.startswith('http') else 'https://' + _url %}
+    <div class="footer text-center" style="font-size: 9px;">
+        Consulta la política completa:<br>
+        <a href="{{ _href }}">{{ _url }}</a>
+    </div>
+    {% endif %}
     {% endif %}
 
     {# Proveedor tecnológico: encendido por defecto, se apaga en Empresa. #}

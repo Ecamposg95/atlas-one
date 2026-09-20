@@ -391,11 +391,24 @@ export function Organization() {
                   value={orgForm.ticket_terms ?? ''}
                   onChange={e => setOrgForm(p => ({ ...p, ticket_terms: e.target.value || null }))}
                   rows={5}
-                  maxLength={600}
+                  maxLength={2000}
                   className="dax-input w-full resize-none font-mono text-xs"
-                  placeholder={'Cambios dentro de los 15 días presentando este ticket.\nNo se aceptan cambios en ropa interior ni liquidación.'}
+                  placeholder={'• Cambios dentro de los 15 días presentando este ticket.\n• No se aceptan cambios en ropa interior ni liquidación.'}
                 />
-                <p className="text-[10px] mt-1 text-slate-600">Se imprimen al final del ticket. Cambios, garantías, política de devolución…</p>
+                <div className="flex items-start justify-between gap-3 mt-1">
+                  <p className="text-[10px] text-slate-600">Se imprimen al final del ticket. Cambios, garantías, política de devolución…</p>
+                  <p className="text-[10px] text-slate-600 tabular-nums whitespace-nowrap">{(orgForm.ticket_terms ?? '').length}/2000</p>
+                </div>
+              </div>
+              <div>
+                <label className="dax-label">Enlace a la política completa</label>
+                <input
+                  value={orgForm.ticket_terms_url ?? ''}
+                  onChange={e => setOrgForm(p => ({ ...p, ticket_terms_url: e.target.value || null }))}
+                  className="dax-input w-full"
+                  placeholder="elevenboutique.mx/terminos"
+                />
+                <p className="text-[10px] mt-1 text-slate-600">Se imprime como código QR más la dirección en texto, debajo de los términos.</p>
               </div>
               <div>
                 <p className="dax-label mb-2">Redes sociales</p>
@@ -440,7 +453,7 @@ export function Organization() {
               <div className="flex items-start gap-3 pt-1">
                 <input
                   type="checkbox" id="ticket-vendor-chk" className="w-4 h-4 mt-0.5"
-                  checked={orgForm.ticket_show_vendor ?? true}
+                  checked={orgForm.ticket_show_vendor ?? false}
                   onChange={e => setOrgForm(p => ({ ...p, ticket_show_vendor: e.target.checked }))}
                 />
                 <label htmlFor="ticket-vendor-chk" className="text-xs text-slate-300 cursor-pointer">

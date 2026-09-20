@@ -15,6 +15,7 @@ export interface Organization {
   // Secciones boutique del ticket (2026-09-19). Vacías = la sección no se
   // imprime. `Web:` del ticket sale de `website`, no de un campo aparte.
   ticket_terms?: string | null
+  ticket_terms_url?: string | null
   ticket_instagram?: string | null
   ticket_facebook?: string | null
   ticket_tiktok?: string | null
