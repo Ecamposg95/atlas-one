@@ -1129,6 +1129,10 @@ function ProductsHQView() {
   const [expandedVariantsId, setExpandedVariantsId] = useState<string | null>(null)
   // CAJERO/GERENTE: modal simplificado para crear producto.
   const [showMiniCreate, setShowMiniCreate] = useState(false)
+  // Tallas sin código de barras (se pide una vez al abrir la pantalla).
+  const [codigosFaltantes, setCodigosFaltantes] = useState(0)
+  const [generandoCodigos, setGenerandoCodigos] = useState(false)
+  const [descargandoEtiquetas, setDescargandoEtiquetas] = useState(false)
 
   const LIMIT = 50
 
@@ -1160,6 +1164,11 @@ function ProductsHQView() {
     productsApi.getBrands()
       .then((b) => setBrands(sortByName(b)))
       .catch(() => toast.error('No se pudieron cargar las marcas.'))
+    // Silencioso a propósito: si el contador falla, el botón simplemente no
+    // aparece — no es motivo para molestar con un toast al abrir el catálogo.
+    productsApi.barcodesMissingCount()
+      .then(setCodigosFaltantes)
+      .catch(() => setCodigosFaltantes(0))
   }, [])
 
   useEffect(() => {
@@ -1237,6 +1246,34 @@ function ProductsHQView() {
     load(search, deptId, page)
   }
 
+  const descargarEtiquetas = async () => {
+    setDescargandoEtiquetas(true)
+    try {
+      await productsApi.downloadLabelsCsv()
+    } catch {
+      toast.error('No se pudo descargar el CSV de etiquetas. Reintenta.')
+    } finally {
+      setDescargandoEtiquetas(false)
+    }
+  }
+
+  const generarCodigos = async () => {
+    setGenerandoCodigos(true)
+    try {
+      const n = await productsApi.assignMissingBarcodes()
+      toast.success(`${n} códigos generados`)
+      // El código nuevo vive en la variante: hay que releer la lista para que
+      // el desglose por talla lo muestre, y el contador para ocultar el botón.
+      await load(search, deptId, page)
+      setCodigosFaltantes(await productsApi.barcodesMissingCount())
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail
+      toast.error(typeof detail === 'string' ? detail : 'No se pudieron generar los códigos.')
+    } finally {
+      setGenerandoCodigos(false)
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -1261,6 +1298,25 @@ function ProductsHQView() {
               >
                 <i className="fa-solid fa-file-import" /> Importar
               </button>
+              <button
+                onClick={descargarEtiquetas}
+                disabled={descargandoEtiquetas}
+                className="dax-btn-secondary text-xs flex items-center gap-1.5 disabled:opacity-50"
+                title="CSV con una fila por talla para la etiquetadora"
+              >
+                <i className={`fa-solid ${descargandoEtiquetas ? 'fa-spinner fa-spin' : 'fa-tags'}`} /> Etiquetas CSV
+              </button>
+              {isHQ && codigosFaltantes > 0 && (
+                <button
+                  onClick={generarCodigos}
+                  disabled={generandoCodigos}
+                  className="dax-btn-secondary text-xs flex items-center gap-1.5 disabled:opacity-50"
+                  title="Genera un código de barras propio para cada talla que no tenga"
+                >
+                  <i className={`fa-solid ${generandoCodigos ? 'fa-spinner fa-spin' : 'fa-barcode'}`} />{' '}
+                  Generar códigos ({codigosFaltantes})
+                </button>
+              )}
               <button
                 onClick={handleNewProductClick}
                 className="dax-btn text-xs flex items-center gap-1.5"
@@ -1550,7 +1606,14 @@ function ProductsHQView() {
                       </tr>
                       {tallasAbiertas && expandVariantRows([p]).map((row) => (
                         <tr key={row.variant.id} className="bg-slate-900/40 text-xs">
-                          <td className="font-mono text-slate-500 pl-6">{row.sku}</td>
+                          <td className="font-mono text-slate-500 pl-6">
+                            {row.sku}
+                            {row.barcode && (
+                              <span className="block text-[10px] text-slate-600" title="Código de barras">
+                                {row.barcode}
+                              </span>
+                            )}
+                          </td>
                           <td className="text-slate-300">
                             <i className="fa-solid fa-turn-up fa-rotate-90 text-slate-600 mr-2 text-[10px]" />
                             {nombreDeVariante(p, row.variant)}

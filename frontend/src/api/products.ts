@@ -457,6 +457,46 @@ export const productsApi = {
   },
 
   /**
+   * GET /api/products/barcodes/missing-count — cuántas tallas visibles
+   * siguen sin código de barras (el botón "Generar códigos" se apoya en esto).
+   */
+  barcodesMissingCount: async (): Promise<number> => {
+    const { data } = await client.get<{ missing: number }>('/products/barcodes/missing-count')
+    return Number(data?.missing ?? 0)
+  },
+
+  /**
+   * POST /api/products/barcodes/assign-missing — genera el código interno de
+   * las variantes que no tienen. Solo ADMINISTRADOR/DUEÑO. Nunca sobrescribe
+   * un código existente. Sin `productId` recorre todo el catálogo.
+   */
+  assignMissingBarcodes: async (productId?: string): Promise<number> => {
+    const { data } = await client.post<{ assigned: number }>(
+      '/products/barcodes/assign-missing',
+      productId ? { product_id: productId } : {},
+    )
+    return Number(data?.assigned ?? 0)
+  },
+
+  /**
+   * GET /api/products/export/labels.csv — CSV de etiquetas (una fila por
+   * talla) para ZebraDesigner / la app de la etiquetadora.
+   */
+  downloadLabelsCsv: async (productId?: string): Promise<void> => {
+    const res = await client.get('/products/export/labels.csv', {
+      params: productId ? { product_id: productId } : undefined,
+      responseType: 'blob',
+    })
+    const url = URL.createObjectURL(new Blob([res.data], { type: 'text/csv;charset=utf-8' }))
+    const a = document.createElement('a')
+    a.href = url
+    const ts = new Date().toISOString().slice(0, 10)
+    a.download = `etiquetas_${ts}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  },
+
+  /**
    * POST /api/products/upload — importación masiva desde Excel/CSV.
    *
    * NOTE (defense in depth): `scope` y `targetBranchIds` son hints. Backend
