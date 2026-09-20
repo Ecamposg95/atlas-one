@@ -23,6 +23,15 @@ class OrganizationBase(BaseModel):
     ticket_footer: Optional[str] = "Gracias por su compra!"
     printer_name: Optional[str] = None
 
+    # Secciones boutique del ticket (2026-09-19). None = la seccion no se
+    # imprime; `ticket_show_vendor` viene encendido como en la base.
+    ticket_terms: Optional[str] = None
+    ticket_instagram: Optional[str] = None
+    ticket_facebook: Optional[str] = None
+    ticket_tiktok: Optional[str] = None
+    ticket_whatsapp: Optional[str] = None
+    ticket_show_vendor: bool = True
+
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     maps_url: Optional[str] = None
@@ -56,6 +65,15 @@ class OrganizationUpdate(BaseModel):
     ticket_header: Optional[str] = None
     ticket_footer: Optional[str] = None
     printer_name: Optional[str] = None
+
+    # Secciones boutique del ticket (2026-09-19). Caen FUERA de la whitelist de
+    # no-admins del router, asi que solo ADMINISTRADOR/DUEÑO las cambia.
+    ticket_terms: Optional[str] = None
+    ticket_instagram: Optional[str] = None
+    ticket_facebook: Optional[str] = None
+    ticket_tiktok: Optional[str] = None
+    ticket_whatsapp: Optional[str] = None
+    ticket_show_vendor: Optional[bool] = None
 
     latitude: Optional[float] = None
     longitude: Optional[float] = None

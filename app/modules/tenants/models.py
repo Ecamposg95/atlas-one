@@ -20,6 +20,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    Text,
     Time,
 )
 from sqlalchemy.orm import relationship
@@ -175,6 +176,18 @@ class Organization(Base):
     ticket_header = Column(String, nullable=True, default="ATLAS POS - Nota de Venta")
     ticket_footer = Column(String, nullable=True, default="Gracias por su compra!")
     printer_name = Column(String, nullable=True)
+
+    # Secciones boutique del ticket (2026-09-19). Todas NULL por defecto: una
+    # organizacion que no las capture imprime el ticket de siempre, byte por
+    # byte (app/pos_printer.py::_build_boutique_footer).
+    ticket_terms = Column(Text, nullable=True)
+    ticket_instagram = Column(String, nullable=True)
+    ticket_facebook = Column(String, nullable=True)
+    ticket_tiktok = Column(String, nullable=True)
+    ticket_whatsapp = Column(String, nullable=True)
+    # La linea del proveedor SI viene encendida: el ticket HTML ya la traia
+    # siempre ("Software: Atlas One"), asi que TRUE es el comportamiento vivo.
+    ticket_show_vendor = Column(Boolean, nullable=False, default=True, server_default="true")
 
     # Geolocalización
     latitude = Column(Numeric(9, 6), nullable=True)

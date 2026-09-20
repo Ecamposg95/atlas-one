@@ -13,6 +13,14 @@ except ImportError:
     from backports.zoneinfo import ZoneInfo
 
 MX_TZ = ZoneInfo("America/Mexico_City")
+
+# Encabezado semilla de TODAS las organizaciones: no es un encabezado que
+# alguien haya pedido, asi que el ticket no lo imprime (ver
+# PosPrinter._ticket_header_lines).
+LEGACY_TICKET_HEADER = "ATLAS POS - Nota de Venta"
+
+# Linea del proveedor tecnologico, al pie del pie.
+VENDOR_LINES = ("Sistema: Atlas One | Atlas Tech", "atlasone.com.mx")
 from typing import List, Optional
 from decimal import Decimal
 
@@ -272,6 +280,9 @@ class PosPrinter:
             raw += (self._truncate(footer_msg, self.cols) + "\n").encode("latin-1", "replace")
             raw += self.CMD["LEFT"]
 
+        # --- 6. BLOQUE BOUTIQUE (redes / terminos / proveedor) ---
+        raw += self._build_boutique_footer(organization, branch)
+
         raw += self.CMD["LF"] * 3
         if open_drawer:
             raw += self.CMD["DRAWER"]
@@ -302,6 +313,12 @@ class PosPrinter:
         raw += self.CMD["BOLD_ON"]
         raw += (self._truncate(line1, self.cols) + "\n").encode("latin-1", "replace")
         raw += self.CMD["BOLD_OFF"]
+
+        # Line 1.5 (opcional): encabezado propio del negocio. La sucursal gana
+        # sobre la organizacion. NUNCA se imprime el seed heredado
+        # ("ATLAS POS - Nota de Venta"): lo traen todas las organizaciones sin
+        # haberlo pedido, y nadie quiere una linea nueva en su ticket de hoy.
+        raw += self._ticket_header_lines(organization, branch)
 
         # Line 2: city/branch | phone
         zone = None
@@ -470,6 +487,118 @@ class PosPrinter:
             raw += line.encode("latin-1", "replace")
         return raw
 
+    # ─── Secciones boutique (2026-09-19) ───────────────────────────────────
+    #
+    # Encabezado propio, redes sociales, terminos y condiciones y la linea del
+    # proveedor tecnologico. Cada seccion se imprime SOLO si esta capturada:
+    # una organizacion que no configuro nada recibe el ticket de siempre, byte
+    # por byte (tests/test_ticket_boutique.py).
+
+    @staticmethod
+    def _texto_config(obj, attr: str) -> str:
+        """Valor de configuracion como texto limpio.
+
+        Devuelve "" para cualquier cosa que no sea una cadena con contenido.
+        El filtro por tipo importa: los mocks de las pruebas (y cualquier
+        objeto a medio construir) devuelven atributos truthy que NO son texto,
+        y un `repr` de mock impreso en el ticket no cabe en el papel.
+        """
+        val = getattr(obj, attr, None) if obj is not None else None
+        return val.strip() if isinstance(val, str) else ""
+
+    def _ticket_header_lines(self, organization, branch) -> bytes:
+        """Encabezado propio bajo el nombre del negocio (sucursal > organizacion).
+
+        Se ignora el seed heredado "ATLAS POS - Nota de Venta": lo traen todas
+        las organizaciones sin haberlo pedido. El campo admite varias lineas
+        (el panel de Empresa ofrece hasta 4), cada una truncada al ancho.
+        """
+        texto = self._texto_config(branch, "ticket_header") or \
+                self._texto_config(organization, "ticket_header")
+        if not texto or texto == LEGACY_TICKET_HEADER:
+            return b""
+        raw = b""
+        for linea in texto.splitlines():
+            linea = linea.strip()
+            if not linea or linea == LEGACY_TICKET_HEADER:
+                continue
+            raw += (self._truncate(linea, self.cols) + "\n").encode("latin-1", "replace")
+        return raw
+
+    def _build_boutique_footer(self, organization, branch = None) -> bytes:
+        """Redes + terminos + proveedor, despues del pie del negocio.
+
+        Vacio (b"") cuando no hay nada configurado y cuando no hay
+        organizacion: el ticket termina como siempre en LF*3 + corte.
+        """
+        if organization is None:
+            return b""
+
+        raw = b""
+        sep = ("-" * self.cols + "\n").encode("latin-1", "replace")
+
+        # --- Redes sociales ---
+        etiquetas = (
+            ("Instagram", "ticket_instagram"),
+            ("Facebook", "ticket_facebook"),
+            ("TikTok", "ticket_tiktok"),
+            ("WhatsApp", "ticket_whatsapp"),
+            ("Web", "website"),
+        )
+        redes = []
+        for etiqueta, attr in etiquetas:
+            valor = self._texto_config(organization, attr)
+            if valor:
+                redes.append(f"{etiqueta}: {valor}")
+        if redes:
+            raw += self.CMD["CENTER"] + self.CMD["BOLD_ON"]
+            raw += b"SIGUENOS\n"
+            raw += self.CMD["BOLD_OFF"]
+            for red in redes:
+                raw += (self._truncate(red, self.cols) + "\n").encode("latin-1", "replace")
+            raw += self.CMD["LEFT"]
+
+        # --- Terminos y condiciones ---
+        terminos = self._texto_config(organization, "ticket_terms")
+        if terminos:
+            raw += self.CMD["LEFT"] + sep
+            raw += self.CMD["CENTER"] + self.CMD["BOLD_ON"]
+            raw += b"TERMINOS Y CONDICIONES\n"
+            raw += self.CMD["BOLD_OFF"] + self.CMD["LEFT"]
+            # En 80 mm el cuerpo va en Font B (compact): son parrafos largos y
+            # el papel se agradece. En 58 mm se queda la fuente por defecto.
+            if self.paper_width_mm >= 70:
+                raw += self.CMD["FONT_B"]
+            for parrafo in terminos.splitlines():
+                parrafo = parrafo.strip()
+                if not parrafo:
+                    raw += self.CMD["LF"]
+                    continue
+                for linea in self._wrap_text(parrafo, self.cols):
+                    raw += (linea + "\n").encode("latin-1", "replace")
+            if self.paper_width_mm >= 70:
+                raw += self._default_font
+
+        # --- Proveedor tecnologico ---
+        if self._mostrar_proveedor(organization):
+            raw += self.CMD["LEFT"] + sep + self.CMD["CENTER"]
+            for linea in VENDOR_LINES:
+                raw += (self._truncate(linea, self.cols) + "\n").encode("latin-1", "replace")
+            raw += self.CMD["LEFT"]
+
+        return raw
+
+    @staticmethod
+    def _mostrar_proveedor(organization) -> bool:
+        """TRUE por defecto: el ticket HTML ya imprimia "Software: Atlas One"
+        para todos, asi que apagarlo es una decision explicita del dueño."""
+        if organization is None:
+            return False
+        val = getattr(organization, "ticket_show_vendor", True)
+        if val is None:
+            return True
+        return bool(val)
+
     def _resolve_footer(self, organization, branch) -> str:
         if branch and getattr(branch, 'ticket_footer', None):
             return branch.ticket_footer
@@ -557,6 +686,8 @@ class PosPrinter:
             # Sin sufijo de marca del proveedor: el pie es del negocio.
             raw += (self._truncate(footer_msg, self.cols) + "\n").encode("latin-1", "replace")
             raw += self.CMD["LEFT"]
+
+        raw += self._build_boutique_footer(organization, branch)
 
         raw += self.CMD["LF"] * 3 + self.CMD["CUT"]
         return raw

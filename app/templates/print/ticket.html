@@ -272,10 +272,41 @@
         {% elif organization.ticket_footer %}
         {{ organization.ticket_footer }}
         {% endif %}
-        <br><br>
-        <span>Software: Atlas One</span><br>
+    </div>
+
+    {# Redes sociales. Cada una sale solo si el negocio la capturó. #}
+    {% set redes = [
+        ('Instagram', organization.ticket_instagram),
+        ('Facebook', organization.ticket_facebook),
+        ('TikTok', organization.ticket_tiktok),
+        ('WhatsApp', organization.ticket_whatsapp),
+        ('Web', organization.website),
+    ] | selectattr('1') | list %}
+    {% if redes %}
+    <div class="separator"></div>
+    <div class="footer text-center">
+        <span class="bold">Síguenos</span><br>
+        {% for etiqueta, valor in redes %}
+        <span style="font-size: 10px;">{{ etiqueta }}: {{ valor }}</span><br>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {# Términos y condiciones: respetan los saltos de línea del usuario. #}
+    {% if organization.ticket_terms %}
+    <div class="separator"></div>
+    <div class="footer" style="font-size: 9px; white-space: pre-line; text-align: left;"><span class="bold">Términos y condiciones</span>
+{{ organization.ticket_terms }}</div>
+    {% endif %}
+
+    {# Proveedor tecnológico: encendido por defecto, se apaga en Empresa. #}
+    {% if organization.ticket_show_vendor %}
+    <div class="separator"></div>
+    <div class="footer text-center">
+        <span>Sistema: Atlas One | Atlas Tech</span><br>
         <span>atlasone.com.mx</span>
     </div>
+    {% endif %}
 
     <script>
         async function tryPrint() {

@@ -121,6 +121,16 @@ def run_migrations():
         # se ponga PIN sigue autorizando con su contrasena, que es como funciono
         # hasta hoy (app/services/reprint_auth.py). Nunca se expone el hash.
         ("users", "reprint_pin_hash", "ALTER TABLE users ADD COLUMN reprint_pin_hash VARCHAR;"),
+        # Secciones boutique del ticket 2026-09-19. Los cinco campos de texto
+        # nacen NULL: quien no los capture imprime el ticket de siempre.
+        # `ticket_show_vendor` nace TRUE porque el ticket HTML ya imprimia
+        # "Software: Atlas One" para todos; apagarlo es una decision del dueño.
+        ("organization", "ticket_terms",       "ALTER TABLE organization ADD COLUMN ticket_terms TEXT;"),
+        ("organization", "ticket_instagram",   "ALTER TABLE organization ADD COLUMN ticket_instagram VARCHAR;"),
+        ("organization", "ticket_facebook",    "ALTER TABLE organization ADD COLUMN ticket_facebook VARCHAR;"),
+        ("organization", "ticket_tiktok",      "ALTER TABLE organization ADD COLUMN ticket_tiktok VARCHAR;"),
+        ("organization", "ticket_whatsapp",    "ALTER TABLE organization ADD COLUMN ticket_whatsapp VARCHAR;"),
+        ("organization", "ticket_show_vendor", "ALTER TABLE organization ADD COLUMN ticket_show_vendor BOOLEAN NOT NULL DEFAULT TRUE;"),
     ]
 
     # Track 1 — Audit + cleanup de Payment huérfanos antes de NOT NULL.
