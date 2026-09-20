@@ -616,7 +616,8 @@ def _build_test_ticket(paper_width_mm: int) -> bytes:
     raw = b""
     raw += init
     raw += sep
-    raw += _center("ATLAS POS")
+    raw += _center("ATLAS TECH")
+    raw += _center("Atlas One - Punto de venta")
     raw += _center("TICKET DE PRUEBA")
     raw += sep
     raw += _row("Fecha:", now.strftime("%Y-%m-%d"))

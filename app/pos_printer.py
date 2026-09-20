@@ -920,47 +920,63 @@ class PosPrinter:
         return res.encode("latin-1", "replace")
 
     def build_test_ticket_bytes(self, organization, branch=None) -> bytes:
-        """Test ticket — uses the same compact header so the cashier sees
-        exactly what real tickets will look like (including 1/3-width logo)."""
+        """Ticket de prueba, brandeado ATLAS TECH.
+
+        No es un ticket de venta: es la tarjeta de presentación del sistema en
+        el momento en que la impresora queda lista. Lleva la marca del
+        proveedor arriba y, como muestra, el negocio y la sucursal tal como
+        saldrán en los tickets reales (mismo logo a 1/3 del ancho).
+        """
         raw = b""
-        sep = ("-" * self.cols + "\n").encode("latin-1", "replace")
+        sep = ("=" * self.cols + "\n").encode("latin-1", "replace")
+        dash = ("-" * self.cols + "\n").encode("latin-1", "replace")
+
+        def line(text: str) -> bytes:
+            return (self._truncate(text, self.cols) + "\n").encode("latin-1", "replace")
 
         raw += self.CMD["INIT"] + self._default_font + self.CMD["SIZE_NORMAL"]
         raw += self.CMD["CENTER"]
 
-        # Logo (branch overrides org)
+        # Marca del proveedor
+        raw += self.CMD["BOLD_ON"] + line("ATLAS TECH") + self.CMD["BOLD_OFF"]
+        raw += line("Atlas One - Punto de venta")
+        raw += line("atlasone.com.mx")
+        raw += sep
+        raw += self.CMD["BOLD_ON"] + line("IMPRESION DE PRUEBA") + self.CMD["BOLD_OFF"]
+        raw += line(datetime.now(timezone.utc).astimezone(MX_TZ).strftime("%d/%m/%Y %H:%M"))
+        raw += sep
+
+        # Muestra: asi se vera el encabezado del negocio en los tickets reales
         effective_logo = (getattr(branch, 'logo_url', None) if branch else None) \
                          or (organization.logo_url if organization else None)
         if effective_logo:
             raw += self._generate_image_bytes(effective_logo)
-
-        org_name = (organization.name if organization else None) or "ATLAS POS"
-        raw += self.CMD["BOLD_ON"]
-        raw += (self._truncate(org_name, self.cols) + "\n").encode("latin-1", "replace")
-        raw += self.CMD["BOLD_OFF"]
-
+        org_name = (organization.name if organization else None) or "Tu negocio"
+        raw += self.CMD["BOLD_ON"] + line(org_name) + self.CMD["BOLD_OFF"]
         zone = (getattr(branch, 'city', None) or branch.name) if branch else None
         phone = (branch.phone if branch and branch.phone else (organization.phone if organization else None))
         if zone and phone:
-            raw += (self._truncate(f"{zone} | {phone}", self.cols) + "\n").encode("latin-1", "replace")
+            raw += line(f"{zone} | {phone}")
         elif zone:
-            raw += (self._truncate(zone, self.cols) + "\n").encode("latin-1", "replace")
+            raw += line(zone)
 
-        raw += b"IMPRESION DE PRUEBA\n"
-        raw += self.CMD["LEFT"] + sep
-        raw += b"Si puedes leer esto, la impresora\n"
-        raw += b"esta configurada correctamente.\n"
-        raw += sep
+        raw += self.CMD["LEFT"] + dash
+        raw += line("Si puedes leer esto, la impresora")
+        raw += line("esta configurada correctamente.")
+        raw += line(f"Ancho de papel: {self.cols} columnas")
+        raw += ("|" + "-" * (self.cols - 2) + "|\n").encode("latin-1", "replace")
+        raw += dash
 
-        # Footer (org/branch override)
+        raw += self.CMD["CENTER"]
         footer_text = None
         if branch and getattr(branch, 'ticket_footer', None):
             footer_text = branch.ticket_footer
         elif organization and organization.ticket_footer:
             footer_text = organization.ticket_footer
         if footer_text:
-            raw += self.CMD["CENTER"]
-            raw += (self._truncate(footer_text, self.cols) + "\n").encode("latin-1", "replace")
+            raw += line(footer_text)
+        raw += line("Impresora lista. Atlas Tech")
+        raw += self.CMD["LEFT"]
 
         raw += self.CMD["LF"] * 3 + self.CMD["CUT"]
         return raw
