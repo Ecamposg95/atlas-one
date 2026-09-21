@@ -31,3 +31,22 @@ describe('navMovilPorRol', () => {
     expect(navMovilPorRol(undefined).map((i) => i.to)).toEqual(['/', '/mobile/profile'])
   })
 })
+
+
+describe('los módulos de la organización mandan sobre la barra', () => {
+  it('sin mesas, el cajero ve Vender en vez de Comanda', () => {
+    const items = navMovilPorRol('CAJERO', 'ATLAS_POS_BOUTIQUE', ['core', 'pos', 'catalog'])
+    expect(items.map((i) => i.label)).toEqual(['Inicio', 'Vender', 'Consultar', 'Perfil'])
+    expect(items[1].to).toBe('/pos')
+  })
+  it('sin mesas, el administrador ve Consultar en vez de Comanda', () => {
+    const items = navMovilPorRol('ADMINISTRADOR', 'ATLAS_POS_BOUTIQUE', ['core', 'pos'])
+    expect(items.map((i) => i.label)).toEqual(['Resumen', 'Más', 'Consultar', 'Perfil'])
+  })
+  it('con mesas sigue la comanda', () => {
+    expect(navMovilPorRol('CAJERO', 'ATLAS_ONE_RESTAURANT', ['pos', 'tables']).map((i) => i.to)).toContain('/mobile/comanda')
+  })
+  it('mientras los módulos no cargan no se esconde nada', () => {
+    expect(navMovilPorRol('ADMINISTRADOR', 'ATLAS_POS').map((i) => i.to)).toContain('/mobile/comanda')
+  })
+})

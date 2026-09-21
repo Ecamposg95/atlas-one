@@ -22,9 +22,9 @@ export function MobileLayout() {
   const org = useAuthStore((s) => s.org)
   const logout = useAuthStore((s) => s.logout)
   // El destino de "Menú" depende del preset, igual que en escritorio.
-  const { preset, loaded, load } = useEnabledModulesStore()
+  const { preset, loaded, load, enabledModules } = useEnabledModulesStore()
   useEffect(() => { if (!loaded) load() }, [loaded, load])
-  const items = navMovilPorRol(user?.role, preset)
+  const items = navMovilPorRol(user?.role, preset, loaded ? enabledModules : undefined)
 
   const handleLogout = async () => {
     const ok = await confirmDialog({

@@ -6,8 +6,11 @@ import { ErrorState } from '../../components/ui/ErrorState'
 import { formatCurrency } from '../../utils/currency'
 import { todayStr } from '../../utils/dates'
 import { resumirDia } from '../../utils/panelDia'
+import { useEnabledModulesStore } from '../../store/enabledModulesStore'
 
 export function MobileDashboard() {
+  const { enabledModules, loaded: modulosCargados } = useEnabledModulesStore()
+  const tieneMesas = !modulosCargados || enabledModules.includes('tables')
   const [summary, setSummary] = useState<DailySummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
@@ -102,7 +105,8 @@ export function MobileDashboard() {
         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Accesos rápidos</p>
         <div className="grid grid-cols-2 gap-3">
           {[
-            { label: 'Comanda', icon: 'fa-utensils', to: '/mobile/comanda', color: 'text-amber-400' },
+            // Comanda solo donde hay mesas: una boutique no tiene cocina.
+            ...(tieneMesas ? [{ label: 'Comanda', icon: 'fa-utensils', to: '/mobile/comanda', color: 'text-amber-400' }] : []),
             { label: 'Consulta', icon: 'fa-magnifying-glass', to: '/mobile/query', color: 'text-indigo-400' },
             { label: 'Cotización', icon: 'fa-file-invoice', to: '/mobile/sales', color: 'text-emerald-400' },
             { label: 'Mi perfil', icon: 'fa-user-circle', to: '/mobile/profile', color: 'text-slate-400' },
