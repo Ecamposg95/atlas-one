@@ -401,15 +401,24 @@ def search_products_pos(
             # pantalon" no cabe en ninguna columna sola. Con una palabra es el
             # filtro de siempre. La marca va por subconsulta para no meter
             # otro join que multiplique filas contra PackagingUnit.
+            # Sin acentos: "pantalon" debe encontrar "Pantalón". En Postgres se
+            # normalizan ambos lados con translate(); SQLite (pruebas) no lo
+            # tiene y ahí la comparación queda como estaba.
+            _es_pg = db.bind is not None and db.bind.dialect.name == "postgresql"
+            _CON, _SIN = "áéíóúüñÁÉÍÓÚÜÑ", "aeiouunAEIOUUN"
+
+            def _plano(col):
+                return func.translate(col, _CON, _SIN) if _es_pg else col
+
             def _empata(palabra: str):
-                patron = f"%{palabra}%"
+                patron = f"%{palabra.translate(str.maketrans(_CON, _SIN))}%" if _es_pg else f"%{palabra}%"
                 return or_(
-                    Product.name.ilike(patron),
-                    Product.description.ilike(patron),
-                    Product.model.ilike(patron),
+                    _plano(Product.name).ilike(patron),
+                    _plano(Product.description).ilike(patron),
+                    _plano(Product.model).ilike(patron),
                     Product.brand_id.in_(
                         select(Brand.id).where(
-                            Brand.organization_id == org_id, Brand.name.ilike(patron)
+                            Brand.organization_id == org_id, _plano(Brand.name).ilike(patron)
                         )
                     ),
                     and_(ProductVariant.deleted_at.is_(None), ProductVariant.sku.ilike(patron)),
