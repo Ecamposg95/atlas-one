@@ -132,6 +132,14 @@ def run_migrations():
         ("organization", "ticket_tiktok",      "ALTER TABLE organization ADD COLUMN ticket_tiktok VARCHAR;"),
         ("organization", "ticket_whatsapp",    "ALTER TABLE organization ADD COLUMN ticket_whatsapp VARCHAR;"),
         ("organization", "ticket_show_vendor", "ALTER TABLE organization ADD COLUMN ticket_show_vendor BOOLEAN NOT NULL DEFAULT FALSE;"),
+        # Ficha boutique 2026-09-21. Los tres campos del producto nacen NULL: el
+        # nombre de venta de quien no los capture sigue siendo su `name` de hoy.
+        # `ticket_line_style` nace 'compact': ninguna tienda viva estrena un
+        # renglon de tres lineas por un deploy; su dueño lo enciende en Empresa.
+        ("products", "gender",   "ALTER TABLE products ADD COLUMN gender VARCHAR(10);"),
+        ("products", "model",    "ALTER TABLE products ADD COLUMN model VARCHAR(80);"),
+        ("products", "material", "ALTER TABLE products ADD COLUMN material VARCHAR(80);"),
+        ("organization", "ticket_line_style", "ALTER TABLE organization ADD COLUMN ticket_line_style VARCHAR(12) NOT NULL DEFAULT 'compact';"),
     ]
 
     # Track 1 — Audit + cleanup de Payment huérfanos antes de NOT NULL.

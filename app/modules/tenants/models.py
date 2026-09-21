@@ -192,6 +192,13 @@ class Organization(Base):
     # ticket de un negocio vivo, y eso lo decide su dueño desde Empresa.
     ticket_show_vendor = Column(Boolean, nullable=False, default=False, server_default="false")
 
+    # Estilo del renglon de producto del ticket (2026-09-21):
+    #   'compact'  -> una linea: cantidad + descripcion recortada + precios
+    #                 (DEFAULT, y es lo que sigue viendo toda tienda viva)
+    #   'detailed' -> tres lineas: marca / nombre completo envuelto / talla y
+    #                 precios (app/pos_printer.py::_product_lines_detailed)
+    ticket_line_style = Column(String(12), default="compact", server_default="compact", nullable=False)
+
     # Geolocalización
     latitude = Column(Numeric(9, 6), nullable=True)
     longitude = Column(Numeric(9, 6), nullable=True)

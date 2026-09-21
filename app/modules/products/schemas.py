@@ -7,8 +7,10 @@ Phase 2 / S2: moved from app/schemas/products.py. The legacy path is now a
 reverse-shim that re-exports from here.
 """
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from decimal import Decimal
+
+from app.modules.products.sale_name import normalizar_genero
 
 # --- Deptos / Categorías ---
 class DepartmentRead(BaseModel):
@@ -59,6 +61,9 @@ class ProductVariantRead(BaseModel):
     variant_name: Optional[str] = None
     color: Optional[str] = None
     size: Optional[str] = None
+    # "Louis Vuitton · Chamarra mezclilla · Talla M": lo que el POS pinta y el
+    # ticket congela. Lo llena `_compute_product_read`; no existe en el ORM.
+    sale_name: Optional[str] = None
     price: Decimal
     # Lo que el POS COBRA por esta variante en la sucursal objetivo: el
     # `price_override` del ProductBranchStatus si lo hay, y si no el precio
@@ -131,6 +136,13 @@ class ProductCreate(BaseModel):
     department_id: Optional[str] = None # UUID
     brand_id: Optional[str] = None # UUID
 
+    # Ficha boutique. `gender` se normaliza ("niño" -> "NINO") y cualquier otro
+    # valor es 422; `model` entra en el nombre de venta, `material` es
+    # informativo.
+    gender: Optional[str] = None
+    model: Optional[str] = None
+    material: Optional[str] = None
+
     initial_stock: Decimal = Decimal(0)
     branch_id: Optional[int] = None
     target_branch_ids: Optional[List[int]] = None # IDs de sucursales donde habilitar
@@ -144,6 +156,11 @@ class ProductCreate(BaseModel):
 
     # Extra Variants
     extra_variants: List[ProductVariantCreate] = []
+
+    @field_validator("gender")
+    @classmethod
+    def _valida_genero(cls, v):
+        return normalizar_genero(v)
 
 class ProductUpdate(BaseModel):
     name: Optional[str] = None
@@ -161,6 +178,10 @@ class ProductUpdate(BaseModel):
     tax_rate: Optional[Decimal] = None
     department_id: Optional[str] = None # UUID
     brand_id: Optional[str] = None # UUID
+    # Ficha boutique (mismo criterio que ProductCreate).
+    gender: Optional[str] = None
+    model: Optional[str] = None
+    material: Optional[str] = None
     uses_inventory: Optional[bool] = None
     is_active: Optional[bool] = None
     approval_status: Optional[str] = None
@@ -176,6 +197,11 @@ class ProductUpdate(BaseModel):
 
     # [NEW] Branch availability update (RBAC: only ADMIN can use this)
     target_branch_ids: Optional[List[int]] = None
+
+    @field_validator("gender")
+    @classmethod
+    def _valida_genero(cls, v):
+        return normalizar_genero(v)
 
 class BatchActionRequest(BaseModel):
     action: str  # 'delete', 'activate', 'deactivate', 'approve'
@@ -197,6 +223,13 @@ class ProductRead(BaseModel):
     image_url: Optional[str] = None
     is_active: bool
     department: Optional[DepartmentRead] = None
+
+    # Ficha boutique. `sale_name` ("Louis Vuitton · Chamarra mezclilla") lo
+    # llena `_compute_product_read`; sin marca ni modelo es exactamente `name`.
+    gender: Optional[str] = None
+    model: Optional[str] = None
+    material: Optional[str] = None
+    sale_name: Optional[str] = None
 
     # En listados simples, devolvemos la variante principal aplanada
     variants: List[ProductVariantRead] = []

@@ -2,7 +2,7 @@
 from datetime import date
 from decimal import Decimal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from app.models.organization import IndustryType
 
@@ -10,6 +10,21 @@ from app.models.organization import IndustryType
 # panel de Empresa: API y pantalla tienen que coincidir o el dueño escribe un
 # texto que el PUT rechaza.
 TERMS_MAX_LEN = 2000
+
+# Estilo del renglon de producto del ticket. 'compact' es el de siempre (una
+# linea); 'detailed' imprime marca / nombre completo / talla (boutique).
+TICKET_LINE_STYLES = ("compact", "detailed")
+
+
+def _valida_estilo_de_linea(v):
+    """None pasa (el PUT no lo manda); cualquier otro valor tiene que ser uno
+    de los dos estilos, o el ticket quedaria con una configuracion muerta."""
+    if v is None:
+        return v
+    limpio = str(v).strip().lower()
+    if limpio not in TICKET_LINE_STYLES:
+        raise ValueError(f"debe ser uno de: {', '.join(TICKET_LINE_STYLES)}")
+    return limpio
 
 
 class OrganizationBase(BaseModel):
@@ -37,6 +52,8 @@ class OrganizationBase(BaseModel):
     ticket_tiktok: Optional[str] = None
     ticket_whatsapp: Optional[str] = None
     ticket_show_vendor: bool = False
+    # Renglon del producto: 'compact' (el de siempre) o 'detailed'.
+    ticket_line_style: str = "compact"
 
     latitude: Optional[float] = None
     longitude: Optional[float] = None
@@ -47,6 +64,9 @@ class OrganizationBase(BaseModel):
     status: Optional[str] = "ACTIVE"
     plan: Optional[str] = "FREE"
     branding_config: Optional[str] = None
+
+
+    _estilo_valido = field_validator("ticket_line_style")(_valida_estilo_de_linea)
 
 
 class OrganizationCreate(OrganizationBase):
@@ -81,6 +101,9 @@ class OrganizationUpdate(BaseModel):
     ticket_tiktok: Optional[str] = None
     ticket_whatsapp: Optional[str] = None
     ticket_show_vendor: Optional[bool] = None
+    # Cae FUERA de la whitelist de no-admins del router: solo
+    # ADMINISTRADOR/DUEÑO cambia el estilo del ticket.
+    ticket_line_style: Optional[str] = None
 
     latitude: Optional[float] = None
     longitude: Optional[float] = None
@@ -105,6 +128,8 @@ class OrganizationUpdate(BaseModel):
     # no-admins del router (linea 76 de router.py), asi que solo
     # ADMINISTRADOR/DUEÑO puede cambiarla: no hace falta guardia nueva.
     card_surcharge_pct: Optional[Decimal] = None
+
+    _estilo_valido = field_validator("ticket_line_style")(_valida_estilo_de_linea)
 
     model_config = {"extra": "ignore"}
 

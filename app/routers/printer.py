@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Body
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import Optional, Tuple
 from app.core.database import get_db
-from app.models import SalesDocument, User, SalesLineItem, ProductVariant, SaleReturn, SaleReturnItem
+from app.models import SalesDocument, User, SalesLineItem, ProductVariant, SaleReturn, SaleReturnItem, Product
 from app.models.sales import DocumentStatus
 from app.models.print_job import PrintJob, PrintJobStatus
 from app.models.cash_audit import CashAuditEvent
@@ -20,6 +20,16 @@ import zipfile
 from pathlib import Path
 
 router = APIRouter()
+
+# Renglones con su variante, su producto y la marca del producto: es lo que
+# necesita el ticket detallado (`pos_printer._datos_de_renglon`). Sin esto,
+# imprimir una venta de diez prendas dispara veintitantas consultas.
+_LINEAS_CON_PRODUCTO = (
+    joinedload(SalesDocument.lines)
+    .joinedload(SalesLineItem.variant)
+    .joinedload(ProductVariant.product)
+    .joinedload(Product.brand)
+)
 
 logger = logging.getLogger(__name__)
 
@@ -393,7 +403,9 @@ def print_ticket_endpoint(
 ):
     """Track 4: genera bytes ESC/POS y los retorna en base64. El agente
     local de la PC del cajero los envía a su impresora física."""
-    sale = db.query(SalesDocument).filter(SalesDocument.id == req.order_id).first()
+    sale = db.query(SalesDocument).options(_LINEAS_CON_PRODUCTO).filter(
+        SalesDocument.id == req.order_id
+    ).first()
     if not sale:
         raise HTTPException(status_code=404, detail="Venta no encontrada")
     if sale.organization_id != org_id:
@@ -450,7 +462,7 @@ def reprint_ticket_endpoint(
     """Reimpresión de un ticket. Exige rol gerencial o PIN de supervisor."""
     from sqlalchemy.orm import joinedload, selectinload
     sale = db.query(SalesDocument).options(
-        joinedload(SalesDocument.lines).joinedload(SalesLineItem.variant),
+        _LINEAS_CON_PRODUCTO,
         joinedload(SalesDocument.payments),
         selectinload(SalesDocument.returns).selectinload(SaleReturn.items).joinedload(SaleReturnItem.variant).joinedload(ProductVariant.product),
         joinedload(SalesDocument.branch)
@@ -512,7 +524,7 @@ def reprint_refunded_endpoint(
     """Ticket actualizado tras devoluciones. Mismo gate que reprint-ticket."""
     from sqlalchemy.orm import joinedload, selectinload
     sale = db.query(SalesDocument).options(
-        joinedload(SalesDocument.lines).joinedload(SalesLineItem.variant),
+        _LINEAS_CON_PRODUCTO,
         joinedload(SalesDocument.branch),
         selectinload(SalesDocument.returns).selectinload(SaleReturn.items).joinedload(SaleReturnItem.variant).joinedload(ProductVariant.product)
     ).filter(SalesDocument.id == order_id).first()

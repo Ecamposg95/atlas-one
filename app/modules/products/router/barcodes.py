@@ -27,13 +27,17 @@ from app.core.security.guards import require_admin_or_owner
 from app.core.tenant_context import get_current_active_organization
 from app.crud.products import _is_admin, query_visible_products
 from app.models import Product, ProductVariant, StockOnHand, User
+from app.modules.products.sale_name import variant_sale_name
 from app.services.barcodes import asignar_codigos_faltantes, contar_codigos_faltantes
 
 router = APIRouter()
 
+# Las cuatro columnas de la ficha boutique van AL FINAL: los diseños de
+# etiqueta que ya existen mapean por posicion, y meterlas en medio les correria
+# el precio y la existencia de lugar.
 ENCABEZADOS_ETIQUETAS = [
     "SKU", "Codigo de barras", "Producto", "Marca", "Talla", "Color",
-    "Precio", "Existencia",
+    "Precio", "Existencia", "Genero", "Modelo", "Material", "Nombre de venta",
 ]
 
 
@@ -160,6 +164,12 @@ def exportar_etiquetas_csv(
             v.color or "",
             f"{Decimal(str(v.price or 0)):.2f}",
             _fmt_cantidad(existencia),
+            p.gender or "",
+            p.model or "",
+            p.material or "",
+            variant_sale_name(
+                p.brand.name if p.brand else None, p.name or "", p.model, v.color, v.size
+            ),
         ])
 
     # BOM: sin él Excel abre "Camisón" como "CamisÃ³n" y la etiqueta sale mal.

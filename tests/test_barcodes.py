@@ -217,7 +217,8 @@ class TestEscaneo:
 
 
 # ── 7. CSV de etiquetas ──────────────────────────────────────────────────────
-ENCABEZADO = "SKU,Codigo de barras,Producto,Marca,Talla,Color,Precio,Existencia"
+ENCABEZADO = ("SKU,Codigo de barras,Producto,Marca,Talla,Color,Precio,Existencia,"
+              "Genero,Modelo,Material,Nombre de venta")
 
 
 class TestEtiquetasCsv:
@@ -237,7 +238,7 @@ class TestEtiquetasCsv:
         assert lineas[0] == ENCABEZADO
         assert len(lineas) == 3, lineas
         fila = next(l for l in lineas[1:] if l.startswith("PLY,"))
-        assert fila == "PLY,7501234567890,Playera,,M,Rojo,100.00,100"
+        assert fila == "PLY,7501234567890,Playera,,M,Rojo,100.00,100,,,,Playera (Rojo / M)"
 
     def test_filtra_por_producto(self, client, db, org, branch_a, auth_admin):
         p, v = _make_product(db, org, "Playera", "PLY", 100, [(branch_a.id, True)])

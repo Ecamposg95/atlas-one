@@ -17,11 +17,12 @@ descrita en `docs/audits/cajero-visibility/00-policy.md`:
 from typing import Optional
 
 from fastapi import HTTPException, status
-from sqlalchemy import and_
+from sqlalchemy import and_, select
 from sqlalchemy.orm import Query, Session, selectinload
 
 from app.models import (
     Branch,
+    Brand,
     Product,
     ProductBranchStatus,
     ProductVariant,
@@ -79,7 +80,9 @@ def query_visible_products(
         org_id: organización activa.
         include_inactive: si True, incluye `Product.is_active=False`.
             Solo válido para ADMIN/DUEÑO; ignorado para otros roles.
-        search: texto ILIKE sobre nombre + SKU + descripción.
+        search: texto ILIKE sobre nombre + SKU + descripción + modelo
+            + nombre de la MARCA (la boutique busca "vuitton", no
+            "chamarra").
         branch_id_override: si el caller es admin y quiere filtrar por una
             sucursal específica. Ignorado para roles no-admin (siempre
             se usa `user.branch_id`).
@@ -179,6 +182,15 @@ def query_visible_products(
         q = q.filter(
             (Product.name.ilike(pattern))
             | (Product.description.ilike(pattern))
+            | (Product.model.ilike(pattern))
+            # Marca por SUBCONSULTA y no por join: la boutique busca "vuitton"
+            # y el nombre del producto es solo "Chamarra". Un join mas a Brand
+            # multiplicaria filas contra el outerjoin de variantes que ya hay.
+            | (Product.brand_id.in_(
+                select(Brand.id).where(
+                    Brand.organization_id == org_id, Brand.name.ilike(pattern)
+                )
+            ))
             | (ProductVariant.sku.ilike(pattern))
             | (ProductVariant.barcode.ilike(pattern))
         )

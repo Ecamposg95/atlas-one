@@ -367,14 +367,33 @@ def read_sales(
 
 @router.post("", response_model=Dict[str, Any], include_in_schema=False)
 def _line_description(variant) -> str:
-    """Descripcion del renglon de venta: nombre del producto y, si la variante
-    tiene un nombre propio distinto del estandar, ese nombre entre parentesis.
+    """Descripcion que se CONGELA en `sales_lines.description`.
+
+    Con marca o modelo capturados es el nombre de venta de la boutique:
+    "Louis Vuitton · Chamarra mezclilla · Talla M" (la marca primero, que es
+    como se pide la prenda en el mostrador).
+
+    SIN marca ni modelo el texto es el de siempre -- "Playera (Rojo / M)",
+    "Refresco (600ml)" o "Playera" a secas -- para que ninguna tienda que no
+    capture los campos nuevos vea cambiar su ticket. Esa rama usa el
+    `variant_name` GUARDADO y no color/talla: el catalogo viejo trae etiquetas
+    escritas a mano ("600ml") con color y talla vacios, y recalcularlas las
+    perderia.
     """
-    nombre = variant.product.name or ""
-    variante = (variant.variant_name or "").strip()
-    if variante and variante != "Estándar":
-        return f"{nombre} ({variante})"
-    return nombre
+    from app.modules.products.sale_name import variant_sale_name
+
+    producto = variant.product
+    nombre = producto.name or ""
+    # `brand_id` primero: sin marca no se dispara la consulta perezosa de
+    # `producto.brand` por cada renglon del ticket.
+    marca = producto.brand.name if (getattr(producto, "brand_id", None) and producto.brand) else None
+    modelo = getattr(producto, "model", None)
+    if not marca and not modelo:
+        variante = (variant.variant_name or "").strip()
+        if variante and variante != "Estándar":
+            return f"{nombre} ({variante})"
+        return nombre
+    return variant_sale_name(marca, nombre, modelo, variant.color, variant.size)
 
 
 def _respuesta_de_venta_existente(db: Session, sale: SalesDocument) -> Dict[str, Any]:

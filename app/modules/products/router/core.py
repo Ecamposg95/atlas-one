@@ -43,6 +43,7 @@ from app.crud.products import (
 from app.modules.products.schemas import (
     ProductCreate, ProductRead, ProductUpdate, ProductListResponse,
 )
+from app.modules.products.sale_name import sku_sugerido
 from app.modules.products.variant_label import (
     COLOR_MAX, SIZE_MAX, clean_attr, variant_label,
 )
@@ -358,6 +359,10 @@ def create_product(
             image_url=prod_in.image_url or None,
             department_id=prod_in.department_id,
             brand_id=prod_in.brand_id,
+            # Ficha boutique. `gender` ya viene normalizado por el schema.
+            gender=prod_in.gender,
+            model=(prod_in.model or "").strip() or None,
+            material=(prod_in.material or "").strip() or None,
             has_variants=True,   # CONSISTENCIA: ya que se crea una variante estándar
             is_active=True,
             approval_status='APPROVED',
@@ -538,6 +543,38 @@ def create_product(
                 detail=f"El SKU '{prod_in.sku}' ya existe en esta organización."
             )
         raise
+
+
+@router.get("/sku-suggest")
+def sugerir_sku(
+    name: str = "",
+    brand: Optional[str] = None,
+    model: Optional[str] = None,
+    color: Optional[str] = None,
+    size: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    org_id: int = Depends(get_current_active_organization),
+):
+    """SKU que sugiere la convención MARCA-PRENDA-MODELO-COLOR-TALLA.
+
+    Es solo una SUGERENCIA: nada la aplica sola y el alta sigue aceptando
+    cualquier SKU único de la organización. `available` dice si ese código ya
+    lo ocupa una variante viva de ESTA organización (el mismo SKU en otra
+    tienda no estorba).
+
+    Va declarado ANTES de `GET /{product_id}`: al revés, FastAPI resolvería
+    "sku-suggest" como un id de producto y devolvería 404.
+    """
+    sku = sku_sugerido(brand, name, model, color, size)
+    ocupado = False
+    if sku:
+        ocupado = db.query(ProductVariant.id).filter(
+            ProductVariant.sku == sku,
+            ProductVariant.organization_id == org_id,
+            ProductVariant.deleted_at == None,  # noqa: E711
+        ).first() is not None
+    return {"sku": sku, "available": bool(sku) and not ocupado}
 
 
 @router.get("/{product_id}", response_model=ProductRead)
@@ -1007,6 +1044,14 @@ def update_product(
         product.department_id = prod_in.department_id
     if "brand_id" in _campos_enviados:
         product.brand_id = prod_in.brand_id
+    # Ficha boutique: mismo criterio que marca/departamento — un null explícito
+    # BORRA el campo, y no mandarlo lo deja como está.
+    if "gender" in _campos_enviados:
+        product.gender = prod_in.gender
+    if "model" in _campos_enviados:
+        product.model = (prod_in.model or "").strip() or None
+    if "material" in _campos_enviados:
+        product.material = (prod_in.material or "").strip() or None
     if prod_in.uses_inventory is not None:
         pass # Not stored directly on Product currently, useful for logic if needed
     if prod_in.is_active is not None:

@@ -10,7 +10,7 @@ import time
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload, contains_eager
 from sqlalchemy.orm.attributes import set_committed_value
-from sqlalchemy import or_, and_, func
+from sqlalchemy import or_, and_, func, select
 from typing import List, Literal, Optional, Dict, Tuple
 from decimal import Decimal
 from datetime import datetime, timedelta
@@ -73,6 +73,7 @@ from app.core.database import get_db
 from app.core.tenant_context import get_current_active_organization
 from app.models import (
     Product, ProductVariant, StockOnHand, User, PackagingUnit, ProductBranchStatus,
+    Brand,
 )
 from app.core.security import get_current_user
 from app.crud.products import query_visible_products, _is_admin
@@ -392,6 +393,16 @@ def search_products_pos(
             query = query.filter(
                 or_(
                     Product.name.ilike(s),
+                    # Marca y modelo: en la boutique la prenda se pide por
+                    # marca ("vuitton") y el `name` es solo "Chamarra". La
+                    # marca va por subconsulta para no meter otro join que
+                    # multiplique filas contra PackagingUnit.
+                    Product.model.ilike(s),
+                    Product.brand_id.in_(
+                        select(Brand.id).where(
+                            Brand.organization_id == org_id, Brand.name.ilike(s)
+                        )
+                    ),
                     and_(ProductVariant.deleted_at.is_(None), ProductVariant.sku.ilike(s)),
                     and_(ProductVariant.deleted_at.is_(None), ProductVariant.barcode.ilike(s)),
                     and_(ProductVariant.deleted_at.is_(None), PackagingUnit.barcode.ilike(s)),

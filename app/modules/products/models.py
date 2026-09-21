@@ -49,6 +49,17 @@ class Product(Base, UUIDMixin, AuditMixin, TenantMixin):
     brand_id = Column(String(36), ForeignKey("brands.id"), nullable=True)
     department_id = Column(String(36), ForeignKey("departments.id", ondelete="SET NULL"), nullable=True) # Departamento
 
+    # Ficha boutique (2026-09-21). Los tres nacen NULL: el resto de los giros
+    # no los captura y su nombre de venta sigue siendo `name` tal cual
+    # (app/modules/products/sale_name.py).
+    # `gender`: HOMBRE|MUJER|UNISEX|NINO en texto, no enum de DB (CLAUDE.md §5).
+    gender = Column(String(10), nullable=True)
+    # `model` es parte de como se llama la prenda ("Chamarra mezclilla"), no un
+    # atributo aparte: entra en el nombre de venta pegado al nombre.
+    model = Column(String(80), nullable=True)
+    # `material` es informativo (ficha y etiqueta CSV); NO entra en el nombre.
+    material = Column(String(80), nullable=True)
+
     has_variants = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True) # "Global" soft-delete or active flag
 

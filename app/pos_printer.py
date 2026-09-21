@@ -46,6 +46,38 @@ def _describe_variant(variant) -> str:
     return nombre
 
 
+def _estilo_detallado(organization) -> bool:
+    """True si esta organizacion pidio el renglon de tres lineas.
+
+    `getattr` con default: una venta impresa sin organizacion (y cualquier
+    mock a medio construir) es COMPACTA, que es el ticket de siempre.
+    """
+    return getattr(organization, "ticket_line_style", "compact") == "detailed"
+
+
+def _datos_de_renglon(line) -> tuple:
+    """(marca, titulo, atributos) de un renglon, para el estilo detallado.
+
+    `titulo` es "nombre modelo" (el nombre completo de la prenda) y
+    `atributos` es "Beige, Talla M". Si el renglon no tiene variante viva
+    (un servicio, o una venta cuyo producto se borro) cae en la descripcion
+    congelada en `sales_lines.description`, que es lo unico que queda.
+    """
+    from app.modules.products.sale_name import atributos_venta, sale_name
+
+    variant = getattr(line, "variant", None)
+    producto = getattr(variant, "product", None) if variant is not None else None
+    if producto is None:
+        return "", (getattr(line, "description", None) or "Articulo"), ""
+
+    marca_obj = getattr(producto, "brand", None)
+    marca = (getattr(marca_obj, "name", None) or "") if marca_obj is not None else ""
+    # `sale_name` sin marca = "nombre modelo" con los espacios ya colapsados.
+    titulo = sale_name(None, getattr(producto, "name", None) or "", getattr(producto, "model", None))
+    atributos = atributos_venta(getattr(variant, "color", None), getattr(variant, "size", None))
+    return marca, (titulo or "Articulo"), atributos
+
+
 def _card_surcharge_amount(sale) -> float:
     """Comision de tarjeta congelada en la venta, como float. 0.0 si no aplico.
 
@@ -225,11 +257,15 @@ class PosPrinter:
 
         # --- 2. PRODUCTS ---
         raw += self.CMD["LEFT"] + sep
+        detallado = _estilo_detallado(organization)
         for line in sale.lines:
             qty_val = float(line.quantity)
             unit_price = float(line.unit_price) if line.unit_price is not None else 0.0
             total_val = float(line.total_line)
-            raw += self._product_line(qty_val, line.description or "Articulo", unit_price, total_val)
+            if detallado:
+                raw += self._product_lines_detailed(qty_val, line, unit_price, total_val)
+            else:
+                raw += self._product_line(qty_val, line.description or "Articulo", unit_price, total_val)
 
         # Inline returns: "- DEVUELTO Nx ITEM      -monto"
         total_returned = 0.0
@@ -365,13 +401,7 @@ class PosPrinter:
     def _product_line(self, qty: float, name: str, unit_price: float, total: float) -> bytes:
         """qty(4) + name(name_w) + unit(8) + total(total_w) = self.cols.
         80mm/56cols: 4+32+8+12. 58mm/32cols: 4+12+8+8."""
-        qty_w = 4
-        if self.cols >= 56:
-            unit_w, total_w = 8, 12
-        elif self.cols >= 42:
-            unit_w, total_w = 8, 10
-        else:
-            unit_w, total_w = 8, 8
+        qty_w, unit_w, total_w = self._anchos_precio()
         name_w = self.cols - qty_w - unit_w - total_w
         qty_str = f"{int(qty) if qty == int(qty) else qty:g}x"
         if len(qty_str) > qty_w - 1:
@@ -383,6 +413,68 @@ class PosPrinter:
             f"{total:>{total_w}.2f}\n"
         )
         return line.encode("latin-1", "replace")
+
+    def _anchos_precio(self) -> tuple:
+        """(qty_w, unit_w, total_w) del renglon de producto, por ancho de papel.
+
+        Unica fuente de las columnas: `_product_line` y el renglon detallado
+        tienen que alinear el mismo `@unitario` y el mismo total, o el ticket
+        se ve chueco cuando una venta mezcla productos con y sin variante.
+        """
+        if self.cols >= 56:
+            return 4, 8, 12
+        if self.cols >= 42:
+            return 4, 8, 10
+        return 4, 8, 8
+
+    def _product_lines_detailed(self, qty: float, line, unit_price: float, total: float) -> bytes:
+        """Bloque de la boutique: marca / nombre completo / talla + precios.
+
+            1x  LOUIS VUITTON
+                Chamarra mezclilla
+                Talla M                          @4,000.00    4,000.00
+
+        Sin marca, el nombre sube a la primera linea (y no hay segunda). El
+        nombre NUNCA se recorta: se envuelve con `_wrap_text` al ancho util,
+        que es justo lo que el renglon compacto no puede hacer en 32 columnas.
+        Los importes llevan separador de miles porque aqui si hay lugar.
+        """
+        qty_w, unit_w, total_w = self._anchos_precio()
+        sangria = " " * qty_w
+        marca, titulo, atributos = _datos_de_renglon(line)
+
+        qty_str = f"{int(qty) if qty == int(qty) else qty:g}x"
+        if len(qty_str) > qty_w - 1:
+            qty_str = qty_str[: qty_w - 1]
+
+        lineas: List[str] = []
+        if marca:
+            lineas.append(f"{qty_str:<{qty_w}}{self._truncate(marca.upper(), self.cols - qty_w)}")
+            cuerpo = self._wrap_text(titulo, self.cols - qty_w)
+        else:
+            # Sin marca la primera linea la ocupa el nombre; lo que no quepa
+            # sigue abajo sangrado (el resto del bloque no cambia).
+            cuerpo = self._wrap_text(titulo.upper(), self.cols - qty_w)
+            primera = cuerpo[0] if cuerpo else ""
+            lineas.append(f"{qty_str:<{qty_w}}{primera}")
+            cuerpo = cuerpo[1:]
+        lineas.extend(sangria + l for l in cuerpo)
+
+        # Ultima linea: atributos a la izquierda, precios a la derecha. El
+        # bloque de precios se mide ENTERO (con un espacio garantizado entre el
+        # unitario y el total) para que un importe de cinco cifras, que
+        # desborda `unit_w`, coma espacio de los atributos y no del papel: a
+        # 58 mm "@4,000.00" ya no cabe en 8 columnas.
+        derecha = f"{('@' + f'{unit_price:,.2f}'):>{unit_w}} {total:>{total_w},.2f}"
+        izq_w = max(0, self.cols - qty_w - len(derecha))
+        if len(atributos) > izq_w:
+            # La talla NO se recorta -- es el punto entero de este estilo: se
+            # va a su propio renglon y el de precios queda solo.
+            lineas.extend(sangria + l for l in self._wrap_text(atributos, self.cols - qty_w))
+            atributos = ""
+        lineas.append(sangria + f"{atributos[:izq_w]:<{izq_w}}" + derecha)
+
+        return ("\n".join(lineas) + "\n").encode("latin-1", "replace")
 
     def _return_line(self, qty: float, name: str, refund: float) -> bytes:
         """One-line refund marker: '- DEVUELTO Nx ITEM      -monto'."""
@@ -695,6 +787,7 @@ class PosPrinter:
         # --- Products (only remaining) ---
         raw += self.CMD["LEFT"] + sep
         new_subtotal = 0.0
+        detallado = _estilo_detallado(organization)
         for line in sale.lines:
             qty_orig = float(line.quantity)
             qty_ret = returned_totals.get(line.variant_id, 0.0)
@@ -704,7 +797,10 @@ class PosPrinter:
             unit_price = float(line.unit_price)
             line_total = qty_rem * unit_price
             new_subtotal += line_total
-            raw += self._product_line(qty_rem, line.description or "Articulo", unit_price, line_total)
+            if detallado:
+                raw += self._product_lines_detailed(qty_rem, line, unit_price, line_total)
+            else:
+                raw += self._product_line(qty_rem, line.description or "Articulo", unit_price, line_total)
         raw += sep
 
         # --- Recomputed totals ---

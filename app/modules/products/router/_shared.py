@@ -37,6 +37,7 @@ from app.crud.products import (
     assert_branches_belong_to_org,
     log_pbs_change,
 )
+from app.modules.products.sale_name import sale_name, variant_sale_name
 from app.modules.products.schemas import (
     ProductCreate, ProductRead, ProductUpdate,
     DepartmentRead, StockLevel, BatchActionRequest, ProductListResponse,
@@ -112,6 +113,13 @@ def _compute_product_read(
     p_read.department_name = p.department.name if p.department else None
     p_read.brand_id = p.brand_id
     p_read.brand_name = p.brand.name if p.brand else None
+
+    # Nombre de venta (marca primero). `p.brand` solo se toca si hay marca:
+    # sin `brand_id` no vale una consulta perezosa por producto en un listado.
+    _marca = p.brand.name if (p.brand_id and p.brand) else None
+    p_read.sale_name = sale_name(_marca, p.name or "", p.model)
+    for vr in p_read.variants:
+        vr.sale_name = variant_sale_name(_marca, p.name or "", p.model, vr.color, vr.size)
 
     # Determinar qué sucursal mostrar: La solicitada o la del usuario
     real_branch_id = target_branch_id if target_branch_id is not None else current_user.branch_id
