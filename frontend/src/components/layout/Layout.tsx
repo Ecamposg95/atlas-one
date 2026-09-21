@@ -186,8 +186,11 @@ export function Layout() {
               />
             </button>
 
-            <div className="hidden sm:flex flex-col min-w-0">
+            <div className="flex flex-col min-w-0">
+              {/* En teléfono se conserva el título de la pantalla (I-9); el
+                  nombre de la organización solo cabe desde sm. */}
               <span
+                className="hidden sm:block"
                 style={{ fontSize: '0.6rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--dax-text-faint)', lineHeight: 1 }}
               >
                 {org?.name ?? 'Atlas One'}
