@@ -4,9 +4,12 @@ interface Props {
   value: ProductFormValue
   onChange: SetField
   errors: ProductErrors
+  /** Pide la sugerencia de SKU. Sin este prop el botón no se pinta. */
+  onSuggestSku?: () => void
+  suggestingSku?: boolean
 }
 
-export function ProductBasicsSection({ value, onChange, errors }: Props) {
+export function ProductBasicsSection({ value, onChange, errors, onSuggestSku, suggestingSku }: Props) {
   return (
     <section className="space-y-3">
       <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wide">Básicos</h2>
@@ -19,8 +22,20 @@ export function ProductBasicsSection({ value, onChange, errors }: Props) {
         </label>
         <label className="text-xs text-slate-400 space-y-1">
           SKU *
-          <input className="dax-input w-full font-mono" value={value.sku}
-            onChange={(e) => onChange('sku', e.target.value.toUpperCase().trim())} />
+          <span className="flex gap-2">
+            <input className="dax-input w-full font-mono" value={value.sku}
+              onChange={(e) => onChange('sku', e.target.value.toUpperCase().trim())} />
+            {onSuggestSku && (
+              // La sugerencia NUNCA se aplica sola: el botón pregunta antes de
+              // pisar lo que el usuario escribió (ver ProductForm).
+              <button type="button" className="dax-btn-secondary text-[11px] whitespace-nowrap"
+                onClick={onSuggestSku} disabled={suggestingSku}>
+                {suggestingSku
+                  ? <i className="fa-solid fa-spinner fa-spin" />
+                  : <><i className="fa-solid fa-wand-magic-sparkles mr-1" />Sugerir</>}
+              </button>
+            )}
+          </span>
           {errors.sku && <span className="text-rose-400 text-[11px]">{errors.sku}</span>}
         </label>
         <label className="text-xs text-slate-400 space-y-1">

@@ -46,7 +46,9 @@ export function VariantPickerModal({ product, onPick, onClose }: Props) {
   const etiqueta = variantAxisLabel(variantes)
 
   // En la cuadrícula la identidad ya la dan la fila y la columna; repetir
-  // "Rojo / M" dentro de la celda solo la ensancha.
+  // "Rojo / M" dentro de la celda solo la ensancha. El nombre de venta
+  // completo ("Louis Vuitton · Chamarra mezclilla · Talla M") viaja en el
+  // tooltip, que es donde cabe.
   const celda = (v: ProductVariant, conNombre: boolean) => {
     const stock = Number(v.stock_total ?? 0)
     const agotada = stock <= 0
@@ -57,7 +59,7 @@ export function VariantPickerModal({ product, onPick, onClose }: Props) {
         onClick={() => onPick(v)}
         className="w-full min-h-[44px] rounded-lg px-2 py-2 flex flex-col items-center justify-center gap-0.5 disabled:opacity-40"
         style={{ background: 'var(--dax-elevated)', color: 'var(--dax-text)' }}
-        title={v.sku}
+        title={v.sale_name ? `${v.sale_name} · ${v.sku}` : v.sku}
       >
         {conNombre && (
           <span className="text-sm font-black leading-none">
@@ -77,13 +79,13 @@ export function VariantPickerModal({ product, onPick, onClose }: Props) {
         ref={cardRef}
         role="dialog"
         aria-modal="true"
-        aria-label={`Elige la ${variantAxisLabel(variantes).toLowerCase()} de ${full.name}`}
+        aria-label={`Elige la ${variantAxisLabel(variantes).toLowerCase()} de ${full.sale_name ?? full.name}`}
         tabIndex={-1}
         className="w-full max-w-lg rounded-2xl p-4 outline-none"
         style={{ background: 'var(--dax-surface)' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="text-base font-black" style={{ color: 'var(--dax-text)' }}>{full.name}</h3>
+        <h3 className="text-base font-black" style={{ color: 'var(--dax-text)' }}>{full.sale_name ?? full.name}</h3>
         <p className="text-xs mb-3" style={{ color: 'var(--dax-text-muted)' }}>
           Elige la {etiqueta.toLowerCase()}
         </p>

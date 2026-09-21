@@ -465,7 +465,7 @@ export function ProductDetailModal({
 
   const headerTitle = mode === 'create'
     ? 'Nuevo producto'
-    : (editing ? 'Editar producto' : (product?.name ?? ''))
+    : (editing ? 'Editar producto' : (product?.sale_name ?? product?.name ?? ''))
 
   return (
     <div
@@ -585,7 +585,9 @@ export function ProductDetailModal({
                       onChange={e => setSelectedVariantId(e.target.value || null)}
                     >
                       {variantesVivas.map(v => (
-                        <option key={v.id} value={v.id}>{variantDisplayName(v, live?.name ?? v.sku)}</option>
+                        <option key={v.id} value={v.id}>
+                          {v.sale_name ?? variantDisplayName(v, live?.name ?? v.sku)}
+                        </option>
                       ))}
                     </select>
                   </label>
@@ -677,7 +679,7 @@ export function ProductDetailModal({
                         return (
                           <tr key={v.id} style={{ borderTop: '1px solid var(--dax-border-dim)', background: esActual ? 'rgba(99,102,241,0.08)' : undefined }}>
                             <td className="px-2 py-1.5 font-semibold" style={{ color: 'var(--dax-text)' }}>
-                              {variantDisplayName(v, live?.name ?? '')}
+                              {v.sale_name ?? variantDisplayName(v, live?.name ?? '')}
                             </td>
                             <td className={`px-2 py-1.5 text-right font-bold tabular-nums ${s > 0 ? '' : 'text-red-600'}`}
                                 style={s > 0 ? { color: 'var(--dax-text)' } : undefined}>

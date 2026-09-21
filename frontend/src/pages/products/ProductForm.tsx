@@ -30,6 +30,7 @@ import {
   splitPrincipal, toExtraVariants, variantDetailErrors, variantFieldErrors, type VariantRow,
 } from '../../components/products/variantMatrix'
 import { variantLabel } from '../../components/products/variantWords'
+import { argsSugerencia, mensajeSugerencia } from '../../components/products/skuSuggest'
 import type { Product } from '../../types/products'
 
 const ADMIN_ROLES = new Set(['ADMINISTRADOR', 'DUEÑO'])
@@ -55,6 +56,7 @@ export function ProductForm() {
   const hasVariantsModule = useEnabledModulesStore((s) => s.enabledModules.includes('variants'))
   const [variantRows, setVariantRows] = useState<VariantRow[]>([])
   const [loaded, setLoaded] = useState<Product | null>(null)
+  const [sugiriendoSku, setSugiriendoSku] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -92,6 +94,9 @@ export function ProductForm() {
           image_url: p.image_url ?? '',
           department_id: (p.department?.id ?? '') as string,
           brand_id: (p.brand_id ?? '') as string,
+          gender: p.gender ?? '',
+          model: p.model ?? '',
+          material: p.material ?? '',
           price: String(v?.price ?? p.price ?? ''),
           cost: String(v?.cost ?? p.cost ?? ''),
           has_iva: Boolean(v?.has_iva ?? p.has_iva ?? false),
@@ -119,6 +124,30 @@ export function ProductForm() {
   const setField = <K extends keyof ProductFormValue>(key: K, value: ProductFormValue[K]) => {
     setForm((f) => ({ ...f, [key]: value }))
     if (errors[key as string]) setErrors((e) => { const { [key as string]: _, ...rest } = e; return rest })
+  }
+
+  /**
+   * Pide el SKU que propone la convención y lo aplica SOLO si el usuario
+   * acepta. Los SKU de la matriz de tallas se recalculan solos al cambiar el
+   * base (`buildVariantRows`), con el sufijo de color/talla.
+   */
+  const sugerirSku = async () => {
+    if (!form.name.trim()) {
+      setErrors((e) => ({ ...e, name: 'Escribe el nombre antes de sugerir el SKU' }))
+      return
+    }
+    setSugiriendoSku(true)
+    try {
+      const args = argsSugerencia(form, brands, hasVariantsModule ? variantRows : [])
+      const { sku, available } = await productsApi.skuSuggest(args)
+      if (!sku) { toast.error('Faltan datos para sugerir un SKU.'); return }
+      if (!window.confirm(mensajeSugerencia(sku, available, form.sku))) return
+      setField('sku', sku)
+    } catch {
+      toast.error('No se pudo sugerir el SKU.')
+    } finally {
+      setSugiriendoSku(false)
+    }
   }
 
   const toggleBranch = (branchId: number, patch: Partial<BranchActivation>) => {
@@ -240,6 +269,9 @@ export function ProductForm() {
           image_url: form.image_url.trim() || null,
           department_id: form.department_id || null,
           brand_id: form.brand_id || null,
+          gender: form.gender || null,
+          model: form.model.trim() || null,
+          material: form.material.trim() || null,
           price: Number(form.price),
           cost: Number(form.cost),
           has_iva: form.has_iva,
@@ -269,6 +301,9 @@ export function ProductForm() {
           image_url: form.image_url.trim() || null,
           department_id: form.department_id || null,
           brand_id: form.brand_id || null,
+          gender: form.gender || null,
+          model: form.model.trim() || null,
+          material: form.material.trim() || null,
           price: Number(form.price),
           cost: Number(form.cost),
           has_iva: form.has_iva,
@@ -347,7 +382,10 @@ export function ProductForm() {
               {avisoPrincipal}
             </p>
           )}
-          <ProductBasicsSection value={form} onChange={setField} errors={errors} />
+          <ProductBasicsSection
+            value={form} onChange={setField} errors={errors}
+            onSuggestSku={sugerirSku} suggestingSku={sugiriendoSku}
+          />
           <ProductCommercialSection
             value={form} onChange={setField} errors={errors}
             departments={departments} brands={brands}

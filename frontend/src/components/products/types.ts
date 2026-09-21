@@ -11,6 +11,10 @@ export interface ProductFormValue {
   image_url: string
   department_id: string
   brand_id: string
+  /** Ficha boutique: '' = sin capturar (no se manda o se manda null). */
+  gender: string
+  model: string
+  material: string
   price: string
   cost: string
   has_iva: boolean
@@ -35,6 +39,9 @@ export const EMPTY_PRODUCT_FORM: ProductFormValue = {
   image_url: '',
   department_id: '',
   brand_id: '',
+  gender: '',
+  model: '',
+  material: '',
   price: '',
   cost: '',
   has_iva: false,

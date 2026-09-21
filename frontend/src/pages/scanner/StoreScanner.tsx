@@ -489,7 +489,7 @@ function ProductEditPanel({
     <div className="space-y-3">
       <DaxCard>
         <h2 className="text-lg font-black text-white leading-tight">
-          {product.name}
+          {product.sale_name ?? product.name}
           {v && varias && (
             <span className="ml-2 text-sm font-bold text-indigo-300">{variantShortLabel(v)}</span>
           )}

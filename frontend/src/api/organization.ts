@@ -21,6 +21,9 @@ export interface Organization {
   ticket_tiktok?: string | null
   ticket_whatsapp?: string | null
   ticket_show_vendor?: boolean
+  // Renglón del producto en el ticket (2026-09-21). 'compact' = el de siempre
+  // (una línea recortada); 'detailed' = marca / nombre completo / talla.
+  ticket_line_style?: 'compact' | 'detailed'
   // Equivalente en dólares (2026-09-17). 'off' = la función está apagada y no
   // se muestra nada en el POS ni en el ticket.
   usd_rate_mode?: 'off' | 'auto' | 'manual'

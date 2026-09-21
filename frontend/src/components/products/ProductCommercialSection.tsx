@@ -8,7 +8,21 @@ interface Props {
   brands: Brand[]
 }
 
+/** Los cuatro géneros que acepta el backend (`products.gender`). */
+export const GENEROS = [
+  { value: 'HOMBRE', label: 'Hombre' },
+  { value: 'MUJER', label: 'Mujer' },
+  { value: 'UNISEX', label: 'Unisex' },
+  { value: 'NINO', label: 'Niño' },
+]
+
 export function ProductCommercialSection({ value, onChange, errors, departments, brands }: Props) {
+  // Vista previa del nombre de venta: la marca primero, el modelo pegado al
+  // nombre. Es exactamente lo que va a leer el cajero en el POS y el ticket.
+  const marca = brands.find((b) => b.id === value.brand_id)?.name ?? ''
+  const prenda = [value.name.trim() || 'Nombre', value.model.trim()].filter(Boolean).join(' ')
+  const nombreDeVenta = marca ? `${marca} · ${prenda}` : prenda
+
   const costOverPrice =
     !errors.cost && Number(value.cost) > 0 && Number(value.price) > 0 && Number(value.cost) > Number(value.price)
 
@@ -31,6 +45,27 @@ export function ProductCommercialSection({ value, onChange, errors, departments,
             <option value="">— Ninguna —</option>
             {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
+        </label>
+        <label className="text-xs text-slate-400 space-y-1">
+          Género
+          <select className="dax-input w-full" value={value.gender}
+            onChange={(e) => onChange('gender', e.target.value)}>
+            <option value="">—</option>
+            {GENEROS.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
+          </select>
+        </label>
+        <label className="text-xs text-slate-400 space-y-1">
+          Modelo
+          <input className="dax-input w-full" value={value.model} placeholder="mezclilla, cargo, slim…"
+            onChange={(e) => onChange('model', e.target.value)} />
+          <span className="text-slate-600 text-[11px] block">
+            Va pegado al nombre: «{nombreDeVenta}».
+          </span>
+        </label>
+        <label className="text-xs text-slate-400 space-y-1">
+          Material
+          <input className="dax-input w-full" value={value.material} placeholder="Algodón, piel, lana…"
+            onChange={(e) => onChange('material', e.target.value)} />
         </label>
         <label className="text-xs text-slate-400 space-y-1">
           Precio *

@@ -11,6 +11,7 @@ import type { Product, Department, Brand, ProductBranchStatus } from '../../type
 import { formatCurrency } from '../../utils/currency'
 import { sortByName } from '../../utils/sortByName'
 import { toast } from '../../store/toastStore'
+import { GENEROS } from '../../components/products/ProductCommercialSection'
 import { ProductImageUploader } from '../../components/products/ProductImageUploader'
 import { expandVariantRows, grupoDeVariantes, nombreDeVariante, priceRange, sumStock } from './variantRows'
 
@@ -727,6 +728,10 @@ function ProductModal({ product, onClose, onSaved, brands, departments, isCajero
   const [usesInventory, setUsesInventory] = useState(product?.uses_inventory ?? true)
   const [brandId, setBrandId] = useState(product?.brand_id ?? '')
   const [deptId, setDeptId] = useState(product?.department?.id ?? '')
+  // Ficha boutique: género, modelo y material. '' = sin capturar → null.
+  const [gender, setGender] = useState(product?.gender ?? '')
+  const [model, setModel] = useState(product?.model ?? '')
+  const [material, setMaterial] = useState(product?.material ?? '')
 
   const [prices, setPrices] = useState<PriceRow[]>(
     product?.prices?.map(p => ({
@@ -787,6 +792,9 @@ function ProductModal({ product, onClose, onSaved, brands, departments, isCajero
         uses_inventory: usesInventory,
         brand_id: brandId || null,
         department_id: deptId || null,
+        gender: gender || null,
+        model: model.trim() || null,
+        material: material.trim() || null,
         prices: prices.map(p => ({
           price_name: p.price_name,
           min_quantity: Number(p.min_quantity),
@@ -891,6 +899,25 @@ function ProductModal({ product, onClose, onSaved, brands, departments, isCajero
                   <option value="">Sin departamento</option>
                   {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
+              </div>
+              <div>
+                <label className="block text-xs mb-1" style={{ color: 'var(--dax-text-muted)' }}>Género</label>
+                <select className="dax-input w-full" value={gender} onChange={e => setGender(e.target.value)}>
+                  <option value="">—</option>
+                  {GENEROS.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs mb-1" style={{ color: 'var(--dax-text-muted)' }}>Modelo</label>
+                {/* Va pegado al nombre en el nombre de venta:
+                    "Louis Vuitton · Chamarra mezclilla". */}
+                <input className="dax-input w-full" value={model} onChange={e => setModel(e.target.value)}
+                       placeholder="mezclilla, cargo, slim…" />
+              </div>
+              <div>
+                <label className="block text-xs mb-1" style={{ color: 'var(--dax-text-muted)' }}>Material</label>
+                <input className="dax-input w-full" value={material} onChange={e => setMaterial(e.target.value)}
+                       placeholder="Algodón, piel, lana…" />
               </div>
               {isEdit && editedProduct ? (
                 <ProductImageUploader
@@ -1391,7 +1418,7 @@ function ProductsHQView() {
                   </div>
                 )}
                 <div className="flex-1">
-                  <p className="text-white text-xs font-semibold line-clamp-2 leading-tight">{p.name}</p>
+                  <p className="text-white text-xs font-semibold line-clamp-2 leading-tight">{p.sale_name ?? p.name}</p>
                   <p className="text-slate-500 text-[10px] font-mono mt-0.5">{p.sku}</p>
                   {p.department_name && <p className="text-slate-600 text-[10px] mt-0.5 truncate">{p.department_name}</p>}
                 </div>
@@ -1501,7 +1528,7 @@ function ProductsHQView() {
                                 <i className="fa-solid fa-box text-slate-500 text-xs" />
                               </div>
                             )}
-                            <span className="font-medium text-white">{p.name}</span>
+                            <span className="font-medium text-white">{p.sale_name ?? p.name}</span>
                           </div>
                         </td>
                         <td className="text-slate-400 text-xs">{p.department_name ?? '—'}</td>

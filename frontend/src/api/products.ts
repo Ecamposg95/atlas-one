@@ -47,6 +47,11 @@ interface ProductCreate {
   // sigue naciendo como "Estándar" (resto de los tenants).
   color?: string
   size?: string
+  // Ficha boutique: el género se valida en el backend (HOMBRE|MUJER|UNISEX|NINO);
+  // el modelo entra en el nombre de venta y el material es informativo.
+  gender?: string | null
+  model?: string | null
+  material?: string | null
   // Admin-only extensions — all optional to keep existing callers working
   has_iva?: boolean
   tax_rate?: number
@@ -185,6 +190,32 @@ export const productsApi = {
     if (Array.isArray(data)) {
       return { items: data, total: data.length, page: 0, pages: 1 }
     }
+    return data
+  },
+
+  /**
+   * GET /api/products/sku-suggest — SKU que propone la convención
+   * MARCA-PRENDA-MODELO-COLOR-TALLA.
+   *
+   * Es una SUGERENCIA: nunca se aplica sola, el alta sigue aceptando cualquier
+   * SKU único. `available` dice si el código ya lo ocupa otra variante de la
+   * organización (el mismo SKU en otra tienda no estorba).
+   */
+  skuSuggest: async (args: {
+    name: string
+    brand?: string | null
+    model?: string | null
+    color?: string | null
+    size?: string | null
+  }): Promise<{ sku: string; available: boolean }> => {
+    const params: Record<string, string> = { name: args.name ?? '' }
+    for (const k of ['brand', 'model', 'color', 'size'] as const) {
+      const v = (args[k] ?? '').trim()
+      if (v) params[k] = v
+    }
+    const { data } = await client.get<{ sku: string; available: boolean }>(
+      '/products/sku-suggest', { params },
+    )
     return data
   },
 

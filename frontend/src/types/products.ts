@@ -44,6 +44,9 @@ export interface ProductVariant {
   variant_name?: string | null   // "Rojo / M" o "Estándar"
   color?: string | null
   size?: string | null
+  /** "Louis Vuitton · Chamarra mezclilla · Talla M" — lo que el POS pinta y el
+   *  ticket congela. Sin marca ni modelo es el nombre de hoy ("Playera (M)"). */
+  sale_name?: string | null
   price: number
   /** Precio que el POS COBRA en la sucursal activa: el `price_override` de la
    *  sucursal si lo hay, y si no `price`. El editor de variantes sigue usando
@@ -66,6 +69,13 @@ export interface Product {
   description: string | null
   brand_id: string | null          // UUID
   brand_name: string | null
+  /** Ficha boutique: género, modelo y material de la prenda. */
+  gender?: string | null           // HOMBRE | MUJER | UNISEX | NINO
+  model?: string | null
+  material?: string | null
+  /** Nombre de venta del producto ("Louis Vuitton · Chamarra mezclilla").
+   *  Sin marca ni modelo es exactamente `name`: usar `sale_name ?? name`. */
+  sale_name?: string | null
   department: { id: string; name: string } | null
   department_name: string | null
   unit: string | null              // "pza", "kg", etc.

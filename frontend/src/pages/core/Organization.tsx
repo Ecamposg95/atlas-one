@@ -15,6 +15,15 @@ const branchTypeLabel = (t: string) =>
 interface BranchForm { name: string; branch_type: Branch['branch_type']; address: string; phone: string }
 const EMPTY_BRANCH: BranchForm = { name: '', branch_type: 'STORE', address: '', phone: '' }
 
+// Vista previa del renglón del ticket (panel de Empresa). Mismo orden y misma
+// sangría que arma `app/pos_printer.py`: lo que se ve aquí es lo que imprime.
+const VISTA_PREVIA_COMPACTA = '1x  LOUIS VUITTON · CHAMARRA MEZC @4000.00    4000.00'
+const VISTA_PREVIA_DETALLADA = [
+  '1x  LOUIS VUITTON',
+  '    Chamarra mezclilla',
+  '    Talla M          @4,000.00   4,000.00',
+].join('\n')
+
 export function Organization() {
   const [tab, setTab] = useState<'org' | 'branches'>('org')
   const [org, setOrg] = useState<Organization | null>(null)
@@ -448,6 +457,27 @@ export function Organization() {
                 </div>
                 <p className="text-[10px] mt-2 text-slate-600">
                   Cada red se imprime solo si la capturas. El sitio web se toma del campo <b>Sitio web</b> de arriba.
+                </p>
+              </div>
+              <div>
+                <label className="dax-label">Estilo de línea del ticket</label>
+                <select
+                  value={orgForm.ticket_line_style ?? 'compact'}
+                  onChange={e => setOrgForm(p => ({ ...p, ticket_line_style: e.target.value as 'compact' | 'detailed' }))}
+                  className="dax-input w-full"
+                >
+                  <option value="compact">Compacto — una línea por prenda</option>
+                  <option value="detailed">Detallado — marca, nombre completo y talla</option>
+                </select>
+                {/* Vista previa en texto: es lo que va a salir impreso, con la
+                    misma sangría y el mismo orden que arma `pos_printer`. */}
+                <pre className="mt-2 rounded-lg bg-slate-900/70 border border-slate-800 px-3 py-2 text-[11px] leading-relaxed font-mono text-slate-300 overflow-x-auto">
+{(orgForm.ticket_line_style ?? 'compact') === 'detailed'
+  ? VISTA_PREVIA_DETALLADA
+  : VISTA_PREVIA_COMPACTA}
+                </pre>
+                <p className="text-[10px] mt-1 text-slate-600">
+                  El detallado gasta dos renglones más por prenda, pero no recorta la marca ni la talla.
                 </p>
               </div>
               <div className="flex items-start gap-3 pt-1">

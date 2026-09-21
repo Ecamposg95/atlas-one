@@ -207,7 +207,11 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
       ...(label ? { variant_label: label } : {}),
       base_price: Number(p.price),
       sku: p.sku ?? '',
-      name: label ? `${p.name} (${label})` : p.name,
+      // Nombre de VENTA: el mismo texto que va a salir en el ticket
+      // ("Louis Vuitton · Chamarra mezclilla · Talla M"). Sin marca ni modelo
+      // es el de siempre ("Playera (M)"), así que nada cambia para el resto.
+      name: variant?.sale_name
+        ?? (label ? `${p.sale_name ?? p.name} (${label})` : (p.sale_name ?? p.name)),
       price: Number(p.price),
       quantity: 1,
       discount: 0,
@@ -347,7 +351,7 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
                   </div>
                   <p className="text-sm font-bold leading-snug line-clamp-2"
                      style={{ color: 'var(--dax-text)', lineHeight: '1.25' }}>
-                    {p.name}
+                    {p.sale_name ?? p.name}
                   </p>
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-[11px] font-mono truncate" style={{ color: 'var(--dax-text-faint)' }}>{p.sku}</p>
