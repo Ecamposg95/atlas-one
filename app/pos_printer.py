@@ -65,7 +65,8 @@ def _producto_tiene_marca(line) -> bool:
     variant = getattr(line, "variant", None)
     producto = getattr(variant, "product", None) if variant is not None else None
     marca_obj = getattr(producto, "brand", None) if producto is not None else None
-    return bool(getattr(marca_obj, "name", None)) if marca_obj is not None else False
+    from app.modules.products.sale_name import marca_visible
+    return bool(marca_visible(getattr(marca_obj, "name", None))) if marca_obj is not None else False
 
 
 def _datos_de_renglon(line) -> tuple:

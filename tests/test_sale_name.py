@@ -90,6 +90,20 @@ class TestVariantSaleName:
         assert variant_sale_name("Gucci", "Playera", None, None, None, "600ml") == "Gucci · Playera"
 
 
+class TestMarcaNeutra:
+    """"Sin marca" es una marca real en el catalogo de varias tiendas (la crean
+    para poder llenar el campo). No debe encabezar el nombre de venta ni salir
+    como renglon de marca en el ticket."""
+
+    def test_sin_marca_no_encabeza_el_nombre(self):
+        assert sale_name("Sin marca", "Chamarra", None) == "Chamarra"
+        assert sale_name("Sin Marca", "Playera", "manga larga") == "Playera manga larga"
+        assert variant_sale_name("sin marca", "Playera", None, None, "M") == "Playera (M)"
+
+    def test_una_marca_real_si(self):
+        assert sale_name("Gucci", "Chamarra", None) == "Gucci · Chamarra"
+
+
 # ── 3. SKU sugerido ──────────────────────────────────────────────────────────
 class TestSkuSugerido:
     def test_marca_de_dos_palabras_usa_iniciales(self):

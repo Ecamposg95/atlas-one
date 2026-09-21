@@ -62,6 +62,17 @@ def normalizar_genero(valor: Optional[str]) -> Optional[str]:
     return texto
 
 
+# Marcas que en realidad dicen "no tiene marca": no encabezan el nombre de venta
+# ni el ticket. Muchas tiendas crean una marca asi para poder llenar el campo.
+MARCAS_NEUTRAS = frozenset({"sin marca", "generico", "generica", "n/a", "na", "ninguna", "sin"})
+
+
+def marca_visible(brand: Optional[str]) -> str:
+    """La marca tal cual, o "" si es una marca neutra ("Sin marca")."""
+    limpia = _limpio(brand)
+    return "" if _sin_acentos(limpia).casefold() in MARCAS_NEUTRAS else limpia
+
+
 def sale_name(brand: Optional[str], name: str, model: Optional[str]) -> str:
     """"Louis Vuitton · Chamarra mezclilla".
 
@@ -70,7 +81,7 @@ def sale_name(brand: Optional[str], name: str, model: Optional[str]) -> str:
     "Chamarra mezclilla". Sin marca ni modelo: el `name` tal cual.
     """
     prenda = " ".join(p for p in (_limpio(name), _limpio(model)) if p)
-    marca = _limpio(brand)
+    marca = marca_visible(brand)
     return f"{marca}{SEPARADOR}{prenda}" if marca and prenda else (prenda or marca)
 
 
@@ -122,7 +133,7 @@ def variant_sale_name(
     """
     base = sale_name(brand, name, model)
     atributos = atributos_venta(color, size)
-    if _limpio(brand) or _limpio(model):
+    if marca_visible(brand) or _limpio(model):
         return f"{base}{SEPARADOR}{atributos}" if atributos else base
     # Sin marca ni modelo: el formato de siempre. Color/talla mandan; si no
     # hay, la etiqueta heredada; si tampoco, el nombre a secas.
