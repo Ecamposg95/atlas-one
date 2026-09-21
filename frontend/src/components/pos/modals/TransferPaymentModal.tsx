@@ -23,7 +23,7 @@ export function TransferPaymentModal({ total, onClose, onConfirm }: Props) {
       style={{ background: 'var(--dax-modal-backdrop)' }}
       onClick={onClose}
     >
-      <div className="dax-card p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+      <div className="dax-card dax-modal p-6 pb-0 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-3 mb-4">
           <i className="fa-solid fa-mobile-screen text-blue-400 text-xl" />
           <div>
@@ -38,7 +38,7 @@ export function TransferPaymentModal({ total, onClose, onConfirm }: Props) {
           <p className="text-slate-500 text-xs mt-1">Ingresa la referencia del comprobante</p>
         </div>
 
-        <div className="mb-4">
+        <div className="mb-1">
           <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
             Referencia <span className="text-red-400">*</span>
           </label>
@@ -54,9 +54,9 @@ export function TransferPaymentModal({ total, onClose, onConfirm }: Props) {
           {!reference.trim() && <p className="text-red-400 text-xs mt-1">Campo requerido</p>}
         </div>
 
-        <div className="flex gap-2">
-          <button onClick={onClose} className="dax-btn-secondary flex-1">Cancelar</button>
-          <button onClick={submit} disabled={loading || !reference.trim()} className="dax-btn-primary flex-1 justify-center disabled:opacity-50">
+        <div className="dax-modal-footer flex gap-2 pb-6">
+          <button onClick={onClose} className="dax-btn-secondary flex-1 min-h-[44px]">Cancelar</button>
+          <button onClick={submit} disabled={loading || !reference.trim()} className="dax-btn-primary flex-1 justify-center disabled:opacity-50 min-h-[44px]">
             {loading ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Confirmar</>}
           </button>
         </div>

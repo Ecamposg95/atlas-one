@@ -55,7 +55,7 @@ export function SessionModal({ onOpened }: Props) {
       className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm p-4"
       style={{ background: 'var(--dax-modal-backdrop)' }}
     >
-      <div className="dax-card p-6 w-full max-w-sm">
+      <div className="dax-card dax-modal p-6 pb-0 w-full max-w-sm">
         <div className="text-center mb-6">
           <div className="w-16 h-16 rounded-full bg-indigo-600/20 flex items-center justify-center mx-auto mb-3">
             <i className="fa-solid fa-vault text-indigo-400 text-2xl" />
@@ -75,18 +75,19 @@ export function SessionModal({ onOpened }: Props) {
               onChange={(e) => setAmount(e.target.value)}
               className="dax-input text-xl font-bold text-center"
               placeholder="0.00"
+              inputMode="decimal"
               min="0"
               step="0.01"
               autoFocus
             />
           </div>
 
-          <div className="grid grid-cols-4 gap-1.5">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
             {QUICK_AMOUNTS.map((a) => (
               <button
                 key={a}
                 onClick={() => setAmount(String(a))}
-                className={`py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                className={`py-3 min-h-[44px] rounded-lg text-xs font-semibold border transition-colors ${
                   parseFloat(amount) === a
                     ? 'border-indigo-500 bg-indigo-600/20 text-white'
                     : 'border-slate-700/50 text-slate-400 hover:border-slate-600 hover:text-white'
@@ -111,11 +112,15 @@ export function SessionModal({ onOpened }: Props) {
           </div>
 
           {error && <p className="text-red-400 text-xs text-center">{error}</p>}
+        </div>
 
+        {/* Pie pegajoso: con el teclado numérico abierto "Abrir Turno" seguía
+            existiendo pero quedaba fuera de la pantalla. */}
+        <div className="dax-modal-footer pb-6">
           <button
             onClick={open}
             disabled={loading || amount === ''}
-            className="dax-btn-primary w-full justify-center py-3 text-base font-black disabled:opacity-50"
+            className="dax-btn-primary w-full justify-center py-3 min-h-[48px] text-base font-black disabled:opacity-50"
           >
             {loading
               ? <><i className="fa-solid fa-spinner fa-spin" /> Abriendo...</>

@@ -70,11 +70,11 @@ export function MixedPaymentModal({ total, surchargePct = 0, onClose, onConfirm 
       style={{ background: 'var(--dax-modal-backdrop)' }}
       onClick={onClose}
     >
-      <div className="dax-card p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+      <div className="dax-card dax-modal p-6 pb-0 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-black text-white mb-1">Pago Mixto</h3>
         <p className="text-slate-500 text-sm mb-4">Total: <span className="text-white font-bold">{formatCurrency(total)}</span></p>
 
-        <div className="space-y-3 mb-4 max-h-[40vh] overflow-y-auto pr-1">
+        <div className="space-y-3 mb-4 max-h-[40dvh] overflow-y-auto pr-1">
           {lines.map((line, i) => (
             <div key={i} className="rounded-xl p-3" style={{ background: 'var(--dax-elevated)', border: '1px solid var(--dax-border-dim)' }}>
               <div className="flex items-center gap-2 mb-2">
@@ -101,6 +101,7 @@ export function MixedPaymentModal({ total, surchargePct = 0, onClose, onConfirm 
                   onChange={(e) => updateLine(i, { amount: e.target.value })}
                   className="dax-input flex-1 text-sm tabular-nums"
                   placeholder="0.00"
+                  inputMode="decimal"
                   min="0"
                   step="0.01"
                 />
@@ -138,7 +139,7 @@ export function MixedPaymentModal({ total, surchargePct = 0, onClose, onConfirm 
         </button>
 
         {/* Resumen */}
-        <div className={`rounded-xl p-3 mb-4 text-sm space-y-1 ${remaining > 0.005 ? 'bg-red-600/10 border border-red-600/30' : 'bg-emerald-600/10 border border-emerald-600/30'}`}>
+        <div className={`rounded-xl p-3 mb-1 text-sm space-y-1 ${remaining > 0.005 ? 'bg-red-600/10 border border-red-600/30' : 'bg-emerald-600/10 border border-emerald-600/30'}`}>
           <div className="flex justify-between text-slate-400">
             <span>{cargo.amount > 0 ? 'Mercancía' : 'Total'}</span><span>{formatCurrency(total)}</span>
           </div>
@@ -171,9 +172,9 @@ export function MixedPaymentModal({ total, surchargePct = 0, onClose, onConfirm 
           </p>
         )}
 
-        <div className="flex gap-2">
-          <button onClick={onClose} className="dax-btn-secondary flex-1">Cancelar</button>
-          <button onClick={submit} disabled={loading || !isValid} className="dax-btn-primary flex-1 justify-center disabled:opacity-50">
+        <div className="dax-modal-footer flex gap-2 pb-6">
+          <button onClick={onClose} className="dax-btn-secondary flex-1 min-h-[44px]">Cancelar</button>
+          <button onClick={submit} disabled={loading || !isValid} className="dax-btn-primary flex-1 justify-center disabled:opacity-50 min-h-[44px]">
             {loading ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Cobrar</>}
           </button>
         </div>

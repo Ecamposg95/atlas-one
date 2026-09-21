@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { formatCurrency } from '../../utils/currency'
+import { posicionaPopover, ANCHO_POPOVER, type PosicionPopover } from './popoverPos'
 
 interface Tier {
   id: string
@@ -24,9 +25,6 @@ interface Props {
   onClose: () => void
 }
 
-const W = 300
-const MARGIN = 8
-
 export function PricePickerPopover({
   open,
   triggerRef,
@@ -42,7 +40,7 @@ export function PricePickerPopover({
   onClose,
 }: Props) {
   const popRef = useRef<HTMLDivElement>(null)
-  const [pos, setPos] = useState<{ top: number; left: number; placement: 'below' | 'above' } | null>(null)
+  const [pos, setPos] = useState<PosicionPopover | null>(null)
 
   const reposition = () => {
     const trigger = triggerRef.current
@@ -50,15 +48,7 @@ export function PricePickerPopover({
     if (!trigger) return
     const r = trigger.getBoundingClientRect()
     const popH = pop?.offsetHeight ?? 280
-    const vw = window.innerWidth
-    const vh = window.innerHeight
-    const spaceBelow = vh - r.bottom - MARGIN
-    const placement = spaceBelow >= popH ? 'below' : (r.top - MARGIN >= popH ? 'above' : 'below')
-    const top = placement === 'below' ? r.bottom + 4 : Math.max(MARGIN, r.top - popH - 4)
-    let left = r.left
-    if (left + W > vw - MARGIN) left = vw - W - MARGIN
-    if (left < MARGIN) left = MARGIN
-    setPos({ top, left, placement })
+    setPos(posicionaPopover(r, popH, window.innerWidth, window.innerHeight))
   }
 
   useLayoutEffect(() => {
@@ -138,7 +128,7 @@ export function PricePickerPopover({
         position: 'fixed',
         top: pos?.top ?? -9999,
         left: pos?.left ?? -9999,
-        width: W,
+        width: pos?.width ?? ANCHO_POPOVER,
         zIndex: 9999,
         // Solid background — `--dax-elevated` is only ~4% opacity and lets
         // cart text bleed through the popover.

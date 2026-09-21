@@ -314,7 +314,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
       {/* Header. `relative z-30` lo deja por encima del velo de caja cerrada
           (`absolute inset-0 z-20` más abajo), que si no se comía el clic en
           "Cliente" — y anotar el cliente no cobra nada. */}
-      <div className="relative z-30 flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid var(--dax-border-dim)' }}>
+      <div className="relative z-30 flex items-center justify-between gap-2 flex-wrap px-4 py-3" style={{ borderBottom: '1px solid var(--dax-border-dim)' }}>
         <div className="flex items-center gap-2">
           <i className="fa-solid fa-shopping-cart text-indigo-400" />
           <span className="text-sm font-black" style={{ color: 'var(--dax-text)' }}>Carrito</span>
@@ -368,8 +368,12 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
           >
             {customerName}
           </button>
-          <button onClick={onClearCustomer} className="text-dax-muted hover:text-dax-danger text-sm">
-            <i className="fa-solid fa-xmark" />
+          <button
+            onClick={onClearCustomer}
+            className="dax-btn-icon text-dax-muted hover:text-dax-danger text-sm rounded-lg"
+            aria-label="Quitar cliente"
+          >
+            <i className="fa-solid fa-xmark" aria-hidden="true" />
           </button>
         </div>
       )}
@@ -415,7 +419,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                   <div className="flex items-start gap-2 mb-1.5">
                     <button
                       onClick={() => openDetail(displayItem)}
-                      className="flex-1 font-bold text-base leading-snug text-left hover:text-indigo-400 transition-colors truncate"
+                      className="flex-1 min-w-0 font-bold text-base leading-snug text-left hover:text-indigo-400 transition-colors truncate max-md:whitespace-normal"
                       style={{ color: 'var(--dax-text)' }}
                       title="Ver detalles"
                     >
@@ -542,7 +546,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                     })
 
                     return (
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 max-md:flex-wrap">
                       {/* Label: icono pieza o badge equivalente a caja */}
                       <div className="flex items-center gap-1.5 w-16 flex-shrink-0">
                         {boxEquiv > 0 ? (
@@ -593,64 +597,72 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                         </div>
                       )}
 
-                      {/* Precio/u y descuento — solo cuando hay ítem de unidades */}
-                      {unitItem && editingDiscount !== priceKey && (
-                        <div className="flex items-center gap-1.5 ml-auto">
-                          <button
-                            ref={(el) => {
-                              if (editingPrice === priceKey) activePriceTriggerRef.current = el
-                            }}
-                            onClick={() => {
-                              if (editingPrice === priceKey) {
-                                setEditing(null)
-                              } else {
-                                setEditing({ key: priceKey!, mode: 'price' })
-                                setPriceInput(String(unitItem.price ?? 0))
-                              }
-                            }}
-                            className="text-sm tabular-nums flex items-center gap-1.5 min-h-[40px] px-2 rounded-lg transition-colors hover:bg-dax-elevated"
-                            style={{ color: hasTiers ? 'var(--dax-accent-text)' : 'var(--dax-text-muted)' }}
-                            title="Cambiar precio / tier"
-                          >
-                            {hasTiers && <i className="fa-solid fa-tags text-[9px]" />}
-                            {formatCurrency(unitItem.price)}/u
-                          </button>
-                          <button
-                            onClick={() => { setEditing({ key: priceKey!, mode: 'discount' }); setDiscountInput(String(unitItem.discount || 0)) }}
-                            className="text-sm tabular-nums min-h-[40px] min-w-[40px] px-2 rounded-lg transition-colors hover:bg-dax-elevated"
-                            style={{ color: (unitItem.discount ?? 0) > 0 ? 'var(--dax-warning)' : 'var(--dax-text-muted)' }}
-                            title="Descuento"
-                          >
-                            {(unitItem.discount ?? 0) > 0 ? `-${unitItem.discount}%` : '%'}
-                          </button>
-                        </div>
-                      )}
-                      {/* Espaciador cuando no hay unitItem */}
-                      {!unitItem && <span className="flex-1" />}
+                      {/* Precio/u, descuento y Caja. En `< md` van juntos en un
+                          segundo renglón (la fila completa pedía ~454 px y no
+                          envolvía, C3); en `≥ md` el envoltorio es
+                          `display: contents` y desaparece, así que sus hijos
+                          vuelven a ser hijos directos de la fila y el reparto
+                          de escritorio queda idéntico al de hoy. */}
+                      <div className="flex items-center gap-1.5 w-full justify-end md:contents">
+                        {unitItem && editingDiscount !== priceKey && (
+                          <div className="flex items-center gap-1.5 md:ml-auto">
+                            <button
+                              ref={(el) => {
+                                if (editingPrice === priceKey) activePriceTriggerRef.current = el
+                              }}
+                              onClick={() => {
+                                if (editingPrice === priceKey) {
+                                  setEditing(null)
+                                } else {
+                                  setEditing({ key: priceKey!, mode: 'price' })
+                                  setPriceInput(String(unitItem.price ?? 0))
+                                }
+                              }}
+                              className="text-sm tabular-nums flex items-center gap-1.5 min-h-[40px] px-2 rounded-lg transition-colors hover:bg-dax-elevated"
+                              style={{ color: hasTiers ? 'var(--dax-accent-text)' : 'var(--dax-text-muted)' }}
+                              title="Cambiar precio / tier"
+                            >
+                              {hasTiers && <i className="fa-solid fa-tags text-[9px]" />}
+                              {formatCurrency(unitItem.price)}/u
+                            </button>
+                            <button
+                              onClick={() => { setEditing({ key: priceKey!, mode: 'discount' }); setDiscountInput(String(unitItem.discount || 0)) }}
+                              className="text-sm tabular-nums min-h-[40px] min-w-[40px] px-2 rounded-lg transition-colors hover:bg-dax-elevated"
+                              style={{ color: (unitItem.discount ?? 0) > 0 ? 'var(--dax-warning)' : 'var(--dax-text-muted)' }}
+                              title="Descuento"
+                            >
+                              {(unitItem.discount ?? 0) > 0 ? `-${unitItem.discount}%` : '%'}
+                            </button>
+                          </div>
+                        )}
+                        {/* Espaciador cuando no hay unitItem — solo en escritorio:
+                            en teléfono el renglón ya va alineado a la derecha. */}
+                        {!unitItem && <span className="hidden md:block flex-1" />}
 
-                      {/* Botón CAJA — visible si hay tier de caja */}
-                      {hasCaja && (() => {
-                        // Puede activar caja si cabe al menos 1 caja en el stock total
-                        // (independiente de cuántas piezas haya — toggleCaja reduce piezas si es necesario)
-                        const canAddCaja = cajaActive ||
-                          !displayItem.stock ||
-                          (cajaTier?.min_quantity ?? 1) <= displayItem.stock
-                        return (
-                          <button
-                            onClick={() => toggleCaja(group)}
-                            disabled={!canAddCaja}
-                            className="text-sm font-bold px-3 min-h-[40px] rounded-lg flex items-center gap-1.5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                            style={{
-                              background: cajaActive ? 'var(--dax-accent)' : 'var(--dax-accent-soft)',
-                              border: '1px solid var(--dax-accent)',
-                              color: cajaActive ? 'var(--dax-on-accent)' : 'var(--dax-accent-text)',
-                            }}
-                          >
-                            <i className="fa-solid fa-boxes-stacked text-[10px]" />
-                            {cajaActive ? `×${cajaTier!.min_quantity}` : 'Caja'}
-                          </button>
-                        )
-                      })()}
+                        {/* Botón CAJA — visible si hay tier de caja */}
+                        {hasCaja && (() => {
+                          // Puede activar caja si cabe al menos 1 caja en el stock total
+                          // (independiente de cuántas piezas haya — toggleCaja reduce piezas si es necesario)
+                          const canAddCaja = cajaActive ||
+                            !displayItem.stock ||
+                            (cajaTier?.min_quantity ?? 1) <= displayItem.stock
+                          return (
+                            <button
+                              onClick={() => toggleCaja(group)}
+                              disabled={!canAddCaja}
+                              className="text-sm font-bold px-3 min-h-[40px] rounded-lg flex items-center gap-1.5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                              style={{
+                                background: cajaActive ? 'var(--dax-accent)' : 'var(--dax-accent-soft)',
+                                border: '1px solid var(--dax-accent)',
+                                color: cajaActive ? 'var(--dax-on-accent)' : 'var(--dax-accent-text)',
+                              }}
+                            >
+                              <i className="fa-solid fa-boxes-stacked text-[10px]" />
+                              {cajaActive ? `×${cajaTier!.min_quantity}` : 'Caja'}
+                            </button>
+                          )
+                        })()}
+                      </div>
                     </div>
                     )
                   })()}
@@ -680,7 +692,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                     return (
                       <div
                         key={cajaKey}
-                        className="flex items-start gap-2 mt-2 pt-2"
+                        className="flex items-start gap-2 mt-2 pt-2 max-md:flex-wrap"
                         style={{ borderTop: '1px dashed color-mix(in srgb, var(--dax-accent) 35%, transparent)' }}
                       >
                         <span className="flex items-center gap-1.5 w-16 flex-shrink-0 text-xs font-bold text-indigo-400 mt-1">
@@ -948,7 +960,9 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
 
       {/* Botones de pago */}
       <div className="px-3 pb-3">
-        <div className="grid gap-2" style={{ gridTemplateColumns: '1.4fr 1fr 1fr 1fr' }}>
+        {/* `< sm`: 2×2 (con cuatro columnas "Transfer." se cortaba en 76 px).
+            `≥ sm`: el reparto 1.4/1/1/1 de siempre. */}
+        <div className="grid gap-2 grid-cols-2 sm:[grid-template-columns:1.4fr_1fr_1fr_1fr]">
           <button onClick={() => onPay('CASH')} disabled={isEmpty}
             className="flex flex-col items-center justify-center gap-1 min-h-[56px] px-2 rounded-2xl bg-dax-accent text-dax-on-accent font-bold shadow-lg shadow-black/10 hover:brightness-110 transition disabled:opacity-30 disabled:cursor-not-allowed">
             <i className="fa-solid fa-money-bill text-xl" aria-hidden="true" />

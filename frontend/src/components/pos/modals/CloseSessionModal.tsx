@@ -42,7 +42,7 @@ export function CloseSessionModal({ onClose, onConfirm }: Props) {
       style={{ background: 'var(--dax-modal-backdrop)' }}
       onClick={onClose}
     >
-      <div className="dax-card p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+      <div className="dax-card dax-modal p-6 pb-0 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
         <div className="text-center mb-5">
           <div className="w-14 h-14 rounded-full bg-amber-500/20 flex items-center justify-center mx-auto mb-3">
             <i className="fa-solid fa-lock text-amber-400 text-2xl" />
@@ -74,6 +74,7 @@ export function CloseSessionModal({ onClose, onConfirm }: Props) {
                 onChange={(e) => setClosingAmount(e.target.value)}
                 className="dax-input text-xl font-black text-center tabular-nums"
                 placeholder="0.00"
+                inputMode="decimal"
                 min="0"
                 step="0.01"
                 autoFocus
@@ -101,12 +102,12 @@ export function CloseSessionModal({ onClose, onConfirm }: Props) {
               />
             </div>
 
-            <div className="flex gap-2 pt-1">
-              <button onClick={onClose} className="dax-btn-secondary flex-1">Cancelar</button>
+            <div className="dax-modal-footer flex gap-2 pb-6">
+              <button onClick={onClose} className="dax-btn-secondary flex-1 min-h-[44px]">Cancelar</button>
               <button
                 onClick={submit}
                 disabled={loading || !closingAmount}
-                className="flex-1 justify-center bg-amber-600 hover:bg-amber-500 text-white font-bold py-2 px-4 rounded-xl text-sm transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                className="flex-1 justify-center bg-amber-600 hover:bg-amber-500 text-white font-bold py-2 min-h-[44px] px-4 rounded-xl text-sm transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {loading
                   ? <i className="fa-solid fa-spinner fa-spin" />

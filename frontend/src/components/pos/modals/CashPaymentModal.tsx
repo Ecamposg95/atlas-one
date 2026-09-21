@@ -40,7 +40,7 @@ export function CashPaymentModal({ total, onClose, onConfirm }: Props) {
       style={{ background: 'var(--dax-modal-backdrop)' }}
       onClick={onClose}
     >
-      <div className="dax-card p-6 w-full max-w-[560px]" onClick={(e) => e.stopPropagation()}>
+      <div className="dax-card dax-modal p-6 pb-0 w-full max-w-[560px]" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-baseline justify-between mb-1">
           <h3 className="text-xl font-black" style={{ color: 'var(--dax-text)' }}>Pago en Efectivo</h3>
           <span className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--dax-text-faint)' }}>Cobro</span>
@@ -71,6 +71,7 @@ export function CashPaymentModal({ total, onClose, onConfirm }: Props) {
             onChange={(e) => setReceived(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && isValid && !loading) submit() }}
             className="dax-input text-4xl font-black text-center tabular-nums py-3"
+            inputMode="decimal"
             min={0}
             step="0.50"
             autoFocus
@@ -99,12 +100,12 @@ export function CashPaymentModal({ total, onClose, onConfirm }: Props) {
         {/* Pago rápido — denominaciones grandes */}
         <div className="mb-3">
           <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--dax-text-muted)' }}>Pago rápido</p>
-          <div className="grid grid-cols-5 gap-1.5">
+          <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
             {QUICK.map((d) => (
               <button
                 key={d}
                 onClick={() => addDenomination(d)}
-                className="py-3 rounded-xl text-sm font-black border-2 transition-colors active:scale-95 hover:bg-emerald-50"
+                className="py-3 min-h-[44px] rounded-xl text-sm font-black border-2 transition-colors active:scale-95 hover:bg-emerald-50"
                 style={{ borderColor: 'var(--dax-border)', color: 'var(--dax-text)' }}
               >
                 ${d}
@@ -116,12 +117,12 @@ export function CashPaymentModal({ total, onClose, onConfirm }: Props) {
         {/* Billetes */}
         <div className="mb-1">
           <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--dax-text-faint)' }}>Billetes</p>
-          <div className="grid grid-cols-6 gap-1.5 mb-2">
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 mb-2">
             {BILLS.map((d) => (
               <button
                 key={d}
                 onClick={() => addDenomination(d)}
-                className="py-2 rounded-lg text-xs font-bold border transition-colors active:scale-95"
+                className="py-2 min-h-[44px] rounded-lg text-xs font-bold border transition-colors active:scale-95"
                 style={{ borderColor: 'var(--dax-border-dim)', color: 'var(--dax-text-muted)' }}
               >
                 ${d}
@@ -138,7 +139,7 @@ export function CashPaymentModal({ total, onClose, onConfirm }: Props) {
               <button
                 key={d}
                 onClick={() => addDenomination(d)}
-                className="py-2 rounded-lg text-[11px] font-bold border transition-colors active:scale-95"
+                className="py-2 min-h-[44px] rounded-lg text-[11px] font-bold border transition-colors active:scale-95"
                 style={{ borderColor: 'var(--dax-border-dim)', color: 'var(--dax-text-muted)' }}
               >
                 ${d}
@@ -150,13 +151,16 @@ export function CashPaymentModal({ total, onClose, onConfirm }: Props) {
         {/* Cantidad exacta */}
         <button
           onClick={() => setReceived(String(total))}
-          className="w-full py-2 border border-emerald-500/40 text-emerald-700 hover:bg-emerald-600/10 font-semibold rounded-xl text-xs uppercase tracking-widest transition mb-4"
+          className="w-full py-3 min-h-[44px] border border-emerald-500/40 text-emerald-700 hover:bg-emerald-600/10 font-semibold rounded-xl text-xs uppercase tracking-widest transition mb-4"
         >
           <i className="fa-solid fa-check-circle mr-2" />Cantidad Exacta
         </button>
 
         {/* Print toggle */}
-        <label className="flex items-center gap-3 cursor-pointer mb-4">
+        {/* M6: el interruptor visible mide 40x20 px. El `<label>` entero ya era
+            tappable; `py-3` lo sube a 44 px de alto y los márgenes negativos
+            devuelven el espaciado exacto que tenía (el pie aporta 12 px). */}
+        <label className="flex items-center gap-3 cursor-pointer py-3 -mt-3 -mb-2">
           <input
             type="checkbox"
             checked={printTicket}
@@ -169,7 +173,7 @@ export function CashPaymentModal({ total, onClose, onConfirm }: Props) {
           <span className="text-xs font-semibold" style={{ color: 'var(--dax-text-muted)' }}>Imprimir Ticket</span>
         </label>
 
-        <div className="flex gap-2">
+        <div className="dax-modal-footer flex gap-2 pb-6">
           <button onClick={onClose} className="dax-btn-secondary flex-1 min-h-[52px]">Cancelar</button>
           <button
             onClick={submit}

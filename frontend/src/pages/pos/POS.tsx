@@ -10,6 +10,7 @@ import { printerApi } from '../../api/printer'
 import { requierePin } from '../../utils/reimpresion'
 import { usePOSStore } from '../../store/posStore'
 import { useAuthStore } from '../../store/authStore'
+import { useEsTelefono } from '../../hooks/useIsMobile'
 import { useExchangeRateStore } from '../../store/exchangeRateStore'
 import { useCardSurchargeStore } from '../../store/cardSurchargeStore'
 import { isCardSurchargeError, surchargeFor } from './cardSurcharge'
@@ -48,8 +49,17 @@ export function POS() {
   const { user } = useAuthStore()
   const store = usePOSStore()
   const total = usePOSStore((s) => s.total())
+  const itemCount = usePOSStore((s) => s.itemCount())
   const pendingCount = usePOSStore((s) => s.parkedTickets.length)
   const savedPrinterName = usePOSStore((s) => s.printerName)
+
+  // En teléfono (< md) el POS es de una sola columna: el buscador ocupa la
+  // pantalla y el carrito vive en una hoja inferior. El corte se decide en JS
+  // —y no solo con clases— para que el `CartPanel` exista UNA vez en el árbol:
+  // duplicarlo con `hidden`/`md:flex` montaría dos veces sus modales internos
+  // (ficha de producto, cliente) y dos suscripciones al store.
+  const esTelefono = useEsTelefono()
+  const [carritoAbierto, setCarritoAbierto] = useState(false)
 
   const [checkingSession, setCheckingSession] = useState(true)
   const [showSessionModal, setShowSessionModal] = useState(false)
@@ -67,6 +77,7 @@ export function POS() {
   const barraRef = useRef<HTMLDivElement>(null)
   const panelIzquierdoRef = useRef<HTMLDivElement>(null)
   const panelDerechoRef = useRef<HTMLDivElement>(null)
+  const barraInferiorRef = useRef<HTMLDivElement>(null)
 
   const canEditProducts = !!user?.role && ['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO'].includes(user.role)
   const { branch } = useAuthStore()
@@ -145,7 +156,14 @@ export function POS() {
   // documentado en Layout.tsx para el cajón móvil). Los modales se renderizan
   // como hermanos de estos contenedores, así que no se vuelven inertes.
   useEffect(() => {
-    const nodos = [barraRef.current, panelIzquierdoRef.current, panelDerechoRef.current]
+    const nodos = [
+      barraRef.current,
+      panelIzquierdoRef.current,
+      panelDerechoRef.current,
+      // Teléfono: la barra de "Ver carrito" es el cuarto contenedor de
+      // controles vivos detrás del modal de cobro.
+      barraInferiorRef.current,
+    ]
     for (const el of nodos) {
       if (!el) continue
       if (payModal !== null) {
@@ -155,6 +173,17 @@ export function POS() {
       }
     }
   }, [payModal])
+
+  // Teléfono: la hoja del carrito se cierra sola cuando el ticket se vacía
+  // (venta cobrada, ticket pausado o carrito limpiado) para devolver la
+  // pantalla al buscador. Solo en la transición >0 → 0: abrir a propósito un
+  // carrito vacío no debe cerrarse en el acto.
+  const itemCountPrevio = useRef(itemCount)
+  useEffect(() => {
+    const antes = itemCountPrevio.current
+    itemCountPrevio.current = itemCount
+    if (antes > 0 && itemCount === 0) setCarritoAbierto(false)
+  }, [itemCount])
 
   // ----- Parked tickets polling — siempre activo sin importar el tab -----
   // Track 2 (POS bug-fix): pausados están en `parked_tickets`, NO crean
@@ -460,7 +489,25 @@ export function POS() {
     setSearchParams(next, { replace: true })
   }, [searchParams, setSearchParams, loadOrder])
 
-  const actionBtn = 'flex items-center gap-2 text-sm font-bold px-3.5 rounded-xl min-h-[44px] transition-colors active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed border'
+  // En `< md` los botones de la barra son solo icono (la etiqueta va en
+  // `aria-label`): con texto son seis botones de ~120 px que se apilaban en
+  // cinco renglones y se comían el 40 % del alto del teléfono (C6).
+  // `dax-btn-icon` los deja en 44×44 exactos por debajo de `md`.
+  const actionBtn = 'dax-btn-icon flex items-center gap-2 text-sm font-bold px-2.5 md:px-3.5 rounded-xl min-h-[44px] transition-colors active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed border'
+  const actionLabel = 'hidden md:inline'
+
+  // Una sola instancia del carrito: en `≥ md` vive en la columna derecha, en
+  // teléfono dentro de la hoja inferior.
+  const carrito = (
+    <CartPanel
+      onPay={(method) => setPayModal(method)}
+      onPark={parkSale}
+      customerName={store.customerName}
+      onClearCustomer={() => store.setCustomer(null, null)}
+      sessionLocked={!store.activeSession}
+      onOpenSession={() => setShowSessionModal(true)}
+    />
+  )
 
   // ----- No session / loading -----
   if (checkingSession) {
@@ -478,7 +525,7 @@ export function POS() {
     <div className="flex flex-col h-full relative">
       {/* Toast */}
       {toast && (
-        <div className={`fixed top-4 right-4 z-50 px-4 py-2.5 rounded-xl shadow-xl text-sm font-semibold flex items-center gap-2 transition-all ${
+        <div className={`fixed top-4 inset-x-4 sm:inset-x-auto sm:right-4 z-50 px-4 py-2.5 rounded-xl shadow-xl text-sm font-semibold flex items-center gap-2 transition-all ${
           toast.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'
         }`}>
           <i className={`fa-solid ${toast.type === 'success' ? 'fa-check' : 'fa-xmark'}`} />
@@ -553,24 +600,27 @@ export function POS() {
             className={actionBtn}
             style={{ background: 'var(--dax-success-soft)', borderColor: 'var(--dax-success)', color: 'var(--dax-success-ink)' }}
             title="Entrada de efectivo"
+            aria-label="Entrada de efectivo"
           >
-            <i className="fa-solid fa-arrow-down text-xs" /> Entrada
+            <i className="fa-solid fa-arrow-down text-xs" aria-hidden="true" /> <span className={actionLabel}>Entrada</span>
           </button>
           <button
             onClick={() => setCashMovement('OUT')}
             className={actionBtn}
             style={{ background: 'var(--dax-danger-soft)', borderColor: 'var(--dax-danger)', color: 'var(--dax-danger)' }}
             title="Salida de efectivo"
+            aria-label="Salida de efectivo"
           >
-            <i className="fa-solid fa-arrow-up text-xs" /> Salida
+            <i className="fa-solid fa-arrow-up text-xs" aria-hidden="true" /> <span className={actionLabel}>Salida</span>
           </button>
           <button
             onClick={() => setReturnModal(true)}
             className={actionBtn}
             style={{ background: 'var(--dax-warning-soft)', borderColor: 'var(--dax-warning)', color: 'var(--dax-warning-ink)' }}
             title="Devoluciones"
+            aria-label="Devoluciones"
           >
-            <i className="fa-solid fa-rotate-left text-xs" /> Devolución
+            <i className="fa-solid fa-rotate-left text-xs" aria-hidden="true" /> <span className={actionLabel}>Devolución</span>
           </button>
           {canEditProducts && (
             <button
@@ -578,8 +628,9 @@ export function POS() {
               className={actionBtn}
               style={{ background: 'var(--dax-elevated)', borderColor: 'var(--dax-border-dim)', color: 'var(--dax-text-muted)' }}
               title="Crear nuevo producto"
+              aria-label="Crear nuevo producto"
             >
-              <i className="fa-solid fa-plus text-xs" /> Producto
+              <i className="fa-solid fa-plus text-xs" aria-hidden="true" /> <span className={actionLabel}>Producto</span>
             </button>
           )}
           {offlineQueue.length > 0 && (
@@ -588,9 +639,10 @@ export function POS() {
               className={actionBtn}
               style={{ background: 'var(--dax-warning-soft)', borderColor: 'var(--dax-warning)', color: 'var(--dax-warning-ink)' }}
               title="Ventas pendientes de enviar"
+              aria-label="Ventas pendientes de enviar"
             >
-              <i className="fa-solid fa-cloud-arrow-up text-xs" />
-              Offline
+              <i className="fa-solid fa-cloud-arrow-up text-xs" aria-hidden="true" />
+              <span className={actionLabel}>Offline</span>
               <span className="bg-dax-warning text-black text-[11px] font-black px-2 py-0.5 rounded-full ml-0.5">
                 {offlineQueue.length}
               </span>
@@ -627,26 +679,29 @@ export function POS() {
             className={actionBtn}
             style={{ background: 'var(--dax-elevated)', borderColor: 'var(--dax-border-dim)', color: 'var(--dax-text-muted)' }}
             title="Reimprimir último ticket"
+            aria-label="Reimprimir último ticket"
           >
-            <i className="fa-solid fa-print text-xs" /> Reimprimir último
+            <i className="fa-solid fa-print text-xs" aria-hidden="true" /> <span className={actionLabel}>Reimprimir último</span>
           </button>
           <div className="w-px h-4 flex-shrink-0" style={{ background: 'var(--dax-border-dim)' }} />
           <button
             onClick={() => setClosingSession(true)}
-            className="flex items-center gap-2 text-sm font-semibold px-3.5 rounded-xl min-h-[44px] text-dax-muted hover:text-dax-danger transition-colors"
+            className="dax-btn-icon flex items-center gap-2 text-sm font-semibold px-2.5 md:px-3.5 rounded-xl min-h-[44px] text-dax-muted hover:text-dax-danger transition-colors"
             title="Cerrar turno"
+            aria-label="Cerrar turno"
           >
-            <i className="fa-solid fa-lock text-xs" /> Cerrar turno
+            <i className="fa-solid fa-lock text-xs" aria-hidden="true" /> <span className={actionLabel}>Cerrar turno</span>
           </button>
         </div>
       </div>
 
-      {/* Main layout: left | right — 40/60 split (cart dominant) */}
-      <div className="flex flex-1 overflow-hidden">
+      {/* Main layout: left | right — 40/60 split (cart dominant) en `≥ md`.
+          En teléfono el carrito sale de la fila y se abre como hoja inferior. */}
+      <div className="flex flex-1 overflow-hidden min-h-0">
         {/* Left panel — productos + búsqueda. Inerte durante el cobro (ver efecto). */}
         <div
           ref={panelIzquierdoRef}
-          className={`flex-[40] flex flex-col min-w-0 overflow-hidden ${
+          className={`flex-1 md:flex-[40] flex flex-col min-w-0 overflow-hidden ${
             payModal !== null ? 'opacity-50' : ''
           }`}
         >
@@ -665,22 +720,98 @@ export function POS() {
             modal ya oscurece la pantalla y el cajero necesita poder leer el
             ticket que está cobrando. El atenuado de los otros dos contenedores
             señala "controles apagados"; aquí no hay controles que señalar. */}
+        {!esTelefono && (
+          <div
+            ref={panelDerechoRef}
+            className="flex-[60] min-w-[420px] flex-shrink-0 flex flex-col overflow-hidden"
+          >
+            <div className="flex-1 overflow-hidden">{carrito}</div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Teléfono: barra fija de ticket + hoja inferior del carrito ── */}
+      {esTelefono && (
         <div
-          ref={panelDerechoRef}
-          className="flex-[60] min-w-[420px] flex-shrink-0 flex flex-col overflow-hidden"
+          ref={barraInferiorRef}
+          className="flex-shrink-0 flex items-center gap-3 px-4 py-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))]"
+          style={{ background: 'var(--dax-surface)', borderTop: '1px solid var(--dax-border-dim)' }}
         >
-          <div className="flex-1 overflow-hidden">
-            <CartPanel
-              onPay={(method) => setPayModal(method)}
-              onPark={parkSale}
-              customerName={store.customerName}
-              onClearCustomer={() => store.setCustomer(null, null)}
-              sessionLocked={!store.activeSession}
-              onOpenSession={() => setShowSessionModal(true)}
-            />
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--dax-text-faint)' }}>
+              {itemCount === 1 ? '1 artículo' : `${itemCount} artículos`}
+            </p>
+            <p className="text-2xl font-black tabular-nums leading-tight" style={{ color: 'var(--dax-text)' }}>
+              {formatCurrency(total)}
+            </p>
+          </div>
+          {/* Sin turno abierto el velo de "Caja cerrada" vive DENTRO del
+              carrito: en teléfono quedaría escondido detrás de la hoja, así
+              que la barra ofrece directamente la apertura. */}
+          {!store.activeSession ? (
+            <button
+              onClick={() => setShowSessionModal(true)}
+              className="ml-auto flex items-center gap-2 min-h-[48px] px-5 rounded-2xl font-black text-sm bg-dax-accent text-dax-on-accent shadow-lg shadow-black/10 active:scale-95 transition"
+            >
+              <i className="fa-solid fa-lock-open" aria-hidden="true" />
+              Abrir turno
+            </button>
+          ) : (
+            <button
+              onClick={() => setCarritoAbierto(true)}
+              className="ml-auto flex items-center gap-2 min-h-[48px] px-5 rounded-2xl font-black text-sm bg-dax-accent text-dax-on-accent shadow-lg shadow-black/10 active:scale-95 transition"
+            >
+              <i className="fa-solid fa-shopping-cart" aria-hidden="true" />
+              Ver carrito
+              {itemCount > 0 && (
+                <span className="text-[11px] font-black px-2 py-0.5 rounded-full" style={{ background: 'var(--dax-on-accent)', color: 'var(--dax-accent)' }}>
+                  {itemCount}
+                </span>
+              )}
+            </button>
+          )}
+        </div>
+      )}
+
+      {esTelefono && carritoAbierto && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center backdrop-blur-sm"
+          style={{ background: 'var(--dax-modal-backdrop)' }}
+          onClick={() => setCarritoAbierto(false)}
+        >
+          {/* `.dax-modal` = hoja inferior con tope de 90dvh y safe-area. El alto
+              fijo le da al CartPanel un contenedor medible: así conserva su
+              reparto de siempre (cabecera arriba, líneas con scroll propio,
+              totales y botones de pago abajo) en vez de convertirse en una
+              tira larga donde "Efectivo" queda al final del desplazamiento. */}
+          {/* Sin `dax-card` A PROPÓSITO: su `backdrop-filter` convertiría a la
+              hoja en bloque contenedor de todo descendiente `position: fixed`,
+              y los modales que el carrito abre por dentro (ficha de producto,
+              cliente) quedarían anclados y recortados dentro de la hoja en vez
+              de cubrir la pantalla. El fondo va en línea, sin blur. */}
+          <div
+            ref={panelDerechoRef}
+            className="dax-modal w-full max-w-lg h-[85dvh] flex flex-col rounded-t-2xl"
+            style={{ background: 'var(--dax-card-solid)', border: '1px solid var(--dax-border-dim)' }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Carrito"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="relative flex-shrink-0 flex items-center justify-center px-4 pt-2 pb-1">
+              <span className="h-1 w-10 rounded-full" style={{ background: 'var(--dax-border)' }} />
+              <button
+                onClick={() => setCarritoAbierto(false)}
+                className="dax-btn-icon absolute right-2 top-0 rounded-lg text-dax-muted hover:text-dax-text"
+                aria-label="Cerrar carrito"
+              >
+                <i className="fa-solid fa-chevron-down" aria-hidden="true" />
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-hidden">{carrito}</div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Payment modals */}
       {payModal === 'CASH' && (

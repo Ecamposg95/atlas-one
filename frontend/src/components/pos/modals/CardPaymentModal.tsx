@@ -30,7 +30,7 @@ export function CardPaymentModal({ total, surchargePct = 0, onClose, onConfirm }
       style={{ background: 'var(--dax-modal-backdrop)' }}
       onClick={onClose}
     >
-      <div className="dax-card p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+      <div className="dax-card dax-modal p-6 pb-0 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-3 mb-4">
           <i className="fa-solid fa-credit-card text-indigo-400 text-xl" />
           <div>
@@ -59,7 +59,7 @@ export function CardPaymentModal({ total, surchargePct = 0, onClose, onConfirm }
           </div>
         )}
 
-        <div className="mb-4">
+        <div className="mb-1">
           <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
             Referencia (opcional)
           </label>
@@ -74,9 +74,9 @@ export function CardPaymentModal({ total, surchargePct = 0, onClose, onConfirm }
           />
         </div>
 
-        <div className="flex gap-2">
-          <button onClick={onClose} className="dax-btn-secondary flex-1">Cancelar</button>
-          <button onClick={submit} disabled={loading} className="dax-btn-primary flex-1 justify-center">
+        <div className="dax-modal-footer flex gap-2 pb-6">
+          <button onClick={onClose} className="dax-btn-secondary flex-1 min-h-[44px]">Cancelar</button>
+          <button onClick={submit} disabled={loading} className="dax-btn-primary flex-1 justify-center min-h-[44px]">
             {loading ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Confirmar</>}
           </button>
         </div>

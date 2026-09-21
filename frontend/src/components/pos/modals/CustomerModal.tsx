@@ -110,7 +110,7 @@ export function CustomerModal({ onClose }: Props) {
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
       <div
-        className="dax-card p-6 w-full max-w-md"
+        className="dax-card dax-modal p-6 pb-0 w-full max-w-md"
         role="dialog"
         aria-modal="true"
         aria-label="Cliente de la venta"
@@ -196,16 +196,16 @@ export function CustomerModal({ onClose }: Props) {
 
         {error && <p className="text-dax-danger text-xs mt-2">{error}</p>}
 
-        <div className="flex flex-wrap gap-2 mt-4">
+        <div className="dax-modal-footer flex flex-wrap gap-2 mt-1 pb-6">
           {hayCliente && (
-            <button onClick={quitarCliente} className="dax-btn-secondary text-sm">
+            <button onClick={quitarCliente} className="dax-btn-secondary text-sm min-h-[44px]">
               Quitar cliente
             </button>
           )}
           <button
             onClick={usarSoloNombre}
             disabled={!nombre}
-            className="dax-btn-secondary flex-1 text-sm justify-center disabled:opacity-40"
+            className="dax-btn-secondary flex-1 text-sm justify-center disabled:opacity-40 min-h-[44px]"
           >
             Usar solo el nombre
           </button>
@@ -213,7 +213,7 @@ export function CustomerModal({ onClose }: Props) {
             <button
               onClick={crear}
               disabled={!nombre || guardando}
-              className="dax-btn-primary flex-1 text-sm justify-center"
+              className="dax-btn-primary flex-1 text-sm justify-center min-h-[44px]"
             >
               {guardando ? <i className="fa-solid fa-spinner fa-spin" /> : 'Crear'}
             </button>
@@ -221,7 +221,7 @@ export function CustomerModal({ onClose }: Props) {
             <button
               onClick={() => setModoAlta(true)}
               disabled={!nombre}
-              className="dax-btn-primary flex-1 text-sm justify-center"
+              className="dax-btn-primary flex-1 text-sm justify-center min-h-[44px]"
             >
               Guardar en clientes
             </button>
