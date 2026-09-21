@@ -234,7 +234,7 @@ export function HQSalesLog() {
             <div className="mt-4 border-t border-slate-700/50 pt-4">
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Artículos</p>
               {/* Sin envoltorio, la tabla arrastraba de lado TODO el modal (I-3). */}
-              <TablaDesplazable>
+              <TablaDesplazable sangrado={false}>
               <table className="dax-table w-full text-xs">
                 <thead><tr><th>Producto</th><th className="text-right">Cant.</th><th className="text-right">Precio</th><th className="text-right">Total</th></tr></thead>
                 <tbody>

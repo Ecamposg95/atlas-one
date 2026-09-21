@@ -203,7 +203,7 @@ export function HQReturns() {
               <div className="border-t border-slate-700/50 pt-4 mb-4">
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Artículos</p>
                 {/* Sin envoltorio, la tabla arrastraba de lado todo el modal. */}
-                <TablaDesplazable>
+                <TablaDesplazable sangrado={false}>
                 <table className="dax-table w-full text-xs">
                   <thead><tr><th>Producto</th><th className="text-right">Cant.</th><th className="text-right">Reembolso</th><th>Stock</th></tr></thead>
                   <tbody>

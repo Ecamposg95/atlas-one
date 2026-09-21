@@ -203,6 +203,7 @@ export function Layout() {
                   {pageTitle}
                 </span>
                 <span
+                  className="hidden sm:inline"
                   style={{
                     padding: '0.1rem 0.4rem',
                     borderRadius: '4px',
@@ -256,7 +257,8 @@ export function Layout() {
               </div>
             )}
 
-            <Clock />
+            {/* En teléfono el reloj cede su sitio al título de la pantalla. */}
+            <div className="hidden sm:block"><Clock /></div>
           </div>
         </header>
 

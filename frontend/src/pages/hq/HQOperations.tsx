@@ -521,7 +521,7 @@ export function HQOperations() {
               {/* En teléfono la lista fluye y el scroll lo hace la página:
               dos cajas de scroll interno dentro del scroll de la página
               dejaban al dedo sin saber cuál mueve (I-4). */}
-              <div className="lg:flex-1 lg:overflow-y-auto overscroll-contain p-3 space-y-2 bg-slate-900/20">
+              <div className="lg:flex-1 lg:overflow-y-auto max-lg:overscroll-contain p-3 space-y-2 bg-slate-900/20">
                 {branches.length === 0 ? (
                   <div className="text-xs text-slate-600 italic p-4 text-center">
                     {branchesAll.length === 0 ? 'No hay sucursales configuradas.' : 'Sin resultados.'}
@@ -625,7 +625,7 @@ export function HQOperations() {
                   </button>
                 )}
               </div>
-              <div className="space-y-3 lg:max-h-64 lg:overflow-y-auto overscroll-contain">
+              <div className="space-y-3 lg:max-h-64 lg:overflow-y-auto max-lg:overscroll-contain">
                 {alertsByType.length === 0 ? (
                   <div className="text-center text-xs text-slate-600 py-4 italic flex items-center justify-center gap-2">
                     <i className="fas fa-check-circle text-emerald-500" /> All Systems Nominal.

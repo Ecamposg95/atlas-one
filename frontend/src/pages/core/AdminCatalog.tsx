@@ -287,7 +287,7 @@ export function AdminCatalog() {
       {/* Filtros */}
       <DaxCard>
         <div className="flex flex-wrap gap-3 items-end">
-          <div className="flex-1 basis-full sm:basis-auto sm:min-w-[200px]">
+          <div className="flex-1 basis-full sm:basis-0 sm:min-w-[200px]">
             <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">
               Buscar
             </label>

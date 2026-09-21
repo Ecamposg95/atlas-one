@@ -635,11 +635,16 @@
    Se excluyen los controles sin texto (casillas, radios, rangos,
    color, archivo) y los botones, donde `font-size` no evita el zoom
    pero sí cambiaría el diseño. */
+/* Es un PISO, no un tope: un campo que ya lleva un tamaño explícito (el
+   importe recibido del cobro en text-4xl, los montos de apertura/cierre en
+   text-xl/2xl) conserva el suyo. Los :not() van en el selector porque esta
+   regla, por su cadena de atributos, gana en especificidad a cualquier
+   utilidad de tamaño. */
 @media (pointer: coarse) and (max-width: 1023px) {
-  .dax-input,
+  .dax-input:not(.text-lg):not(.text-xl):not(.text-2xl):not(.text-3xl):not(.text-4xl),
   select.dax-input,
   textarea.dax-input,
-  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']):not([type='button']):not([type='submit']):not([type='reset']),
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']):not([type='button']):not([type='submit']):not([type='reset']):not(.text-lg):not(.text-xl):not(.text-2xl):not(.text-3xl):not(.text-4xl),
   select,
   textarea {
     font-size: 16px;
