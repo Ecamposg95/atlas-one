@@ -354,7 +354,11 @@ def search_products_pos(
         query = (
             query_visible_products(
                 db, current_user, org_id,
-                search=None if exact else q,
+                # `search` del helper aplica la FRASE completa sobre nombre/SKU/
+                # descripción con AND; con "gucci pantalon" (marca + nombre)
+                # vaciaba el resultado. El filtro por palabra de abajo cubre
+                # esos campos y además marca, modelo y códigos.
+                search=None,
                 # Siempre: el outerjoin a PackagingUnit de abajo referencia
                 # ProductVariant, y un admin sin `search` (la pantalla inicial
                 # del POS manda q="") no traería la tabla unida — Postgres
@@ -392,24 +396,29 @@ def search_products_pos(
                 )
             )
         else:
-            query = query.filter(
-                or_(
-                    Product.name.ilike(s),
-                    # Marca y modelo: en la boutique la prenda se pide por
-                    # marca ("vuitton") y el `name` es solo "Chamarra". La
-                    # marca va por subconsulta para no meter otro join que
-                    # multiplique filas contra PackagingUnit.
-                    Product.model.ilike(s),
+            # Cada palabra del texto debe empatar en ALGUN campo (nombre, marca,
+            # modelo, SKU o codigo): con la marca en su propio campo, "gucci
+            # pantalon" no cabe en ninguna columna sola. Con una palabra es el
+            # filtro de siempre. La marca va por subconsulta para no meter
+            # otro join que multiplique filas contra PackagingUnit.
+            def _empata(palabra: str):
+                patron = f"%{palabra}%"
+                return or_(
+                    Product.name.ilike(patron),
+                    Product.description.ilike(patron),
+                    Product.model.ilike(patron),
                     Product.brand_id.in_(
                         select(Brand.id).where(
-                            Brand.organization_id == org_id, Brand.name.ilike(s)
+                            Brand.organization_id == org_id, Brand.name.ilike(patron)
                         )
                     ),
-                    and_(ProductVariant.deleted_at.is_(None), ProductVariant.sku.ilike(s)),
-                    and_(ProductVariant.deleted_at.is_(None), ProductVariant.barcode.ilike(s)),
-                    and_(ProductVariant.deleted_at.is_(None), PackagingUnit.barcode.ilike(s)),
+                    and_(ProductVariant.deleted_at.is_(None), ProductVariant.sku.ilike(patron)),
+                    and_(ProductVariant.deleted_at.is_(None), ProductVariant.barcode.ilike(patron)),
+                    and_(ProductVariant.deleted_at.is_(None), PackagingUnit.barcode.ilike(patron)),
                 )
-            )
+
+            palabras = [w for w in q.split() if w] or [q]
+            query = query.filter(and_(*[_empata(w) for w in palabras]))
 
         # .distinct() defends against duplicate Product rows introduced by the
         # outerjoin on PackagingUnit (1 variant × N packaging rows) and by

@@ -279,6 +279,17 @@ class TestBusquedaPorMarcaYModelo:
         db.commit()
         return p
 
+    def test_dos_palabras_cruzan_marca_y_nombre(self, client, org, auth_cajero_a, catalogo):
+        """"gucci pantalon" no cabe en ninguna columna sola: cada palabra empata
+        en algun campo y todas deben empatar."""
+        r = client.get("/api/products/pos/search?q=vuitton%20chamarra", headers=_h(auth_cajero_a, org))
+        assert r.status_code == 200, r.text
+        assert [p["name"] for p in r.json()] == ["Chamarra"]
+        r = client.get("/api/products/pos/search?q=chamarra%20vuitton", headers=_h(auth_cajero_a, org))
+        assert [p["name"] for p in r.json()] == ["Chamarra"]
+        r = client.get("/api/products/pos/search?q=vuitton%20gorra", headers=_h(auth_cajero_a, org))
+        assert r.json() == []
+
     def test_encuentra_por_marca(self, client, org, auth_cajero_a, catalogo):
         r = client.get("/api/products/pos/search?q=vuitton", headers=_h(auth_cajero_a, org))
         assert r.status_code == 200, r.text
