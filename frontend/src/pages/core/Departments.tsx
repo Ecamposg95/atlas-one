@@ -81,9 +81,13 @@ export function Departments() {
                 {departments.map((d) => (
                   <tr key={d.id}>
                     <td className="font-semibold text-white">{d.name}</td>
-                    <td className="flex gap-2">
-                      <button onClick={() => openEdit(d)} className="text-slate-500 hover:text-white text-xs"><i className="fa-solid fa-pen" /></button>
-                      <button onClick={() => handleDelete(d)} className="text-slate-600 hover:text-red-400 text-xs"><i className="fa-solid fa-trash" /></button>
+                    {/* El `flex` iba en el `<td>`: la celda dejaba de ser
+                        `table-cell` y se salía del reparto de columnas. */}
+                    <td className="whitespace-nowrap">
+                      <div className="flex gap-2">
+                      <button onClick={() => openEdit(d)} aria-label={`Editar ${d.name}`} className="dax-btn-icon text-slate-500 hover:text-white text-xs"><i className="fa-solid fa-pen" /></button>
+                      <button onClick={() => handleDelete(d)} aria-label={`Eliminar ${d.name}`} className="dax-btn-icon text-slate-600 hover:text-red-400 text-xs"><i className="fa-solid fa-trash" /></button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -96,17 +100,17 @@ export function Departments() {
       {/* Modal */}
       {modal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setModal(null)}>
-          <div className="dax-card p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+          <div className="dax-card dax-modal p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-lg font-black text-white">{modal === 'create' ? 'Nuevo Departamento' : 'Editar Departamento'}</h3>
-              <button onClick={() => setModal(null)} className="text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
+              <button onClick={() => setModal(null)} aria-label="Cerrar" className="dax-btn-icon text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
             </div>
             <div>
               <label className="dax-label">Nombre</label>
               <input value={form.name} onChange={(e) => setForm({ name: e.target.value })}
                 className="dax-input w-full" placeholder="Ej: Electrónicos" autoFocus />
             </div>
-            <div className="flex gap-2 mt-5">
+            <div className="dax-modal-footer -mx-6 px-6 flex gap-2 mt-5">
               <button onClick={() => setModal(null)} className="dax-btn-secondary flex-1">Cancelar</button>
               <button onClick={handleSave} disabled={saving || !form.name} className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
                 {saving ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Guardar</>}

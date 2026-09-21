@@ -3,6 +3,7 @@ import { salesApi } from '../../api/sales'
 import { organizationApi, type Branch } from '../../api/organization'
 import client from '../../api/client'
 import { DaxCard } from '../../components/ui/DaxCard'
+import { TablaDesplazable } from '../../components/ui/TablaDesplazable'
 import { Spinner } from '../../components/ui/Spinner'
 import { Badge } from '../../components/ui/Badge'
 import type { SalesDocument } from '../../types/sales'
@@ -160,7 +161,7 @@ export function HQSalesLog() {
         {loading ? <Spinner text="Cargando ventas..." /> : filteredSales.length === 0 ? (
           <div className="p-12 text-center text-slate-600">Sin ventas en este período</div>
         ) : (
-          <div className="overflow-x-auto">
+          <TablaDesplazable sangrado={false}>
             <table className="dax-table w-full">
               <thead>
                 <tr>
@@ -199,7 +200,7 @@ export function HQSalesLog() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </TablaDesplazable>
         )}
 
         {pages > 1 && (
@@ -214,7 +215,7 @@ export function HQSalesLog() {
       {/* Modal detalle */}
       {selected && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setSel(null)}>
-          <div className="dax-card p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="dax-card dax-modal p-6 w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <div>
                 <p className="text-[10px] text-slate-500 uppercase tracking-widest">Folio</p>
@@ -232,6 +233,8 @@ export function HQSalesLog() {
 
             <div className="mt-4 border-t border-slate-700/50 pt-4">
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Artículos</p>
+              {/* Sin envoltorio, la tabla arrastraba de lado TODO el modal (I-3). */}
+              <TablaDesplazable>
               <table className="dax-table w-full text-xs">
                 <thead><tr><th>Producto</th><th className="text-right">Cant.</th><th className="text-right">Precio</th><th className="text-right">Total</th></tr></thead>
                 <tbody>
@@ -245,6 +248,7 @@ export function HQSalesLog() {
                   ))}
                 </tbody>
               </table>
+              </TablaDesplazable>
             </div>
 
             <div className="mt-4 border-t border-slate-700/50 pt-4 space-y-1 text-sm">

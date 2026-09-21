@@ -4,6 +4,7 @@ import { organizationApi, type Branch } from '../../api/organization'
 import { useAuthStore } from '../../store/authStore'
 import { toast } from '../../store/toastStore'
 import { DaxCard } from '../../components/ui/DaxCard'
+import { TablaDesplazable } from '../../components/ui/TablaDesplazable'
 import { Badge } from '../../components/ui/Badge'
 import { Spinner } from '../../components/ui/Spinner'
 import { formatCurrency } from '../../utils/currency'
@@ -183,7 +184,7 @@ export function HQReturns() {
       {/* Modal detalle */}
       {selected && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setSelected(null)}>
-          <div className="dax-card p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="dax-card dax-modal p-6 w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-black text-white">Detalle de Devolución</h3>
               <button onClick={() => setSelected(null)} className="dax-btn-icon text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
@@ -201,6 +202,8 @@ export function HQReturns() {
             {selected.items?.length > 0 && (
               <div className="border-t border-slate-700/50 pt-4 mb-4">
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Artículos</p>
+                {/* Sin envoltorio, la tabla arrastraba de lado todo el modal. */}
+                <TablaDesplazable>
                 <table className="dax-table w-full text-xs">
                   <thead><tr><th>Producto</th><th className="text-right">Cant.</th><th className="text-right">Reembolso</th><th>Stock</th></tr></thead>
                   <tbody>
@@ -214,6 +217,7 @@ export function HQReturns() {
                     ))}
                   </tbody>
                 </table>
+                </TablaDesplazable>
               </div>
             )}
 
@@ -222,7 +226,7 @@ export function HQReturns() {
             </div>
 
             {canApprove && selected.status === 'PENDING' && (
-              <div className="flex gap-2 mt-4">
+              <div className="dax-modal-footer -mx-6 px-6 flex gap-2 mt-4">
                 <button onClick={() => handleApprove(selected.id)} disabled={actionLoading} className="dax-btn-primary flex-1 justify-center">
                   {actionLoading ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Aprobar</>}
                 </button>
@@ -238,7 +242,7 @@ export function HQReturns() {
       {/* Modal de rechazo con motivo */}
       {rejectingId && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setRejectingId(null)}>
-          <div className="dax-card p-5 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+          <div className="dax-card dax-modal p-5 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-base font-black mb-3" style={{ color: 'var(--dax-text)' }}>
               <i className="fa-solid fa-circle-exclamation mr-2 text-red-500" />
               Rechazar devolución
@@ -254,7 +258,7 @@ export function HQReturns() {
               placeholder="Ej: Producto fuera de plazo de devolución, ticket duplicado..."
               autoFocus
             />
-            <div className="flex gap-2 mt-4">
+            <div className="dax-modal-footer -mx-5 px-5 flex gap-2 mt-4">
               <button onClick={() => setRejectingId(null)} className="dax-btn-secondary flex-1" disabled={actionLoading}>
                 Cancelar
               </button>

@@ -18,7 +18,19 @@
  * `overflow-y-auto`) por `className` en vez de ponerlo en un `div` aparte
  * por fuera. Así el `sticky` se ancla aquí, que sí es el contenedor que
  * realmente se desplaza verticalmente.
+ *
+ * `sangrado` (por defecto `true`) es el `-mx-4 px-4` que en teléfono deja que
+ * la tabla se desplace de borde a borde del contenedor padre. Solo sirve
+ * cuando ALGUIEN RECORTA ese desbordamiento (una tarjeta con
+ * `overflow-hidden`) o cuando el padre tiene ese mismo padding. Dentro de una
+ * `DaxCard padding={false}` —que no recorta— el `-mx-4` haría la caja 32 px
+ * más ancha que la tarjeta y el desbordamiento se lo comería la PÁGINA, que
+ * es justo lo que este componente existe para evitar: ahí va `sangrado={false}`.
  */
-export function TablaDesplazable({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return <div className={`overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 ${className}`}>{children}</div>
+export function TablaDesplazable(
+  { children, className = '', sangrado = true }:
+  { children: React.ReactNode; className?: string; sangrado?: boolean },
+) {
+  const bleed = sangrado ? '-mx-4 px-4 sm:mx-0 sm:px-0' : ''
+  return <div className={`overflow-x-auto ${bleed} ${className}`}>{children}</div>
 }
