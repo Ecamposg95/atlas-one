@@ -289,7 +289,10 @@
     font-weight: 400;
     background: var(--dax-bg);
     color: var(--dax-text);
-    min-height: 100vh;
+    /* `dvh` y no `vh`: en iOS Safari `100vh` es el viewport SIN la barra de
+       URL, así que la página mide más que la pantalla visible y el último
+       tramo queda debajo del borde. En escritorio dvh == vh. */
+    min-height: 100dvh;
     transition: background 0.25s ease, color 0.25s ease;
   }
 
@@ -607,4 +610,104 @@
 
 @media (prefers-reduced-motion: reduce) {
   #cajon-lateral { transition: none !important; }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   BASE RESPONSIVA — teléfono y tablet
+   (fuera de @layer a propósito: así estas reglas van DESPUÉS de las
+   utilidades de Tailwind en el CSS final y ganan por orden a un
+   `text-xs`/`p-6` suelto sobre el mismo elemento. Nada de esto aplica
+   en escritorio: todo vive detrás de una media query.)
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ─── 1. Inputs sin el zoom automático de iOS ──────────────────────
+   Safari en iPhone hace zoom al enfocar cualquier campo con
+   `font-size < 16px` y NO lo revierte al salir: la pantalla queda
+   ampliada ~1.14x y desplazada — es buena parte de la sensación de
+   "se descuadra". `index.html` declara `initial-scale=1.0` sin
+   `maximum-scale` (correcto para accesibilidad), así que la única
+   cura es subir el tamaño del texto del campo.
+
+   El corte es la intersección de las dos reglas del plan: pantalla
+   táctil (`pointer: coarse` — el puntero PRIMARIO es el dedo, no un
+   ratón) Y por debajo de 1024 px, para que un escritorio —incluso uno
+   con pantalla táctil y ratón— se vea exactamente igual que hoy.
+   Se excluyen los controles sin texto (casillas, radios, rangos,
+   color, archivo) y los botones, donde `font-size` no evita el zoom
+   pero sí cambiaría el diseño. */
+@media (pointer: coarse) and (max-width: 1023px) {
+  .dax-input,
+  select.dax-input,
+  textarea.dax-input,
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']):not([type='button']):not([type='submit']):not([type='reset']),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* ─── 2. Molde de modales: `.dax-modal` ────────────────────────────
+   CÓMO SE USA (olas 2 y 3): la clase va en la TARJETA del modal,
+   junto a las que ya tenga. El fondo (scrim) no se toca:
+
+     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+       <div className="dax-card dax-modal p-6 w-full max-w-md">…</div>
+     </div>
+
+   Qué garantiza:
+   · En cualquier ancho — la tarjeta nunca pasa de 90dvh y desplaza por
+     dentro (`overflow-y: auto`), así que el encabezado y los botones
+     siempre son alcanzables. Sin esto, un hijo más alto que la pantalla
+     dentro de un scrim `items-center` desborda por ARRIBA y por ABAJO y
+     ninguno de los dos extremos se puede alcanzar.
+   · `overscroll-behavior: contain` — el desplazamiento no se "escapa"
+     a la página de atrás al llegar al final.
+   · Por debajo de `sm` (640 px) — hoja inferior (bottom-sheet): la
+     tarjeta se ancla al borde inferior a todo lo ancho, con las
+     esquinas superiores redondeadas y el hueco de la barra de inicio
+     (`env(safe-area-inset-bottom)`) respetado. Se usa `position: fixed`
+     para que funcione sin tocar el scrim: cualquiera de los que hay en
+     el repo (`fixed inset-0 … p-4`) sirve tal cual.
+   · `max-width` se anula solo en `<sm` (la hoja es de borde a borde);
+     el `max-w-*` de la tarjeta sigue mandando de `sm` hacia arriba.
+
+   Opcional: `.dax-modal-footer` en el contenedor de los botones de
+   acción para que queden pegados abajo y visibles con el teclado
+   abierto (es el caso de Cobrar / Guardar).
+
+   Si la tarjeta ya trae su propio cuerpo desplazable (el patrón
+   `flex flex-col` + cabecera fija + `<div className="flex-1
+   overflow-y-auto">`), añádele `.dax-modal` igual: lo que aporta es el
+   tope de alto y la hoja inferior, y su `overflow-y: auto` queda
+   inerte porque el cuerpo ya absorbe el desbordamiento. */
+.dax-modal {
+  max-height: 90dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 639px) {
+  .dax-modal {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    max-width: none;
+    max-height: 90dvh;
+    border-radius: 16px 16px 0 0;
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Pie de acciones pegado al fondo de la tarjeta. Vive DENTRO de
+   `.dax-modal` (que es el contenedor que desplaza), así que `sticky`
+   funciona: los botones no se van con el scroll ni con el teclado. */
+.dax-modal-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin-top: auto;
+  background: var(--dax-card-solid);
+  padding-top: 0.75rem;
 }

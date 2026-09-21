@@ -119,8 +119,12 @@ export function Layout() {
   // Routes that need full viewport height with no padding/max-width container
   const isFullBleed = location.pathname === '/pos'
 
+  // `h-dvh` y no `h-screen`: en iOS Safari `100vh` mide el viewport SIN la
+  // barra de URL, así que el armazón queda 80-110 px más alto que la pantalla
+  // visible y, con `overflow-hidden`, ese tramo (totales del POS, pie) es
+  // inalcanzable. En escritorio dvh == vh: nada cambia.
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: 'var(--dax-bg)' }}>
+    <div className="flex h-dvh overflow-hidden" style={{ background: 'var(--dax-bg)' }}>
       <div
         ref={cajonRef}
         style={estiloCajon(esMovil, cajonAbierto)}
@@ -254,11 +258,15 @@ export function Layout() {
         </header>
 
         {/* ── Content ── */}
-        <main className={`flex-1 ${isFullBleed ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+        {/* El recorte del full-bleed (`/pos`) solo se sostiene cuando hay alto
+            de escritorio: por debajo de `lg` la pantalla se desplaza en vez de
+            esconder lo que no cabe. En ≥ lg queda el `overflow-hidden` de
+            siempre. */}
+        <main className={`flex-1 ${isFullBleed ? 'overflow-y-auto lg:overflow-hidden' : 'overflow-y-auto'}`}>
           {isFullBleed ? (
             <Outlet />
           ) : (
-            <div className="p-4 sm:p-6 lg:p-8 max-w-screen-2xl mx-auto">
+            <div className="p-4 sm:p-6 lg:p-8 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] sm:pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] lg:pb-8 max-w-screen-2xl mx-auto">
               <div className="route-fade" key={location.pathname}>
                 <Outlet />
               </div>
@@ -267,10 +275,16 @@ export function Layout() {
         </main>
 
         {/* ── Footer ── */}
+        {/* El pie decorativo pide ~437 px de ancho (leyenda + reloj con fecha):
+            a 390 px desborda de lado y se lleva 40 px de alto útil. Se oculta
+            por debajo de `sm`; de ahí en adelante se ve igual que siempre, con
+            el hueco de la barra de inicio sumado a su alto fijo (0 px en
+            escritorio). */}
         <footer
-          className="flex items-center justify-center gap-6 flex-shrink-0 px-6"
+          className="hidden sm:flex items-center justify-center gap-6 flex-shrink-0 px-6"
           style={{
-            height: '40px',
+            height: 'calc(40px + env(safe-area-inset-bottom, 0px))',
+            paddingBottom: 'env(safe-area-inset-bottom, 0px)',
             background: theme === 'dark' ? 'rgba(11,11,34,0.5)' : 'rgba(241,240,234,0.6)',
             borderTop: '1px solid var(--dax-border-dim)',
           }}

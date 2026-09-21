@@ -4,7 +4,7 @@ import { useAuthStore } from './store/authStore'
 import { useEnabledModulesStore } from './store/enabledModulesStore'
 import { ThemeProvider } from './context/ThemeContext'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
-import { useIsMobile } from './hooks/useIsMobile'
+import { useEsTelefono } from './hooks/useIsMobile'
 import { rutaInicioPorRol } from './utils/rutaInicio'
 
 // Aplicar tema inicial antes del primer render — evita flash
@@ -157,7 +157,9 @@ function PlatformRoute({ children }: { children: React.ReactNode }) {
 
 function RoleHomeRedirect() {
   const user = useAuthStore((s) => s.user)
-  const isMobile = useIsMobile()
+  // Ancho de TELÉFONO (< 768), no el del armazón: en tablet el dueño entra al
+  // armazón de escritorio (ya con cajón) y llega al panel móvil desde el menú.
+  const isMobile = useEsTelefono()
   const { preset, loaded, load } = useEnabledModulesStore()
   useEffect(() => {
     if (!loaded) load()

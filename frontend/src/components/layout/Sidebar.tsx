@@ -41,6 +41,7 @@ const HQ_NAV_GROUPS: { header: string; urls: string[] }[] = [
   { header: 'Clientes',     urls: ['/customers', '/appointments', '/commissions', '/memberships'] },
   { header: 'Organización', urls: ['/organization', '/hq/branches', '/users', '/hr'] },
   { header: 'Inteligencia', urls: ['/ai'] },
+  { header: 'Móvil',        urls: ['/mobile/owner'] },
 ]
 
 // Color de acento por grupo — identidad de módulo en el sidebar. El ícono se
@@ -55,6 +56,7 @@ const GROUP_COLOR: Record<string, string> = {
   'Compras': 'var(--sb-mod-teal)', 'Clientes': 'var(--sb-mod-rose)',
   'Organización': 'var(--sb-mod-cyan)', 'Inteligencia': 'var(--sb-mod-indigo)',
   'Restaurante': 'var(--sb-mod-orange)', 'Más': 'var(--sb-mod-slate)',
+  'Móvil': 'var(--sb-mod-blue)',
   // Grupos de sucursal
   'Mi día': 'var(--sb-mod-violet)', 'Mi turno': 'var(--sb-mod-green)',
   'Reportes': 'var(--sb-mod-indigo)', 'Configuración': 'var(--sb-mod-slate)',
@@ -136,6 +138,10 @@ const ALL_NAV: NavItem[] = [
   { label: 'Reportes',          short: 'REP', icon: 'fa-chart-pie',           url: '/reports',          group: 'pos',  sort: 6  },
   { label: 'Impresora',         short: 'IMP', icon: 'fa-print',               url: '/printer-settings', group: 'pos',  sort: 7  },
   { label: 'Mi Expediente',     short: 'YO',  icon: 'fa-id-card',             url: '/hr/me',            group: 'pos',  sort: 8  },
+  // Vuelta al armazón móvil para dueño/admin. Sin este enlace, quien entra
+  // al escritorio desde la pestaña «Más» del móvil se queda sin camino de
+  // regreso salvo escribiendo la URL (admin-findings I-10).
+  { label: 'Resumen móvil',     short: 'RSM', icon: 'fa-mobile-screen-button', url: '/mobile/owner',     group: 'mob',  sort: -1 },
   { label: 'Dashboard Móvil',   short: 'DSH', icon: 'fa-mobile-screen',       url: '/mobile/dashboard', group: 'mob',  sort: 0  },
   { label: 'Consulta Móvil',    short: 'QRY', icon: 'fa-mobile-alt',          url: '/mobile/query',     group: 'mob',  sort: 1  },
   { label: 'Cotización móvil',  short: 'COT', icon: 'fa-file-invoice',        url: '/mobile/sales',     group: 'mob',  sort: 2  },
@@ -143,8 +149,8 @@ const ALL_NAV: NavItem[] = [
 ]
 
 const ROLE_ROUTES: Record<Role, string[]> = {
-  ADMINISTRADOR:    ['/cash-history','/hq/operations','/hq/reports-hub','/hq/control','/admin/catalog','/scanner','/departments','/organization','/users','/customers','/hq/branches','/hq/inventory','/hq/sales','/hq/returns','/brands','/hr','/hr/me','/logistics','/boxes','/quotes','/quotes/new','/seguimiento','/purchases','/expenses','/appointments','/commissions','/memberships','/recipes','/ai','/purchasing','/tables','/kitchen','/meseros','/bar/bottles','/menu','/mobile/comanda'],
-  DUEÑO:            ['/cash-history','/hq/operations','/hq/reports-hub','/hq/control','/admin/catalog','/scanner','/customers','/hq/sales','/hq/returns','/hr/me','/logistics','/boxes','/quotes','/quotes/new','/seguimiento','/purchases','/expenses','/appointments','/commissions','/memberships','/recipes','/ai','/purchasing','/tables','/kitchen','/meseros','/bar/bottles','/menu','/mobile/comanda'],
+  ADMINISTRADOR:    ['/mobile/owner','/cash-history','/hq/operations','/hq/reports-hub','/hq/control','/admin/catalog','/scanner','/departments','/organization','/users','/customers','/hq/branches','/hq/inventory','/hq/sales','/hq/returns','/brands','/hr','/hr/me','/logistics','/boxes','/quotes','/quotes/new','/seguimiento','/purchases','/expenses','/appointments','/commissions','/memberships','/recipes','/ai','/purchasing','/tables','/kitchen','/meseros','/bar/bottles','/menu','/mobile/comanda'],
+  DUEÑO:            ['/mobile/owner','/cash-history','/hq/operations','/hq/reports-hub','/hq/control','/admin/catalog','/scanner','/customers','/hq/sales','/hq/returns','/hr/me','/logistics','/boxes','/quotes','/quotes/new','/seguimiento','/purchases','/expenses','/appointments','/commissions','/memberships','/recipes','/ai','/purchasing','/tables','/kitchen','/meseros','/bar/bottles','/menu','/mobile/comanda'],
   GERENTE:          ['/cash-history','/reports','/hr/me','/products','/scanner','/pos','/sales','/returns','/atlas-pos','/tables','/kitchen','/recipes','/meseros','/bar/bottles','/menu','/mobile/comanda'],
   CAJERO:           ['/pos','/cash-history','/hr/me','/products','/scanner','/printer-settings','/sales','/returns','/atlas-pos','/tables','/kitchen','/bar/bottles','/menu','/mobile/comanda'],
   VENDEDOR:         ['/mobile/dashboard','/mobile/query','/mobile/sales','/mobile/profile','/hr/me','/atlas-pos'],
@@ -346,7 +352,9 @@ function MatrixSidebar({ items, logout, isBranchRole }: { items: NavItem[]; logo
 
   return (
     <aside style={{
-      width: '244px', minWidth: '244px', height: '100vh',
+      // `dvh`: con `100vh` en iOS el pie del sidebar (chip de usuario y
+      // «Cerrar sesión») cae bajo la barra de URL y no hay forma de tocarlo.
+      width: '244px', minWidth: '244px', height: '100dvh',
       display: 'flex', flexDirection: 'column',
       background: 'var(--sb-bg)', borderRight: '1px solid rgba(255,255,255,0.06)',
       flexShrink: 0,
@@ -566,7 +574,7 @@ function IconRail({ items, logout }: { items: NavItem[]; logout: () => void }) {
 
   return (
     <aside style={{
-      width: '72px', minWidth: '72px', height: '100vh',
+      width: '72px', minWidth: '72px', height: '100dvh',
       display: 'flex', flexDirection: 'column',
       background: 'var(--sb-bg)', borderRight: '1px solid rgba(255,255,255,0.06)',
       flexShrink: 0,

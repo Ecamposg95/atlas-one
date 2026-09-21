@@ -11,7 +11,11 @@ export function estiloCajon(esMovil: boolean, abierto: boolean): CSSProperties {
     position: 'fixed',
     top: 0,
     left: 0,
-    height: '100vh',
+    // `dvh` + safe-area: con `100vh` el pie del cajón («Cerrar sesión») queda
+    // bajo la barra de URL de iOS, y sin el inset inferior lo tapa la barra de
+    // inicio del teléfono.
+    height: '100dvh',
+    paddingBottom: 'env(safe-area-inset-bottom, 0px)',
     zIndex: 50,
     transform: abierto ? 'translateX(0)' : 'translateX(-100%)',
     transition: 'transform 200ms ease',
