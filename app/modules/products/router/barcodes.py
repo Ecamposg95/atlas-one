@@ -168,7 +168,8 @@ def exportar_etiquetas_csv(
             p.model or "",
             p.material or "",
             variant_sale_name(
-                p.brand.name if p.brand else None, p.name or "", p.model, v.color, v.size
+                p.brand.name if p.brand else None, p.name or "", p.model,
+                v.color, v.size, v.variant_name,
             ),
         ])
 

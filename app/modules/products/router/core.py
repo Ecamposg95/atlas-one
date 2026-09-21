@@ -889,6 +889,11 @@ def duplicate_product(
             image_url=source.image_url,
             department_id=source.department_id,
             brand_id=source.brand_id,
+            # Ficha boutique: la copia es la misma prenda, con su genero,
+            # modelo y material -- si no, su nombre de venta sale distinto.
+            gender=source.gender,
+            model=source.model,
+            material=source.material,
             has_variants=source.has_variants,
             is_active=True,
             approval_status='APPROVED',

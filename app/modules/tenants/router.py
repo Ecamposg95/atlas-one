@@ -117,10 +117,11 @@ def update_organization(
             except ValueError as e:
                 raise HTTPException(status_code=422, detail=str(e))
 
-    # Linea del proveedor en el ticket: la columna es NOT NULL, asi que un
-    # `null` en el payload es "no tocar" y no un 500 al commitear.
-    if data_to_update.get("ticket_show_vendor", False) is None:
-        data_to_update.pop("ticket_show_vendor")
+    # Linea del proveedor y estilo del renglon: las dos columnas son NOT NULL,
+    # asi que un `null` en el payload es "no tocar" y no un 500 al commitear.
+    for _campo_no_nulo in ("ticket_show_vendor", "ticket_line_style"):
+        if _campo_no_nulo in data_to_update and data_to_update[_campo_no_nulo] is None:
+            data_to_update.pop(_campo_no_nulo)
 
     for key, value in data_to_update.items():
         setattr(org, key, value)

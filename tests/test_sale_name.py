@@ -73,6 +73,22 @@ class TestVariantSaleName:
         assert variant_sale_name(None, "Playera", None, "Rojo", "M") == "Playera (Rojo / M)"
         assert variant_sale_name(None, "Playera", None, None, None) == "Playera"
 
+    def test_etiqueta_escrita_a_mano_del_catalogo_viejo(self):
+        """Sin color ni talla, la etiqueta guardada es lo unico que distingue
+        dos variantes viejas: "600ml" y "2L" del mismo refresco."""
+        assert variant_sale_name(None, "Refresco", None, None, None, "600ml") == "Refresco (600ml)"
+        assert variant_sale_name(None, "Refresco", None, None, None, "2L") == "Refresco (2L)"
+
+    def test_la_etiqueta_neutra_no_ensucia_el_nombre(self):
+        for neutra in ("Estándar", "estandar", "Default", "  ", None):
+            assert variant_sale_name(None, "Playera", None, None, None, neutra) == "Playera"
+
+    def test_color_y_talla_ganan_a_la_etiqueta_guardada(self):
+        assert variant_sale_name(None, "Playera", None, None, "M", "vieja") == "Playera (M)"
+
+    def test_con_marca_la_etiqueta_vieja_no_se_usa(self):
+        assert variant_sale_name("Gucci", "Playera", None, None, None, "600ml") == "Gucci · Playera"
+
 
 # ── 3. SKU sugerido ──────────────────────────────────────────────────────────
 class TestSkuSugerido:
@@ -156,6 +172,27 @@ class TestFichaDelProducto:
         assert g.json()["sale_name"] == "Gorra"
         assert g.json()["variants"][0]["sale_name"] == "Gorra"
 
+    def test_dos_variantes_viejas_se_distinguen_por_su_etiqueta(
+        self, client, db, org, branch_a, auth_admin
+    ):
+        """Catalogo viejo: etiqueta a mano, sin color ni talla. En pantalla se
+        tienen que seguir llamando distinto (el ticket ya lo hacia)."""
+        from app.models.products import ProductVariant
+        p, v = _make_product(db, org, "Refresco", "REF-600", 20, [(branch_a.id, True)])
+        v.variant_name = "600ml"
+        hermana = ProductVariant(
+            product_id=p.id, sku="REF-2L", variant_name="2L",
+            price=Decimal("35"), cost=Decimal("20"), organization_id=org.id,
+        )
+        db.add(hermana)
+        db.commit()
+
+        g = client.get(f"/api/products/{p.id}", headers=_h(auth_admin, org))
+        assert g.status_code == 200, g.text
+        nombres = {x["sku"]: x["sale_name"] for x in g.json()["variants"]}
+        assert nombres == {"REF-600": "Refresco (600ml)", "REF-2L": "Refresco (2L)"}
+        assert g.json()["sale_name"] == "Refresco"
+
     def test_update_cambia_los_tres_campos(self, client, db, org, branch_a, auth_admin):
         p, v = _make_product(db, org, "Gorra", "GOR", 50, [(branch_a.id, True)])
         db.commit()
@@ -228,6 +265,23 @@ class TestBusquedaPorMarcaYModelo:
         r = client.get("/api/products/pos/search?q=gorra", headers=_h(auth_cajero_a, org))
         assert [p["name"] for p in r.json()] == ["Gorra"]
 
+    def test_el_escaneo_exacto_no_busca_por_marca_ni_modelo(
+        self, client, db, org, auth_cajero_a, catalogo
+    ):
+        """`exact=true` compara SOLO codigos: el `or_` de marca/modelo vive en
+        la rama parcial y no puede aflojar el escaneo del pasillo."""
+        r = client.get("/api/products/pos/search?q=vuitton&exact=true",
+                       headers=_h(auth_cajero_a, org))
+        assert r.status_code == 200, r.text
+        assert r.json() == []
+        r2 = client.get("/api/products/pos/search?q=mezclilla&exact=true",
+                        headers=_h(auth_cajero_a, org))
+        assert r2.json() == []
+        # El SKU exacto de esa misma prenda si la encuentra.
+        r3 = client.get("/api/products/pos/search?q=CH-1&exact=true",
+                        headers=_h(auth_cajero_a, org))
+        assert [p["name"] for p in r3.json()] == ["Chamarra"]
+
 
 # ── 7. Renglon de la venta (lo que se congela en sales_lines.description) ────
 def _variant(nombre, *, marca=None, modelo=None, color=None, talla=None, etiqueta=None):
@@ -262,3 +316,73 @@ class TestLineDescription:
     def test_con_marca_sin_talla(self):
         v = _variant("Playera", marca="Gucci")
         assert _line_description(v) == "Gucci · Playera"
+
+
+# ── 8. Estilo de linea del ticket (configuracion de la organizacion) ────────
+class TestEstiloDeLineaDelTicket:
+    def test_arranca_compacto(self, client, org, auth_admin):
+        r = client.get("/api/organization/", headers=_h(auth_admin, org))
+        assert r.status_code == 200, r.text
+        assert r.json()["ticket_line_style"] == "compact"
+
+    def test_admin_lo_enciende(self, client, db, org, auth_admin):
+        r = client.put("/api/organization/", json={"ticket_line_style": "detailed"},
+                       headers=_h(auth_admin, org))
+        assert r.status_code == 200, r.text
+        db.refresh(org)
+        assert org.ticket_line_style == "detailed"
+
+    def test_valor_invalido_es_422(self, client, org, auth_admin):
+        r = client.put("/api/organization/", json={"ticket_line_style": "bonito"},
+                       headers=_h(auth_admin, org))
+        assert r.status_code == 422, r.text
+
+    def test_null_no_borra_la_columna(self, client, db, org, auth_admin):
+        """La columna es NOT NULL y el panel manda el objeto completo: un
+        `null` es "no tocar", no un 500 al commitear."""
+        org.ticket_line_style = "detailed"
+        db.commit()
+        r = client.put("/api/organization/", json={"ticket_line_style": None},
+                       headers=_h(auth_admin, org))
+        assert r.status_code == 200, r.text
+        db.refresh(org)
+        assert org.ticket_line_style == "detailed"
+
+
+# ── 9. Duplicar y buscar conservan la ficha ─────────────────────────────────
+class TestDuplicarYBuscar:
+    @pytest.fixture()
+    def chamarra(self, db, org, branch_a, auth_admin, client):
+        marca = Brand(name="Louis Vuitton", organization_id=org.id)
+        db.add(marca); db.flush()
+        p, v = _make_product(db, org, "Chamarra", "CH-1", 4000, [(branch_a.id, True)])
+        p.brand_id, p.model, p.gender, p.material = marca.id, "mezclilla", "MUJER", "Algodón"
+        db.commit()
+        return p
+
+    def test_la_copia_conserva_genero_modelo_y_material(
+        self, client, db, org, chamarra, auth_admin
+    ):
+        r = client.post(f"/api/products/{chamarra.id}/duplicate", headers=_h(auth_admin, org))
+        assert r.status_code == 200, r.text
+        copia = r.json()
+        assert (copia["gender"], copia["model"], copia["material"]) == \
+            ("MUJER", "mezclilla", "Algodón")
+        assert copia["sale_name"] == "Louis Vuitton · Chamarra (copia) mezclilla"
+
+    def test_la_busqueda_de_catalogo_trae_el_nombre_de_venta(
+        self, db, org, chamarra, admin_user
+    ):
+        """`search_products` no pasa por `_compute_product_read`: si no llenara
+        `sale_name`, esa pantalla llamaria distinto a la misma prenda.
+
+        Se llama la funcion directo y no por HTTP: `GET /api/products/search`
+        lo tapa `GET /api/products/{product_id}` del router `core`, que se
+        monta antes (bug preexistente de orden de rutas, fuera de alcance).
+        """
+        from app.modules.products.router.search import search_products
+
+        filas = search_products(q="chamarra", db=db, current_user=admin_user, org_id=org.id)
+        fila = next(x for x in filas if x.name == "Chamarra")
+        assert fila.sale_name == "Louis Vuitton · Chamarra mezclilla"
+        assert fila.variants[0].sale_name == "Louis Vuitton · Chamarra mezclilla"

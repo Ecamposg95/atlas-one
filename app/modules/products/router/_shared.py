@@ -85,6 +85,24 @@ def variante_principal(product: Product):
     return vivas[0] if vivas else None
 
 
+def aplanar_sale_name(p_read: ProductRead, p: Product) -> None:
+    """Llena `sale_name` en el producto y en cada variante leida.
+
+    Unica fuente para todas las rutas de lectura (`_compute_product_read` y
+    `GET /products/search`): si una lo calculara aparte, el POS y la ficha
+    podrian llamar distinto a la misma prenda.
+
+    `p.brand` solo se toca si hay `brand_id`: sin marca no vale una consulta
+    perezosa por producto en un listado.
+    """
+    marca = p.brand.name if (p.brand_id and p.brand) else None
+    p_read.sale_name = sale_name(marca, p.name or "", p.model)
+    for vr in p_read.variants:
+        vr.sale_name = variant_sale_name(
+            marca, p.name or "", p.model, vr.color, vr.size, vr.variant_name,
+        )
+
+
 def _compute_product_read(
     p: Product,
     db: Session,
@@ -114,12 +132,7 @@ def _compute_product_read(
     p_read.brand_id = p.brand_id
     p_read.brand_name = p.brand.name if p.brand else None
 
-    # Nombre de venta (marca primero). `p.brand` solo se toca si hay marca:
-    # sin `brand_id` no vale una consulta perezosa por producto en un listado.
-    _marca = p.brand.name if (p.brand_id and p.brand) else None
-    p_read.sale_name = sale_name(_marca, p.name or "", p.model)
-    for vr in p_read.variants:
-        vr.sale_name = variant_sale_name(_marca, p.name or "", p.model, vr.color, vr.size)
+    aplanar_sale_name(p_read, p)
 
     # Determinar qué sucursal mostrar: La solicitada o la del usuario
     real_branch_id = target_branch_id if target_branch_id is not None else current_user.branch_id

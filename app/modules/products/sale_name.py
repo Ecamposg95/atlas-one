@@ -12,7 +12,10 @@ REGLA DE COMPATIBILIDAD (no negociable): un producto SIN marca y SIN modelo se
 sigue llamando exactamente como hoy. Con talla, el renglon del ticket de hoy
 dice "Playera (M)" -- `variant_sale_name` conserva ESE formato y solo usa el
 de " · " cuando hay marca o modelo. Asi ninguna tienda que no capture los
-campos nuevos ve cambiar su ticket ni su pantalla.
+campos nuevos ve cambiar su ticket ni su pantalla. La misma regla cubre el
+catalogo VIEJO, cuyas variantes traen una etiqueta escrita a mano
+(`variant_name` = "600ml") con color y talla vacios: pasa `variant_name` y
+sale "Refresco (600ml)", que es como se ha llamado siempre.
 """
 from __future__ import annotations
 
@@ -29,6 +32,11 @@ _ESPACIOS = re.compile(r"\s+")
 _NO_SKU = re.compile(r"[^A-Z0-9]")
 
 SEPARADOR = " · "
+
+# Etiquetas que NO distinguen nada: una variante con esto en `variant_name` es
+# la unica del producto y se llama como el producto. "Default" lo dejaron
+# importaciones viejas; "Estándar" es el que pone `variant_label`.
+ETIQUETAS_NEUTRAS = frozenset({"estandar", "default"})
 
 
 def _limpio(valor: Optional[str]) -> str:
@@ -82,30 +90,47 @@ def atributos_venta(color: Optional[str], size: Optional[str]) -> str:
     return ", ".join(partes)
 
 
+def _etiqueta_heredada(variant_name: Optional[str]) -> str:
+    """La etiqueta escrita a mano del catalogo viejo, o "" si no distingue nada."""
+    etiqueta = _limpio(variant_name)
+    if not etiqueta:
+        return ""
+    plano = _sin_acentos(etiqueta).casefold()
+    return "" if plano in ETIQUETAS_NEUTRAS else etiqueta
+
+
 def variant_sale_name(
     brand: Optional[str],
     name: str,
     model: Optional[str],
     color: Optional[str],
     size: Optional[str],
+    variant_name: Optional[str] = None,
 ) -> str:
     """Nombre de venta de UNA talla/color concreta.
 
     Con marca o modelo: "Louis Vuitton · Chamarra mezclilla · Beige, Talla M".
+
     Sin marca NI modelo conserva el formato historico del ticket:
-    "Playera (Rojo / M)" / "Playera (M)" / "Playera" (ver la regla de
-    compatibilidad del encabezado del modulo).
+    "Playera (Rojo / M)" / "Playera (M)" / "Playera".
+
+    `variant_name` es la etiqueta GUARDADA de la variante y es la unica fuente
+    del caso viejo: sin marca, sin modelo y sin color/talla, una variante con
+    etiqueta propia ("600ml") se sigue llamando "Refresco (600ml)". Sin ese
+    dato dos variantes viejas del mismo producto quedan con el mismo nombre en
+    pantalla mientras el ticket sigue imprimiendo la etiqueta.
     """
     base = sale_name(brand, name, model)
     atributos = atributos_venta(color, size)
-    if not atributos:
-        return base
     if _limpio(brand) or _limpio(model):
-        return f"{base}{SEPARADOR}{atributos}"
+        return f"{base}{SEPARADOR}{atributos}" if atributos else base
+    # Sin marca ni modelo: el formato de siempre. Color/talla mandan; si no
+    # hay, la etiqueta heredada; si tampoco, el nombre a secas.
     # Misma etiqueta que `variant_label` (sin su guarda de longitud: aqui solo
     # se formatea, nunca se valida a media impresion).
-    etiqueta = " / ".join(p for p in (_limpio(color), _limpio(size)) if p)
-    return f"{_limpio(name)} ({etiqueta})"
+    etiqueta = " / ".join(p for p in (_limpio(color), _limpio(size)) if p) \
+        or _etiqueta_heredada(variant_name)
+    return f"{_limpio(name)} ({etiqueta})" if etiqueta else base
 
 
 # ─── SKU sugerido ────────────────────────────────────────────────────────────

@@ -12,11 +12,6 @@ export interface MarcaMinima {
   name: string
 }
 
-export interface FilaVariante {
-  color: string
-  size: string
-}
-
 export interface ArgsSugerencia {
   name: string
   brand: string
@@ -32,24 +27,28 @@ export function nombreDeMarca(brands: MarcaMinima[], brandId: string | null | un
 }
 
 /**
- * Lo que se le manda al endpoint desde el formulario.
+ * Lo que se le manda al endpoint desde el formulario: marca, nombre y modelo.
  *
- * El color y la talla salen de la PRIMERA fila de la matriz (la variante
- * principal, la que lleva el SKU base). Las hermanas no entran: sus SKU los
- * deriva la matriz del base con el sufijo de color/talla.
+ * **Sin color ni talla, a propósito.** El SKU que se sugiere es el de la
+ * FAMILIA (`LV-CHAM-MEZ`): la matriz de tallas le pega a cada hermana su
+ * propio sufijo (`LV-CHAM-MEZ-BEIGE-M`, `-BEIGE-CH`…) en `buildVariantRows`.
+ * Si le pegáramos además la primera talla, el base nacería como
+ * `LV-CHAM-MEZ-BEI-CH` y las hermanas quedarían
+ * `LV-CHAM-MEZ-BEI-CH-BEIGE-M`.
+ *
+ * El endpoint sí acepta `color`/`size` (los usa quien sugiera el SKU de UNA
+ * variante suelta); este formulario no los manda nunca.
  */
 export function argsSugerencia(
   form: { name: string; model?: string; brand_id?: string },
   brands: MarcaMinima[],
-  filas: FilaVariante[] = [],
 ): ArgsSugerencia {
-  const principal = filas[0]
   return {
     name: (form.name ?? '').trim(),
     brand: nombreDeMarca(brands, form.brand_id),
     model: (form.model ?? '').trim(),
-    color: (principal?.color ?? '').trim(),
-    size: (principal?.size ?? '').trim(),
+    color: '',
+    size: '',
   }
 }
 

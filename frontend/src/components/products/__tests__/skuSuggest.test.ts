@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
 import { argsSugerencia, mensajeSugerencia, nombreDeMarca } from '../skuSuggest'
+import { buildVariantRows } from '../variantMatrix'
 
 const MARCAS = [
   { id: 'b1', name: 'Louis Vuitton' },
@@ -19,21 +20,33 @@ describe('nombreDeMarca', () => {
 })
 
 describe('argsSugerencia', () => {
-  it('toma color y talla de la PRIMERA fila de la matriz', () => {
+  it('manda marca, nombre y modelo, y NUNCA color ni talla', () => {
+    // Con matriz de tallas el SKU base es el de la familia: las hermanas le
+    // pegan su sufijo (-BEIGE-M). Mandar la primera talla aquí produciría
+    // LV-CHAM-MEZ-BEI-CH y hermanas LV-CHAM-MEZ-BEI-CH-BEIGE-M.
     const args = argsSugerencia(
       { name: ' Chamarra ', model: ' mezclilla ', brand_id: 'b1' },
       MARCAS,
-      [{ color: 'Beige', size: 'M' }, { color: 'Beige', size: 'L' }],
     )
     expect(args).toEqual({
       name: 'Chamarra', brand: 'Louis Vuitton', model: 'mezclilla',
-      color: 'Beige', size: 'M',
+      color: '', size: '',
     })
   })
-  it('sin matriz ni marca manda solo el nombre', () => {
+  it('sin marca ni modelo manda solo el nombre', () => {
     expect(argsSugerencia({ name: 'Gorra' }, MARCAS)).toEqual({
       name: 'Gorra', brand: '', model: '', color: '', size: '',
     })
+  })
+})
+
+describe('el SKU sugerido es el prefijo de la matriz', () => {
+  it('las hermanas salen del base con su sufijo, sin repetir la talla', () => {
+    const base = 'LV-CHAM-MEZ' // lo que devuelve el endpoint con esos args
+    const filas = buildVariantRows(base, ['Beige'], ['CH', 'M', 'G'], [])
+    expect(filas.map((f) => f.sku)).toEqual([
+      'LV-CHAM-MEZ-BEIGE-CH', 'LV-CHAM-MEZ-BEIGE-M', 'LV-CHAM-MEZ-BEIGE-G',
+    ])
   })
 })
 

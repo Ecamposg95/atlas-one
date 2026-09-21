@@ -128,8 +128,11 @@ export function ProductForm() {
 
   /**
    * Pide el SKU que propone la convención y lo aplica SOLO si el usuario
-   * acepta. Los SKU de la matriz de tallas se recalculan solos al cambiar el
-   * base (`buildVariantRows`), con el sufijo de color/talla.
+   * acepta.
+   *
+   * Lo que se sugiere es el SKU de la FAMILIA (sin color ni talla): al
+   * escribirlo en el campo, la matriz regenera el de cada talla con su sufijo
+   * (`buildVariantRows`), salvo los que el usuario haya tecleado a mano.
    */
   const sugerirSku = async () => {
     if (!form.name.trim()) {
@@ -138,7 +141,7 @@ export function ProductForm() {
     }
     setSugiriendoSku(true)
     try {
-      const args = argsSugerencia(form, brands, hasVariantsModule ? variantRows : [])
+      const args = argsSugerencia(form, brands)
       const { sku, available } = await productsApi.skuSuggest(args)
       if (!sku) { toast.error('Faltan datos para sugerir un SKU.'); return }
       if (!window.confirm(mensajeSugerencia(sku, available, form.sku))) return

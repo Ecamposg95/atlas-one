@@ -55,27 +55,62 @@ def _estilo_detallado(organization) -> bool:
     return getattr(organization, "ticket_line_style", "compact") == "detailed"
 
 
+def _producto_tiene_marca(line) -> bool:
+    """True si el producto de este renglon tiene marca capturada.
+
+    Es lo unico que se le pregunta al catalogo VIVO, y solo para desambiguar
+    una descripcion de dos partes: "Gucci · Playera" (marca + nombre) y
+    "Chamarra mezclilla · Talla M" (nombre + atributos) se parten igual.
+    """
+    variant = getattr(line, "variant", None)
+    producto = getattr(variant, "product", None) if variant is not None else None
+    marca_obj = getattr(producto, "brand", None) if producto is not None else None
+    return bool(getattr(marca_obj, "name", None)) if marca_obj is not None else False
+
+
 def _datos_de_renglon(line) -> tuple:
     """(marca, titulo, atributos) de un renglon, para el estilo detallado.
 
-    `titulo` es "nombre modelo" (el nombre completo de la prenda) y
-    `atributos` es "Beige, Talla M". Si el renglon no tiene variante viva
-    (un servicio, o una venta cuyo producto se borro) cae en la descripcion
-    congelada en `sales_lines.description`, que es lo unico que queda.
+    La fuente es `line.description`: el texto que se CONGELO al cobrar
+    (`app/routers/sales.py::_line_description`, que escribe siempre la marca
+    primero cuando la hay). Un ticket reimpreso tiene que decir exactamente lo
+    que decia el que se entrego, aunque despues le hayan cambiado el nombre,
+    el modelo o la marca al producto.
+
+    Como se parte:
+      * "Marca · Nombre Modelo · Talla M" -> las tres piezas.
+      * dos piezas -> es (marca, nombre) si el producto TIENE marca, y
+        (nombre, atributos) si no.
+      * sin " · " -> todo es el nombre y no hay linea de marca. Ahi caen el
+        formato viejo ("Playera (M)", "Refresco (600ml)") y los renglones sin
+        producto (un servicio).
+
+    Solo si la descripcion viene vacia (ventas antiguas) se arma del producto
+    vivo, que es lo unico que queda.
     """
-    from app.modules.products.sale_name import atributos_venta, sale_name
+    from app.modules.products.sale_name import SEPARADOR, atributos_venta, sale_name
 
-    variant = getattr(line, "variant", None)
-    producto = getattr(variant, "product", None) if variant is not None else None
-    if producto is None:
-        return "", (getattr(line, "description", None) or "Articulo"), ""
+    desc = (getattr(line, "description", None) or "").strip()
+    if not desc:
+        variant = getattr(line, "variant", None)
+        producto = getattr(variant, "product", None) if variant is not None else None
+        if producto is None:
+            return "", "Articulo", ""
+        marca_obj = getattr(producto, "brand", None)
+        marca = (getattr(marca_obj, "name", None) or "") if marca_obj is not None else ""
+        # `sale_name` sin marca = "nombre modelo", espacios ya colapsados.
+        titulo = sale_name(None, getattr(producto, "name", None) or "",
+                           getattr(producto, "model", None))
+        atributos = atributos_venta(getattr(variant, "color", None),
+                                    getattr(variant, "size", None))
+        return marca, (titulo or "Articulo"), atributos
 
-    marca_obj = getattr(producto, "brand", None)
-    marca = (getattr(marca_obj, "name", None) or "") if marca_obj is not None else ""
-    # `sale_name` sin marca = "nombre modelo" con los espacios ya colapsados.
-    titulo = sale_name(None, getattr(producto, "name", None) or "", getattr(producto, "model", None))
-    atributos = atributos_venta(getattr(variant, "color", None), getattr(variant, "size", None))
-    return marca, (titulo or "Articulo"), atributos
+    partes = [p.strip() for p in desc.split(SEPARADOR)]
+    if len(partes) == 1:
+        return "", desc, ""
+    if _producto_tiene_marca(line):
+        return partes[0], partes[1], SEPARADOR.join(partes[2:])
+    return "", partes[0], SEPARADOR.join(partes[1:])
 
 
 def _card_surcharge_amount(sale) -> float:
@@ -434,8 +469,8 @@ class PosPrinter:
                 Chamarra mezclilla
                 Talla M                          @4,000.00    4,000.00
 
-        Sin marca, el nombre sube a la primera linea (y no hay segunda). El
-        nombre NUNCA se recorta: se envuelve con `_wrap_text` al ancho util,
+        Sin marca, el nombre sube a la primera linea (y no hay segunda). Nada
+        se recorta: marca y nombre se envuelven con `_wrap_text` al ancho util,
         que es justo lo que el renglon compacto no puede hacer en 32 columnas.
         Los importes llevan separador de miles porque aqui si hay lugar.
         """
@@ -447,17 +482,15 @@ class PosPrinter:
         if len(qty_str) > qty_w - 1:
             qty_str = qty_str[: qty_w - 1]
 
-        lineas: List[str] = []
-        if marca:
-            lineas.append(f"{qty_str:<{qty_w}}{self._truncate(marca.upper(), self.cols - qty_w)}")
-            cuerpo = self._wrap_text(titulo, self.cols - qty_w)
-        else:
-            # Sin marca la primera linea la ocupa el nombre; lo que no quepa
-            # sigue abajo sangrado (el resto del bloque no cambia).
-            cuerpo = self._wrap_text(titulo.upper(), self.cols - qty_w)
-            primera = cuerpo[0] if cuerpo else ""
-            lineas.append(f"{qty_str:<{qty_w}}{primera}")
-            cuerpo = cuerpo[1:]
+        # La cabeza es la marca (en mayusculas) y si no hay, el nombre. Las dos
+        # se ENVUELVEN: recortar la marca larga era perder justo el dato que
+        # este estilo existe para no perder. El nombre conserva sus
+        # mayusculas y minusculas haya marca o no.
+        cabeza = self._wrap_text(marca.upper() if marca else titulo, self.cols - qty_w)
+        cuerpo = self._wrap_text(titulo, self.cols - qty_w) if marca else []
+
+        lineas: List[str] = [f"{qty_str:<{qty_w}}{cabeza[0] if cabeza else ''}"]
+        lineas.extend(sangria + l for l in cabeza[1:])
         lineas.extend(sangria + l for l in cuerpo)
 
         # Ultima linea: atributos a la izquierda, precios a la derecha. El

@@ -79,7 +79,7 @@ from app.core.security import get_current_user
 from app.crud.products import query_visible_products, _is_admin
 from app.modules.products.schemas import ProductRead, StockLevel
 
-from ._shared import _compute_product_read
+from ._shared import _compute_product_read, aplanar_sale_name
 
 logger = logging.getLogger(__name__)
 
@@ -263,6 +263,8 @@ def search_products(
             continue
 
         p_read = ProductRead.model_validate(p)
+        # Mismo nombre de venta que el POS y la ficha (helper compartido).
+        aplanar_sale_name(p_read, p)
 
         # Flatten variant data
         p_read.sku = v.sku

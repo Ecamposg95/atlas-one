@@ -15,13 +15,30 @@ const branchTypeLabel = (t: string) =>
 interface BranchForm { name: string; branch_type: Branch['branch_type']; address: string; phone: string }
 const EMPTY_BRANCH: BranchForm = { name: '', branch_type: 'STORE', address: '', phone: '' }
 
-// Vista previa del renglón del ticket (panel de Empresa). Mismo orden y misma
-// sangría que arma `app/pos_printer.py`: lo que se ve aquí es lo que imprime.
-const VISTA_PREVIA_COMPACTA = '1x  LOUIS VUITTON · CHAMARRA MEZC @4000.00    4000.00'
+// Vista previa del renglón del ticket (panel de Empresa).
+//
+// Los renglones están COPIADOS de la salida real de `app/pos_printer.py`
+// (`_product_line` y `_product_lines_detailed`) para una chamarra Louis
+// Vuitton mezclilla talla M de $4,000: 56 columnas en papel de 80 mm y 32 en
+// el de 58 mm. Ver a la mitad de ancho lo que en papel sale recortado
+// ("CHAMARRA MEZCLIL") era justamente no ver el problema.
+const VISTA_PREVIA_COMPACTA = [
+  '80 mm (56 columnas)',
+  '1x  LOUIS VUITTON · CHAMARRA MEZCLIL@4000.00     4000.00',
+  '',
+  '58 mm (32 columnas)',
+  '1x  LOUIS VUITTO@4000.00 4000.00',
+].join('\n')
 const VISTA_PREVIA_DETALLADA = [
+  '80 mm (56 columnas)',
   '1x  LOUIS VUITTON',
   '    Chamarra mezclilla',
-  '    Talla M          @4,000.00   4,000.00',
+  '    Talla M                       @4,000.00     4,000.00',
+  '',
+  '58 mm (32 columnas)',
+  '1x  LOUIS VUITTON',
+  '    Chamarra mezclilla',
+  '    Talla M   @4,000.00 4,000.00',
 ].join('\n')
 
 export function Organization() {
