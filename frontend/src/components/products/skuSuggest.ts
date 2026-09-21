@@ -18,6 +18,7 @@ export interface ArgsSugerencia {
   model: string
   color: string
   size: string
+  gender: string
 }
 
 /** Nombre de la marca elegida; "" si no hay marca o el id ya no existe. */
@@ -40,7 +41,7 @@ export function nombreDeMarca(brands: MarcaMinima[], brandId: string | null | un
  * variante suelta); este formulario no los manda nunca.
  */
 export function argsSugerencia(
-  form: { name: string; model?: string; brand_id?: string },
+  form: { name: string; model?: string; brand_id?: string; gender?: string | null },
   brands: MarcaMinima[],
 ): ArgsSugerencia {
   return {
@@ -49,6 +50,7 @@ export function argsSugerencia(
     model: (form.model ?? '').trim(),
     color: '',
     size: '',
+    gender: (form.gender ?? '').trim(),
   }
 }
 

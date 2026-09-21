@@ -97,7 +97,21 @@ class TestSkuSugerido:
             "LV-CHAM-MEZ-BEI-M"
 
     def test_marca_de_una_palabra_usa_tres_letras_y_omite_vacios(self):
-        assert sku_sugerido("Gucci", "Pantalón formal", None, None, "32") == "GUC-PANT-32"
+        assert sku_sugerido("Gucci", "Pantalón formal", None, None, "32") == "GUC-PANT-F-32"
+
+    def test_palabras_extra_del_nombre_van_como_iniciales(self):
+        # Sin esto, las blusas de manga corta, larga y sin mangas de la misma
+        # marca colisionaban en PRA-BLUS.
+        assert sku_sugerido("Prada", "Blusa manga corta", None, None, None) == "PRA-BLUS-MC"
+        assert sku_sugerido("Prada", "Blusa sin mangas", None, None, None) == "PRA-BLUS-SM"
+        assert sku_sugerido("Loro Piana", "Playera premium cuello redondo", None, None, "CH") == "LP-PLAY-PCR-CH"
+        assert sku_sugerido(None, "Pantalón de pants", None, None, None) == "PANT-P"
+
+    def test_genero_mujer_y_nino_se_marcan_hombre_no(self):
+        assert sku_sugerido("Gucci", "Pantalón", None, None, None, gender="MUJER") == "GUC-PANT-MUJ"
+        assert sku_sugerido("Gucci", "Pantalón", "Mezclilla", None, None, gender="HOMBRE") == "GUC-PANT-MEZ"
+        assert sku_sugerido("Gucci", "Pantalón", None, None, None, gender="UNISEX") == "GUC-PANT"
+        assert sku_sugerido("Gucci", "Playera", None, None, "4", gender="nino") == "GUC-PLAY-NIN-4"
 
     @pytest.mark.parametrize("marca,esperado", [
         ("Chrome Hearts", "CH"),

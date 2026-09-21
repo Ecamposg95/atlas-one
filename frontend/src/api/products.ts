@@ -207,9 +207,10 @@ export const productsApi = {
     model?: string | null
     color?: string | null
     size?: string | null
+    gender?: string | null
   }): Promise<{ sku: string; available: boolean }> => {
     const params: Record<string, string> = { name: args.name ?? '' }
-    for (const k of ['brand', 'model', 'color', 'size'] as const) {
+    for (const k of ['brand', 'model', 'color', 'size', 'gender'] as const) {
       const v = (args[k] ?? '').trim()
       if (v) params[k] = v
     }

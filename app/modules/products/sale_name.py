@@ -166,22 +166,45 @@ def _primeras(valor: Optional[str], n: int) -> str:
     return palabras[0][:n] if palabras else ""
 
 
+# Palabras del nombre que no aportan al SKU ("Pantalón de pants" -> PANT-P).
+_SIN_PESO = frozenset({"DE", "DEL", "LA", "EL", "LOS", "LAS", "Y", "CON", "PARA"})
+_GENERO_SKU = {"MUJER": "MUJ", "NINO": "NIN"}
+
+
+def _prenda_corta(name: Optional[str]) -> str:
+    """4 letras de la primera palabra y, si hay mas palabras, sus iniciales
+    como token aparte: "Blusa manga corta" -> "BLUS-MC", "Pantalón formal" ->
+    "PANT-F", "Playera premium cuello redondo" -> "PLAY-PCR". Sin esto, las
+    blusas de manga corta, larga y sin mangas de la misma marca colisionaban
+    en el mismo SKU."""
+    palabras = [w for w in _palabras(name)]
+    if not palabras:
+        return ""
+    resto = [w[0] for w in palabras[1:] if w not in _SIN_PESO][:3]
+    return palabras[0][:4] + ("-" + "".join(resto) if resto else "")
+
+
 def sku_sugerido(
     brand: Optional[str],
     name: str,
     model: Optional[str],
     color: Optional[str],
     size: Optional[str],
+    gender: Optional[str] = None,
 ) -> str:
     """"LV-CHAM-MEZ-BEI-M". Solo [A-Z0-9-]; las partes vacias se omiten.
 
-    Marca: iniciales (2+ palabras) o 3 letras. Prenda: 4 letras. Modelo y
-    color: 3 letras. Talla tal cual, sin signos ("26.5" -> "265").
+    Orden: MARCA-PRENDA[-INICIALES]-MODELO[-MUJ|NIN]-COLOR-TALLA.
+    Marca: iniciales (2+ palabras) o 3 letras. Prenda: 4 letras mas las
+    iniciales de las palabras restantes. Modelo y color: 3 letras. Genero:
+    solo se marca MUJER (MUJ) y NINO (NIN); hombre/unisex son el caso base.
+    Talla tal cual, sin signos ("26.5" -> "265").
     """
     partes = [
         _marca_corta(brand),
-        _primeras(name, 4),
+        _prenda_corta(name),
         _primeras(model, 3),
+        _GENERO_SKU.get((gender or "").strip().upper(), ""),
         _primeras(color, 3),
         _NO_SKU.sub("", _sin_acentos(_limpio(size)).upper()),
     ]

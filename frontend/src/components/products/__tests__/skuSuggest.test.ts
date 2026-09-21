@@ -25,17 +25,17 @@ describe('argsSugerencia', () => {
     // pegan su sufijo (-BEIGE-M). Mandar la primera talla aquí produciría
     // LV-CHAM-MEZ-BEI-CH y hermanas LV-CHAM-MEZ-BEI-CH-BEIGE-M.
     const args = argsSugerencia(
-      { name: ' Chamarra ', model: ' mezclilla ', brand_id: 'b1' },
+      { name: ' Chamarra ', model: ' mezclilla ', brand_id: 'b1', gender: 'HOMBRE' },
       MARCAS,
     )
     expect(args).toEqual({
       name: 'Chamarra', brand: 'Louis Vuitton', model: 'mezclilla',
-      color: '', size: '',
+      color: '', size: '', gender: 'HOMBRE',
     })
   })
   it('sin marca ni modelo manda solo el nombre', () => {
     expect(argsSugerencia({ name: 'Gorra' }, MARCAS)).toEqual({
-      name: 'Gorra', brand: '', model: '', color: '', size: '',
+      name: 'Gorra', brand: '', model: '', color: '', size: '', gender: '',
     })
   })
 })

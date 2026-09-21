@@ -552,11 +552,12 @@ def sugerir_sku(
     model: Optional[str] = None,
     color: Optional[str] = None,
     size: Optional[str] = None,
+    gender: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization),
 ):
-    """SKU que sugiere la convención MARCA-PRENDA-MODELO-COLOR-TALLA.
+    """SKU que sugiere la convención MARCA-PRENDA-MODELO-GENERO-COLOR-TALLA.
 
     Es solo una SUGERENCIA: nada la aplica sola y el alta sigue aceptando
     cualquier SKU único de la organización. `available` dice si ese código ya
@@ -566,7 +567,7 @@ def sugerir_sku(
     Va declarado ANTES de `GET /{product_id}`: al revés, FastAPI resolvería
     "sku-suggest" como un id de producto y devolvería 404.
     """
-    sku = sku_sugerido(brand, name, model, color, size)
+    sku = sku_sugerido(brand, name, model, color, size, gender=gender)
     ocupado = False
     if sku:
         ocupado = db.query(ProductVariant.id).filter(
