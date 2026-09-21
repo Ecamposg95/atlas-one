@@ -50,21 +50,31 @@ export function ProductBranchMatrixSection({ branches, activation, onToggle, onS
                   <td className="py-1.5 text-slate-300">
                     {b.name} <span className="text-slate-600">({b.branch_type})</span>
                   </td>
-                  <td className="py-1.5 text-center">
-                    <input type="checkbox" checked={row.enabled}
-                      onChange={(e) => onToggle(b.id, { enabled: e.target.checked })} />
+                  <td className="py-1.5">
+                    {/* Una casilla de 16 px es un objetivo táctil de 16 px: el
+                        `label` la lleva a 44 px sin cambiar su aspecto (M-4). */}
+                    <label className="flex min-h-[44px] sm:min-h-0 items-center justify-center cursor-pointer">
+                      <input type="checkbox" checked={row.enabled}
+                        onChange={(e) => onToggle(b.id, { enabled: e.target.checked })} />
+                    </label>
                   </td>
-                  <td className="py-1.5 text-center">
-                    <input type="checkbox" disabled={!row.enabled} checked={row.is_active_pos}
-                      onChange={(e) => onToggle(b.id, { is_active_pos: e.target.checked })} />
+                  <td className="py-1.5">
+                    <label className="flex min-h-[44px] sm:min-h-0 items-center justify-center cursor-pointer">
+                      <input type="checkbox" disabled={!row.enabled} checked={row.is_active_pos}
+                        onChange={(e) => onToggle(b.id, { is_active_pos: e.target.checked })} />
+                    </label>
                   </td>
-                  <td className="py-1.5 text-center">
-                    <input type="checkbox" disabled={!row.enabled} checked={row.is_active_hq}
-                      onChange={(e) => onToggle(b.id, { is_active_hq: e.target.checked })} />
+                  <td className="py-1.5">
+                    <label className="flex min-h-[44px] sm:min-h-0 items-center justify-center cursor-pointer">
+                      <input type="checkbox" disabled={!row.enabled} checked={row.is_active_hq}
+                        onChange={(e) => onToggle(b.id, { is_active_hq: e.target.checked })} />
+                    </label>
                   </td>
-                  <td className="py-1.5 text-center">
-                    <input type="checkbox" disabled={!row.enabled} checked={row.is_visible}
-                      onChange={(e) => onToggle(b.id, { is_visible: e.target.checked })} />
+                  <td className="py-1.5">
+                    <label className="flex min-h-[44px] sm:min-h-0 items-center justify-center cursor-pointer">
+                      <input type="checkbox" disabled={!row.enabled} checked={row.is_visible}
+                        onChange={(e) => onToggle(b.id, { is_visible: e.target.checked })} />
+                    </label>
                   </td>
                 </tr>
               )

@@ -45,7 +45,7 @@ export function ProductImageUploader({ product, onUpdated }: Props) {
   const imageUrl = product.image_url ?? null
 
   return (
-    <div className="col-span-2 space-y-2">
+    <div className="sm:col-span-2 space-y-2">
       <label className="block text-xs mb-1" style={{ color: 'var(--dax-text-muted)' }}>
         Imagen del producto
       </label>

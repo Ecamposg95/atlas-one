@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { productsApi } from '../../api/products'
+import { useMediaQuery } from '../../hooks/useMediaQuery'
+import { TablaDesplazable } from '../ui/TablaDesplazable'
 import type { Product, ProductVariant } from '../../types/products'
 import { errorDetailText } from '../../utils/errorDetail'
 import { ProductVariantsSection } from './ProductVariantsSection'
@@ -48,6 +50,7 @@ export function ProductVariantsEditor({ product, onChanged }: Props) {
   const variants = product.variants ?? []
   const principal = variants[0] ?? null
 
+  const enTarjetas = useMediaQuery('(max-width: 767px)')
   const conColores = usesColors(variants)
   const palabra = variantWords(conColores)
   // Producto sin color ni talla: la primera fila nueva ES esta prenda.
@@ -135,19 +138,32 @@ export function ProductVariantsEditor({ product, onChanged }: Props) {
     <section className="space-y-3">
       <h3 className="text-sm font-black uppercase tracking-wide text-slate-300">{titulo} ({variants.length})</h3>
       {msg && <p className="text-sm text-amber-400">{msg}</p>}
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs">
-          <thead><tr className="text-left text-slate-400">
-            <th className="py-1 pr-2">Color</th><th className="py-1 pr-2">Talla</th><th className="py-1 pr-2">SKU</th>
-            <th className="py-1 pr-2">Código</th><th className="py-1 pr-2">Precio</th><th className="py-1 pr-2">Existencia</th><th />
-          </tr></thead>
-          <tbody>
-            {variants.map((v) => (
-              <VariantRowEditor key={v.id} v={v} busy={busyId === v.id} onSave={(patch) => save(v, patch)} onRemove={() => remove(v)} />
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {/* Bajo `md` la tabla de 7 columnas con 5 campos pide ~660 px y, al
+          desplazarla, se pierde de vista qué talla se está editando: cada
+          variante pasa a ser una tarjeta. De `md` hacia arriba, la tabla. */}
+      {enTarjetas ? (
+        <div className="space-y-3">
+          {variants.map((v) => (
+            <VariantRowEditor key={v.id} v={v} modo="tarjeta" busy={busyId === v.id}
+                              onSave={(patch) => save(v, patch)} onRemove={() => remove(v)} />
+          ))}
+        </div>
+      ) : (
+        <TablaDesplazable sangrado={false}>
+          <table className="w-full text-xs">
+            <thead><tr className="text-left text-slate-400">
+              <th className="py-1 pr-2">Color</th><th className="py-1 pr-2">Talla</th><th className="py-1 pr-2">SKU</th>
+              <th className="py-1 pr-2">Código</th><th className="py-1 pr-2">Precio</th><th className="py-1 pr-2">Existencia</th><th />
+            </tr></thead>
+            <tbody>
+              {variants.map((v) => (
+                <VariantRowEditor key={v.id} v={v} modo="fila" busy={busyId === v.id}
+                                  onSave={(patch) => save(v, patch)} onRemove={() => remove(v)} />
+              ))}
+            </tbody>
+          </table>
+        </TablaDesplazable>
+      )}
       {!adding ? (
         <button type="button" className="dax-btn-secondary" onClick={() => setAdding(true)}>Agregar {palabra.plural}</button>
       ) : (
@@ -184,8 +200,10 @@ export function ProductVariantsEditor({ product, onChanged }: Props) {
   )
 }
 
-function VariantRowEditor({ v, busy, onSave, onRemove }: {
+function VariantRowEditor({ v, busy, modo, onSave, onRemove }: {
   v: ProductVariant; busy: boolean
+  /** `fila` = celda de tabla (md+); `tarjeta` = bloque apilado (teléfono). */
+  modo: 'fila' | 'tarjeta'
   onSave: (patch: { color?: string | null; size?: string | null; sku?: string; barcode?: string | null; price?: number }) => void
   onRemove: () => void
 }) {
@@ -199,6 +217,55 @@ function VariantRowEditor({ v, busy, onSave, onRemove }: {
   const otherDirty = color !== (v.color ?? '') || size !== (v.size ?? '') || sku !== v.sku || barcode !== (v.barcode ?? '')
   const priceDirty = priceOk && priceNum !== Number(v.price)
   const dirty = otherDirty || priceDirty
+
+  const acciones = (
+    <>
+      <button type="button" className="dax-btn-primary" disabled={!dirty || busy || !priceOk}
+              onClick={() => onSave({ color: color || null, size: size || null, sku, barcode: barcode || null, price: priceNum })}>Guardar</button>
+      <button type="button" className="dax-btn-secondary" disabled={busy} onClick={onRemove}>Retirar</button>
+    </>
+  )
+
+  if (modo === 'tarjeta') {
+    return (
+      <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3 space-y-2">
+        <p className="text-xs font-bold text-slate-200">
+          {[v.color, v.size].filter(Boolean).join(' / ') || v.sku}
+          <span className="ml-2 font-normal text-slate-500">· {Number(v.stock_total ?? 0)} en existencia</span>
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block">
+            <span className="text-[10px] text-slate-400">Color</span>
+            <input className="dax-input w-full" value={color} onChange={(e) => setColor(e.target.value)} />
+          </label>
+          <label className="block">
+            <span className="text-[10px] text-slate-400">Talla</span>
+            <input className="dax-input w-full" value={size} onChange={(e) => setSize(e.target.value)} />
+          </label>
+          <label className="block">
+            <span className="text-[10px] text-slate-400">SKU</span>
+            <input className="dax-input w-full" value={sku} onChange={(e) => setSku(e.target.value)} />
+          </label>
+          <label className="block">
+            <span className="text-[10px] text-slate-400">Código</span>
+            <input className="dax-input w-full" value={barcode} onChange={(e) => setBarcode(e.target.value)} />
+          </label>
+          <label className="block">
+            <span className="text-[10px] text-slate-400">Precio</span>
+            <input className="dax-input w-full" value={price} inputMode="decimal" onChange={(e) => setPrice(e.target.value)} />
+            {!priceOk && <span className="text-rose-400 text-[11px] block">Precio mayor a 0</span>}
+          </label>
+          <div className="flex items-end">
+            {/* La existencia no se edita aquí (necesita motivo y kardex). */}
+            <Link to={`/inventory?variant=${v.id}&q=${encodeURIComponent(v.sku)}`}
+                  className="dax-btn-secondary w-full justify-center text-xs">Ajustar existencia</Link>
+          </div>
+        </div>
+        <div className="flex gap-2 [&>button]:flex-1 [&>button]:justify-center [&>button]:min-h-[44px]">{acciones}</div>
+      </div>
+    )
+  }
+
   return (
     <tr>
       <td className="py-1 pr-2"><input className="dax-input" value={color} onChange={(e) => setColor(e.target.value)} /></td>
@@ -216,10 +283,10 @@ function VariantRowEditor({ v, busy, onSave, onRemove }: {
         <Link to={`/inventory?variant=${v.id}&q=${encodeURIComponent(v.sku)}`}
               className="block text-[11px] text-indigo-400 hover:underline">Ajustar</Link>
       </td>
-      <td className="py-1 flex gap-1">
-        <button type="button" className="dax-btn-primary" disabled={!dirty || busy || !priceOk}
-                onClick={() => onSave({ color: color || null, size: size || null, sku, barcode: barcode || null, price: priceNum })}>Guardar</button>
-        <button type="button" className="dax-btn-secondary" disabled={busy} onClick={onRemove}>Retirar</button>
+      {/* El `flex` iba en el propio `<td>`: la celda dejaba de ser
+          `table-cell` y se salía del reparto de columnas de la tabla. */}
+      <td className="py-1 whitespace-nowrap">
+        <div className="flex gap-1">{acciones}</div>
       </td>
     </tr>
   )

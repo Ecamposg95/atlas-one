@@ -315,7 +315,7 @@ export function ProductBranchMatrix({ product, onClose, onSaved }: Props) {
                 <table className="w-full text-sm">
                   <thead className="bg-slate-900/40">
                     <tr className="text-[10px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-800">
-                      <th className="text-left py-2 px-3">Sucursal</th>
+                      <th className="text-left py-2 px-3 sticky left-0 z-10 bg-[var(--dax-surface)] md:static md:bg-transparent">Sucursal</th>
                       <th className="text-center py-2 px-3">POS</th>
                       <th className="text-right py-2 px-3">Precio override</th>
                       <th className="text-right py-2 px-3">Stock mín / máx</th>
@@ -368,7 +368,9 @@ function BranchRow({ branch, pbs, variantPrice, disabled, onToggle, onPriceOverr
 
   return (
     <tr className="border-b border-slate-800/60 hover:bg-slate-800/20">
-      <td className="py-2.5 px-3">
+      {/* Columna fija: con cuatro campos a la derecha, sin esto se pierde
+          de vista qué sucursal se está editando al desplazar (I-1). */}
+      <td className="py-2.5 px-3 sticky left-0 z-10 bg-[var(--dax-surface)] md:static md:bg-transparent">
         <div className="flex items-center gap-2">
           <span className={`w-2 h-2 rounded-full ${active ? 'bg-emerald-400' : pbs ? 'bg-slate-600' : 'bg-fuchsia-500'}`} />
           <span className="text-white font-semibold">{branch.name}</span>
@@ -380,15 +382,18 @@ function BranchRow({ branch, pbs, variantPrice, disabled, onToggle, onPriceOverr
           )}
         </div>
       </td>
-      <td className="py-2 px-3 text-center">
-        <input
-          type="checkbox"
-          checked={active}
-          disabled={disabled}
-          onChange={(e) => onToggle(e.target.checked)}
-          className="w-4 h-4 accent-emerald-500"
-          title={active ? 'Desactivar en POS' : 'Activar en POS'}
-        />
+      <td className="py-2 px-3">
+        <label className="flex min-h-[44px] sm:min-h-0 items-center justify-center cursor-pointer">
+          <input
+            type="checkbox"
+            checked={active}
+            disabled={disabled}
+            onChange={(e) => onToggle(e.target.checked)}
+            className="w-4 h-4 accent-emerald-500"
+            title={active ? 'Desactivar en POS' : 'Activar en POS'}
+            aria-label={active ? 'Desactivar en POS' : 'Activar en POS'}
+          />
+        </label>
       </td>
       <td className="py-2 px-3 text-right">
         <NumberBlurInput
@@ -406,7 +411,7 @@ function BranchRow({ branch, pbs, variantPrice, disabled, onToggle, onPriceOverr
             placeholder="min"
             disabled={disabled || !pbs}
             onCommit={onMinStock}
-            width="w-20"
+            width="w-14 sm:w-20"
             min={0}
           />
           <NumberBlurInput
@@ -414,7 +419,7 @@ function BranchRow({ branch, pbs, variantPrice, disabled, onToggle, onPriceOverr
             placeholder="max"
             disabled={disabled || !pbs}
             onCommit={onMaxStock}
-            width="w-20"
+            width="w-14 sm:w-20"
             min={0}
           />
         </div>
@@ -432,7 +437,7 @@ interface NumberBlurInputProps {
   width?: string
 }
 
-function NumberBlurInput({ value, placeholder, disabled, onCommit, min, width = 'w-28' }: NumberBlurInputProps) {
+function NumberBlurInput({ value, placeholder, disabled, onCommit, min, width = 'w-20 sm:w-28' }: NumberBlurInputProps) {
   const [local, setLocal] = useState(value !== null ? String(value) : '')
 
   useEffect(() => {

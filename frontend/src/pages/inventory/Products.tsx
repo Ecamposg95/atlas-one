@@ -14,6 +14,7 @@ import { toast } from '../../store/toastStore'
 import { GENEROS } from '../../components/products/ProductCommercialSection'
 import { ProductImageUploader } from '../../components/products/ProductImageUploader'
 import { expandVariantRows, grupoDeVariantes, nombreDeVariante, priceRange, sumStock } from './variantRows'
+import { claseEtiquetaFila } from '../../utils/formResponsivo'
 
 const SINGULAR_GRUPO = { tallas: 'talla', colores: 'color', variantes: 'variante' } as const
 
@@ -48,7 +49,7 @@ function ImportModal({ onClose, onDone, isHQ }: { onClose: () => void; onDone: (
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="dax-card p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+      <div className="dax-card dax-modal p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-black text-white">Importar productos</h3>
           <button onClick={onClose} className="text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
@@ -539,7 +540,7 @@ function CreateProductMiniModal({ brands, departments, onClose, onCreated }: Cre
     >
       <form
         onSubmit={handleSubmit}
-        className="dax-card p-5 w-full max-w-md space-y-4"
+        className="dax-card dax-modal p-5 w-full max-w-md space-y-4"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
@@ -660,7 +661,7 @@ function CreateProductMiniModal({ brands, departments, onClose, onCreated }: Cre
           </p>
         )}
 
-        <div className="flex items-center justify-end gap-2">
+        <div className="dax-modal-footer -mx-5 px-5 flex items-center justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
@@ -827,7 +828,7 @@ function ProductModal({ product, onClose, onSaved, brands, departments, isCajero
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
       <div
-        className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl"
+        className="dax-modal w-full max-w-2xl rounded-2xl"
         style={{ background: 'var(--dax-surface)', border: '1px solid var(--dax-border)' }}
       >
         {/* Header */}
@@ -853,8 +854,9 @@ function ProductModal({ product, onClose, onSaved, brands, departments, isCajero
           {/* Datos básicos */}
           <section className="space-y-3">
             <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--dax-text-faint)' }}>Datos generales</p>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="col-span-2">
+            {/* A 390 px dos columnas fijas dejaban campos de ~145 px. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="sm:col-span-2">
                 <label className="block text-xs mb-1" style={{ color: 'var(--dax-text-muted)' }}>Nombre *</label>
                 <input className="dax-input w-full" value={name} onChange={e => setName(e.target.value)} placeholder="Nombre del producto" />
               </div>
@@ -928,16 +930,16 @@ function ProductModal({ product, onClose, onSaved, brands, departments, isCajero
                   }}
                 />
               ) : (
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                   <label className="block text-xs mb-1" style={{ color: 'var(--dax-text-muted)' }}>URL de imagen</label>
                   <input className="dax-input w-full" value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="https://..." />
                 </div>
               )}
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="block text-xs mb-1" style={{ color: 'var(--dax-text-muted)' }}>Descripción</label>
                 <textarea className="dax-input w-full" rows={2} value={description} onChange={e => setDescription(e.target.value)} placeholder="Descripción opcional" />
               </div>
-              <div className="col-span-2 flex flex-wrap items-center gap-4">
+              <div className="sm:col-span-2 flex flex-wrap items-center gap-4">
                 <div className="flex items-center gap-2">
                   <input type="checkbox" id="has_iva" checked={hasIva} onChange={e => setHasIva(e.target.checked)} className="rounded" />
                   <label htmlFor="has_iva" className="text-xs cursor-pointer" style={{ color: 'var(--dax-text-muted)' }}>
@@ -983,9 +985,12 @@ function ProductModal({ product, onClose, onSaved, brands, departments, isCajero
             ) : (
               <div className="space-y-2">
                 {prices.map((p, i) => (
-                  <div key={i} className="grid grid-cols-[1fr_80px_90px_28px] gap-2 items-end">
+                  <div
+                    key={i}
+                    className="grid grid-cols-1 sm:grid-cols-[1fr_80px_90px_28px] gap-2 items-end rounded-lg border border-slate-800/70 p-2 sm:rounded-none sm:border-0 sm:p-0"
+                  >
                     <div>
-                      {i === 0 && <label className="block text-[10px] mb-0.5" style={{ color: 'var(--dax-text-faint)' }}>Nombre</label>}
+                      <label className={claseEtiquetaFila(i, 'block text-[10px] mb-0.5')} style={{ color: 'var(--dax-text-faint)' }}>Nombre</label>
                       <input
                         className="dax-input w-full text-xs"
                         value={p.price_name}
@@ -994,7 +999,7 @@ function ProductModal({ product, onClose, onSaved, brands, departments, isCajero
                       />
                     </div>
                     <div>
-                      {i === 0 && <label className="block text-[10px] mb-0.5" style={{ color: 'var(--dax-text-faint)' }}>Min. piezas</label>}
+                      <label className={claseEtiquetaFila(i, 'block text-[10px] mb-0.5')} style={{ color: 'var(--dax-text-faint)' }}>Min. piezas</label>
                       <input
                         className="dax-input w-full text-xs"
                         type="number" min="1"
@@ -1003,7 +1008,7 @@ function ProductModal({ product, onClose, onSaved, brands, departments, isCajero
                       />
                     </div>
                     <div>
-                      {i === 0 && <label className="block text-[10px] mb-0.5" style={{ color: 'var(--dax-text-faint)' }}>Precio/u</label>}
+                      <label className={claseEtiquetaFila(i, 'block text-[10px] mb-0.5')} style={{ color: 'var(--dax-text-faint)' }}>Precio/u</label>
                       <input
                         className="dax-input w-full text-xs"
                         type="number" min="0" step="0.01"
@@ -1013,9 +1018,11 @@ function ProductModal({ product, onClose, onSaved, brands, departments, isCajero
                     </div>
                     <button
                       onClick={() => removePrice(i)}
-                      className="h-8 w-7 flex items-center justify-center text-slate-500 hover:text-red-400 transition-colors rounded"
+                      aria-label={`Quitar el precio ${i + 1}`}
+                      className="w-full min-h-[44px] sm:w-7 sm:h-8 sm:min-h-0 flex items-center justify-center gap-1.5 rounded border border-slate-700 sm:border-0 text-slate-500 hover:text-red-400 transition-colors"
                     >
                       <i className="fa-solid fa-xmark text-xs" />
+                      <span className="text-[11px] font-semibold sm:hidden">Quitar</span>
                     </button>
                   </div>
                 ))}
@@ -1041,9 +1048,12 @@ function ProductModal({ product, onClose, onSaved, brands, departments, isCajero
             ) : (
               <div className="space-y-2">
                 {packagings.map((u, i) => (
-                  <div key={i} className="grid grid-cols-[1fr_70px_90px_1fr_28px] gap-2 items-end">
+                  <div
+                    key={i}
+                    className="grid grid-cols-1 sm:grid-cols-[1fr_70px_90px_1fr_28px] gap-2 items-end rounded-lg border border-slate-800/70 p-2 sm:rounded-none sm:border-0 sm:p-0"
+                  >
                     <div>
-                      {i === 0 && <label className="block text-[10px] mb-0.5" style={{ color: 'var(--dax-text-faint)' }}>Nombre</label>}
+                      <label className={claseEtiquetaFila(i, 'block text-[10px] mb-0.5')} style={{ color: 'var(--dax-text-faint)' }}>Nombre</label>
                       <input
                         className="dax-input w-full text-xs"
                         value={u.name}
@@ -1052,7 +1062,7 @@ function ProductModal({ product, onClose, onSaved, brands, departments, isCajero
                       />
                     </div>
                     <div>
-                      {i === 0 && <label className="block text-[10px] mb-0.5" style={{ color: 'var(--dax-text-faint)' }}>Unidades</label>}
+                      <label className={claseEtiquetaFila(i, 'block text-[10px] mb-0.5')} style={{ color: 'var(--dax-text-faint)' }}>Unidades</label>
                       <input
                         className="dax-input w-full text-xs"
                         type="number" min="1"
@@ -1061,7 +1071,7 @@ function ProductModal({ product, onClose, onSaved, brands, departments, isCajero
                       />
                     </div>
                     <div>
-                      {i === 0 && <label className="block text-[10px] mb-0.5" style={{ color: 'var(--dax-text-faint)' }}>Precio/caja</label>}
+                      <label className={claseEtiquetaFila(i, 'block text-[10px] mb-0.5')} style={{ color: 'var(--dax-text-faint)' }}>Precio/caja</label>
                       <input
                         className="dax-input w-full text-xs"
                         type="number" min="0" step="0.01"
@@ -1070,7 +1080,7 @@ function ProductModal({ product, onClose, onSaved, brands, departments, isCajero
                       />
                     </div>
                     <div>
-                      {i === 0 && <label className="block text-[10px] mb-0.5" style={{ color: 'var(--dax-text-faint)' }}>Código de barras</label>}
+                      <label className={claseEtiquetaFila(i, 'block text-[10px] mb-0.5')} style={{ color: 'var(--dax-text-faint)' }}>Código de barras</label>
                       <input
                         className="dax-input w-full text-xs font-mono"
                         value={u.barcode}
@@ -1080,9 +1090,11 @@ function ProductModal({ product, onClose, onSaved, brands, departments, isCajero
                     </div>
                     <button
                       onClick={() => removePackaging(i)}
-                      className="h-8 w-7 flex items-center justify-center text-slate-500 hover:text-red-400 transition-colors rounded"
+                      aria-label={`Quitar el empaque ${i + 1}`}
+                      className="w-full min-h-[44px] sm:w-7 sm:h-8 sm:min-h-0 flex items-center justify-center gap-1.5 rounded border border-slate-700 sm:border-0 text-slate-500 hover:text-red-400 transition-colors"
                     >
                       <i className="fa-solid fa-xmark text-xs" />
+                      <span className="text-[11px] font-semibold sm:hidden">Quitar</span>
                     </button>
                   </div>
                 ))}
@@ -1098,7 +1110,7 @@ function ProductModal({ product, onClose, onSaved, brands, departments, isCajero
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t" style={{ borderColor: 'var(--dax-border-dim)' }}>
+        <div className="dax-modal-footer flex items-center justify-end gap-2 px-5 py-4 border-t" style={{ borderColor: 'var(--dax-border-dim)', background: 'var(--dax-surface)' }}>
           <button onClick={onClose} className="dax-btn-secondary text-sm" disabled={saving}>
             Cancelar
           </button>
@@ -1323,55 +1335,65 @@ function ProductsHQView() {
             </span>
           )}
         </div>
-        <div className="flex items-center gap-3">
+        {/* Un solo ítem flex sin `flex-wrap` sumaba ~420 px de mínimo y
+            desbordaba la página a 390 px: ahora envuelve y bajo `sm` los
+            botones son solo icono (el texto vive en el `aria-label`). */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
           <span className="text-slate-500 text-sm">{total.toLocaleString()} productos</span>
           {canEdit && (
             <>
               <button
                 onClick={() => setShowImport(true)}
-                className="dax-btn-secondary text-xs flex items-center gap-1.5"
+                aria-label="Importar productos"
+                className="dax-btn-secondary dax-btn-icon text-xs flex items-center gap-1.5 whitespace-nowrap"
               >
-                <i className="fa-solid fa-file-import" /> Importar
+                <i className="fa-solid fa-file-import" /> <span className="hidden sm:inline">Importar</span>
               </button>
               <button
                 onClick={descargarEtiquetas}
                 disabled={descargandoEtiquetas}
-                className="dax-btn-secondary text-xs flex items-center gap-1.5 disabled:opacity-50"
+                className="dax-btn-secondary dax-btn-icon text-xs flex items-center gap-1.5 disabled:opacity-50 whitespace-nowrap"
                 title="CSV con una fila por talla para la etiquetadora"
+                aria-label="Descargar etiquetas CSV"
               >
-                <i className={`fa-solid ${descargandoEtiquetas ? 'fa-spinner fa-spin' : 'fa-tags'}`} /> Etiquetas CSV
+                <i className={`fa-solid ${descargandoEtiquetas ? 'fa-spinner fa-spin' : 'fa-tags'}`} />{' '}
+                <span className="hidden sm:inline">Etiquetas CSV</span>
               </button>
               {isHQ && codigosFaltantes > 0 && (
                 <button
                   onClick={generarCodigos}
                   disabled={generandoCodigos}
-                  className="dax-btn-secondary text-xs flex items-center gap-1.5 disabled:opacity-50"
+                  className="dax-btn-secondary dax-btn-icon text-xs flex items-center gap-1.5 disabled:opacity-50 whitespace-nowrap"
                   title="Genera un código de barras propio para cada talla que no tenga"
+                  aria-label={`Generar códigos de barras faltantes (${codigosFaltantes})`}
                 >
                   <i className={`fa-solid ${generandoCodigos ? 'fa-spinner fa-spin' : 'fa-barcode'}`} />{' '}
-                  Generar códigos ({codigosFaltantes})
+                  <span className="hidden sm:inline">Generar códigos </span>({codigosFaltantes})
                 </button>
               )}
               <button
                 onClick={handleNewProductClick}
-                className="dax-btn text-xs flex items-center gap-1.5"
+                aria-label="Nuevo producto"
+                className="dax-btn dax-btn-icon text-xs flex items-center gap-1.5 whitespace-nowrap"
               >
-                <i className="fa-solid fa-plus" /> Nuevo producto
+                <i className="fa-solid fa-plus" /> <span className="hidden sm:inline">Nuevo producto</span>
               </button>
             </>
           )}
           <div className="flex items-center bg-slate-800 rounded-lg border border-slate-700/50 p-0.5">
             <button
               onClick={() => setViewMode('list')}
-              className={`p-1.5 rounded-md transition-colors ${viewMode === 'list' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}
+              className={`dax-btn-icon p-1.5 rounded-md transition-colors ${viewMode === 'list' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}
               title="Vista lista"
+              aria-label="Vista lista"
             >
               <i className="fa-solid fa-list w-4 text-xs" />
             </button>
             <button
               onClick={() => setViewMode('grid')}
-              className={`p-1.5 rounded-md transition-colors ${viewMode === 'grid' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}
+              className={`dax-btn-icon p-1.5 rounded-md transition-colors ${viewMode === 'grid' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}
               title="Vista cuadrícula"
+              aria-label="Vista cuadrícula"
             >
               <i className="fa-solid fa-grip w-4 text-xs" />
             </button>
@@ -1473,21 +1495,26 @@ function ProductsHQView() {
                     )
                   })()}
                 </div>
+                {/* En un teléfono no hay `hover`: con `opacity-0` los botones
+                    existían pero no se veían nunca. Visibles bajo `md`; de
+                    `md` hacia arriba, igual que siempre. */}
                 {canEdit && (
-                  <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute top-2 right-2 flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                     {isBranchEditor && (
                       <button
                         onClick={() => openBranchSettings(p)}
-                        className="w-6 h-6 rounded-full flex items-center justify-center bg-slate-700 border border-slate-600 hover:bg-indigo-600 hover:border-indigo-500"
+                        className="w-6 h-6 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 rounded-full flex items-center justify-center bg-slate-700 border border-slate-600 hover:bg-indigo-600 hover:border-indigo-500"
                         title="Ajustes en mi sucursal"
+                        aria-label="Ajustes en mi sucursal"
                       >
                         <i className="fa-solid fa-sliders text-[9px] text-white" />
                       </button>
                     )}
                     <button
                       onClick={() => openEdit(p)}
-                      className="w-6 h-6 rounded-full flex items-center justify-center bg-slate-700 border border-slate-600 hover:bg-indigo-600 hover:border-indigo-500"
+                      className="w-6 h-6 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 rounded-full flex items-center justify-center bg-slate-700 border border-slate-600 hover:bg-indigo-600 hover:border-indigo-500"
                       title="Editar producto"
+                      aria-label="Editar producto"
                     >
                       <i className="fa-solid fa-pencil text-[9px] text-white" />
                     </button>
@@ -1622,7 +1649,7 @@ function ProductsHQView() {
                               {isBranchEditor && (
                                 <button
                                   onClick={() => openBranchSettings(p)}
-                                  className={`transition-colors p-1 ${isExpanded ? 'text-indigo-400' : 'text-slate-500 hover:text-indigo-400'}`}
+                                  className={`dax-btn-icon transition-colors p-1 ${isExpanded ? 'text-indigo-400' : 'text-slate-500 hover:text-indigo-400'}`}
                                   title={isExpanded ? 'Cerrar ajustes de sucursal' : 'Ajustes en mi sucursal'}
                                 >
                                   <i className={`fa-solid ${isExpanded ? 'fa-chevron-up' : 'fa-sliders'} text-xs`} />
@@ -1630,8 +1657,9 @@ function ProductsHQView() {
                               )}
                               <button
                                 onClick={() => openEdit(p)}
-                                className="transition-colors p-1 text-slate-500 hover:text-indigo-400"
+                                className="dax-btn-icon transition-colors p-1 text-slate-500 hover:text-indigo-400"
                                 title="Editar producto"
+                                aria-label="Editar producto"
                               >
                                 <i className="fa-solid fa-pencil text-xs" />
                               </button>

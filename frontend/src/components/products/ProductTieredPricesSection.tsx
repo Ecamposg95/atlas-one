@@ -1,3 +1,4 @@
+import { claseEtiquetaFila } from '../../utils/formResponsivo'
 import type { PriceRow, ProductErrors } from './types'
 import { emptyPriceRow } from './types'
 
@@ -25,7 +26,7 @@ export function ProductTieredPricesSection({ prices, onChange, errors, help }: P
         <button
           type="button"
           onClick={add}
-          className="flex items-center gap-1 text-[11px] font-bold text-indigo-400 hover:text-indigo-300 px-2 py-0.5 rounded hover:bg-indigo-500/10 transition-colors"
+          className="flex items-center gap-1 text-[11px] font-bold text-indigo-400 hover:text-indigo-300 px-2 py-0.5 rounded hover:bg-indigo-500/10 transition-colors min-h-[44px] sm:min-h-0"
         >
           <i className="fa-solid fa-plus" /> Agregar precio
         </button>
@@ -39,9 +40,14 @@ export function ProductTieredPricesSection({ prices, onChange, errors, help }: P
       ) : (
         <div className="space-y-2">
           {prices.map((p, i) => (
-            <div key={i} className="grid grid-cols-[1fr_90px_110px_28px] gap-2 items-end">
+            // En teléfono la fila se apila a una columna (si no, el campo
+            // Nombre queda en 34 px) y cada campo estrena su etiqueta.
+            <div
+              key={i}
+              className="grid grid-cols-1 sm:grid-cols-[1fr_90px_110px_28px] gap-2 items-end rounded-lg border border-slate-800/70 p-2 sm:rounded-none sm:border-0 sm:p-0"
+            >
               <div>
-                {i === 0 && <label className="block text-[10px] mb-0.5 text-slate-400">Nombre</label>}
+                <label className={`${claseEtiquetaFila(i)} text-slate-400`}>Nombre</label>
                 <input
                   className="dax-input w-full text-xs"
                   value={p.price_name}
@@ -53,7 +59,7 @@ export function ProductTieredPricesSection({ prices, onChange, errors, help }: P
                 )}
               </div>
               <div>
-                {i === 0 && <label className="block text-[10px] mb-0.5 text-slate-400">Mín. piezas</label>}
+                <label className={`${claseEtiquetaFila(i)} text-slate-400`}>Mín. piezas</label>
                 <input
                   className="dax-input w-full text-xs"
                   type="number" min="1"
@@ -65,7 +71,7 @@ export function ProductTieredPricesSection({ prices, onChange, errors, help }: P
                 )}
               </div>
               <div>
-                {i === 0 && <label className="block text-[10px] mb-0.5 text-slate-400">Precio / unidad</label>}
+                <label className={`${claseEtiquetaFila(i)} text-slate-400`}>Precio / unidad</label>
                 <input
                   className="dax-input w-full text-xs"
                   type="number" min="0" step="0.01"
@@ -79,10 +85,12 @@ export function ProductTieredPricesSection({ prices, onChange, errors, help }: P
               <button
                 type="button"
                 onClick={() => remove(i)}
-                className="h-8 w-7 flex items-center justify-center text-slate-500 hover:text-red-400 transition-colors rounded"
+                className="w-full min-h-[44px] sm:w-7 sm:h-8 sm:min-h-0 flex items-center justify-center gap-1.5 rounded border border-slate-700 sm:border-0 text-slate-500 hover:text-red-400 transition-colors"
                 title="Eliminar"
+                aria-label={`Eliminar el precio ${i + 1}`}
               >
                 <i className="fa-solid fa-xmark text-xs" />
+                <span className="text-[11px] font-semibold sm:hidden">Quitar</span>
               </button>
             </div>
           ))}

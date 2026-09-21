@@ -7,6 +7,9 @@ import { Spinner } from '../../components/ui/Spinner'
 import { CatalogKpis } from '../../components/catalog/CatalogKpis'
 import { ProductBranchMatrix } from '../../components/catalog/ProductBranchMatrix'
 import { ProductAuditDrawer } from '../../components/catalog/ProductAuditDrawer'
+import { TablaDesplazable } from '../../components/ui/TablaDesplazable'
+import { useMediaQuery } from '../../hooks/useMediaQuery'
+import { ACCIONES_CATALOGO, accionesDeProducto, type ClaveAccionCatalogo } from './catalogActions'
 import { formatCurrency } from '../../utils/currency'
 import { toast } from '../../store/toastStore'
 import type { Product, Department, Brand } from '../../types/products'
@@ -40,6 +43,11 @@ export function AdminCatalog() {
   const [auditProduct, setAuditProduct] = useState<Product | null>(null)
 
   const debounceRef = useRef<number | null>(null)
+
+  // Bajo `md` la tabla pedía ~1020 px de ancho (7 columnas + hasta 7 botones
+  // de 44 px en la última) y había que desplazarse ~660 px para llegar a
+  // «Editar», momento en el que ya no se veía de qué producto se trataba.
+  const enTarjetas = useMediaQuery('(max-width: 767px)')
 
   const pages = Math.max(1, Math.ceil(total / PAGE_LIMIT))
 
@@ -198,6 +206,39 @@ export function AdminCatalog() {
     }
   }
 
+  const correrAccion = (clave: ClaveAccionCatalogo, product: Product) => {
+    switch (clave) {
+      case 'matriz': return handleMatrix(product)
+      case 'aprobar': return handleApprove(product)
+      case 'rechazar': return handleReject(product)
+      case 'historial': return setAuditProduct(product)
+      case 'editar': return handleEdit(product)
+      case 'duplicar': return handleDuplicate(product)
+      case 'archivar': return handleDelete(product)
+      case 'restaurar': return handleRestore(product)
+    }
+  }
+
+  /** Los mismos botones en la fila de la tabla y en la tarjeta. */
+  const botonesDeAcciones = (product: Product, conTexto: boolean) =>
+    accionesDeProducto(product).map((clave) => {
+      const meta = ACCIONES_CATALOGO[clave]
+      return (
+        <button
+          key={clave}
+          onClick={() => correrAccion(clave, product)}
+          className={`dax-btn-icon p-1.5 rounded-md text-slate-400 ${meta.clase} ${
+            conTexto ? 'inline-flex items-center gap-1.5 px-2.5 text-[11px] font-semibold' : ''
+          }`}
+          title={meta.etiqueta}
+          aria-label={`${meta.etiqueta} — ${product.name}`}
+        >
+          <i className={`fa-solid ${meta.icono}`} />
+          {conTexto && <span>{meta.etiqueta}</span>}
+        </button>
+      )
+    })
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -214,20 +255,20 @@ export function AdminCatalog() {
         <div className="flex items-center gap-2 flex-wrap">
           <Link
             to="/admin/products/new"
-            className="dax-btn-primary text-xs inline-flex items-center gap-1.5"
+            className="dax-btn-primary dax-btn-icon text-xs inline-flex items-center gap-1.5 whitespace-nowrap"
           >
             <i className="fa-solid fa-plus" /> Nuevo producto
           </Link>
           <button
             onClick={handleExport}
-            className="dax-btn-secondary text-xs inline-flex items-center gap-1.5"
+            className="dax-btn-secondary dax-btn-icon text-xs inline-flex items-center gap-1.5 whitespace-nowrap"
             title="Exportar catálogo filtrado a Excel"
           >
             <i className="fa-solid fa-file-excel text-emerald-400" /> Exportar
           </button>
           <Link
             to="/products"
-            className="dax-btn-secondary text-xs inline-flex items-center gap-1.5"
+            className="dax-btn-secondary dax-btn-icon text-xs inline-flex items-center gap-1.5 whitespace-nowrap"
             title="Vista completa con import, packaging y precios escalonados"
           >
             <i className="fa-solid fa-layer-group" /> Vista completa
@@ -246,7 +287,7 @@ export function AdminCatalog() {
       {/* Filtros */}
       <DaxCard>
         <div className="flex flex-wrap gap-3 items-end">
-          <div className="flex-1 min-w-[200px]">
+          <div className="flex-1 basis-full sm:basis-auto sm:min-w-[200px]">
             <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">
               Buscar
             </label>
@@ -262,7 +303,7 @@ export function AdminCatalog() {
             </div>
           </div>
 
-          <div className="min-w-[150px]">
+          <div className="flex-1 basis-[calc(50%-0.375rem)] sm:flex-initial sm:basis-auto sm:min-w-[150px]">
             <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">
               Departamento
             </label>
@@ -278,7 +319,7 @@ export function AdminCatalog() {
             </select>
           </div>
 
-          <div className="min-w-[150px]">
+          <div className="flex-1 basis-[calc(50%-0.375rem)] sm:flex-initial sm:basis-auto sm:min-w-[150px]">
             <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">
               Marca
             </label>
@@ -298,12 +339,12 @@ export function AdminCatalog() {
             <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">
               Aprobación
             </label>
-            <div className="inline-flex rounded-lg bg-slate-900/40 border border-slate-700 p-0.5">
+            <div className="flex flex-wrap rounded-lg bg-slate-900/40 border border-slate-700 p-0.5">
               {(['ALL', 'PENDING', 'APPROVED', 'REJECTED'] as ApprovalFilter[]).map((a) => (
                 <button
                   key={a}
                   onClick={() => setApproval(a)}
-                  className={`px-3 py-1.5 rounded-md text-[11px] font-bold uppercase tracking-wider transition ${
+                  className={`flex-1 sm:flex-none min-h-[44px] sm:min-h-0 px-3 py-1.5 rounded-md text-[11px] font-bold uppercase tracking-wider transition ${
                     approval === a ? 'bg-indigo-500 text-white' : 'text-slate-500 hover:text-white'
                   }`}
                 >
@@ -346,8 +387,35 @@ export function AdminCatalog() {
           </div>
         </DaxCard>
       ) : (
-        <DaxCard>
-          <div className="overflow-x-auto">
+        <DaxCard padding={!enTarjetas}>
+          {enTarjetas ? (
+            /* Una tarjeta por producto: nombre + marca de titular, SKU,
+               departamento, precio y los dos distintivos; las acciones,
+               rotuladas y envolviendo, debajo. */
+            <div className="divide-y divide-slate-800/60">
+              {products.map((p) => (
+                <div key={p.id} className="p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-white break-words">{p.name}</p>
+                      {p.brand_name && <p className="text-[11px] text-slate-500">{p.brand_name}</p>}
+                    </div>
+                    <span className="tabular-nums text-emerald-400 font-semibold whitespace-nowrap">
+                      {formatCurrency(p.price)}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400">
+                    <span className="tabular-nums">{p.sku || '—'}</span>
+                    <span>{p.department_name || '—'}</span>
+                    <BranchBadge count={p.branch_statuses?.filter((s) => s.is_active_pos).length ?? 0} total={p.branch_statuses?.length ?? 0} />
+                    <ApprovalBadge status={p.approval_status || 'APPROVED'} active={p.is_active} />
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">{botonesDeAcciones(p, true)}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+          <TablaDesplazable sangrado={false}>
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-[10px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-800">
@@ -381,77 +449,14 @@ export function AdminCatalog() {
                       <ApprovalBadge status={p.approval_status || 'APPROVED'} active={p.is_active} />
                     </td>
                     <td className="py-2.5 px-3 text-right">
-                      <div className="inline-flex gap-1">
-                        <button
-                          onClick={() => handleMatrix(p)}
-                          className="dax-btn-icon p-1.5 rounded-md text-slate-400 hover:text-indigo-300 hover:bg-indigo-500/10"
-                          title="Matriz de sucursales"
-                        >
-                          <i className="fa-solid fa-store" />
-                        </button>
-                        {p.approval_status === 'PENDING' && (
-                          <>
-                            <button
-                              onClick={() => handleApprove(p)}
-                              className="dax-btn-icon p-1.5 rounded-md text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10"
-                              title="Aprobar"
-                            >
-                              <i className="fa-solid fa-check" />
-                            </button>
-                            <button
-                              onClick={() => handleReject(p)}
-                              className="dax-btn-icon p-1.5 rounded-md text-slate-400 hover:text-amber-400 hover:bg-amber-500/10"
-                              title="Rechazar"
-                            >
-                              <i className="fa-solid fa-xmark" />
-                            </button>
-                          </>
-                        )}
-                        <button
-                          onClick={() => setAuditProduct(p)}
-                          className="dax-btn-icon p-1.5 rounded-md text-slate-400 hover:text-amber-300 hover:bg-amber-500/10"
-                          title="Historial"
-                        >
-                          <i className="fa-solid fa-clock-rotate-left" />
-                        </button>
-                        <button
-                          onClick={() => handleEdit(p)}
-                          className="dax-btn-icon p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-slate-700"
-                          title="Editar"
-                        >
-                          <i className="fa-solid fa-pen-to-square" />
-                        </button>
-                        <button
-                          onClick={() => handleDuplicate(p)}
-                          className="dax-btn-icon p-1.5 rounded-md text-slate-400 hover:text-cyan-300 hover:bg-cyan-500/10"
-                          title="Duplicar"
-                        >
-                          <i className="fa-solid fa-copy" />
-                        </button>
-                        {p.is_active ? (
-                          <button
-                            onClick={() => handleDelete(p)}
-                            className="dax-btn-icon p-1.5 rounded-md text-slate-400 hover:text-rose-400 hover:bg-rose-500/10"
-                            title="Archivar"
-                          >
-                            <i className="fa-solid fa-box-archive" />
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => handleRestore(p)}
-                            className="dax-btn-icon p-1.5 rounded-md text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10"
-                            title="Restaurar"
-                          >
-                            <i className="fa-solid fa-box-open" />
-                          </button>
-                        )}
-                      </div>
+                      <div className="inline-flex gap-1">{botonesDeAcciones(p, false)}</div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
+          </TablaDesplazable>
+          )}
 
           {pages > 1 && (
             <div className="flex items-center justify-between pt-4 mt-3 border-t border-slate-800">

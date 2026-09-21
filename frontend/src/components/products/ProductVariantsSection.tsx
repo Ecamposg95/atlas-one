@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 
+import { useMediaQuery } from '../../hooks/useMediaQuery'
+import { TablaDesplazable } from '../ui/TablaDesplazable'
 import type { ProductErrors } from './types'
 import { buildVariantRows, parseList, type VariantPair, type VariantRow } from './variantMatrix'
 import { usesColors, variantWords } from './variantWords'
@@ -65,6 +67,25 @@ export function ProductVariantsSection({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [baseSku])
 
+  // La tabla y las tarjetas necesitan lo mismo por fila; se calcula una vez.
+  const enTarjetas = useMediaQuery('(max-width: 767px)')
+  const datosFila = (i: number) => {
+    const esPrincipal = firstIsPrincipal && i === 0
+    // Los errores se numeran entre las hermanas: la principal no viaja en
+    // `extra_variants`, así que no tiene índice propio.
+    const n = firstIsPrincipal ? i - 1 : i
+    return {
+      esPrincipal,
+      errSku: esPrincipal ? undefined : errors[`variants.${n}.sku`],
+      errPrecio: esPrincipal ? undefined : errors[`variants.${n}.price`],
+      errStock: esPrincipal ? undefined : errors[`variants.${n}.initial_stock`],
+      errBarcode: esPrincipal ? undefined : errors[`variants.${n}.barcode`],
+      // Mensaje del backend que no apunta a un campo concreto ("indica color
+      // o talla"): va bajo el nombre de la fila.
+      errFila: esPrincipal ? undefined : errors[`variants.${n}`],
+    }
+  }
+
   const conColores = usesColors(existing) || parseList(colors).length > 0
   const palabra = variantWords(conColores)
   const titulo = conColores ? 'Variantes (color / talla)' : 'Tallas'
@@ -89,7 +110,69 @@ export function ProductVariantsSection({
         </label>
       </div>
       {rows.length > 0 && (
-        <div className="overflow-x-auto">
+        <div>
+          {/* Bajo `md` la tabla de 5 columnas con 4 campos pide ~660 px: cada
+              fila pasa a ser una tarjeta con su título (color / talla) y los
+              campos apilados. De `md` hacia arriba, la tabla de siempre. */}
+          {enTarjetas ? (
+            <div className="space-y-3">
+              {rows.map((r, i) => {
+                const d = datosFila(i)
+                return (
+                  <div key={r.key} className="rounded-xl border border-slate-800 bg-slate-900/40 p-3 space-y-2">
+                    <p className="text-xs font-bold text-slate-200">
+                      {[r.color, r.size].filter(Boolean).join(' / ') || '—'}
+                      {d.esPrincipal && <span className="ml-2 text-[10px] font-normal text-indigo-400">principal</span>}
+                      {d.errFila && <span className="block text-[11px] font-normal text-rose-400">{d.errFila}</span>}
+                    </p>
+                    <label className="block">
+                      <span className="text-[10px] text-slate-400">SKU</span>
+                      <input className="dax-input w-full" value={d.esPrincipal ? baseSku : r.sku} disabled={d.esPrincipal}
+                             onChange={(e) => setRow(r.key, { sku: e.target.value, skuTocado: true })} />
+                      {d.esPrincipal && <span className="text-[11px] text-slate-500">SKU base del producto</span>}
+                      {d.errSku && <span className="text-rose-400 text-[11px] block">{d.errSku}</span>}
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="block">
+                        <span className="text-[10px] text-slate-400">Código de barras</span>
+                        {d.esPrincipal
+                          ? <p className="text-[11px] text-slate-500 py-2">el código de arriba</p>
+                          : <>
+                              <input className="dax-input w-full" value={r.barcode} inputMode="numeric"
+                                     onChange={(e) => setRow(r.key, { barcode: e.target.value })} />
+                              {d.errBarcode && <span className="text-rose-400 text-[11px] block">{d.errBarcode}</span>}
+                            </>}
+                      </label>
+                      <label className="block">
+                        <span className="text-[10px] text-slate-400">Precio (vacío = base)</span>
+                        {d.esPrincipal
+                          ? <p className="text-[11px] text-slate-500 py-2">el precio base</p>
+                          : <>
+                              <input className="dax-input w-full" value={r.price} inputMode="decimal"
+                                     onChange={(e) => setRow(r.key, { price: e.target.value })} />
+                              {d.errPrecio && <span className="text-rose-400 text-[11px] block">{d.errPrecio}</span>}
+                            </>}
+                      </label>
+                    </div>
+                    {showInitialStock && (
+                      <label className="block">
+                        <span className="text-[10px] text-slate-400">Existencia inicial</span>
+                        {d.esPrincipal
+                          ? <input className="dax-input w-full" value={principalStock} inputMode="decimal" min="0"
+                                   onChange={(e) => onPrincipalStockChange?.(e.target.value)} />
+                          : <>
+                              <input className="dax-input w-full" value={r.initial_stock} inputMode="decimal" min="0"
+                                     onChange={(e) => setRow(r.key, { initial_stock: e.target.value })} />
+                              {d.errStock && <span className="text-rose-400 text-[11px] block">{d.errStock}</span>}
+                            </>}
+                      </label>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+          <TablaDesplazable sangrado={false}>
           <table className="w-full text-xs">
             <thead>
               <tr className="text-left text-slate-400">
@@ -102,17 +185,7 @@ export function ProductVariantsSection({
             </thead>
             <tbody>
               {rows.map((r, i) => {
-                const esPrincipal = firstIsPrincipal && i === 0
-                // Los errores se numeran entre las hermanas: la principal no
-                // viaja en `extra_variants`, así que no tiene índice propio.
-                const n = firstIsPrincipal ? i - 1 : i
-                const errSku = esPrincipal ? undefined : errors[`variants.${n}.sku`]
-                const errPrecio = esPrincipal ? undefined : errors[`variants.${n}.price`]
-                const errStock = esPrincipal ? undefined : errors[`variants.${n}.initial_stock`]
-                const errBarcode = esPrincipal ? undefined : errors[`variants.${n}.barcode`]
-                // Mensaje del backend que no apunta a un campo concreto
-                // ("indica color o talla"): va bajo el nombre de la fila.
-                const errFila = esPrincipal ? undefined : errors[`variants.${n}`]
+                const { esPrincipal, errSku, errPrecio, errStock, errBarcode, errFila } = datosFila(i)
                 return (
                   <tr key={r.key}>
                     <td className="py-1 pr-2 font-semibold text-slate-200">
@@ -158,6 +231,8 @@ export function ProductVariantsSection({
               })}
             </tbody>
           </table>
+          </TablaDesplazable>
+          )}
           {showInitialStock && (
             <p className="text-[11px] text-slate-500 mt-1">
               Existencia inicial por {conColores ? 'variante' : 'talla'}

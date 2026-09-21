@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { usersApi, type SystemUser, type CreateUserPayload, type UpdateUserPayload } from '../../api/users'
 import { organizationApi, type Branch } from '../../api/organization'
 import { DaxCard } from '../../components/ui/DaxCard'
+import { TablaDesplazable } from '../../components/ui/TablaDesplazable'
 import { Spinner } from '../../components/ui/Spinner'
 import { Badge } from '../../components/ui/Badge'
 import { toast } from '../../store/toastStore'
@@ -126,7 +127,7 @@ export function Users() {
         {loading ? <Spinner text="Cargando usuarios..." /> : users.length === 0 ? (
           <div className="p-12 text-center text-slate-600">Sin usuarios</div>
         ) : (
-          <div className="overflow-x-auto">
+          <TablaDesplazable sangrado={false}>
             <table className="dax-table w-full">
               <thead>
                 <tr>
@@ -147,13 +148,15 @@ export function Users() {
                     <td className="text-slate-400 text-sm">{u.branch_name ?? 'HQ'}</td>
                     <td>
                       <button onClick={() => handleToggle(u)}
-                        className={`text-xs font-semibold ${u.is_active ? 'text-emerald-400' : 'text-slate-600'}`}>
+                        aria-label={u.is_active ? `Desactivar a ${u.username}` : `Activar a ${u.username}`}
+                        className={`dax-btn-icon text-xs font-semibold whitespace-nowrap ${u.is_active ? 'text-emerald-400' : 'text-slate-600'}`}>
                         <i className={`fa-solid ${u.is_active ? 'fa-circle-check' : 'fa-circle-xmark'} mr-1`} />
                         {u.is_active ? 'Activo' : 'Inactivo'}
                       </button>
                     </td>
                     <td>
-                      <button onClick={() => openEdit(u)} className="dax-btn-icon text-slate-500 hover:text-white text-xs">
+                      <button onClick={() => openEdit(u)} aria-label={`Editar a ${u.username}`}
+                        className="dax-btn-icon text-slate-500 hover:text-white text-xs">
                         <i className="fa-solid fa-pen" />
                       </button>
                     </td>
@@ -161,14 +164,14 @@ export function Users() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </TablaDesplazable>
         )}
       </DaxCard>
 
       {/* Modal crear/editar */}
       {modal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setModal(null)}>
-          <div className="dax-card p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+          <div className="dax-card dax-modal p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-lg font-black text-white">{modal === 'create' ? 'Nuevo Usuario' : 'Editar Usuario'}</h3>
               <button onClick={() => setModal(null)} className="dax-btn-icon text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
@@ -188,7 +191,7 @@ export function Users() {
                 <label className="dax-label">{modal === 'edit' ? 'Nueva contraseña (opcional)' : 'Contraseña'}</label>
                 <input type="password" value={form.password} onChange={(e) => f('password', e.target.value)} className="dax-input w-full" />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="dax-label">Rol</label>
                   <select value={form.role} onChange={(e) => f('role', e.target.value)} className="dax-input w-full">
@@ -261,7 +264,7 @@ export function Users() {
               </div>
             </div>
 
-            <div className="flex gap-2 mt-5">
+            <div className="dax-modal-footer -mx-6 px-6 flex gap-2 mt-5">
               <button onClick={() => setModal(null)} className="dax-btn-secondary flex-1">Cancelar</button>
               <button onClick={handleSave} disabled={saving || !form.username || !!errorPin || (modal === 'create' && !form.password)} className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
                 {saving ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Guardar</>}

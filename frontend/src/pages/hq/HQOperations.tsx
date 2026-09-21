@@ -475,7 +475,9 @@ export function HQOperations() {
           </div>
 
           {/* Charts + Branch Matrix */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5" style={{ minHeight: 380 }}>
+          {/* Apilado a una columna el `minHeight` fijo no tiene sentido:
+              solo desde `lg`, donde las tres cajas conviven de lado. */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 lg:min-h-[380px]">
             <div className="dax-card rounded-2xl p-5 border border-white/5 lg:col-span-2 flex flex-col relative overflow-hidden">
               <div className="flex justify-between items-center mb-3">
                 <h3 className="text-xs font-black uppercase text-white tracking-widest flex items-center gap-2">
@@ -516,7 +518,10 @@ export function HQOperations() {
                   placeholder="Buscar sucursal..."
                   className="w-full bg-slate-800/80 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 placeholder-slate-600" />
               </div>
-              <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-slate-900/20">
+              {/* En teléfono la lista fluye y el scroll lo hace la página:
+              dos cajas de scroll interno dentro del scroll de la página
+              dejaban al dedo sin saber cuál mueve (I-4). */}
+              <div className="lg:flex-1 lg:overflow-y-auto overscroll-contain p-3 space-y-2 bg-slate-900/20">
                 {branches.length === 0 ? (
                   <div className="text-xs text-slate-600 italic p-4 text-center">
                     {branchesAll.length === 0 ? 'No hay sucursales configuradas.' : 'Sin resultados.'}
@@ -589,7 +594,7 @@ export function HQOperations() {
                         const pct = (p.value / topProductsRevenue) * 100
                         return (
                           <tr key={i} className="hover:bg-slate-800/60 transition group">
-                            <td className="px-3 py-3 font-bold text-white group-hover:text-emerald-400 transition text-xs truncate max-w-[140px]">{p.name}</td>
+                            <td className="px-3 py-3 font-bold text-white group-hover:text-emerald-400 transition text-xs truncate max-w-none md:max-w-[140px]">{p.name}</td>
                             <td className="px-3 py-3 text-right font-mono text-emerald-400 font-bold text-xs">{formatCurrency(p.value)}</td>
                             <td className="px-3 py-3 text-right">
                               <div className="flex items-center justify-end gap-2">
@@ -620,7 +625,7 @@ export function HQOperations() {
                   </button>
                 )}
               </div>
-              <div className="space-y-3 max-h-64 overflow-y-auto">
+              <div className="space-y-3 lg:max-h-64 lg:overflow-y-auto overscroll-contain">
                 {alertsByType.length === 0 ? (
                   <div className="text-center text-xs text-slate-600 py-4 italic flex items-center justify-center gap-2">
                     <i className="fas fa-check-circle text-emerald-500" /> All Systems Nominal.

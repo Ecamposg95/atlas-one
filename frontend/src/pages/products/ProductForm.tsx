@@ -371,15 +371,15 @@ export function ProductForm() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <i className={`${iconCls} text-indigo-400 text-xl`} />
-        <h1 className="text-2xl font-black text-white">{title}</h1>
+        <h1 className="text-xl sm:text-2xl font-black text-white">{title}</h1>
         {!isAdmin && user?.branch_name && (
           <span className="text-xs text-slate-500">· sucursal {user.branch_name}</span>
         )}
       </div>
       <DaxCard>
-        <div className="p-4 space-y-6">
+        <div className="p-0 sm:p-4 space-y-6">
           {avisoPrincipal && (
             <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
               {avisoPrincipal}
@@ -429,12 +429,12 @@ export function ProductForm() {
             <ProductVariantsEditor product={loaded} onChanged={setLoaded} />
           )}
 
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800/60">
-            <button type="button" className="dax-btn-secondary text-xs"
+          <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center sm:justify-end gap-2 pt-2 border-t border-slate-800/60">
+            <button type="button" className="dax-btn-secondary text-xs min-h-[44px] sm:min-h-0 justify-center"
               onClick={() => navigate('/products')} disabled={submitting}>
               Cancelar
             </button>
-            <button type="button" className="dax-btn-primary text-xs inline-flex items-center gap-1.5"
+            <button type="button" className="dax-btn-primary text-xs inline-flex items-center justify-center gap-1.5 min-h-[44px] sm:min-h-0"
               onClick={handleSubmit} disabled={submitting}>
               {submitting ? <Spinner size="sm" /> : <i className="fa-solid fa-save" />}
               {cta}

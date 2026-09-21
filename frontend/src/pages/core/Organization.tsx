@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { organizationApi, type Organization, type Branch, type BranchCreate, type ExchangeRateInfo } from '../../api/organization'
 import { DaxCard } from '../../components/ui/DaxCard'
+import { TablaDesplazable } from '../../components/ui/TablaDesplazable'
 import { Spinner } from '../../components/ui/Spinner'
 import { Badge } from '../../components/ui/Badge'
 import { toast } from '../../store/toastStore'
@@ -175,10 +176,10 @@ export function Organization() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-slate-800/50 p-1 rounded-lg w-fit">
+      <div className="flex flex-wrap gap-1 bg-slate-800/50 p-1 rounded-lg w-full sm:w-fit">
         {(['org', 'branches'] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-colors ${tab === t ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}>
+            className={`flex-1 sm:flex-none min-h-[44px] sm:min-h-0 px-4 py-1.5 rounded-md text-sm font-semibold transition-colors ${tab === t ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}>
             {t === 'org' ? 'Datos de Empresa' : `Sucursales (${branches.length})`}
           </button>
         ))}
@@ -529,7 +530,7 @@ export function Organization() {
             {branches.length === 0 ? (
               <div className="p-12 text-center text-slate-600">Sin sucursales</div>
             ) : (
-              <div className="overflow-x-auto">
+              <TablaDesplazable sangrado={false}>
                 <table className="dax-table w-full">
                   <thead>
                     <tr>
@@ -553,21 +554,27 @@ export function Organization() {
                             {b.is_active ? 'Activa' : 'Inactiva'}
                           </Badge>
                         </td>
-                        <td className="flex gap-1">
-                          <button onClick={() => openEditBranch(b)} className="dax-btn-icon text-slate-500 hover:text-white text-xs">
-                            <i className="fa-solid fa-pen" />
-                          </button>
-                          {!b.is_headquarters && (
-                            <button onClick={() => deleteBranch(b)} className="dax-btn-icon text-slate-600 hover:text-red-400 text-xs ml-1">
-                              <i className="fa-solid fa-trash" />
+                        {/* El `flex` iba en el `<td>`: la celda dejaba de ser
+                            `table-cell` y se salía del reparto de columnas. */}
+                        <td className="whitespace-nowrap">
+                          <div className="flex gap-1">
+                            <button onClick={() => openEditBranch(b)} aria-label={`Editar ${b.name}`}
+                              className="dax-btn-icon text-slate-500 hover:text-white text-xs">
+                              <i className="fa-solid fa-pen" />
                             </button>
-                          )}
+                            {!b.is_headquarters && (
+                              <button onClick={() => deleteBranch(b)} aria-label={`Eliminar ${b.name}`}
+                                className="dax-btn-icon text-slate-600 hover:text-red-400 text-xs ml-1">
+                                <i className="fa-solid fa-trash" />
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </TablaDesplazable>
             )}
           </DaxCard>
         </div>
@@ -576,7 +583,7 @@ export function Organization() {
       {/* Modal sucursal */}
       {branchModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setBranchModal(null)}>
-          <div className="dax-card p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+          <div className="dax-card dax-modal p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-lg font-black text-white">{branchModal === 'create' ? 'Nueva Sucursal' : 'Editar Sucursal'}</h3>
               <button onClick={() => setBranchModal(null)} className="dax-btn-icon text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
@@ -601,7 +608,7 @@ export function Organization() {
                 <input value={branchForm.address} onChange={(e) => bf('address', e.target.value)} className="dax-input w-full" />
               </div>
             </div>
-            <div className="flex gap-2 mt-5">
+            <div className="dax-modal-footer -mx-6 px-6 flex gap-2 mt-5">
               <button onClick={() => setBranchModal(null)} className="dax-btn-secondary flex-1">Cancelar</button>
               <button onClick={saveBranch} disabled={branchSaving || !branchForm.name} className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
                 {branchSaving ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Guardar</>}

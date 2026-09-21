@@ -4,6 +4,7 @@ import { productsApi } from '../../api/products'
 import { inventoryApi } from '../../api/inventory'
 import { organizationApi, type Branch } from '../../api/organization'
 import { DaxCard } from '../../components/ui/DaxCard'
+import { TablaDesplazable } from '../../components/ui/TablaDesplazable'
 import { Spinner } from '../../components/ui/Spinner'
 import { toast } from '../../store/toastStore'
 import type { Product } from '../../types/products'
@@ -104,6 +105,7 @@ export function Inventory() {
 
       {!selected && rows.length > 0 && (
         <DaxCard padding={false}>
+          <TablaDesplazable sangrado={false}>
           <table className="dax-table w-full">
             <thead><tr><th>SKU</th><th>Producto</th><th className="text-right">Precio</th><th className="text-right">Stock</th><th></th></tr></thead>
             <tbody>
@@ -125,6 +127,7 @@ export function Inventory() {
               ))}
             </tbody>
           </table>
+          </TablaDesplazable>
         </DaxCard>
       )}
 
@@ -182,7 +185,7 @@ export function Inventory() {
 
       {modal && selected && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setModal(false)}>
-          <div className="dax-card p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+          <div className="dax-card dax-modal p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-black text-white">Ajuste de Stock</h3>
               <button onClick={() => setModal(false)} className="text-slate-500 hover:text-white"><i className="fa-solid fa-xmark" /></button>
@@ -207,7 +210,7 @@ export function Inventory() {
                   className="dax-input w-full" placeholder="Conteo físico, merma..." />
               </div>
             </div>
-            <div className="flex gap-2 mt-4">
+            <div className="dax-modal-footer -mx-6 px-6 flex gap-2 mt-4">
               <button onClick={() => setModal(false)} className="dax-btn-secondary flex-1">Cancelar</button>
               <button onClick={handleAdjust} disabled={adjSaving || !adjQty || !adjReason || !adjBranch} className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
                 {adjSaving ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Ajustar</>}

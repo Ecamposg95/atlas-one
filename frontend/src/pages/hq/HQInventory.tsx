@@ -213,7 +213,7 @@ export function HQInventory() {
       {/* Modal ajuste */}
       {adjustModal && selected && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setAdjustModal(false)}>
-          <div className="dax-card p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+          <div className="dax-card dax-modal p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-black text-white">Ajuste de Inventario</h3>
               <button onClick={() => setAdjustModal(false)} className="dax-btn-icon text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
@@ -238,7 +238,7 @@ export function HQInventory() {
                   placeholder="Conteo físico, merma, etc." className="dax-input w-full" />
               </div>
             </div>
-            <div className="flex gap-2 mt-4">
+            <div className="dax-modal-footer -mx-6 px-6 flex gap-2 mt-4">
               <button onClick={() => setAdjustModal(false)} className="dax-btn-secondary flex-1">Cancelar</button>
               <button onClick={handleAdjust} disabled={adjSaving || !adjQty || !adjReason || !adjBranch} className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
                 {adjSaving ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Ajustar</>}

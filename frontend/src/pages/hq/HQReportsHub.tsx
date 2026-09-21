@@ -313,7 +313,7 @@ export function HQReportsHub() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 items-center">
-        <div className="flex items-center gap-1 bg-slate-800/40 rounded-lg p-1 border border-slate-700/50">
+        <div className="flex flex-wrap items-center gap-1 bg-slate-800/40 rounded-lg p-1 border border-slate-700/50">
           {PRESETS.map((p) => (
             <button
               key={p.label}
