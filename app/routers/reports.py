@@ -6,7 +6,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
 from decimal import Decimal
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from typing import List, Dict, Any, Optional
 from zoneinfo import ZoneInfo
 
@@ -144,8 +144,15 @@ def get_daily_summary(
         pagos[PaymentMethod.CASH] -= Decimal(str(vuelto_del_dia))
 
     # 4. Cálculo de Utilidad Bruta (Venta - Costo)
+    # `coalesce(unit_cost, 0)`: en SQL cualquier aritmética con NULL da NULL y
+    # SUM lo ignora, así que una línea con costo desconocido (catálogos
+    # importados: Imaltzin) desaparecía ENTERA de la utilidad — ni su margen
+    # ni su ingreso. Auditoría A-8.
     profit_data = db.query(
-        func.sum(SalesLineItem.total_line - (SalesLineItem.unit_cost * SalesLineItem.quantity))
+        func.sum(
+            SalesLineItem.total_line
+            - (func.coalesce(SalesLineItem.unit_cost, 0) * SalesLineItem.quantity)
+        )
     ).join(SalesDocument).filter(
         SalesDocument.organization_id == org_id,
         func.date(_mx(SalesDocument.created_at)) == target_date,
@@ -228,7 +235,11 @@ def get_aging_report(
     Calcula la antigüedad de saldos: Clasifica la deuda de los clientes 
     en periodos de 30, 60, 90 y +90 días.
     """
-    now = datetime.now()
+    # `created_at` es TIMESTAMPTZ: en Postgres vuelve con tzinfo y restarle un
+    # `datetime.now()` naive revienta con TypeError (500). En SQLite vuelve
+    # naive, por eso la suite no lo veía. Se normalizan ambos lados a UTC.
+    # Auditoría A-9.
+    now = datetime.now(timezone.utc)
     # 1. Obtener solo clientes que tengan saldo deudor actual
     debtor_customers = db.query(Customer).filter(
         Customer.organization_id == org_id,
@@ -256,7 +267,12 @@ def get_aging_report(
         ).all()
 
         for entry in ledger_entries:
-            days_old = (now - entry.created_at).days
+            creado = entry.created_at
+            if creado is None:
+                continue
+            if creado.tzinfo is None:
+                creado = creado.replace(tzinfo=timezone.utc)
+            days_old = (now - creado).days
 
             if days_old <= 30:
                 buckets["current"] += entry.amount
