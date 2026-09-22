@@ -28,13 +28,39 @@ describe('buildSaleItems', () => {
 
   it('expande una caja a piezas y conserva la variante', () => {
     const caja = pieza({
-      cart_key: 'p1::caja::t9', quantity: 1, price: 1000,
+      cart_key: 'p1::caja::t9', quantity: 1, price: 1200, subtotal: 1200,
       prices: [{ id: 't9', price_name: 'Caja', min_quantity: 12, unit_price: 100, linked_package_id: null }],
     })
     const [it] = buildSaleItems([caja], 0)
     expect(it.quantity).toBe(12)
     expect(it.unit_price).toBe(100)
     expect(it.variant_id).toBe('v-m')
+  })
+
+  // Regresión #1: el precio real cobrado (c.price) puede diferir del
+  // `unit_price` crudo del tier cuando la caja tiene un paquete vinculado con
+  // precio propio, o cuando la cajera fuerza un precio con "Caja libre". El
+  // backend exige que unit_price*quantity coincida con lo cobrado (±$0.01)
+  // para pagos no-CASH, así que hay que mandar el precio real, no el del tier.
+  it('usa el precio real de la caja (paquete vinculado o forzado), no el crudo del tier', () => {
+    const cajaConPaquete = pieza({
+      cart_key: 'p1::caja::t9', quantity: 2, price: 950, subtotal: 1900,
+      prices: [{ id: 't9', price_name: 'Caja', min_quantity: 12, unit_price: 100, linked_package_id: 'pk1' }],
+    })
+    const [it] = buildSaleItems([cajaConPaquete], 0)
+    expect(it.quantity).toBe(24) // 2 cajas * 12 piezas
+    expect(it.unit_price).toBeCloseTo(950 / 12) // no 100 (tier crudo)
+    expect(it.subtotal).toBeCloseTo(1900)
+  })
+
+  it('respeta el descuento global también en cajas con precio forzado', () => {
+    const cajaForzada = pieza({
+      cart_key: 'p1::caja::t9', quantity: 1, price: 900, subtotal: 900,
+      prices: [{ id: 't9', price_name: 'Caja', min_quantity: 12, unit_price: 100, linked_package_id: null }],
+    })
+    const [it] = buildSaleItems([cajaForzada], 10)
+    expect(it.unit_price).toBeCloseTo((900 / 12) * 0.9)
+    expect(it.subtotal).toBeCloseTo(900 * 0.9)
   })
 
   it('sin variant_id sigue funcionando por sku (tiendas sin variantes)', () => {

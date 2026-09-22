@@ -36,9 +36,14 @@ export function buildSaleItems(cart: CartItem[], globalDiscount: number): SaleIt
       const cajaTier = c.prices?.find((p) => p.id === tierId)
       if (cajaTier && cajaTier.min_quantity > 0) {
         const totalPiezas = c.quantity * cajaTier.min_quantity
-        const unitPrice = cajaTier.unit_price * gdFactor
+        // El precio real cobrado es c.price (precio de la caja tal cual se
+        // muestra/cobra en pantalla: puede venir de un paquete vinculado o de
+        // "Caja libre" en PricePickerPopover), NO el `unit_price` crudo del
+        // tier — ambos pueden diferir. Se deriva el precio por pieza desde ahí
+        // para que unit_price*quantity coincida con lo que el backend valida.
+        const unitPrice = (c.price / cajaTier.min_quantity) * gdFactor
         return { ...base, unit_price: unitPrice, price: unitPrice, quantity: totalPiezas,
-                 subtotal: totalPiezas * unitPrice * (1 - c.discount / 100) }
+                 subtotal: c.subtotal * gdFactor }
       }
     }
     const unitPrice = c.price * gdFactor
