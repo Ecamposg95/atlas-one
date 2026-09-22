@@ -33,6 +33,7 @@ const HQBranchDetail  = lazy(() => import('./pages/hq/HQBranchDetail').then(m =>
 // Catalog / Core
 const AdminCatalog    = lazy(() => import('./pages/core/AdminCatalog').then(m => ({ default: m.AdminCatalog })))
 const StoreScanner    = lazy(() => import('./pages/scanner/StoreScanner').then(m => ({ default: m.StoreScanner })))
+const Labels          = lazy(() => import('./pages/labels/Labels').then(m => ({ default: m.Labels })))
 const Departments     = lazy(() => import('./pages/core/Departments').then(m => ({ default: m.Departments })))
 const Brands          = lazy(() => import('./pages/core/Brands').then(m => ({ default: m.Brands })))
 const Users           = lazy(() => import('./pages/core/Users').then(m => ({ default: m.Users })))
@@ -304,6 +305,17 @@ export default function App() {
             element={
               <RequireRole roles={['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO']}>
                 <Suspense fallback={<PageLoader />}><StoreScanner /></Suspense>
+              </RequireRole>
+            }
+          />
+          {/* Etiquetas — quien etiqueta es quien acomoda el piso, así que entra
+              desde CAJERO. El módulo `labels` gatea el acceso real en el
+              backend (`require_module`); aquí solo se filtra por rol. */}
+          <Route
+            path="labels"
+            element={
+              <RequireRole roles={['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO']}>
+                <Suspense fallback={<PageLoader />}><Labels /></Suspense>
               </RequireRole>
             }
           />
