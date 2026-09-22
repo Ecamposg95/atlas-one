@@ -317,7 +317,7 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
               ? (matched ? Number(matched.stock_total ?? 0) : p.variants!.reduce((a, v) => a + Number(v.stock_total ?? 0), 0))
               : stockNum(p)
             const price = Number(p.price)
-            const inCart = cartQtyUnits(p.id)
+            const inCart = cartQtyUnits(p.id, p.matched_variant_id)
             const atLimit = stock > 0 && inCart >= stock
             const isLimit = limitId === p.id
             const isInCart = inCart > 0

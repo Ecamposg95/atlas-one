@@ -139,8 +139,11 @@ export function AdminCatalog() {
 
   const handleExport = async () => {
     try {
+      // `listFilters` (no `currentFilters`) es el que trae `include_inactive`:
+      // exportar debe respetar el checkbox "Incluir archivados" tal como se ve
+      // en la tabla, no el conjunto sin filtrar.
       await productsApi.downloadTemplate({
-        ...currentFilters,
+        ...listFilters,
       })
       toast.success('Descarga iniciada.')
     } catch (e: any) {

@@ -53,6 +53,13 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     if (org) {
       localStorage.setItem('atlas_org_id', String(org.id))
       localStorage.setItem('atlas_org', JSON.stringify(org))
+    } else {
+      // Sin `else` esto sobrevivía a un login sin organización (SUPERADMIN):
+      // el contexto de org de la sesión anterior (otro usuario, otro equipo
+      // compartido) quedaba en localStorage y el backend confía en el header
+      // X-Organization-ID sin verificar membresía para SUPERADMIN.
+      localStorage.removeItem('atlas_org_id')
+      localStorage.removeItem('atlas_org')
     }
     set({ user, token, org, isAuthenticated: true, foreignSession: false })
   },

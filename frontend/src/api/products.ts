@@ -429,12 +429,14 @@ export const productsApi = {
   },
 
   updateBrand: async (id: string, payload: { name?: string; logo_url?: string }): Promise<Brand> => {
-    const { data } = await client.put<Brand>(`/brands/${id}/`, payload)
+    // Sin barra final: el backend registra PUT /brands/{id} (sin `/`) y no hay
+    // redirect 307 en ese sentido — con `/` cae en el catch-all SPA y da 405.
+    const { data } = await client.put<Brand>(`/brands/${id}`, payload)
     return data
   },
 
   deleteBrand: async (id: string): Promise<void> => {
-    await client.delete(`/brands/${id}/`)
+    await client.delete(`/brands/${id}`)
   },
 
   getDepartments: async (): Promise<Department[]> => {
@@ -448,12 +450,13 @@ export const productsApi = {
   },
 
   updateDepartment: async (id: string, payload: { name?: string }): Promise<Department> => {
-    const { data } = await client.put<Department>(`/departments/${id}/`, payload)
+    // Igual que brands: el backend no tiene la barra final en PUT/DELETE.
+    const { data } = await client.put<Department>(`/departments/${id}`, payload)
     return data
   },
 
   deleteDepartment: async (id: string): Promise<void> => {
-    await client.delete(`/departments/${id}/`)
+    await client.delete(`/departments/${id}`)
   },
 
   posSearch: async (

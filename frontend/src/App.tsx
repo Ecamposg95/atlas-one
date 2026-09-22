@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
 import { useEnabledModulesStore } from './store/enabledModulesStore'
 import { ThemeProvider } from './context/ThemeContext'
@@ -40,6 +40,15 @@ const Organization    = lazy(() => import('./pages/core/Organization').then(m =>
 const Startup         = lazy(() => import('./pages/core/Startup').then(m => ({ default: m.Startup })))
 const AdminProductCreate = lazy(() => import('./pages/admin/AdminProductCreate').then(m => ({ default: m.AdminProductCreate })))
 const ProductForm = lazy(() => import('./pages/products/ProductForm').then(m => ({ default: m.ProductForm })))
+
+// `key={id}` fuerza remount al navegar entre ediciones de productos distintos
+// (y, junto con la ruta `products/new` que usa key="new", entre editar y
+// crear) — sin esto React Router reutiliza la instancia de ProductForm y el
+// formulario hereda los datos del producto anterior.
+function ProductFormEditRoute() {
+  const { id } = useParams<{ id: string }>()
+  return <ProductForm key={id} />
+}
 
 // Ventas
 const SalesHistory    = lazy(() => import('./pages/sales/SalesHistory').then(m => ({ default: m.SalesHistory })))
@@ -324,12 +333,15 @@ export default function App() {
           <Route path="products"  element={<Suspense fallback={<PageLoader />}><Products /></Suspense>} />
           <Route path="products/new" element={
             <RequireRole roles={['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO']}>
-              <Suspense fallback={<PageLoader />}><ProductForm /></Suspense>
+              {/* key fuerza remount al alternar con products/:id/edit — sin esto
+                  React Router reutiliza la instancia y "Nuevo producto" hereda
+                  los datos del producto que se estaba editando. */}
+              <Suspense fallback={<PageLoader />}><ProductForm key="new" /></Suspense>
             </RequireRole>
           } />
           <Route path="products/:id/edit" element={
             <RequireRole roles={['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO']}>
-              <Suspense fallback={<PageLoader />}><ProductForm /></Suspense>
+              <Suspense fallback={<PageLoader />}><ProductFormEditRoute /></Suspense>
             </RequireRole>
           } />
 
