@@ -104,26 +104,26 @@ class TestSaldoInicial:
         )
 
     def test_no_se_puede_corregir_con_un_abono_ya_cobrado_en_la_sesion(
-        self, client, db, org, branch_a, cajero_a, auth_cajero_a
+        self, client, db, org, branch_a, admin_a, auth_admin_a
     ):
         """Ronda de correcciones final (MAYOR-2): el guard de "caja limpia"
         solo miraba `CashMovement` y `SalesDocument.cash_session_id`. Un abono
         de cliente cobrado con esta caja abierta no genera movimiento y su
         documento sigue apuntando al turno viejo, asi que la caja parecia
         limpia y el fondo se podia reescribir — enmascarando un faltante por
-        el mismo monto: el cajero se guarda los $500, baja el fondo de 1000 a
-        500, y el cierre cuadra.
+        el mismo monto: quien cobra se guarda los $500, baja el fondo de 1000
+        a 500, y el cierre cuadra.
         """
         from app.models.sales import DocumentStatus, SalesDocument
         from app.modules.customers.models import Customer
         from app.services.cash_reconciliation import compute_expected_cash
 
-        h = {**auth_cajero_a, "X-Organization-ID": str(org.id)}
+        h = {**auth_admin_a, "X-Organization-ID": str(org.id)}
         sesion_id = client.post("/api/cash/open", json={"opening_balance": "1000.00"},
                                 headers=h).json()["id"]
 
         # Venta a credito de un turno viejo (documento atado a OTRA sesion).
-        vieja = CashSession(user_id=cajero_a.id, branch_id=branch_a.id,
+        vieja = CashSession(user_id=admin_a.id, branch_id=branch_a.id,
                             organization_id=org.id, opening_balance=Decimal("0"),
                             status="CLOSED")
         db.add(vieja); db.flush()
@@ -132,7 +132,7 @@ class TestSaldoInicial:
                            current_balance=Decimal("500"))
         db.add(cliente); db.flush()
         venta = SalesDocument(
-            organization_id=org.id, branch_id=branch_a.id, seller_id=cajero_a.id,
+            organization_id=org.id, branch_id=branch_a.id, seller_id=admin_a.id,
             folio=5001, series="A", subtotal=Decimal("500"), tax_amount=Decimal("0"),
             total_amount=Decimal("500"), status=DocumentStatus.PENDING,
             doc_type="ORDER", cash_session_id=vieja.id, customer_id=cliente.id,
@@ -165,22 +165,22 @@ class TestSaldoInicial:
         assert Decimal(str(sesion.opening_balance)) == Decimal("1000.00")
 
     def test_un_abono_con_tarjeta_no_bloquea_la_correccion_del_fondo(
-        self, client, db, org, branch_a, cajero_a, auth_cajero_a
+        self, client, db, org, branch_a, admin_a, auth_admin_a
     ):
         """Ronda de correcciones 2 (MENOR): el guard de arriba usa el mismo
         criterio de atribucion que el corte, que no distingue metodo de pago.
         Un abono con tarjeta no entra al cajon, asi que corregir el fondo no
-        puede enmascarar ningun faltante — y el guard le quitaba al cajero la
-        unica via legitima de arreglar un fondo mal capturado.
+        puede enmascarar ningun faltante — y el guard le quitaba a quien abrio la caja
+        la unica via legitima de arreglar un fondo mal capturado.
         """
         from app.models.sales import DocumentStatus, SalesDocument
         from app.modules.customers.models import Customer
 
-        h = {**auth_cajero_a, "X-Organization-ID": str(org.id)}
+        h = {**auth_admin_a, "X-Organization-ID": str(org.id)}
         sesion_id = client.post("/api/cash/open", json={"opening_balance": "1000.00"},
                                 headers=h).json()["id"]
 
-        vieja = CashSession(user_id=cajero_a.id, branch_id=branch_a.id,
+        vieja = CashSession(user_id=admin_a.id, branch_id=branch_a.id,
                             organization_id=org.id, opening_balance=Decimal("0"),
                             status="CLOSED")
         db.add(vieja); db.flush()
@@ -189,7 +189,7 @@ class TestSaldoInicial:
                            current_balance=Decimal("500"))
         db.add(cliente); db.flush()
         venta = SalesDocument(
-            organization_id=org.id, branch_id=branch_a.id, seller_id=cajero_a.id,
+            organization_id=org.id, branch_id=branch_a.id, seller_id=admin_a.id,
             folio=5002, series="A", subtotal=Decimal("500"), tax_amount=Decimal("0"),
             total_amount=Decimal("500"), status=DocumentStatus.PENDING,
             doc_type="ORDER", cash_session_id=vieja.id, customer_id=cliente.id,

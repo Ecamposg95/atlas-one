@@ -53,7 +53,7 @@ def _abonar(client, auth, customer, venta, amount, method):
 
 
 def test_ticket_de_sesion_no_se_reescribe_por_liquidacion_en_otro_turno(
-    client, db, org, branch_a, cajero_a, auth_cajero_a
+    client, db, org, branch_a, admin_a, auth_admin_a
 ):
     """`get_session_audit_data`: abono en turno 1 (TRANSFER y CASH), turno 1
     cerrado, liquidacion del resto en turno 2. El ticket del turno 1 no debe
@@ -72,13 +72,13 @@ def test_ticket_de_sesion_no_se_reescribe_por_liquidacion_en_otro_turno(
     )
     db.add_all([customer_transfer, customer_cash]); db.flush()
 
-    sesion_1 = _abrir_caja(db, org, branch_a, cajero_a)
-    venta_transfer = _venta_pendiente(db, org, branch_a, cajero_a, sesion_1, customer_transfer, "100.00", 5001)
-    venta_cash = _venta_pendiente(db, org, branch_a, cajero_a, sesion_1, customer_cash, "100.00", 5002)
+    sesion_1 = _abrir_caja(db, org, branch_a, admin_a)
+    venta_transfer = _venta_pendiente(db, org, branch_a, admin_a, sesion_1, customer_transfer, "100.00", 5001)
+    venta_cash = _venta_pendiente(db, org, branch_a, admin_a, sesion_1, customer_cash, "100.00", 5002)
 
     # Abonos parciales en el turno 1: 40 de cada uno.
-    _abonar(client, auth_cajero_a, customer_transfer, venta_transfer, "40", "TRANSFER")
-    _abonar(client, auth_cajero_a, customer_cash, venta_cash, "40", "CASH")
+    _abonar(client, auth_admin_a, customer_transfer, venta_transfer, "40", "TRANSFER")
+    _abonar(client, auth_admin_a, customer_cash, venta_cash, "40", "CASH")
 
     audit_1_antes = get_session_audit_data(db, sesion_1.id)
     assert audit_1_antes["payments"]["transfer"] == {"total": 40.0, "count": 1}
@@ -87,14 +87,14 @@ def test_ticket_de_sesion_no_se_reescribe_por_liquidacion_en_otro_turno(
     # El turno 1 cierra.
     close_resp = client.post(
         "/api/cash/close", json={"closing_balance": "40.00"},
-        headers={**auth_cajero_a, "X-Organization-ID": str(org.id)},
+        headers={**auth_admin_a, "X-Organization-ID": str(org.id)},
     )
     assert close_resp.status_code in (200, 201), close_resp.text
 
     # Turno 2: liquidacion del resto (60 de cada uno).
-    sesion_2 = _abrir_caja(db, org, branch_a, cajero_a)
-    _abonar(client, auth_cajero_a, customer_transfer, venta_transfer, "60", "TRANSFER")
-    _abonar(client, auth_cajero_a, customer_cash, venta_cash, "60", "CASH")
+    sesion_2 = _abrir_caja(db, org, branch_a, admin_a)
+    _abonar(client, auth_admin_a, customer_transfer, venta_transfer, "60", "TRANSFER")
+    _abonar(client, auth_admin_a, customer_cash, venta_cash, "60", "CASH")
 
     db.refresh(venta_transfer); db.refresh(venta_cash)
     assert venta_transfer.status == DocumentStatus.PAID
@@ -122,7 +122,7 @@ def test_ticket_de_sesion_no_se_reescribe_por_liquidacion_en_otro_turno(
 
 
 def test_resumen_de_sucursal_no_se_reescribe_por_liquidacion_en_otro_turno(
-    client, db, org, branch_a, cajero_a, auth_cajero_a, gerente_a, auth_gerente_a
+    client, db, org, branch_a, admin_a, auth_admin_a, gerente_a, auth_gerente_a
 ):
     """`get_branch_cash_summary`: mismo escenario, endpoint de resumen de
     sucursal que consumen gerentes/admin (`/api/cash/branch-summary`)."""
@@ -132,19 +132,19 @@ def test_resumen_de_sucursal_no_se_reescribe_por_liquidacion_en_otro_turno(
     )
     db.add(customer); db.flush()
 
-    sesion_1 = _abrir_caja(db, org, branch_a, cajero_a)
-    venta = _venta_pendiente(db, org, branch_a, cajero_a, sesion_1, customer, "100.00", 5003)
+    sesion_1 = _abrir_caja(db, org, branch_a, admin_a)
+    venta = _venta_pendiente(db, org, branch_a, admin_a, sesion_1, customer, "100.00", 5003)
 
-    _abonar(client, auth_cajero_a, customer, venta, "40", "TRANSFER")
+    _abonar(client, auth_admin_a, customer, venta, "40", "TRANSFER")
 
     close_resp = client.post(
         "/api/cash/close", json={"closing_balance": "0.00"},
-        headers={**auth_cajero_a, "X-Organization-ID": str(org.id)},
+        headers={**auth_admin_a, "X-Organization-ID": str(org.id)},
     )
     assert close_resp.status_code in (200, 201), close_resp.text
 
-    sesion_2 = _abrir_caja(db, org, branch_a, cajero_a)
-    _abonar(client, auth_cajero_a, customer, venta, "60", "TRANSFER")
+    sesion_2 = _abrir_caja(db, org, branch_a, admin_a)
+    _abonar(client, auth_admin_a, customer, venta, "60", "TRANSFER")
 
     db.refresh(venta)
     assert venta.status == DocumentStatus.PAID

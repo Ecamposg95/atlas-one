@@ -9,6 +9,7 @@ import { CustomerFormModal } from './CustomerFormModal'
 import { toast } from '../../store/toastStore'
 import { confirm as confirmDialog } from '../../components/ui/ConfirmDialog'
 import { ErrorState } from '../../components/ui/ErrorState'
+import { useAuthStore } from '../../store/authStore'
 
 interface PayModal { id: number; name: string }
 
@@ -18,6 +19,14 @@ const apiErrorMessage = (err: unknown, fallback: string) => {
 }
 
 export function Customers() {
+  // Borrar un cliente y registrar un abono son de administrador/dueño; la
+  // cajera consulta, da de alta y edita. El backend responde 403 en esos dos
+  // endpoints (app/modules/customers/router.py), así que esconder los botones
+  // evita ofrecer algo que va a fallar — no es el candado.
+  const user = useAuthStore((s) => s.user)
+  // Borrar un cliente es de administración; recibir un abono es cobrar en el
+  // mostrador y lo hace quien tiene el turno de caja abierto.
+  const puedeBorrar = user?.role === 'ADMINISTRADOR' || user?.role === 'DUEÑO'
   const [customers, setCustomers] = useState<Customer[]>([])
   const [stats, setStats] = useState<CustomerStats | null>(null)
   const [loading, setLoading] = useState(true)
@@ -225,7 +234,7 @@ export function Customers() {
                   className="text-slate-500 hover:text-white" title="Editar">
                   <i className="fa-solid fa-pen" />
                 </button>
-                <button
+                {puedeBorrar && <button
                   onClick={async () => {
                     const ok = await confirmDialog({
                       title: `Eliminar a ${selected.name}`,
@@ -246,7 +255,7 @@ export function Customers() {
                   }}
                   className="text-slate-500 hover:text-red-400 disabled:opacity-40" title="Eliminar" disabled={deleting}>
                   <i className="fa-solid fa-trash" />
-                </button>
+                </button>}
                 <button onClick={() => setSelected(null)} className="dax-btn-icon text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
               </div>
             </div>

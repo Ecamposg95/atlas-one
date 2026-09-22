@@ -3,6 +3,12 @@
 El endpoint colgaba el pago del documento original, asi que el esperado lo
 acreditaba a la sesion de la VENTA — posiblemente cerrada hace semanas — y el
 corte del dia que recibio el dinero no lo veia.
+
+Nota (2026-09-22): registrar un abono pasó a exigir administrador/dueño
+(`require_admin_or_owner` en app/modules/customers/router.py), así que aquí
+cobra `admin_a` —un ADMINISTRADOR asignado a la Sucursal A— en vez de la
+cajera. El guard de efectivo no hace excepción de rol: el escenario y las
+aserciones son los mismos, solo cambia quién está en el mostrador.
 """
 from decimal import Decimal
 
@@ -64,7 +70,7 @@ def test_el_abono_cuenta_en_la_caja_de_hoy(
 
 
 def test_endpoint_de_abono_atribuye_la_caja_abierta_del_cobrador(
-    client, db, org, branch_a, cajero_a, auth_cajero_a
+    client, db, org, branch_a, admin_a, auth_admin_a
 ):
     """El endpoint real (no la prueba anterior que arma el Payment a mano)
     debe resolver y asignar el cash_session_id por si mismo, con el mismo
@@ -74,7 +80,7 @@ def test_endpoint_de_abono_atribuye_la_caja_abierta_del_cobrador(
 
     # Venta a credito de un turno anterior, ya cerrado -> no debe importar
     # para la atribucion del abono.
-    s_vieja = CashSession(user_id=cajero_a.id, branch_id=branch_a.id, organization_id=org.id,
+    s_vieja = CashSession(user_id=admin_a.id, branch_id=branch_a.id, organization_id=org.id,
                           opening_balance=Decimal("0"), status="CLOSED")
     db.add(s_vieja); db.flush()
 
@@ -90,7 +96,7 @@ def test_endpoint_de_abono_atribuye_la_caja_abierta_del_cobrador(
     db.add(customer); db.flush()
 
     venta = SalesDocument(
-        organization_id=org.id, branch_id=branch_a.id, seller_id=cajero_a.id,
+        organization_id=org.id, branch_id=branch_a.id, seller_id=admin_a.id,
         customer_id=customer.id,
         folio=2, series="A", subtotal=Decimal("200"), tax_amount=Decimal("0"),
         total_amount=Decimal("200"), status=DocumentStatus.PENDING, doc_type="ORDER",
@@ -98,8 +104,8 @@ def test_endpoint_de_abono_atribuye_la_caja_abierta_del_cobrador(
     )
     db.add(venta); db.commit(); db.refresh(venta); db.refresh(customer)
 
-    # Turno de hoy, abierto, del cajero que va a cobrar el abono.
-    s_hoy = CashSession(user_id=cajero_a.id, branch_id=branch_a.id, organization_id=org.id,
+    # Turno de hoy, abierto, de quien va a cobrar el abono.
+    s_hoy = CashSession(user_id=admin_a.id, branch_id=branch_a.id, organization_id=org.id,
                         opening_balance=Decimal("0"), status="OPEN")
     db.add(s_hoy); db.commit(); db.refresh(s_hoy)
 
@@ -110,7 +116,7 @@ def test_endpoint_de_abono_atribuye_la_caja_abierta_del_cobrador(
             "method": "CASH",
             "sales_document_id": venta.id,
         },
-        headers=auth_cajero_a,
+        headers=auth_admin_a,
     )
     assert resp.status_code == 200, resp.text
 
@@ -124,7 +130,7 @@ def test_endpoint_de_abono_atribuye_la_caja_abierta_del_cobrador(
 
 
 def test_endpoint_de_abono_sin_sesion_abierta_solo_admite_lo_que_no_es_efectivo(
-    client, db, org, branch_a, cajero_a, auth_cajero_a
+    client, db, org, branch_a, admin_a, auth_admin_a
 ):
     """Ronda de correcciones final (CRITICO-2): antes, sin sesion OPEN el abono
     en efectivo se registraba igual con `cash_session_id` nulo — y de ahi caia a
@@ -145,7 +151,7 @@ def test_endpoint_de_abono_sin_sesion_abierta_solo_admite_lo_que_no_es_efectivo(
     efectivo = client.post(
         f"/api/customers/{customer.id}/pay",
         json={"amount": "100", "method": "CASH"},
-        headers=auth_cajero_a,
+        headers=auth_admin_a,
     )
     assert efectivo.status_code == 409, efectivo.text
     assert db.query(Payment).filter(Payment.customer_id == customer.id).count() == 0
@@ -153,7 +159,7 @@ def test_endpoint_de_abono_sin_sesion_abierta_solo_admite_lo_que_no_es_efectivo(
     transferencia = client.post(
         f"/api/customers/{customer.id}/pay",
         json={"amount": "100", "method": "TRANSFER"},
-        headers=auth_cajero_a,
+        headers=auth_admin_a,
     )
     assert transferencia.status_code == 200, transferencia.text
 
@@ -162,7 +168,7 @@ def test_endpoint_de_abono_sin_sesion_abierta_solo_admite_lo_que_no_es_efectivo(
 
 
 def test_abono_parcial_sobre_venta_pendiente_cuenta_en_el_turno_que_lo_recibe(
-    client, db, org, branch_a, cajero_a, auth_cajero_a
+    client, db, org, branch_a, admin_a, auth_admin_a
 ):
     """Contraparte PENDING de `test_el_abono_cuenta_en_la_caja_de_hoy`.
 
@@ -177,7 +183,7 @@ def test_abono_parcial_sobre_venta_pendiente_cuenta_en_el_turno_que_lo_recibe(
     from app.modules.customers.models import Customer
 
     # Venta a credito de un turno anterior, ya cerrado.
-    s_vieja = CashSession(user_id=cajero_a.id, branch_id=branch_a.id, organization_id=org.id,
+    s_vieja = CashSession(user_id=admin_a.id, branch_id=branch_a.id, organization_id=org.id,
                           opening_balance=Decimal("0"), status="CLOSED")
     db.add(s_vieja); db.flush()
 
@@ -188,7 +194,7 @@ def test_abono_parcial_sobre_venta_pendiente_cuenta_en_el_turno_que_lo_recibe(
     db.add(customer); db.flush()
 
     venta = SalesDocument(
-        organization_id=org.id, branch_id=branch_a.id, seller_id=cajero_a.id,
+        organization_id=org.id, branch_id=branch_a.id, seller_id=admin_a.id,
         customer_id=customer.id,
         folio=3, series="A", subtotal=Decimal("300"), tax_amount=Decimal("0"),
         total_amount=Decimal("300"), status=DocumentStatus.PENDING, doc_type="ORDER",
@@ -197,7 +203,7 @@ def test_abono_parcial_sobre_venta_pendiente_cuenta_en_el_turno_que_lo_recibe(
     db.add(venta); db.commit(); db.refresh(venta); db.refresh(customer)
 
     # Turno de hoy, abierto, distinto al de la venta.
-    s_hoy = CashSession(user_id=cajero_a.id, branch_id=branch_a.id, organization_id=org.id,
+    s_hoy = CashSession(user_id=admin_a.id, branch_id=branch_a.id, organization_id=org.id,
                         opening_balance=Decimal("0"), status="OPEN")
     db.add(s_hoy); db.commit(); db.refresh(s_hoy)
 
@@ -205,7 +211,7 @@ def test_abono_parcial_sobre_venta_pendiente_cuenta_en_el_turno_que_lo_recibe(
     resp = client.post(
         f"/api/customers/{customer.id}/pay",
         json={"amount": "120", "method": "CASH", "sales_document_id": venta.id},
-        headers=auth_cajero_a,
+        headers=auth_admin_a,
     )
     assert resp.status_code == 200, resp.text
 

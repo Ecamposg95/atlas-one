@@ -11,6 +11,12 @@ El criterio es el mismo que ya rige el checkout
 (`app/routers/sales.py::create_sale`, guard H-5): el efectivo es fisico y no
 admite excepciones de rol; lo que no toca el cajon (tarjeta, transferencia)
 sigue permitido sin turno.
+
+Nota (2026-09-22): registrar un abono pasó a exigir administrador/dueño
+(`require_admin_or_owner` en app/modules/customers/router.py), así que aquí
+cobra `admin_a` —un ADMINISTRADOR asignado a la Sucursal A— en vez de la
+cajera. El guard de efectivo no hace excepción de rol: el escenario y las
+aserciones son los mismos, solo cambia quién está en el mostrador.
 """
 from decimal import Decimal
 
@@ -46,14 +52,14 @@ def _cliente_con_venta_a_credito(db, org, branch, user, sesion, total="1000.00",
 
 
 def test_el_abono_en_efectivo_sin_caja_abierta_se_rechaza(
-    client, db, org, branch_a, cajero_a, auth_cajero_a, gerente_a
+    client, db, org, branch_a, admin_a, auth_admin_a, gerente_a
 ):
-    """El escenario del hallazgo: la venta nacio en el turno S1 del cajero A,
+    """El escenario del hallazgo: la venta nacio en el turno S1 de quien cobra,
     S1 cerro cuadrado, y dos dias despues alguien cobra el abono en efectivo
     sin caja abierta. Antes, esos pesos se sumaban al esperado de S1 —un corte
     cerrado— y lo dejaban en faltante."""
-    sesion_1 = _abrir_caja(db, org, branch_a, cajero_a)
-    cliente, venta = _cliente_con_venta_a_credito(db, org, branch_a, cajero_a, sesion_1)
+    sesion_1 = _abrir_caja(db, org, branch_a, admin_a)
+    cliente, venta = _cliente_con_venta_a_credito(db, org, branch_a, admin_a, sesion_1)
 
     sesion_1.status = "CLOSED"
     db.commit(); db.refresh(sesion_1)
@@ -62,7 +68,7 @@ def test_el_abono_en_efectivo_sin_caja_abierta_se_rechaza(
     resp = client.post(
         f"/api/customers/{cliente.id}/pay",
         json={"amount": "400", "method": "CASH", "sales_document_id": venta.id},
-        headers=auth_cajero_a,
+        headers=auth_admin_a,
     )
     assert resp.status_code == 409, (
         f"cobrar efectivo sin caja abierta debe rechazarse igual que en el "
@@ -84,19 +90,19 @@ def test_el_abono_en_efectivo_sin_caja_abierta_se_rechaza(
 
 
 def test_el_abono_por_transferencia_sigue_sin_exigir_caja(
-    client, db, org, branch_a, cajero_a, auth_cajero_a
+    client, db, org, branch_a, admin_a, auth_admin_a
 ):
     """Lo que no toca el cajon se registra igual sin turno, y sin atribucion."""
-    sesion_1 = _abrir_caja(db, org, branch_a, cajero_a)
+    sesion_1 = _abrir_caja(db, org, branch_a, admin_a)
     cliente, venta = _cliente_con_venta_a_credito(
-        db, org, branch_a, cajero_a, sesion_1, folio=3002)
+        db, org, branch_a, admin_a, sesion_1, folio=3002)
     sesion_1.status = "CLOSED"
     db.commit()
 
     resp = client.post(
         f"/api/customers/{cliente.id}/pay",
         json={"amount": "400", "method": "TRANSFER", "sales_document_id": venta.id},
-        headers=auth_cajero_a,
+        headers=auth_admin_a,
     )
     assert resp.status_code == 200, resp.text
 
@@ -105,19 +111,19 @@ def test_el_abono_por_transferencia_sigue_sin_exigir_caja(
 
 
 def test_el_abono_en_efectivo_con_caja_abierta_se_atribuye_a_esa_caja(
-    client, db, org, branch_a, cajero_a, auth_cajero_a
+    client, db, org, branch_a, admin_a, auth_admin_a
 ):
-    sesion_1 = _abrir_caja(db, org, branch_a, cajero_a)
+    sesion_1 = _abrir_caja(db, org, branch_a, admin_a)
     cliente, venta = _cliente_con_venta_a_credito(
-        db, org, branch_a, cajero_a, sesion_1, folio=3003)
+        db, org, branch_a, admin_a, sesion_1, folio=3003)
     sesion_1.status = "CLOSED"
     db.commit()
 
-    sesion_2 = _abrir_caja(db, org, branch_a, cajero_a)
+    sesion_2 = _abrir_caja(db, org, branch_a, admin_a)
     resp = client.post(
         f"/api/customers/{cliente.id}/pay",
         json={"amount": "400", "method": "CASH", "sales_document_id": venta.id},
-        headers=auth_cajero_a,
+        headers=auth_admin_a,
     )
     assert resp.status_code == 200, resp.text
 

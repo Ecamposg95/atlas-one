@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useEnabledModulesStore } from '../../store/enabledModulesStore'
 import { useAuthStore } from '../../store/authStore'
+import { rolesConAcceso } from '../../components/layout/navConfig'
 import { GastroHomeDay } from './GastroHomeDay'
 
 /**
@@ -36,34 +37,39 @@ export function PresetHome() {
 
   const greeting = user?.full_name?.split(' ')[0] || user?.username || ''
   const orgName = org?.name || ''
+  // Cobrar es de la cajera: el administrador ya no tiene `/pos` y ofrecerle
+  // "Ir al POS" aquí lo mandaría a una ruta que su propia guarda le rebota.
+  // Se deriva de ROLE_ROUTES para no tener una segunda lista que mantener.
+  const puedeCobrar = !!user?.role && rolesConAcceso('/pos').includes(user.role)
+  const home = { greeting, orgName, puedeCobrar }
 
   switch (preset) {
     // Taxonomy v2 (2026-05-15)
     case 'ATLAS_ONE_BARBER':
-      return <BarberHome greeting={greeting} orgName={orgName} />
+      return <BarberHome {...home} />
     case 'ATLAS_ONE_BEAUTY_WELLNESS':
-      return <BeautyWellnessHome greeting={greeting} orgName={orgName} />
+      return <BeautyWellnessHome {...home} />
     case 'ATLAS_ONE_HEALTH':
-      return <HealthHome greeting={greeting} orgName={orgName} />
+      return <HealthHome {...home} />
     case 'ATLAS_ONE_RESTAURANT':
-      return <RestaurantHome greeting={greeting} orgName={orgName} />
+      return <RestaurantHome {...home} />
     case 'ATLAS_ONE_CAFE':
-      return <CafeHome greeting={greeting} orgName={orgName} />
+      return <CafeHome {...home} />
     case 'ATLAS_ONE_BAR':
-      return <BarHome greeting={greeting} orgName={orgName} />
+      return <BarHome {...home} />
     // Atlas One verticals (v1)
     case 'ATLAS_ONE_RETAIL':
-      return <RetailHome greeting={greeting} orgName={orgName} />
+      return <RetailHome {...home} />
     case 'ATLAS_ONE_SERVICES':
-      return <ServicesHome greeting={greeting} orgName={orgName} />
+      return <ServicesHome {...home} />
     case 'ATLAS_ONE_ENTERPRISE':
-      return <EnterpriseHome greeting={greeting} orgName={orgName} />
+      return <EnterpriseHome {...home} />
     // Legacy aliases — orgs created before taxonomy v2 still land on
     // a coherent home instead of redirecting to /hq/operations.
     case 'ATLAS_ONE_BEAUTY':
-      return <BeautyWellnessHome greeting={greeting} orgName={orgName} />
+      return <BeautyWellnessHome {...home} />
     case 'ATLAS_ONE_GASTRO':
-      return <RestaurantHome greeting={greeting} orgName={orgName} />
+      return <RestaurantHome {...home} />
     default:
       return <Navigate to="/hq/operations" replace />
   }
@@ -74,6 +80,8 @@ export function PresetHome() {
 interface HomeProps {
   greeting: string
   orgName: string
+  /** ¿Este rol puede abrir el punto de venta? (ver ROLE_ROUTES). */
+  puedeCobrar: boolean
 }
 
 function HomeShell({
@@ -83,7 +91,7 @@ function HomeShell({
   subtitle,
   accent,
   children,
-}: HomeProps & {
+}: Omit<HomeProps, 'puedeCobrar'> & {
   title: string
   subtitle: string
   accent: string
@@ -199,7 +207,7 @@ function Widget({ icon, title, description, cta, ctaUrl, beta }: WidgetProps) {
 
 // ── Per-preset homes ────────────────────────────────────────────────────────
 
-function BarberHome({ greeting, orgName }: HomeProps) {
+function BarberHome({ greeting, orgName, puedeCobrar }: HomeProps) {
   return (
     <HomeShell
       greeting={greeting}
@@ -212,13 +220,13 @@ function BarberHome({ greeting, orgName }: HomeProps) {
       <Widget icon="fa-id-card" title="Paquetes prepagados" description="Bonos de N cortes y vencimientos próximos." cta="Ver paquetes" ctaUrl="/memberships" beta />
       <Widget icon="fa-percent" title="Comisiones del turno" description="Resumen por barbero al cierre del día." cta="Ver comisiones" ctaUrl="/commissions" beta />
       <Widget icon="fa-address-book" title="Clientes recurrentes" description="Historial de cortes y preferencias." cta="Ver clientes" ctaUrl="/customers" />
-      <Widget icon="fa-cash-register" title="Cobrar" description="Cobrar servicio o paquete en silla." cta="Ir al POS" ctaUrl="/pos" />
+      {puedeCobrar && <Widget icon="fa-cash-register" title="Cobrar" description="Cobrar servicio o paquete en silla." cta="Ir al POS" ctaUrl="/pos" />}
       <Widget icon="fa-chart-pie" title="Reportes" description="Ingreso por barbero, servicios top." cta="Ver reportes" ctaUrl="/reports" />
     </HomeShell>
   )
 }
 
-function BeautyWellnessHome({ greeting, orgName }: HomeProps) {
+function BeautyWellnessHome({ greeting, orgName, puedeCobrar }: HomeProps) {
   return (
     <HomeShell
       greeting={greeting}
@@ -231,13 +239,13 @@ function BeautyWellnessHome({ greeting, orgName }: HomeProps) {
       <Widget icon="fa-id-card" title="Membresías activas" description="Saldo de paquetes y vencimientos próximos." cta="Ver membresías" ctaUrl="/memberships" beta />
       <Widget icon="fa-percent" title="Comisiones del turno" description="Resumen de comisiones al cierre." cta="Ver comisiones" ctaUrl="/commissions" beta />
       <Widget icon="fa-address-book" title="Clientes" description="Historial, preferencias y frecuencia." cta="Ver clientes" ctaUrl="/customers" />
-      <Widget icon="fa-cash-register" title="Vender" description="Cobrar servicio o producto." cta="Ir al POS" ctaUrl="/pos" />
+      {puedeCobrar && <Widget icon="fa-cash-register" title="Vender" description="Cobrar servicio o producto." cta="Ir al POS" ctaUrl="/pos" />}
       <Widget icon="fa-chart-pie" title="Reportes" description="Servicios top, ticket promedio." cta="Ver reportes" ctaUrl="/reports" />
     </HomeShell>
   )
 }
 
-function HealthHome({ greeting, orgName }: HomeProps) {
+function HealthHome({ greeting, orgName, puedeCobrar }: HomeProps) {
   return (
     <HomeShell
       greeting={greeting}
@@ -250,13 +258,13 @@ function HealthHome({ greeting, orgName }: HomeProps) {
       <Widget icon="fa-user-injured" title="Pacientes" description="Historial clínico, notas y contactos." cta="Ver pacientes" ctaUrl="/customers" />
       <Widget icon="fa-id-card" title="Planes de tratamiento" description="Paquetes prepagados y avance por paciente." cta="Ver planes" ctaUrl="/memberships" beta />
       <Widget icon="fa-percent" title="Comisiones" description="Pago por consulta o sesión." cta="Ver comisiones" ctaUrl="/commissions" beta />
-      <Widget icon="fa-cash-register" title="Cobrar" description="Cobro de consulta o paquete." cta="Ir al POS" ctaUrl="/pos" />
+      {puedeCobrar && <Widget icon="fa-cash-register" title="Cobrar" description="Cobro de consulta o paquete." cta="Ir al POS" ctaUrl="/pos" />}
       <Widget icon="fa-chart-pie" title="Reportes" description="Consultas atendidas, ingresos por profesional." cta="Ver reportes" ctaUrl="/reports" />
     </HomeShell>
   )
 }
 
-function RestaurantHome({ greeting, orgName }: HomeProps) {
+function RestaurantHome({ greeting, orgName, puedeCobrar }: HomeProps) {
   return (
     <GastroHomeDay
       greeting={greeting}
@@ -268,7 +276,7 @@ function RestaurantHome({ greeting, orgName }: HomeProps) {
       actions={[
         { icon: 'fa-utensils', label: 'Cocina · KDS', to: '/kitchen' },
         { icon: 'fa-chair', label: 'Plano de mesas', to: '/tables' },
-        { icon: 'fa-cash-register', label: 'Cobrar mesa', to: '/pos' },
+        ...(puedeCobrar ? [{ icon: 'fa-cash-register', label: 'Cobrar mesa', to: '/pos' }] : []),
         { icon: 'fa-book', label: 'Recetas', to: '/recipes', beta: true },
         { icon: 'fa-percent', label: 'Comisiones', to: '/commissions', beta: true },
         { icon: 'fa-chart-pie', label: 'Reportes', to: '/reports' },
@@ -277,7 +285,7 @@ function RestaurantHome({ greeting, orgName }: HomeProps) {
   )
 }
 
-function CafeHome({ greeting, orgName }: HomeProps) {
+function CafeHome({ greeting, orgName, puedeCobrar }: HomeProps) {
   return (
     <GastroHomeDay
       greeting={greeting}
@@ -288,7 +296,7 @@ function CafeHome({ greeting, orgName }: HomeProps) {
       topLabel="Productos top"
       actions={[
         { icon: 'fa-coffee', label: 'Mostrador · KDS', to: '/kitchen' },
-        { icon: 'fa-cash-register', label: 'Cobrar', to: '/pos' },
+        ...(puedeCobrar ? [{ icon: 'fa-cash-register', label: 'Cobrar', to: '/pos' }] : []),
         { icon: 'fa-vault', label: 'Caja del día', to: '/cash-history' },
         { icon: 'fa-boxes', label: 'Inventario', to: '/inventory' },
         { icon: 'fa-address-book', label: 'Frecuentes', to: '/customers' },
@@ -298,7 +306,7 @@ function CafeHome({ greeting, orgName }: HomeProps) {
   )
 }
 
-function BarHome({ greeting, orgName }: HomeProps) {
+function BarHome({ greeting, orgName, puedeCobrar }: HomeProps) {
   return (
     <GastroHomeDay
       greeting={greeting}
@@ -309,7 +317,7 @@ function BarHome({ greeting, orgName }: HomeProps) {
       topLabel="Bebidas top"
       actions={[
         { icon: 'fa-martini-glass', label: 'Barra · comandas', to: '/tables' },
-        { icon: 'fa-cash-register', label: 'Cobrar tab', to: '/pos' },
+        ...(puedeCobrar ? [{ icon: 'fa-cash-register', label: 'Cobrar tab', to: '/pos' }] : []),
         { icon: 'fa-boxes', label: 'Inventario líquido', to: '/inventory' },
         { icon: 'fa-book', label: 'Cocteles · recetas', to: '/recipes', beta: true },
         { icon: 'fa-percent', label: 'Comisiones', to: '/commissions', beta: true },

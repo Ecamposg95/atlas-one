@@ -16,15 +16,37 @@ const menu = (role: Role, enabledModules: string[], isGastro = false) =>
 // Eleven Fashion: boutique de una sola sucursal, preset ATLAS_POS_BOUTIQUE.
 const BOUTIQUE = [
   'core', 'pos', 'cash_management', 'catalog', 'inventory', 'returns',
-  'pricing', 'payments', 'reports', 'scanner', 'variants', 'labels',
+  'pricing', 'payments', 'reports', 'scanner', 'variants', 'labels', 'crm',
 ]
 
 describe('el menú de la boutique', () => {
-  it('le da a la administradora camino para cobrar, reimprimir, etiquetar y configurar la impresora', () => {
+  it('le da a la administradora camino para reimprimir, etiquetar y configurar la impresora', () => {
     const urls = menu('ADMINISTRADOR', BOUTIQUE)
     expect(urls).toEqual(expect.arrayContaining([
-      '/pos', '/sales', '/products', '/labels', '/printer-settings',
+      '/sales', '/products', '/labels', '/printer-settings',
     ]))
+  })
+
+  it('no le ofrece «Vender» a la administradora: cobrar es de la cajera', () => {
+    const urls = menu('ADMINISTRADOR', BOUTIQUE)
+    expect(urls).not.toContain('/pos')
+    expect(rolesConAcceso('/pos')).not.toContain('ADMINISTRADOR')
+  })
+
+  it('el dueño conserva el punto de venta', () => {
+    expect(menu('DUEÑO', BOUTIQUE)).toContain('/pos')
+    expect(rolesConAcceso('/pos')).toEqual(expect.arrayContaining(['DUEÑO', 'GERENTE', 'CAJERO']))
+  })
+
+  it('Clientes llega al menú de la cajera y del gerente', () => {
+    expect(menu('CAJERO', BOUTIQUE)).toContain('/customers')
+    expect(menu('GERENTE', BOUTIQUE)).toContain('/customers')
+    expect(menu('ADMINISTRADOR', BOUTIQUE)).toContain('/customers')
+  })
+
+  it('Clientes se apaga donde la organización no tiene el módulo crm', () => {
+    const sinCrm = BOUTIQUE.filter((m) => m !== 'crm')
+    expect(menu('CAJERO', sinCrm)).not.toContain('/customers')
   })
 
   it('no muestra Compras, Gastos ni Recursos Humanos: la boutique no tiene esos módulos', () => {
@@ -45,9 +67,14 @@ describe('el menú de la boutique', () => {
 })
 
 describe('los grupos del menú', () => {
-  it('«Mi tienda» reúne el trabajo diario de la tienda', () => {
+  it('«Mi tienda» reúne el trabajo diario de la tienda, ya sin cobrar', () => {
     const grupo = HQ_NAV_GROUPS.find((g) => g.header === 'Mi tienda')
-    expect(grupo?.urls).toEqual(['/pos', '/sales', '/products', '/labels', '/printer-settings'])
+    expect(grupo?.urls).toEqual(['/sales', '/products', '/labels', '/printer-settings'])
+  })
+
+  it('la cajera encuentra Clientes en su propio grupo, no en «Más»', () => {
+    const grupo = BRANCH_NAV_GROUPS.find((g) => g.urls.includes('/customers'))
+    expect(grupo?.header).toBe('Clientes')
   })
 
   it('el corte de caja tiene grupo propio y ya no cae en «Más»', () => {
@@ -106,6 +133,12 @@ describe('las guardas de ruta', () => {
   it('se derivan de la misma lista que dibuja el menú', () => {
     expect(rolesConAcceso('/users')).toContain('ADMINISTRADOR')
     expect(rolesConAcceso('/pos')).toContain('CAJERO')
+  })
+
+  it('dejan entrar a la cajera y al gerente a Clientes', () => {
+    expect(rolesConAcceso('/customers')).toEqual(
+      expect.arrayContaining(['CAJERO', 'GERENTE', 'ADMINISTRADOR', 'DUEÑO']),
+    )
   })
 
   it('dejan fuera a la cajera de Usuarios y de Empresa', () => {

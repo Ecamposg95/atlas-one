@@ -20,17 +20,19 @@ export const BRANCH_NAV_GROUPS: { header: string; urls: string[] }[] = [
   { header: 'Mi día',        urls: ['/atlas-pos', '/pos'] },
   { header: 'Restaurante',   urls: ['/menu', '/tables', '/mobile/comanda', '/kitchen', '/bar/bottles'] },
   { header: 'Mi turno',      urls: ['/cash-history', '/sales'] },
+  { header: 'Clientes',      urls: ['/customers'] },
   { header: 'Inventario',    urls: ['/products', '/scanner', '/labels'] },
   { header: 'Reportes',      urls: ['/reports', '/meseros'] },
   { header: 'Configuración', urls: ['/printer-settings'] },
 ]
 
 // Grupos del menú HQ/admin. Los items no listados caen en "Más" (no se ocultan).
-// "Mi tienda" va primero: en una tienda de una sola sucursal, cobrar, ver los
-// tickets del día, el catálogo, las etiquetas y la impresora son el trabajo
-// diario de la dueña, y antes no tenían ninguna entrada en su menú.
+// "Mi tienda" va primero: en una tienda de una sola sucursal, ver los tickets
+// del día, el catálogo, las etiquetas y la impresora son el trabajo diario de
+// la dueña, y antes no tenían ninguna entrada en su menú. Cobrar ya no: el
+// punto de venta es de la cajera (ver ROLE_ROUTES.ADMINISTRADOR).
 export const HQ_NAV_GROUPS: { header: string; urls: string[] }[] = [
-  { header: 'Mi tienda',    urls: ['/pos', '/sales', '/products', '/labels', '/printer-settings'] },
+  { header: 'Mi tienda',    urls: ['/sales', '/products', '/labels', '/printer-settings'] },
   { header: 'Caja',         urls: ['/cash-history'] },
   { header: 'Restaurante',  urls: ['/menu', '/tables', '/mobile/comanda', '/kitchen', '/recipes', '/meseros', '/bar/bottles'] },
   { header: 'Operación',    urls: ['/hq/operations', '/hq/reports-hub', '/hq/control'] },
@@ -135,13 +137,19 @@ export const ALL_NAV: NavItem[] = [
 ]
 
 export const ROLE_ROUTES: Record<Role, string[]> = {
-  // `/pos`, `/sales`, `/products` y `/printer-settings` entran al menú del
-  // admin: sin ellos la dueña no podía cobrar, reimprimir un ticket, ver su
-  // catálogo completo ni configurar la impresora desde su propia cuenta.
-  ADMINISTRADOR:    ['/pos','/sales','/products','/printer-settings','/labels','/mobile/owner','/cash-history','/hq/operations','/hq/reports-hub','/hq/control','/admin/catalog','/scanner','/departments','/organization','/users','/customers','/hq/branches','/hq/inventory','/hq/sales','/hq/returns','/brands','/hr','/hr/me','/logistics','/boxes','/quotes','/quotes/new','/seguimiento','/purchases','/expenses','/appointments','/commissions','/memberships','/recipes','/ai','/purchasing','/tables','/kitchen','/meseros','/bar/bottles','/menu','/mobile/comanda'],
+  // `/sales`, `/products` y `/printer-settings` entran al menú del admin: sin
+  // ellos la dueña no podía reimprimir un ticket, ver su catálogo completo ni
+  // configurar la impresora desde su propia cuenta.
+  //
+  // `/pos` NO está en la lista del administrador (sí en la del dueño): cobrar
+  // es de la cajera. Una venta capturada por el admin cae en la caja del
+  // admin, no en la de quien está en el mostrador, y hubo que mover ventas a
+  // mano por eso. El backend sigue aceptando al admin en `create_sale` (se usa
+  // para capturar ventas históricas por API); esto es solo la navegación.
+  ADMINISTRADOR:    ['/sales','/products','/printer-settings','/labels','/mobile/owner','/cash-history','/hq/operations','/hq/reports-hub','/hq/control','/admin/catalog','/scanner','/departments','/organization','/users','/customers','/hq/branches','/hq/inventory','/hq/sales','/hq/returns','/brands','/hr','/hr/me','/logistics','/boxes','/quotes','/quotes/new','/seguimiento','/purchases','/expenses','/appointments','/commissions','/memberships','/recipes','/ai','/purchasing','/tables','/kitchen','/meseros','/bar/bottles','/menu','/mobile/comanda'],
   DUEÑO:            ['/pos','/sales','/products','/printer-settings','/labels','/mobile/owner','/cash-history','/hq/operations','/hq/reports-hub','/hq/control','/admin/catalog','/scanner','/customers','/hq/sales','/hq/returns','/hr/me','/logistics','/boxes','/quotes','/quotes/new','/seguimiento','/purchases','/expenses','/appointments','/commissions','/memberships','/recipes','/ai','/purchasing','/tables','/kitchen','/meseros','/bar/bottles','/menu','/mobile/comanda'],
-  GERENTE:          ['/labels','/cash-history','/reports','/hr/me','/products','/scanner','/pos','/sales','/returns','/atlas-pos','/tables','/kitchen','/recipes','/meseros','/bar/bottles','/menu','/mobile/comanda'],
-  CAJERO:           ['/labels','/pos','/cash-history','/hr/me','/products','/scanner','/printer-settings','/sales','/returns','/atlas-pos','/tables','/kitchen','/bar/bottles','/menu','/mobile/comanda'],
+  GERENTE:          ['/labels','/cash-history','/reports','/hr/me','/products','/scanner','/pos','/sales','/customers','/returns','/atlas-pos','/tables','/kitchen','/recipes','/meseros','/bar/bottles','/menu','/mobile/comanda'],
+  CAJERO:           ['/labels','/pos','/cash-history','/hr/me','/products','/scanner','/printer-settings','/sales','/customers','/returns','/atlas-pos','/tables','/kitchen','/bar/bottles','/menu','/mobile/comanda'],
   VENDEDOR:         ['/mobile/dashboard','/mobile/query','/mobile/sales','/mobile/profile','/hr/me','/atlas-pos'],
   SOPORTE_OPERATIVO:['/mobile/dashboard','/mobile/query','/mobile/profile','/hr/me','/atlas-pos'],
   CLIENTE:          ['/portal'],

@@ -36,8 +36,11 @@ def test_seed_atlas_pos_is_lightweight(db):
         .first()
     )
     assert atlas_pos is not None
-    # crm and branch_catalog_enablement should NOT be in ATLAS_POS
-    assert "crm" not in atlas_pos.modules
+    # `branch_catalog_enablement` sigue siendo de retail multi-sucursal.
+    # `crm` SÍ entra desde 2026-09-22: sin él la entrada "Clientes" del menú no
+    # se veía en ninguna tienda de mostrador y el router de clientes (que ahora
+    # exige `require_module("crm")`) respondería 403.
+    assert "crm" in atlas_pos.modules
     assert "branch_catalog_enablement" not in atlas_pos.modules
     # Core POS modules must be present
     assert "pos" in atlas_pos.modules
