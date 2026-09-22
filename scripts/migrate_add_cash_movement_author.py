@@ -1,4 +1,10 @@
-"""Columna `created_by_user_id` en cash_movements.
+"""Columna `created_by_user_id` en cash_movements — envoltorio manual.
+
+La DDL y el indice viven en `scripts/railway_init.py` (regla 3 de CLAUDE.md):
+ese es el unico script que corre en cada despliegue, asi que una migracion que
+no este ahi no se aplica nunca en Railway. Este archivo se conserva para
+aplicar SOLO esta columna a mano (por ejemplo en el VPS, sin reiniciar la app)
+reusando exactamente la misma DDL.
 
 Los movimientos no registraban quien los creaba. Las filas historicas quedan
 en NULL a proposito: inventarles un autor seria peor que reconocer que no se
@@ -13,39 +19,19 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from sqlalchemy import inspect, text
-
 from app.core.database import engine
+from scripts.railway_init import (
+    INDICES_CASH_MOVEMENT_AUTHOR,
+    MIGRACIONES_CASH_MOVEMENT_AUTHOR,
+    aplicar_migraciones_de_columna,
+    aplicar_migraciones_de_indice,
+)
 
 
 def main() -> None:
-    with engine.begin() as conn:
-        # SQLite (usada en pruebas) no soporta la clausula
-        # "ADD COLUMN IF NOT EXISTS" — solo Postgres la entiende. Se checa
-        # la columna via el inspector para que el script sea idempotente
-        # en ambos motores.
-        columnas = {c["name"] for c in inspect(conn).get_columns("cash_movements")}
-        if "created_by_user_id" not in columnas:
-            if engine.dialect.name == "postgresql":
-                conn.execute(text(
-                    "ALTER TABLE cash_movements ADD COLUMN IF NOT EXISTS created_by_user_id INTEGER"
-                ))
-            else:
-                conn.execute(text(
-                    "ALTER TABLE cash_movements ADD COLUMN created_by_user_id INTEGER"
-                ))
-        if engine.dialect.name == "postgresql":
-            conn.execute(text("""
-                DO $$ BEGIN
-                    ALTER TABLE cash_movements
-                        ADD CONSTRAINT cash_movements_created_by_user_id_fkey
-                        FOREIGN KEY (created_by_user_id) REFERENCES users(id);
-                EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-            """))
-            conn.execute(text(
-                "CREATE INDEX IF NOT EXISTS ix_cash_movements_created_by "
-                "ON cash_movements (created_by_user_id)"
-            ))
+    with engine.connect() as conn:
+        aplicar_migraciones_de_columna(conn, MIGRACIONES_CASH_MOVEMENT_AUTHOR)
+        aplicar_migraciones_de_indice(conn, INDICES_CASH_MOVEMENT_AUTHOR)
     print("[migrate] OK — cash_movements.created_by_user_id listo.")
 
 

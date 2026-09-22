@@ -6,6 +6,8 @@ STATUS: Stable
 Phase 2 / S2: moved from app/routers/customers.py. Imports point to the
 local module (models, schemas) instead of the legacy global namespace.
 """
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func, and_
@@ -24,6 +26,8 @@ from app.modules.customers.schemas import (
 from app.core.security import get_current_user
 from app.models import User
 from app.core.tenant_context import get_current_active_organization
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -447,6 +451,53 @@ def register_customer_payment(
 
         doc_reference = f"{doc.series}-{doc.folio}" if doc.series and doc.folio else doc.id
 
+    from app.models.sales import Payment as SalesPayment, DocumentStatus, PaymentMethod as SalesPaymentMethod
+    try:
+        method_enum = SalesPaymentMethod(payment_in.method.upper())
+    except (ValueError, AttributeError):
+        method_enum = SalesPaymentMethod.CASH
+
+    # --- Caja que recibe el abono (y guard de efectivo) ---
+    # El abono debe acreditarse a la caja de QUIEN LO COBRA hoy, no a la del
+    # documento de venta original (que puede llevar semanas cerrada). Mismo
+    # criterio que el checkout (app/routers/sales.py ~linea 783): sesion OPEN
+    # de current_user por user_id + branch_id.
+    from app.models.cash import CashSession, CashSessionStatus
+    active_cash = db.query(CashSession.id).filter(
+        CashSession.user_id == current_user.id,
+        CashSession.branch_id == current_user.branch_id,
+        CashSession.status == CashSessionStatus.OPEN,
+    ).first()
+    cash_session_id_value = active_cash[0] if active_cash else None
+
+    # Replica del guard H-5 del checkout (app/routers/sales.py:419-450): el
+    # efectivo es fisico y no admite excepciones de rol — si estos billetes
+    # entran a un cajon de sucursal, tiene que haber una caja abierta que
+    # responda por ellos. Sin este guard el pago nacia con cash_session_id en
+    # NULL, caia a la rama de respaldo por documento de
+    # `session_payments_filter` y se sumaba al esperado de la sesion de la
+    # venta original —cerrada y cuadrada dias antes—, que pasaba a mostrar un
+    # faltante por el monto del abono.
+    #
+    # Dos diferencias deliberadas con el checkout, ambas conservan lo que ya
+    # se permitia aqui: (a) solo el efectivo exige turno; tarjeta y
+    # transferencia se siguen registrando sin caja (no tocan el cajon) y se
+    # atribuyen cuando hay una abierta; (b) la exencion de oficina central es
+    # la misma que alla — sin `branch_id` no hay cajon del que responder.
+    cobra_efectivo = method_enum == SalesPaymentMethod.CASH
+    requiere_caja = cobra_efectivo and bool(current_user.branch_id)
+    if requiere_caja and cash_session_id_value is None:
+        logger.warning(
+            "BLOCKED_CUSTOMER_PAYMENT: user_id=%s branch_id=%s customer_id=%s "
+            "sales_document_id=%s reason=no_open_cash_session_cash_payment",
+            current_user.id, current_user.branch_id, customer_id,
+            payment_in.sales_document_id,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail="Debes abrir caja antes de cobrar en efectivo",
+        )
+
     # 1. Actualizar saldo (restar el abono)
     customer.current_balance -= payment_in.amount
 
@@ -465,12 +516,8 @@ def register_customer_payment(
     db.add(new_entry)
 
     # ATS-37: Create a Payment record linked to the SalesDocument
-    from app.models.sales import Payment as SalesPayment, DocumentStatus, PaymentMethod as SalesPaymentMethod
-    try:
-        method_enum = SalesPaymentMethod(payment_in.method.upper())
-    except (ValueError, AttributeError):
-        method_enum = SalesPaymentMethod.CASH
-
+    # (`method_enum` y `cash_session_id_value` se resolvieron arriba, antes de
+    # tocar el saldo, porque el guard de efectivo depende de ambos.)
     payment_record = SalesPayment(
         sales_document_id=payment_in.sales_document_id,
         customer_id=customer.id,
@@ -478,7 +525,8 @@ def register_customer_payment(
         amount=payment_in.amount,
         method=method_enum,
         reference=payment_in.reference,
-        organization_id=org_id
+        organization_id=org_id,
+        cash_session_id=cash_session_id_value,
     )
     db.add(payment_record)
 

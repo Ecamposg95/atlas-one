@@ -493,6 +493,13 @@ def convert_quote_to_sale(
         # Si ya era P, mantenemos el folio actual, solo cambia estado a PAID.
 
     # Registrar Pago y Movimientos de Stock
+    # El pago nace atribuido a la caja de quien cobra, igual que en
+    # `create_sale` (app/routers/sales.py). Sin esta linea el pago quedaba en
+    # NULL y solo el respaldo por DOCUMENTO lo ubicaba: si mas tarde alguien
+    # reprocesaba este pedido por el checkout en otro turno, la reasignacion de
+    # `sales_documents.cash_session_id` se llevaba el efectivo de hoy al corte
+    # de ese otro turno — exactamente el defecto que la atribucion por pago
+    # existe para cerrar.
     new_payment = Payment(
         sales_document_id=quote.id,
         amount=quote.total_amount,
@@ -500,6 +507,7 @@ def convert_quote_to_sale(
         created_by_id=current_user.id,
         reference=f"Conv. desde {quote.series}-{quote.folio}",
         organization_id=org_id,
+        cash_session_id=sesion_activa.id if sesion_activa else None,
     )
     db.add(new_payment)
 

@@ -1,28 +1,28 @@
 """El efectivo entra al corte donde se recibio, no al de la venta original.
 
-Ni Novedades Kaory ni Novedades Ginebra usan credito a clientes todavia -- este
-riesgo esta latente, no manifestado -- pero se activa el dia que den la primera
-venta a plazos: hoy el efectivo de una venta a credito con abono parcial NO
-entra al esperado de NINGUNA caja, aunque los billetes esten fisicamente en el
-cajon (`DocumentStatus.PENDING` esta fuera de `CASH_INCLUDED_STATUSES`).
+Historia (para quien encuentre referencias viejas a esto en el codigo o en
+los commits): hubo una version de esta rama que agregaba
+`DocumentStatus.PENDING` a `CASH_INCLUDED_STATUSES` para que el abono
+parcial de una venta a credito contara en el esperado del turno que lo
+recibia -- y los tres tests que hoy pasan sin marca se probaron entonces con
+`@pytest.mark.xfail(strict=True)`. Se revirtio (hallazgo ALTA) porque el
+mecanismo de esa version generaba un bug peor: la sesion de caja vivia en el
+`SalesDocument`, asi que al liquidar el resto de una venta a credito en un
+turno *posterior*, el documento entero se reatribuia al `cash_session_id` de
+la sesion nueva (rama `existing_sale` en `app/routers/sales.py`) -- lo que
+arrastraba consigo el abono que ya se habia cobrado en el turno viejo,
+VACIANDO retroactivamente el esperado de un corte que un gerente ya pudo
+haber cerrado y dado por bueno.
 
-REVERTIDO (revision final de esta rama, hallazgo ALTA): una version anterior
-de este archivo agregaba `DocumentStatus.PENDING` a `CASH_INCLUDED_STATUSES`
-para tapar justo ese hueco -- y los tres tests marcados `xfail` abajo lo
-probaban. Se revirtio porque el mecanismo generaba un bug peor: al liquidar
-el resto de una venta a credito en un turno *posterior*, el documento entero
-se reatribuye al `cash_session_id` de la sesion nueva (rama `existing_sale`
-en `app/routers/sales.py`) -- lo que arrastraba consigo el abono que ya se
-habia cobrado en el turno viejo, VACIANDO retroactivamente el esperado de un
-corte que un gerente ya pudo haber cerrado y dado por bueno. Corromper un
-cuadre ya cerrado es peor que el hueco original.
-
-El arreglo correcto no es de este archivo: exige atribuir la sesion de caja
-al `Payment` (que turno recibio cada abono), no al `SalesDocument` completo
--- es un cambio de modelo de datos (agregar `cash_session_id` a `Payment` y
-recalcular `compute_expected_cash` desde ahi), no una correccion puntual de
-esta pasada. Hasta que eso exista, habilitar venta a credito con abonos deja
-este hueco latente a proposito.
+El arreglo real fue de modelo de datos, no de esta tupla: `Payment` gano su
+propio `cash_session_id` (independiente del documento), y
+`compute_expected_cash` prefiere esa atribucion por pago sobre la del
+documento (ver `app/services/cash_reconciliation.py`). Con eso en pie,
+liquidar el resto en otro turno ya no reatribuye el abono viejo -- cada pago
+conserva la sesion que lo cobro -- y `DocumentStatus.PENDING` volvio a
+`CASH_INCLUDED_STATUSES` sin reintroducir el bug. Los tres tests de abajo,
+que antes fijaban el defecto con `xfail`, ahora fijan el comportamiento
+correcto sin marca alguna.
 
 Nota de diseño -- por que las ventas PENDING se siembran directo en BD (como
 ya hace `test_cash_warning_ventas_sin_corte.py`) en vez de vía POST completo a
@@ -36,8 +36,6 @@ corrigio por separado en `app/routers/sales.py` (hallazgo #7 de la misma
 revision), pero se dejo aqui la nota porque explica por que estos tests
 siguen sembrando PENDING directo en BD en vez de vía POST.
 """
-import pytest
-
 from decimal import Decimal
 
 from app.models.cash import CashSession
@@ -76,14 +74,6 @@ def _venta_pendiente(db, org, branch, user, sesion, total="100.00", folio=999):
     return s
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Revertido: PENDING ya no esta en CASH_INCLUDED_STATUSES (ver cabecera "
-        "del archivo). Requiere atribuir cash_session_id al Payment, no al "
-        "SalesDocument, antes de poder habilitarse."
-    ),
-    strict=True,
-)
 def test_abono_parcial_en_efectivo_entra_al_esperado(db, org, branch_a, cajero_a):
     """Venta a credito con abono en efectivo: los pesos estan en el cajon."""
     sesion = _abrir_caja(db, org, branch_a, cajero_a)
@@ -146,6 +136,81 @@ def test_completar_venta_pendiente_en_turno_posterior_reasigna_la_sesion(
     )
 
 
+# ── Reactivacion de credito (Task 5) ─────────────────────────────────────────
+
+def test_abono_en_turno_1_y_liquidacion_en_turno_2_no_reescribe_el_corte_cerrado(
+    client, db, org, branch_a, cajero_a, auth_cajero_a
+):
+    """El escenario completo que motivo el plan: abono parcial en el turno 1,
+    turno 1 CERRADO, y liquidacion del resto en el turno 2 -- via el mismo
+    endpoint de abono (`/api/customers/{id}/pay`), sin volver a pasar por
+    `/api/sales/` (esa ruta borra y recrea los Payment de la venta; no es el
+    camino real para "abonar dos veces").
+
+    El esperado del turno 1, ya cerrado, no debe moverse ni un peso cuando el
+    cliente liquida el resto despues. El turno 2 solo debe ver el dinero que
+    entro fisicamente en el (el resto de la deuda), no la venta completa.
+    """
+    from app.modules.customers.models import Customer
+
+    customer = Customer(
+        name="Cliente a credito", organization_id=org.id,
+        has_credit=True, credit_limit=Decimal("1000"), current_balance=Decimal("100"),
+    )
+    db.add(customer); db.flush()
+
+    sesion_1 = _abrir_caja(db, org, branch_a, cajero_a)
+    venta = _venta_pendiente(db, org, branch_a, cajero_a, sesion_1, total="100.00", folio=2001)
+    venta.customer_id = customer.id
+    db.commit(); db.refresh(venta)
+
+    # Abono parcial en efectivo, turno 1: 40 de los 100.
+    resp1 = client.post(
+        f"/api/customers/{customer.id}/pay",
+        json={"amount": "40", "method": "CASH", "sales_document_id": venta.id},
+        headers=auth_cajero_a,
+    )
+    assert resp1.status_code == 200, resp1.text
+
+    esperado_1_antes = Decimal(str(compute_expected_cash(db, sesion_1).expected))
+    assert esperado_1_antes == Decimal("40.00"), (
+        f"los 40 del abono deben contar en el turno que los recibio; el esperado dice {esperado_1_antes}"
+    )
+
+    # El turno 1 cierra (el gerente ya dio el cuadre por bueno).
+    close_resp = client.post(
+        "/api/cash/close", json={"closing_balance": "40.00"},
+        headers={**auth_cajero_a, "X-Organization-ID": str(org.id)},
+    )
+    assert close_resp.status_code in (200, 201), close_resp.text
+
+    # Turno 2: mismo cajero, sesion distinta.
+    sesion_2 = _abrir_caja(db, org, branch_a, cajero_a)
+
+    # El cliente liquida el resto (60) en el turno 2, mismo endpoint de abono.
+    resp2 = client.post(
+        f"/api/customers/{customer.id}/pay",
+        json={"amount": "60", "method": "CASH", "sales_document_id": venta.id},
+        headers=auth_cajero_a,
+    )
+    assert resp2.status_code == 200, resp2.text
+
+    db.refresh(venta)
+    assert venta.status == DocumentStatus.PAID, "el saldo del cliente llego a cero, la venta debe quedar PAID"
+
+    esperado_1_despues = Decimal(str(compute_expected_cash(db, sesion_1).expected))
+    assert esperado_1_despues == esperado_1_antes == Decimal("40.00"), (
+        "el corte del turno 1, ya cerrado, no debe moverse por una liquidacion "
+        f"posterior en otro turno; antes={esperado_1_antes} despues={esperado_1_despues}"
+    )
+
+    esperado_2 = Decimal(str(compute_expected_cash(db, sesion_2).expected))
+    assert esperado_2 == Decimal("60.00"), (
+        "el turno 2 solo debe ver los 60 que entraron fisicamente en el, no "
+        f"los 100 de la venta completa; el esperado dice {esperado_2}"
+    )
+
+
 # ── Ronda de correcciones 1 ──────────────────────────────────────────────────
 #
 # `CASH_INCLUDED_STATUSES` no es privado de `compute_expected_cash`: tambien
@@ -159,15 +224,6 @@ def test_completar_venta_pendiente_en_turno_posterior_reasigna_la_sesion(
 # todavia no termina de pagar. Ver `SALES_REPORT_STATUSES` en
 # app/services/cash_reconciliation.py.
 
-@pytest.mark.xfail(
-    reason=(
-        "Revertido: PENDING ya no esta en CASH_INCLUDED_STATUSES (ver cabecera "
-        "del archivo). El abono en efectivo de la venta PENDING ya no aparece "
-        "en payments/expected (payments['cash']['total'] y "
-        "expected['cash_physical'] vuelven a dar 0.0)."
-    ),
-    strict=True,
-)
 def test_venta_pendiente_no_infla_kpis_del_corte_de_sesion(db, org, branch_a, cajero_a):
     """Un abono en efectivo SI debe sumar al esperado y al desglose de pagos,
     pero la venta (PENDING, con deuda restante) NO debe aparecer como ingreso
@@ -199,14 +255,6 @@ def test_venta_pendiente_no_infla_kpis_del_corte_de_sesion(db, org, branch_a, ca
     )
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Revertido: PENDING ya no esta en CASH_INCLUDED_STATUSES (ver cabecera "
-        "del archivo). El abono en efectivo de la venta PENDING ya no aparece "
-        "en totals['cash'] ni en expected_cash del cajero (vuelven a dar 0.0)."
-    ),
-    strict=True,
-)
 def test_venta_pendiente_no_infla_el_corte_de_sucursal(
     client, db, org, branch_a, cajero_a, gerente_a, auth_gerente_a
 ):

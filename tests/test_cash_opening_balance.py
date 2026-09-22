@@ -103,6 +103,118 @@ class TestSaldoInicial:
             "con movimientos ya registrados, cambiar el fondo reescribe la historia"
         )
 
+    def test_no_se_puede_corregir_con_un_abono_ya_cobrado_en_la_sesion(
+        self, client, db, org, branch_a, cajero_a, auth_cajero_a
+    ):
+        """Ronda de correcciones final (MAYOR-2): el guard de "caja limpia"
+        solo miraba `CashMovement` y `SalesDocument.cash_session_id`. Un abono
+        de cliente cobrado con esta caja abierta no genera movimiento y su
+        documento sigue apuntando al turno viejo, asi que la caja parecia
+        limpia y el fondo se podia reescribir — enmascarando un faltante por
+        el mismo monto: el cajero se guarda los $500, baja el fondo de 1000 a
+        500, y el cierre cuadra.
+        """
+        from app.models.sales import DocumentStatus, SalesDocument
+        from app.modules.customers.models import Customer
+        from app.services.cash_reconciliation import compute_expected_cash
+
+        h = {**auth_cajero_a, "X-Organization-ID": str(org.id)}
+        sesion_id = client.post("/api/cash/open", json={"opening_balance": "1000.00"},
+                                headers=h).json()["id"]
+
+        # Venta a credito de un turno viejo (documento atado a OTRA sesion).
+        vieja = CashSession(user_id=cajero_a.id, branch_id=branch_a.id,
+                            organization_id=org.id, opening_balance=Decimal("0"),
+                            status="CLOSED")
+        db.add(vieja); db.flush()
+        cliente = Customer(name="Cliente a credito", organization_id=org.id,
+                           has_credit=True, credit_limit=Decimal("5000"),
+                           current_balance=Decimal("500"))
+        db.add(cliente); db.flush()
+        venta = SalesDocument(
+            organization_id=org.id, branch_id=branch_a.id, seller_id=cajero_a.id,
+            folio=5001, series="A", subtotal=Decimal("500"), tax_amount=Decimal("0"),
+            total_amount=Decimal("500"), status=DocumentStatus.PENDING,
+            doc_type="ORDER", cash_session_id=vieja.id, customer_id=cliente.id,
+        )
+        db.add(venta); db.commit()
+
+        abono = client.post(
+            f"/api/customers/{cliente.id}/pay",
+            json={"amount": "500", "method": "CASH", "sales_document_id": venta.id},
+            headers=h,
+        )
+        assert abono.status_code == 200, abono.text
+
+        sesion = db.query(CashSession).filter(CashSession.id == sesion_id).one()
+        assert Decimal(str(compute_expected_cash(db, sesion).expected)) == Decimal("1500.00")
+        assert db.query(CashMovement).count() == 0
+        assert db.query(SalesDocument).filter(
+            SalesDocument.cash_session_id == sesion_id).count() == 0
+
+        resp = client.patch(
+            f"/api/cash/sessions/{sesion_id}/opening-balance",
+            json={"opening_balance": "500.00", "reason": "me equivoque al abrir"},
+            headers=h,
+        )
+        assert resp.status_code == 409, (
+            "con dinero ya cobrado en la sesion, cambiar el fondo reescribe la "
+            f"historia y esconde un faltante; respondio {resp.status_code}"
+        )
+        db.refresh(sesion)
+        assert Decimal(str(sesion.opening_balance)) == Decimal("1000.00")
+
+    def test_un_abono_con_tarjeta_no_bloquea_la_correccion_del_fondo(
+        self, client, db, org, branch_a, cajero_a, auth_cajero_a
+    ):
+        """Ronda de correcciones 2 (MENOR): el guard de arriba usa el mismo
+        criterio de atribucion que el corte, que no distingue metodo de pago.
+        Un abono con tarjeta no entra al cajon, asi que corregir el fondo no
+        puede enmascarar ningun faltante — y el guard le quitaba al cajero la
+        unica via legitima de arreglar un fondo mal capturado.
+        """
+        from app.models.sales import DocumentStatus, SalesDocument
+        from app.modules.customers.models import Customer
+
+        h = {**auth_cajero_a, "X-Organization-ID": str(org.id)}
+        sesion_id = client.post("/api/cash/open", json={"opening_balance": "1000.00"},
+                                headers=h).json()["id"]
+
+        vieja = CashSession(user_id=cajero_a.id, branch_id=branch_a.id,
+                            organization_id=org.id, opening_balance=Decimal("0"),
+                            status="CLOSED")
+        db.add(vieja); db.flush()
+        cliente = Customer(name="Cliente a credito", organization_id=org.id,
+                           has_credit=True, credit_limit=Decimal("5000"),
+                           current_balance=Decimal("500"))
+        db.add(cliente); db.flush()
+        venta = SalesDocument(
+            organization_id=org.id, branch_id=branch_a.id, seller_id=cajero_a.id,
+            folio=5002, series="A", subtotal=Decimal("500"), tax_amount=Decimal("0"),
+            total_amount=Decimal("500"), status=DocumentStatus.PENDING,
+            doc_type="ORDER", cash_session_id=vieja.id, customer_id=cliente.id,
+        )
+        db.add(venta); db.commit()
+
+        abono = client.post(
+            f"/api/customers/{cliente.id}/pay",
+            json={"amount": "500", "method": "CARD", "sales_document_id": venta.id},
+            headers=h,
+        )
+        assert abono.status_code == 200, abono.text
+
+        resp = client.patch(
+            f"/api/cash/sessions/{sesion_id}/opening-balance",
+            json={"opening_balance": "1377.00", "reason": "fondo capturado mal al abrir"},
+            headers=h,
+        )
+        assert resp.status_code == 200, (
+            "el abono con tarjeta no metio efectivo al cajon: corregir el fondo "
+            f"no esconde nada y no se puede bloquear ({resp.text})"
+        )
+        sesion = db.query(CashSession).filter(CashSession.id == sesion_id).one()
+        assert Decimal(str(sesion.opening_balance)) == Decimal("1377.00")
+
     def test_el_saldo_inicial_no_puede_ser_negativo(
         self, client, db, org, branch_a, cajero_a, auth_cajero_a
     ):
