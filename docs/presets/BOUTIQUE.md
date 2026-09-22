@@ -245,6 +245,28 @@ cambio USD" / "Comisión por tarjeta" si aplican (§5).
 | **Equivalente en USD** | `organization.usd_rate_mode` (`off`\|`auto`\|`manual`) | Función general (no exclusiva de boutique), útil en zona turística/fronteriza. `auto` = FIX de Banxico + margen; `manual` = tipo fijo capturado por el admin. El tipo se congela en `sales_documents.usd_rate` al cobrar; el ticket imprime `USD (T.C. …)`. **Solo Fase A (mostrar el equivalente)** — cobrar en dólares es Fase B, sin implementar. |
 | **Comisión por pago con tarjeta** | `organization.card_surcharge_pct` (0-20%, `NUMERIC(5,2)`) | Se suma solo a la parte pagada con `CARD`; en mixto, solo sobre esa parte. `total_amount` sigue siendo mercancía; la comisión vive en `sales_documents.card_surcharge_amount/pct`. Ticket imprime `COM. TARJETA` y `TOTAL A PAGAR`; el corte de caja muestra `card_surcharges`. **No se reintegra en devoluciones** (el banco ya se la quedó). |
 | **Escanear al carrito** | — | **No existe.** El Scanner es solo consulta; cobrar escaneando es agregar manualmente el producto encontrado, o usar el buscador del POS que sí resuelve por código exacto. |
+| **Corte de caja — atribución por pago** (2026-09-22) | `payments.cash_session_id` | El efectivo de un abono a crédito ahora se cuenta en el turno que lo COBRÓ, no en el de la venta original — antes, liquidar un pedido viejo en un turno nuevo podía descuadrar (o reabrir) un corte ya cerrado. Conteo ciego al cerrar turno y salidas de caja con motivo/autoría obligatorios. Detalle en `docs/DATA_MODEL.md §Ventas / Caja`. |
+
+### Correcciones 2026-09-22 al POS boutique
+
+Cuatro bugs de la auditoría funcional del 2026-09-22 (`docs/AUDITORIA-2026-09-22.md §2.1`)
+afectaban directamente la operación diaria de una boutique — ya corregidos en `main`:
+
+- **Precio real de caja.** Vender una "caja" con precio de paquete vinculado o precio
+  forzado ("Caja libre") y cobrar con tarjeta daba 422 pese a cobrar el monto correcto
+  en pantalla; en efectivo la venta pasaba pero quedaba grabada con un precio de línea
+  distinto al cobrado. `frontend/src/pages/pos/saleItems.ts`.
+- **Stock por talla en la tarjeta de producto.** Con una variante emparejada por
+  escaneo, el tope de stock sumaba el carrito de TODAS las tallas en vez de solo la
+  emparejada — bloqueaba ventas válidas (agregar talla M con stock propio, cuando ya
+  había piezas de otra talla en el carrito). `frontend/src/components/pos/ProductSearch.tsx`.
+- **QR con guion en el SKU.** El escáner de QR le quitaba el guion a un SKU boutique
+  (`M-1151` → `m1151`) y dejaba de emparejar contra el catálogo.
+  `frontend/src/pages/scanner/barcodeReader.ts`.
+- **Marcas y departamentos editables.** Editar o borrar una marca o departamento desde
+  Catálogo devolvía 405 siempre (barra final en la llamada que el backend no
+  registraba) — funcionalidad rota para cualquier boutique con marcas capturadas
+  (§2.1 de arriba). `frontend/src/api/products.ts`.
 
 ---
 

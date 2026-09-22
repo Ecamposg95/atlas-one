@@ -1,14 +1,18 @@
-# Changelog — preset boutique (2026-09-16 → 2026-09-21)
+# Changelog — preset boutique (2026-09-16 → 2026-09-22)
 
 Bitácora fechada de lo construido para **Eleven Fashion** (org 17) y el preset
 `ATLAS_POS_BOUTIQUE`. Es historial, no referencia viva — para el estado actual del
 sistema ver [`docs/presets/BOUTIQUE.md`](presets/BOUTIQUE.md),
 [`docs/DATA_MODEL.md`](DATA_MODEL.md) y [`docs/API_REFERENCE.md`](API_REFERENCE.md).
 
-Rango: `git log --oneline 959be7d..main` — 86 commits entre el 2026-09-17 y el
-2026-09-21 (`959be7d` es el commit donde se desplegó la primera fase de variantes
-color/talla, el 2026-09-17 por la mañana; `main` al cerrar esta bitácora está en
-`5c73854`, un commit por delante de `a30c112`).
+Rango original (secciones 1-8): `git log --oneline 959be7d..main` — 86 commits entre el
+2026-09-17 y el 2026-09-21 (`959be7d` es el commit donde se desplegó la primera fase de
+variantes color/talla, el 2026-09-17 por la mañana; `main` al cerrar esa bitácora
+estaba en `5c73854`, un commit por delante de `a30c112`). §9 extiende la bitácora al
+2026-09-22 con los tres merges siguientes (`git log --first-parent 9d98dea..63ee8a2`):
+`4054d6e` (deploy a IONOS), `ed8f41f` (bugs de frontend) y `63ee8a2` (atribución del
+efectivo por pago) — ninguno es específico de boutique, pero el tercero cambia cómo se
+lee el corte de caja de cualquier organización, Eleven incluida.
 
 ---
 
@@ -171,6 +175,34 @@ usable en teléfono — no se podía completar una venta (carrito `min-w-[420px]
 de cobro sin scroll). **Escritorio ≥1024px verificado byte a byte sin cambios.**
 
 ---
+
+## 9. Despliegue a IONOS, auditoría funcional y atribución del efectivo por pago (2026-09-22, 3 merges)
+
+No es trabajo de boutique específicamente, pero los tres merges del día tocan cosas que
+Eleven usa a diario (el corte de caja, el POS) y cambian dónde vive producción.
+Detalle completo en [`docs/DEPLOY.md`](DEPLOY.md) y
+[`docs/AUDITORIA-2026-09-22.md`](AUDITORIA-2026-09-22.md).
+
+- `4054d6e` **Despliegue a IONOS desde CI.** `main` ya no despliega a Railway: un push
+  a `main` corre pytest+vitest+tsc+build y, si pasan, despliega automáticamente al VPS
+  IONOS (`app.atlasone.com.mx`, producción real). `staging` se fusionó a `main` el
+  mismo día — ya no hay dos ramas.
+- `ed8f41f` **12 bugs de frontend corregidos**, confirmados por la auditoría funcional
+  del mismo día. Dos tocan directamente el POS de boutique: **#1** el precio real de
+  una "caja" vendida (paquete vinculado o precio forzado) no era el que se mandaba a
+  `create_sale` — con tarjeta, 422 pese a cobrar el monto correcto en pantalla; **#6**
+  el escáner de QR le quitaba el guion al SKU boutique (`M-1151` → `m1151`) y dejaba de
+  emparejar. Detalle de los 12 en `docs/AUDITORIA-2026-09-22.md §2.1`.
+- `63ee8a2` **Atribución del efectivo por pago.** El corte de caja ya no agrupa el
+  efectivo por `sales_documents.cash_session_id` (el turno de la VENTA) sino por
+  `payments.cash_session_id` (el turno que efectivamente RECIBIÓ el dinero) — corrige
+  el caso de un abono a crédito cobrado en un turno distinto al de la venta original.
+  Trae además conteo ciego al cerrar turno, salidas de caja con motivo/autoría
+  obligatorios, y la corrección del fondo inicial como vía legítima (antes el único
+  recurso era inventar una "entrada de efectivo"). El abono en efectivo de un cliente
+  ahora exige caja abierta (409 si no la hay); tarjeta/transferencia siguen sin
+  exigirla. Detalle en `docs/DATA_MODEL.md §Ventas / Caja` y
+  `docs/API_REFERENCE.md §Caja`.
 
 ## Diferidos y deudas conocidas
 
