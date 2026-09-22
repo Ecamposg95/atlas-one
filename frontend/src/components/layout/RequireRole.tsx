@@ -1,6 +1,7 @@
 import { Navigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
 import type { Role } from '../../types/auth'
+import { rolesConAcceso } from './navConfig'
 
 /**
  * Route guard that restricts children to users whose tenant `role` is in
@@ -37,4 +38,20 @@ export function RequireRole({
   }
 
   return <>{children}</>
+}
+
+/**
+ * Guarda una ruta con los mismos roles que la ven en el menú (`ROLE_ROUTES`).
+ *
+ * Antes solo 5 de ~55 rutas verificaban el rol: cualquier usuario autenticado
+ * que escribiera `/users` veía la lista completa de usuarios, y en
+ * `/organization` la configuración fiscal y de comisión de tarjeta
+ * (audit-funcional #13). Quien no tiene permiso vuelve a `/`, que reenvía a
+ * su propio inicio según su rol.
+ *
+ * Sigue siendo una guarda de interfaz: el backend es el que autoriza de
+ * verdad en cada llamada.
+ */
+export function RutaPorRol({ url, children }: { url: string; children: React.ReactNode }) {
+  return <RequireRole roles={rolesConAcceso(url)} redirectTo="/">{children}</RequireRole>
 }
