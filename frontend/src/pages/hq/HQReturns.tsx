@@ -104,7 +104,7 @@ export function HQReturns() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <i className="fa-solid fa-undo text-indigo-400 text-xl" />
-          <h1 className="text-2xl font-black text-white">Devoluciones HQ</h1>
+          <h1 className="text-2xl font-black text-white">Devoluciones</h1>
         </div>
         <div className="flex items-center gap-2">
           <select

@@ -30,7 +30,7 @@ export function Seguimiento() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <i className="fa-solid fa-clipboard-check text-indigo-400 text-xl" />
-          <h1 className="text-2xl font-black text-white">Pedidos Abiertos</h1>
+          <h1 className="text-2xl font-black text-white">Pedidos</h1>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-slate-500 text-xs">{orders.length} pedidos</span>

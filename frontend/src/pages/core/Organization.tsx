@@ -181,7 +181,7 @@ export function Organization() {
     <div className="space-y-5">
       <div className="flex items-center gap-3">
         <i className="fa-solid fa-building text-indigo-400 text-xl" />
-        <h1 className="text-2xl font-black text-white">Empresa y Sucursales</h1>
+        <h1 className="text-2xl font-black text-white">Empresa</h1>
       </div>
 
       {/* Tabs */}

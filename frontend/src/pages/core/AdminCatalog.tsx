@@ -249,7 +249,7 @@ export function AdminCatalog() {
         <div>
           <div className="flex items-center gap-3">
             <i className="fa-solid fa-book text-indigo-400 text-xl" />
-            <h1 className="text-2xl font-black text-white">Catálogo — Administración</h1>
+            <h1 className="text-2xl font-black text-white">Catálogo</h1>
           </div>
           <p className="text-slate-500 text-xs mt-0.5">
             Gestión completa de productos · {org?.name ?? 'Organización'}

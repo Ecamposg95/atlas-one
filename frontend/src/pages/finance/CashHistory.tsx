@@ -207,7 +207,7 @@ function CashHistoryHQView() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <i className="fa-solid fa-vault text-indigo-400 text-xl" />
-          <h1 className="text-2xl font-black text-white">Control de Caja</h1>
+          <h1 className="text-2xl font-black text-white">Corte de caja</h1>
         </div>
         <div className="flex gap-2">
           <button onClick={load} className="dax-btn-secondary text-xs"><i className="fa-solid fa-rotate-right" /></button>

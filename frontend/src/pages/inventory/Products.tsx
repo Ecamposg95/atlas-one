@@ -2,6 +2,7 @@ import { Fragment, useEffect, useState, useCallback, useRef, type FormEvent } fr
 import { useNavigate, useLocation } from 'react-router-dom'
 import { productsApi, type BranchStatusPatch } from '../../api/products'
 import { useAuthStore } from '../../store/authStore'
+import { useBranchCountStore, esTiendaUnica } from '../../store/branchCountStore'
 import { useIsBranchUser } from '../../components/branch/useIsBranchUser'
 import { ProductsBranchView } from '../../components/branch/ProductsBranchView'
 import { DaxCard } from '../../components/ui/DaxCard'
@@ -1144,6 +1145,7 @@ function ProductsHQView() {
   const location = useLocation()
   const { user } = useAuthStore()
   const isHQ = HQ_ROLES.includes(user?.role ?? '')
+  const unaSolaSucursal = esTiendaUnica(useBranchCountStore((s) => s.count))
   const canEdit = CAN_EDIT_ROLES.includes(user?.role ?? '')
   // CAJERO/GERENTE tienen además el editor PBS inline para toggles rápidos.
   const isBranchEditor = BRANCH_EDIT_ROLES.includes(user?.role ?? '') && user?.branch_id != null
@@ -1327,11 +1329,14 @@ function ProductsHQView() {
         <div className="flex items-center gap-3">
           <i className="fa-solid fa-barcode text-indigo-400 text-xl" />
           <h1 className="text-2xl font-black text-white">
-            {isHQ ? 'Catálogo de Productos' : 'Consulta Productos'}
+            {isHQ ? 'Productos' : 'Consulta de productos'}
           </h1>
-          {isHQ && (
+          {/* Con una sola tienda, "HQ Global" no nombra nada que la dueña
+              reconozca: el alcance ya es "toda la tienda". El chip solo
+              aparece cuando de verdad hay varias sucursales. */}
+          {isHQ && !unaSolaSucursal && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-violet-600/20 text-violet-400 border border-violet-500/30 rounded text-[9px] font-black uppercase tracking-widest">
-              <i className="fa-solid fa-building-shield text-[8px]" /> HQ Global
+              <i className="fa-solid fa-building-shield text-[8px]" /> Todas las sucursales
             </span>
           )}
         </div>

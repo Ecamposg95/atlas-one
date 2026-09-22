@@ -118,7 +118,7 @@ export function Logistics() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <i className="fa-solid fa-truck-loading text-indigo-400 text-xl" />
-          <h1 className="text-2xl font-black text-white">Logística — Transferencias</h1>
+          <h1 className="text-2xl font-black text-white">Logística</h1>
         </div>
         <button onClick={openModal} className="dax-btn-primary text-xs">
           <i className="fa-solid fa-plus" /> Nueva Solicitud

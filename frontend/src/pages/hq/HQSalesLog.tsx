@@ -97,7 +97,7 @@ export function HQSalesLog() {
     <div className="space-y-5">
       <div className="flex items-center gap-3">
         <i className="fa-solid fa-receipt text-indigo-400 text-xl" />
-        <h1 className="text-2xl font-black text-white">Ventas HQ</h1>
+        <h1 className="text-2xl font-black text-white">Ventas</h1>
       </div>
 
       {/* KPI Strip */}

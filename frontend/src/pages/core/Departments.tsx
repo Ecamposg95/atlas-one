@@ -3,6 +3,7 @@ import { productsApi } from '../../api/products'
 import { DaxCard } from '../../components/ui/DaxCard'
 import { Spinner } from '../../components/ui/Spinner'
 import { toast } from '../../store/toastStore'
+import { errorDetailText } from '../../utils/errorDetail'
 import { confirm as confirmDialog } from '../../components/ui/ConfirmDialog'
 import type { Department } from '../../types/products'
 
@@ -38,7 +39,12 @@ export function Departments() {
       if (modal === 'create') await productsApi.createDepartment({ name: form.name })
       else if (editing) await productsApi.updateDepartment(editing.id, { name: form.name })
       setModal(null); load()
-    } catch { toast.error('Error al guardar el departamento') } finally { setSaving(false) }
+    } catch (e: any) {
+      toast.error(errorDetailText(
+        e?.response?.data?.detail,
+        'No se pudo guardar el departamento. Revisa que el nombre no esté repetido y vuelve a intentar.',
+      ))
+    } finally { setSaving(false) }
   }
 
   const handleDelete = async (d: Department) => {
@@ -50,7 +56,12 @@ export function Departments() {
     })
     if (!ok) return
     try { await productsApi.deleteDepartment(d.id); load() }
-    catch { toast.error('Error al eliminar el departamento') }
+    catch (e: any) {
+      toast.error(errorDetailText(
+        e?.response?.data?.detail,
+        'No se pudo eliminar el departamento. Si tiene productos asignados, muévelos a otro primero.',
+      ))
+    }
   }
 
   return (

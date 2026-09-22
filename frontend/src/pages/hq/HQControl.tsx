@@ -73,7 +73,7 @@ export function HQControl() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <i className="fa-solid fa-sliders text-indigo-400 text-xl" />
-          <h1 className="text-2xl font-black text-white">Control HQ</h1>
+          <h1 className="text-2xl font-black text-white">Control</h1>
         </div>
         <button onClick={() => { load(); loadAuditLog() }} className="dax-btn-secondary text-xs">
           <i className="fa-solid fa-rotate-right" /> Actualizar
@@ -85,15 +85,15 @@ export function HQControl() {
         <DaxCard>
           <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Sucursales</p>
           <p className="text-3xl font-black text-white mt-2 tabular-nums">{branchCount ?? '—'}</p>
-          <p className="text-[10px] text-indigo-400 mt-1">Nodos activos</p>
+          <p className="text-[10px] text-indigo-400 mt-1">Activas</p>
         </DaxCard>
         <DaxCard>
-          <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Revenue Hoy</p>
+          <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Ventas de hoy</p>
           <p className="text-3xl font-black text-emerald-400 mt-2 tabular-nums">{revenue !== null ? formatCurrency(revenue) : '—'}</p>
           <p className="text-[10px] text-slate-500 mt-1">Acumulado del día</p>
         </DaxCard>
         <DaxCard>
-          <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Tickets Hoy</p>
+          <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Tickets de hoy</p>
           <p className="text-3xl font-black text-sky-400 mt-2 tabular-nums">{tickets ?? '—'}</p>
           <p className="text-[10px] text-slate-500 mt-1">Transacciones</p>
         </DaxCard>

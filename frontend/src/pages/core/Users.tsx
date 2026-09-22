@@ -119,7 +119,7 @@ export function Users() {
           <h1 className="text-2xl font-black text-white">Usuarios</h1>
         </div>
         <button onClick={openCreate} className="dax-btn-primary text-xs">
-          <i className="fa-solid fa-plus" /> Nuevo Usuario
+          <i className="fa-solid fa-plus" /> Nuevo usuario
         </button>
       </div>
 
@@ -173,13 +173,13 @@ export function Users() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setModal(null)}>
           <div className="dax-card dax-modal p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
-              <h3 className="text-lg font-black text-white">{modal === 'create' ? 'Nuevo Usuario' : 'Editar Usuario'}</h3>
+              <h3 className="text-lg font-black text-white">{modal === 'create' ? 'Nuevo usuario' : 'Editar usuario'}</h3>
               <button onClick={() => setModal(null)} className="dax-btn-icon text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
             </div>
 
             <div className="space-y-3">
               <div>
-                <label className="dax-label">Username</label>
+                <label className="dax-label">Usuario</label>
                 <input value={form.username} onChange={(e) => f('username', e.target.value)}
                   disabled={modal === 'edit'} className="dax-input w-full disabled:opacity-50" placeholder="usuario123" />
               </div>
@@ -201,7 +201,7 @@ export function Users() {
                 <div>
                   <label className="dax-label">Sucursal</label>
                   <select value={form.branch_id} onChange={(e) => f('branch_id', e.target.value)} className="dax-input w-full">
-                    <option value="">HQ / Global</option>
+                    <option value="">Sin sucursal fija</option>
                     {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
                 </div>
