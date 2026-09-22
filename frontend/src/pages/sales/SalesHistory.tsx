@@ -281,7 +281,7 @@ export function SalesHistory() {
                         </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); reprintTicket(s) }}
-                          disabled={!printerName}
+                          disabled={reprinting || !printerName}
                           className="px-3 py-2 rounded-lg text-xs font-bold bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/25 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                           title={printerName ? 'Reimprimir ticket' : 'Configura una impresora'}
                         >
