@@ -295,11 +295,26 @@ def corregir_saldo_inicial(
     # persona. Misma regla que ya aplica `/sessions/{id}/close-guided` (línea
     # ~419): el dueño del turno, o un rol con visibilidad gerencial
     # (ROLES_SALIDA_ALTA = ADMINISTRADOR/DUEÑO/GERENTE).
-    if session.user_id != current_user.id and current_user.role not in ROLES_SALIDA_ALTA:
-        raise HTTPException(
-            status_code=403,
-            detail="Solo el dueño del turno o un GERENTE/ADMINISTRADOR/DUEÑO puede corregir el fondo.",
-        )
+    # El dueño del turno siempre corrige el suyo.
+    if session.user_id != current_user.id:
+        if current_user.role not in ROLES_SALIDA_ALTA:
+            raise HTTPException(
+                status_code=403,
+                detail="Solo el dueño del turno o un GERENTE/ADMINISTRADOR/DUEÑO puede corregir el fondo.",
+            )
+        # M-4: la misma fuga cross-sucursal que A-3 en `close-guided` — el
+        # query solo acotaba por organización y el guard solo miraba el rol,
+        # así que un GERENTE de la sucursal A reescribía el fondo inicial de
+        # una sesión de la B. ADMINISTRADOR/DUEÑO sí ven toda la organización.
+        if (
+            current_user.role not in ROLES_HQ
+            and session.branch_id is not None
+            and session.branch_id != current_user.branch_id
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail="Solo puedes corregir el fondo de una caja de tu sucursal.",
+            )
 
     from app.services.cash_reconciliation import session_payments_filter
 

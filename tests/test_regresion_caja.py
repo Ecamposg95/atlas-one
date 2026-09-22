@@ -6,6 +6,8 @@
   403 al cerrar el turno de su cajera.
 * A-4 `GET /cash/branch-summary?branch_id=` solo filtraba por organización: un
   GERENTE de A veía el corte consolidado de B.
+* M-4 `PATCH /cash/sessions/{id}/opening-balance` tenía la misma fuga que A-3:
+  un GERENTE de A reescribía el fondo inicial de una sesión de B.
 """
 from decimal import Decimal
 
@@ -120,3 +122,55 @@ def test_a4_admin_sigue_consolidando_cualquier_sucursal(
                    headers=_h(auth_admin, org))
     assert r.status_code == 200, r.text
     assert r.json()["branch_id"] == branch_b.id
+
+
+# ---------------------------------------------------------------- M-4
+_CORRECCION = {"opening_balance": "777.00", "reason": "Fondo capturado mal al abrir"}
+
+
+def test_m4_gerente_no_corrige_el_fondo_de_otra_sucursal(
+    client, db, org, branch_a, branch_b, gerente_a, auth_gerente_a
+):
+    cajero_b = _make_user(db, org, branch_b, "cajero_b_reg_m4", Role.CAJERO)
+    session_b = _abrir(db, org, branch_b, cajero_b, Decimal("100"))
+    assert gerente_a.branch_id == branch_a.id
+
+    r = client.patch(f"/api/cash/sessions/{session_b.id}/opening-balance",
+                     json=_CORRECCION, headers=_h(auth_gerente_a, org))
+    assert r.status_code == 403, r.text
+    db.refresh(session_b)
+    assert session_b.opening_balance == Decimal("100")
+
+
+def test_m4_gerente_si_corrige_el_fondo_de_su_sucursal(
+    client, db, org, branch_a, cajero_a, gerente_a, auth_gerente_a
+):
+    session_a = _abrir(db, org, branch_a, cajero_a, Decimal("100"))
+    r = client.patch(f"/api/cash/sessions/{session_a.id}/opening-balance",
+                     json=_CORRECCION, headers=_h(auth_gerente_a, org))
+    assert r.status_code == 200, r.text
+    db.refresh(session_a)
+    assert session_a.opening_balance == Decimal("777.00")
+
+
+def test_m4_admin_corrige_cualquier_sucursal(
+    client, db, org, branch_b, admin_user, auth_admin
+):
+    cajero_b = _make_user(db, org, branch_b, "cajero_b_reg_m4b", Role.CAJERO)
+    session_b = _abrir(db, org, branch_b, cajero_b, Decimal("100"))
+    r = client.patch(f"/api/cash/sessions/{session_b.id}/opening-balance",
+                     json=_CORRECCION, headers=_h(auth_admin, org))
+    assert r.status_code == 200, r.text
+    db.refresh(session_b)
+    assert session_b.opening_balance == Decimal("777.00")
+
+
+def test_m4_el_cajero_sigue_corrigiendo_su_propio_fondo(
+    client, db, org, branch_a, cajero_a, auth_cajero_a
+):
+    session = _abrir(db, org, branch_a, cajero_a, Decimal("100"))
+    r = client.patch(f"/api/cash/sessions/{session.id}/opening-balance",
+                     json=_CORRECCION, headers=_h(auth_cajero_a, org))
+    assert r.status_code == 200, r.text
+    db.refresh(session)
+    assert session.opening_balance == Decimal("777.00")
