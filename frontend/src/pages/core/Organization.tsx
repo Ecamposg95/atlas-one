@@ -167,7 +167,12 @@ export function Organization() {
     } catch { /* ignore */ }
   }
 
-  const of = (field: keyof Organization, val: string) => setOrgForm((prev) => ({ ...prev, [field]: val || null }))
+  // `name` no se coacciona a null: un borrado momentáneo del campo (patrón
+  // normal al retipear) no debe poder guardarse como razón social NULL — el
+  // botón "Guardar" se deshabilita en su lugar (ver `nameInvalido`).
+  const of = (field: keyof Organization, val: string) =>
+    setOrgForm((prev) => ({ ...prev, [field]: field === 'name' ? val : (val || null) }))
+  const nameInvalido = !orgForm.name?.trim()
   const bf = (field: keyof BranchForm, val: string) => setBranchForm((prev) => ({ ...prev, [field]: val }))
 
   if (loading) return <Spinner text="Cargando organización..." />
@@ -221,7 +226,7 @@ export function Organization() {
               </div>
             </div>
             <div className="flex justify-end mt-4">
-              <button onClick={saveOrg} disabled={saving} className="dax-btn-primary disabled:opacity-40">
+              <button onClick={saveOrg} disabled={saving || nameInvalido} className="dax-btn-primary disabled:opacity-40">
                 {saving ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Guardar cambios</>}
               </button>
             </div>
@@ -337,7 +342,7 @@ export function Organization() {
                 <button onClick={refreshFx} disabled={fxRefreshing} className="dax-btn-secondary text-xs disabled:opacity-40">
                   {fxRefreshing ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-rotate" /> Actualizar ahora</>}
                 </button>
-                <button onClick={saveOrg} disabled={saving} className="dax-btn-primary text-xs disabled:opacity-40">
+                <button onClick={saveOrg} disabled={saving || nameInvalido} className="dax-btn-primary text-xs disabled:opacity-40">
                   {saving ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Guardar</>}
                 </button>
               </div>
@@ -380,7 +385,7 @@ export function Organization() {
               </div>
             </div>
             <div className="flex justify-end mt-4">
-              <button onClick={saveOrg} disabled={saving} className="dax-btn-primary text-xs disabled:opacity-40">
+              <button onClick={saveOrg} disabled={saving || nameInvalido} className="dax-btn-primary text-xs disabled:opacity-40">
                 {saving ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Guardar</>}
               </button>
             </div>
@@ -514,7 +519,7 @@ export function Organization() {
                 </label>
               </div>
               <div className="flex justify-end">
-                <button onClick={saveOrg} disabled={saving} className="dax-btn-primary disabled:opacity-40">
+                <button onClick={saveOrg} disabled={saving || nameInvalido} className="dax-btn-primary disabled:opacity-40">
                   {saving ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Guardar ticket</>}
                 </button>
               </div>
