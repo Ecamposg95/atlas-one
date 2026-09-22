@@ -3,6 +3,8 @@ MOONSHOT_ENGINE: Nucleus
 DOMAIN: Identity & Access Management
 STATUS: Stable
 """
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -18,6 +20,7 @@ from app.core.security.guards import require_admin_or_owner
 from app.core.tenant_context import get_current_active_organization
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # --- 0. CONTEXTO COMPLETO (NEW) ---
 @router.get("/me/context")
@@ -229,6 +232,16 @@ def update_user(
         raise HTTPException(status_code=404, detail="Usuario no encontrado o no pertenece a la organización")
 
     update_data = user_in.dict(exclude_unset=True)
+
+    # Red de seguridad ante deriva del schema (C-5): el rol de PLATAFORMA
+    # nunca se escribe desde una ruta de tenant, por más que el payload lo
+    # traiga. `require_admin_or_owner` es de la organización, no de la
+    # plataforma.
+    if update_data.pop('platform_role', None) is not None:
+        logger.warning(
+            "PLATFORM_ROLE_IGNORED: user_id=%s actor_id=%s org_id=%s",
+            user_id, getattr(current_user, "id", None), org_id,
+        )
 
     if 'password' in update_data:
         password_raw = update_data.pop('password')
