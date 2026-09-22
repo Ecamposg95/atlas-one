@@ -102,7 +102,18 @@ def create_return(db: Session, return_in: SaleReturnCreate, user_id: int, branch
             SalesLineItem.document_id == sale.id
         ).first()
         if line_item:
-            item_refund = Decimal(str(item_in.quantity)) * Decimal(str(line_item.unit_price))
+            # Se prorratea `total_line` (lo que el cliente pagó de verdad por
+            # esa partida), no `unit_price`, que es PRE-descuento: 2 piezas de
+            # $100 con 50% de descuento se cobran $100 en total, y devolver
+            # una reembolsaba $100 — el doble de lo pagado por esa pieza.
+            # Auditoría C-6.
+            qty_linea = Decimal(str(line_item.quantity or 0))
+            total_linea = Decimal(str(line_item.total_line or 0))
+            qty_dev = Decimal(str(item_in.quantity))
+            if qty_linea > 0:
+                item_refund = (total_linea * qty_dev / qty_linea).quantize(Decimal("0.01"))
+            else:
+                item_refund = Decimal(str(line_item.unit_price)) * qty_dev
         else:
             item_refund = Decimal(str(item_in.refund_amount))  # fallback only
 
