@@ -139,12 +139,11 @@ CRUD productos + aprobar/rechazar/restore/duplicate/imagen; `search` (variants/p
 ## Impresora · `/api/printer`
 `POST /test-print · /print-ticket · /reprint-ticket/{id} · /reprint-refunded/{id} · /print-cash-cut` · `GET /printers · /download-agent`. Genera ESC/POS base64 (el agente local imprime, no el server). Registra `PrintJob`. `reprint-ticket`/`reprint-refunded` aceptan `pin` (2026-09-19): si la venta no es propia-y-reciente, primero prueban el PIN de reimpresión de un supervisor (`users.reprint_pin_hash`) y si no, su contraseña.
 
-`GET /download-agent?platform=windows|linux|mac` — hoy sigue empaquetando el ZIP desde
-`tools/print_agent/` en este mismo repo (filtrado por plataforma: launcher +
-autoarranque de la plataforma pedida, certs excluidos). **El agente se está
-mudando a un repo propio**, <https://github.com/Ecamposg95/Atlas-Print-Agent> — trátalo
-como el nuevo hogar del código del agente (`main.py`, instaladores, requirements) de
-cara a futuro; este endpoint deberá apuntar ahí cuando la migración se complete. Ver
+`GET /download-agent?platform=windows|linux|mac` — redirige (302) al repositorio del
+agente, <https://github.com/Ecamposg95/Atlas-Print-Agent> (ZIP de `main`; dentro,
+`legacy/print_agent/` trae los launchers e instaladores de autoarranque). El agente ya no
+vive en este repo (2026-09-22). `ATLAS_PRINT_AGENT_URL` sobreescribe el destino y admite
+`{platform}` para cuando el repo publique un ZIP por plataforma.
 autoarranque en `docs/superpowers/runbooks/print-agent-autostart.md`.
 
 ## Portal cliente · `/api/portal`

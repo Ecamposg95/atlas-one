@@ -229,10 +229,10 @@ personas que hicieron el trabajo dejaron anotado.
 - Rotación de logs de launchd sin implementar; `find` profundo de certificados en
   macOS sin implementar; `--uninstall` en Linux sin implementar; `_es_health` del
   instalador Linux sin implementar.
-- **El agente se está moviendo a un repo propio**,
-  <https://github.com/Ecamposg95/Atlas-Print-Agent> — a la fecha de esta bitácora
-  `GET /api/printer/download-agent` todavía empaqueta desde `tools/print_agent/` en
-  este repo; la migración de código y del endpoint queda pendiente.
+- **El agente vive en su propio repo** desde el 2026-09-22:
+  <https://github.com/Ecamposg95/Atlas-Print-Agent>. `GET /api/printer/download-agent`
+  redirige ahí; `tools/print_agent/` y sus tests se retiraron de este repo. Ahí mismo
+  vive `atlas_labels/`, el módulo de etiquetas ZPL para la Zebra GX420t.
 - Impresión Bluetooth sin agente (investigación 2026-09-17, sin implementar): rutas
   identificadas — Windows emparejando la impresora BT como puerto SPP y siguiendo con
   el agente; Android con la app **RawBT** por intent `rawbt:`; **PUQU Q1** (etiquetadora)
