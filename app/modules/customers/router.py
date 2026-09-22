@@ -462,12 +462,19 @@ def get_customer_unpaid_documents(
     
     return results
 
+# Recibir un abono es cobrar en el mostrador, y cobrar es de la cajera: este
+# endpoint exige caja abierta a QUIEN cobra cuando el abono es en efectivo
+# (misma regla que el checkout). Dejarlo solo en manos del administrador lo
+# dejaba inservible: desde el 2026-09-22 el admin ya no tiene punto de venta
+# ni turno de caja, asi que un abono en efectivo le respondia 409 y nadie
+# podia recibirlo. Lo que SI es de administracion —borrar un cliente— sigue
+# con `require_admin_or_owner`.
 @router.post("/{customer_id}/pay", response_model=LedgerEntryResponse)
 def register_customer_payment(
     customer_id: int,
     payment_in: CustomerPaymentCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin_or_owner),
+    current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization)
 ):
     """

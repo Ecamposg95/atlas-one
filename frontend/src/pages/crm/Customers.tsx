@@ -24,7 +24,9 @@ export function Customers() {
   // endpoints (app/modules/customers/router.py), así que esconder los botones
   // evita ofrecer algo que va a fallar — no es el candado.
   const user = useAuthStore((s) => s.user)
-  const esAdmin = user?.role === 'ADMINISTRADOR' || user?.role === 'DUEÑO'
+  // Borrar un cliente es de administración; recibir un abono es cobrar en el
+  // mostrador y lo hace quien tiene el turno de caja abierto.
+  const puedeBorrar = user?.role === 'ADMINISTRADOR' || user?.role === 'DUEÑO'
   const [customers, setCustomers] = useState<Customer[]>([])
   const [stats, setStats] = useState<CustomerStats | null>(null)
   const [loading, setLoading] = useState(true)
@@ -196,7 +198,7 @@ export function Customers() {
                       <button onClick={() => openDetail(c)} className="dax-btn-icon text-slate-500 hover:text-white text-xs mr-2">
                         <i className="fa-solid fa-eye" />
                       </button>
-                      {esAdmin && c.current_balance > 0 && (
+                      {c.current_balance > 0 && (
                         <button onClick={() => setPayModal({ id: c.id, name: c.name })} className="text-emerald-500 hover:text-emerald-400 text-xs">
                           <i className="fa-solid fa-money-bill-wave" />
                         </button>
@@ -232,7 +234,7 @@ export function Customers() {
                   className="text-slate-500 hover:text-white" title="Editar">
                   <i className="fa-solid fa-pen" />
                 </button>
-                {esAdmin && <button
+                {puedeBorrar && <button
                   onClick={async () => {
                     const ok = await confirmDialog({
                       title: `Eliminar a ${selected.name}`,
@@ -273,7 +275,7 @@ export function Customers() {
               </div>
             </div>
 
-            {esAdmin && selected.current_balance > 0 && (
+            {selected.current_balance > 0 && (
               <button onClick={() => setPayModal({ id: selected.id, name: selected.name })}
                 className="dax-btn-primary w-full justify-center mb-4 text-sm">
                 <i className="fa-solid fa-money-bill-wave" /> Registrar Pago

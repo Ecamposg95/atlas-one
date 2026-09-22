@@ -110,7 +110,7 @@ def test_la_cajera_da_de_alta_y_edita(client, db, org, auth_cajero_a, crm_encend
     assert edicion.json()["phone"] == "4493330000"
 
 
-# ── Borrar y abonar son del administrador ────────────────────────────────────
+# ── Borrar es del administrador; abonar es de quien cobra ────────────────────
 
 def test_la_cajera_no_puede_borrar_un_cliente(client, db, org, auth_cajero_a, crm_encendido, cliente):
     r = client.delete(f"/api/customers/{cliente.id}", headers=_h(auth_cajero_a, org))
@@ -119,20 +119,27 @@ def test_la_cajera_no_puede_borrar_un_cliente(client, db, org, auth_cajero_a, cr
     assert cliente.is_active is True, "el cliente no se pudo haber dado de baja"
 
 
-def test_la_cajera_no_puede_registrar_un_abono(client, db, org, auth_cajero_a, crm_encendido, cliente):
+def test_la_cajera_si_registra_un_abono(client, db, org, auth_cajero_a, crm_encendido, cliente):
+    """Recibir un abono es cobrar, y cobrar es del mostrador.
+
+    El endpoint exige caja abierta a quien cobra cuando el abono es en
+    efectivo, asi que dejarlo solo en manos del administrador —que desde el
+    2026-09-22 ya no tiene turno— dejaba a la tienda sin forma de recibir un
+    pago de credito.
+    """
     r = client.post(f"/api/customers/{cliente.id}/pay",
                     json={"amount": "100", "method": "TRANSFER"},
                     headers=_h(auth_cajero_a, org))
-    assert r.status_code == 403, r.text
+    assert r.status_code == 200, r.text
     db.refresh(cliente)
-    assert cliente.current_balance == Decimal("300"), "el saldo no se pudo haber movido"
+    assert cliente.current_balance == Decimal("200")
 
 
-def test_el_gerente_tampoco_borra_ni_abona(client, org, auth_gerente_a, crm_encendido, cliente):
+def test_el_gerente_abona_pero_no_borra(client, db, org, auth_gerente_a, crm_encendido, cliente):
     h = _h(auth_gerente_a, org)
     assert client.delete(f"/api/customers/{cliente.id}", headers=h).status_code == 403
     assert client.post(f"/api/customers/{cliente.id}/pay",
-                       json={"amount": "100", "method": "TRANSFER"}, headers=h).status_code == 403
+                       json={"amount": "100", "method": "TRANSFER"}, headers=h).status_code == 200
 
 
 def test_el_administrador_registra_el_abono(client, db, org, auth_admin, cliente):
