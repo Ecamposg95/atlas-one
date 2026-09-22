@@ -67,9 +67,9 @@ dominio del VPS en [`infra/deployment-map.md`](./infra/deployment-map.md).
 
 ## Deuda abierta
 
-- [ ] **`SECRET_KEY` en producción** — verificar que el VPS la define (el histórico de
-      Railway nunca la definió y firmaba JWT con el default público del repositorio,
-      `app/core/security/config.py`). Ver `docs/infra/deployment-map.md`.
+- [x] **`SECRET_KEY` en producción** — verificado el 2026-09-22 dentro del contenedor del
+      VPS: definida, 64 caracteres, distinta del default público de
+      `app/core/security/config.py` (el histórico de Railway nunca la definió).
 - [ ] Decidir el destino final de `origin/staging` (borrarla o dejarla como referencia).
 - [ ] Decidir el destino final del proyecto de Railway (`rmazh` sigue ahí, fuera de
       alcance de este repo — ver `docs/infra/deployment-map.md`).
