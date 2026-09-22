@@ -15,6 +15,8 @@
 | [`UI_REVIEW.md`](UI_REVIEW.md) | Revisión UI/UX de las 76 vistas (dark+claro, paleta, consistencia) + **plan de ejecución de Fase 5** (fundación de tokens/componentes + reskin por pantalla). |
 | [`modules/MODULE_GUIDE.md`](modules/MODULE_GUIDE.md) | Cómo crear/mover un módulo (backend + seed + preset + frontend + tests + migración). |
 | [`modules/GASTRO_MESAS_COMANDAS.md`](modules/GASTRO_MESAS_COMANDAS.md) | Feature doc del flujo mesas → comanda → KDS → cuenta → cobro. |
+| [`presets/README.md`](presets/README.md) | Cómo crear un preset de industria nuevo (composición de módulos, datos vs. código, checklist). |
+| [`presets/BOUTIQUE.md`](presets/BOUTIQUE.md) | Preset `ATLAS_POS_BOUTIQUE`: estándar de datos de producto, ticket, etiquetas, funciones de cajera, checklist de alta. |
 | [`platform/superadmin-creation.md`](platform/superadmin-creation.md) | Crear SUPERADMINs de plataforma. |
 | [`branching-strategy.md`](branching-strategy.md) | Modelo de ramas y entornos. |
 | [`ci-cd/SETUP.md`](ci-cd/SETUP.md) | CI (GitHub Actions) y branch protection. |
@@ -22,6 +24,7 @@
 ## 🗂️ Historial / generado (no es referencia)
 
 - [`audits/`](audits/) — auditorías fechadas (tenant-isolation, platform-orgs, cajero-visibility). Snapshots/baselines, no estado actual.
+- [`CHANGELOG-2026-09-boutique.md`](CHANGELOG-2026-09-boutique.md) — bitácora fechada de lo construido para el preset boutique (2026-09-16 → 2026-09-21).
 - `superpowers/` — specs, plans y runbooks por feature (historial de ejecución).
 - `ATLAS ONE/` — mockups del deck comercial y prototipos `.jsx`/`.html` del sistema de diseño (no es doc técnica).
 
