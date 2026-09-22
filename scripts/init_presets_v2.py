@@ -280,10 +280,11 @@ PRESETS = [
         "id": "ATLAS_POS",
         "name": "Atlas POS",
         "desc": "Punto de venta de entrada: ventas, caja, catálogo, inventario, precios, devoluciones y reportes.",
-        # `labels` va aquí y no en ATLAS_POS_MODS: la etiqueta ZPL es de
-        # mostrador y no tiene por qué encenderse en los presets de otros
-        # giros que reusan la misma base.
-        "mods": ATLAS_POS_MODS + ["labels"],
+        # `labels` y `crm` van aquí y no en ATLAS_POS_MODS: la etiqueta ZPL es
+        # de mostrador y no tiene por qué encenderse en los presets de otros
+        # giros que reusan la misma base, y `crm` ya lo agrega por su cuenta el
+        # preset de retail (meterlo en la base lo duplicaría en esa lista).
+        "mods": ATLAS_POS_MODS + ["labels", "crm"],
     },
     {
         # Boutique de ropa/moda: lo mismo que Atlas POS mas el Scanner de tienda
@@ -292,7 +293,7 @@ PRESETS = [
         "id": "ATLAS_POS_BOUTIQUE",
         "name": "Atlas POS Boutique",
         "desc": "Boutique de ropa y moda: Atlas POS más scanner con cámara para cajeros.",
-        "mods": ATLAS_POS_MODS + ["scanner", "variants", "labels"],
+        "mods": ATLAS_POS_MODS + ["scanner", "variants", "labels", "crm"],
     },
     {
         "id": "ATLAS_ONE_RETAIL",
@@ -459,6 +460,7 @@ def seed_modules_and_presets(db: Session) -> None:
     _cleanup_legacy_dataxpos(db)
     _backfill_gastro_modules(db)
     _backfill_labels_module(db)
+    _backfill_crm_module(db)
 
 
 def _backfill_gastro_modules(db: Session) -> None:
@@ -519,6 +521,35 @@ def _backfill_labels_module(db: Session) -> None:
             added += 1
     db.commit()
     logger.info(f"  ✓ labels backfill: {added} fila(s) de módulo agregadas")
+
+
+def _backfill_crm_module(db: Session) -> None:
+    """Backfill de `crm` en las tiendas POS/boutique que ya existían.
+
+    El módulo `crm` llevaba en el catálogo desde siempre pero fuera de los dos
+    presets de mostrador, así que la entrada "Clientes" del menú no se veía en
+    ninguna tienda POS. Al sumarlo al preset hace falta este backfill: como el
+    router de clientes ahora exige `require_module("crm")`, sin la fila en
+    `organization_modules` las tiendas dadas de alta antes de este cambio
+    verían 403 en toda la pantalla de Clientes. Idempotente y ADITIVO: solo
+    inserta lo que falta, nunca deshabilita.
+    """
+    from app.models.organization import IndustryType, Organization
+    from app.models.modules import OrganizationModule
+
+    industrias = (IndustryType.ATLAS_POS, IndustryType.ATLAS_POS_BOUTIQUE)
+    added = 0
+    orgs = db.query(Organization).filter(Organization.industry_type.in_(industrias)).all()
+    for org in orgs:
+        exists = db.query(OrganizationModule).filter(
+            OrganizationModule.organization_id == org.id,
+            OrganizationModule.module_key == "crm",
+        ).first()
+        if not exists:
+            db.add(OrganizationModule(organization_id=org.id, module_key="crm", is_enabled=True))
+            added += 1
+    db.commit()
+    logger.info(f"  ✓ crm backfill: {added} fila(s) de módulo agregadas")
 
 
 def _cleanup_legacy_dataxpos(db: Session) -> None:
