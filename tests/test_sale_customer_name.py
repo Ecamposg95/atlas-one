@@ -79,10 +79,16 @@ def test_nombre_explicito_gana_sobre_el_del_cliente(client, auth_cajero_a, db, o
     assert doc.customer_name == "Como lo dijo la cajera"
 
 
-def test_customer_id_de_otra_organizacion_no_filtra_el_nombre(client, auth_cajero_a, db, org, branch_a, cajero_a):
-    """Un `customer_id` que existe pero pertenece a OTRA organización no debe
-    rellenar `customer_name` (la query de la venta filtra `organization_id`,
-    ver regla de oro #5) — la venta igual se completa, solo sin nombre."""
+def test_customer_id_de_otra_organizacion_se_rechaza(client, auth_cajero_a, db, org, branch_a, cajero_a):
+    """Un `customer_id` que existe pero pertenece a OTRA organización se
+    rechaza con 404.
+
+    Antes la venta se completaba "solo sin nombre", pero
+    `sales_documents.customer_id` quedaba apuntando al cliente ajeno: fuga
+    multi-tenant en historial y reportes por cliente (auditoría funcional
+    2026-09-22, hallazgo A-2). Ahora el cliente se valida contra la org una
+    sola vez, arriba de `create_sale`, y la venta ni siquiera se crea.
+    """
     _preparar_pos(db, org, branch_a, cajero_a)
     _make_product(db, org, "Pluma", "SKU-CLI-4", 10.0, branches_active=[(branch_a.id, True)])
     otra_org = Organization(name="Otra Org", status="ACTIVE")
@@ -90,12 +96,11 @@ def test_customer_id_de_otra_organizacion_no_filtra_el_nombre(client, auth_cajer
     cliente_ajeno = Customer(name="Cliente de Otra Org", organization_id=otra_org.id)
     db.add(cliente_ajeno); db.flush()
     r = _venta(client, auth_cajero_a, "SKU-CLI-4", customer_id=cliente_ajeno.id)
-    assert r.status_code == 200, r.text
-    doc = db.query(SalesDocument).filter(
+    assert r.status_code == 404, r.text
+    assert db.query(SalesDocument).filter(
         SalesDocument.organization_id == org.id,
         SalesDocument.customer_id == cliente_ajeno.id,
-    ).one()
-    assert doc.customer_name is None
+    ).count() == 0
 
 
 def _render_ticket_html(cliente_display):
@@ -103,11 +108,10 @@ def _render_ticket_html(cliente_display):
     router/DB) para probar solo la línea `Cliente:` — igual de aislado que
     `tests/test_ticket_layout.py` prueba `_build_header` con SimpleNamespace.
 
-    No se usa el endpoint `/print-view` real: la venta de prueba (SQLite +
-    `SaleItemCreate.quantity: float`) dispara un bug preexistente y ajeno a
-    esta tarea en el bloque de totales del template (`remaining_qty *
-    line_price` mezcla `float` con `Decimal`, línea ~201) — ver "Fix round 1"
-    en el reporte."""
+    `lineas` es el contexto que arma `get_sale_print_view` con las cantidades
+    ya en Decimal (antes el template multiplicaba el Float de `sale.lines` por
+    un Decimal y el endpoint devolvía 500 — auditoría M-6). El endpoint real
+    tiene su propia prueba en `tests/test_regresion_ventas.py`."""
     from datetime import datetime, timezone
     from decimal import Decimal
     from types import SimpleNamespace
@@ -123,7 +127,8 @@ def _render_ticket_html(cliente_display):
     )
     tpl = templates.get_template("print/ticket.html")
     return tpl.render({
-        "sale": sale, "organization": None, "branch": None, "seller": None,
+        "sale": sale, "lineas": [vars(line)], "organization": None,
+        "branch": None, "seller": None,
         "approved_returns": None, "cliente_display": cliente_display,
     })
 

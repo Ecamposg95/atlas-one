@@ -18,7 +18,10 @@ class SaleItemCreate(BaseModel):
     # Variante exacta (boutique: la talla/color elegida). Si viene, manda sobre
     # `sku`, que se conserva como respaldo y para los mensajes de error.
     variant_id: Optional[str] = None
-    quantity: float = 1.0
+    # `gt=0`: una cantidad negativa pasaba el chequeo de stock
+    # (`current_stock < qty_dec` es falso contra un negativo) y el descuento de
+    # inventario la SUMABA, con un total de linea negativo. Auditoria C-2.
+    quantity: float = Field(default=1.0, gt=0.0)
     unit_price: Optional[Decimal] = None
     discount: Optional[float] = Field(default=0.0, ge=0.0, le=100.0)   # porcentaje 0-100
     notes: Optional[str] = None
