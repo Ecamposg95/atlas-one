@@ -122,7 +122,11 @@ def read_user_context(
 
 
 # --- 1. LEER TODOS (READ) ---
-@router.get("/", response_model=List[UserRead])
+# El listado trae username, rol, sucursal y `has_reprint_pin` de todo el
+# personal: es informacion de administracion, no de mostrador. Antes solo el
+# POST/PUT estaba gateado y cualquier sesion valida podia leerlo entero
+# (audit-funcional #13).
+@router.get("/", response_model=List[UserRead], dependencies=[Depends(require_admin_or_owner)])
 def read_users(
     skip: int = 0,
     limit: int = 100,
@@ -144,7 +148,9 @@ def read_user_me(current_user: User = Depends(get_current_user)):
     return current_user
 
 # --- 3. LEER POR ID ---
-@router.get("/{user_id}", response_model=UserRead)
+# Mismo criterio que el listado. `/users/me` sigue abierto: cada quien puede
+# leer su propia ficha.
+@router.get("/{user_id}", response_model=UserRead, dependencies=[Depends(require_admin_or_owner)])
 def read_user_by_id(
     user_id: int,
     db: Session = Depends(get_db),

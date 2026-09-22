@@ -115,7 +115,7 @@ export function Boxes() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <i className="fa-solid fa-box-open text-indigo-400 text-xl" />
-          <h1 className="text-2xl font-black text-white">Cajas y Contenedores</h1>
+          <h1 className="text-2xl font-black text-white">Cajas y contenedores</h1>
         </div>
         <button
           onClick={() => tab === 'containers' ? (setContainerForm(emptyContainerForm()), setShowContainerModal(true)) : (setBoxForm(emptyBoxForm()), setShowBoxModal(true))}

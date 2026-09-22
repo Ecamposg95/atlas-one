@@ -12,7 +12,7 @@ const _savedTheme = localStorage.getItem('atlas_theme') ?? 'dark'
 document.documentElement.classList.add(_savedTheme)
 import { Layout } from './components/layout/Layout'
 import { MobileLayout } from './components/layout/MobileLayout'
-import { RequireRole } from './components/layout/RequireRole'
+import { RequireRole, RutaPorRol } from './components/layout/RequireRole'
 import { LoginPage } from './pages/Login'
 import { NotFoundPage } from './pages/NotFound'
 
@@ -267,14 +267,14 @@ export default function App() {
 
           {/* HQ */}
           <Route path="hq">
-            <Route path="operations" element={<Suspense fallback={<PageLoader />}><HQOperations /></Suspense>} />
-            <Route path="reports-hub" element={<Suspense fallback={<PageLoader />}><HQReportsHub /></Suspense>} />
-            <Route path="control" element={<Suspense fallback={<PageLoader />}><HQControl /></Suspense>} />
-            <Route path="sales" element={<Suspense fallback={<PageLoader />}><HQSalesLog /></Suspense>} />
-            <Route path="returns" element={<Suspense fallback={<PageLoader />}><HQReturns /></Suspense>} />
-            <Route path="inventory" element={<Suspense fallback={<PageLoader />}><HQInventory /></Suspense>} />
-            <Route path="branches" element={<Suspense fallback={<PageLoader />}><HQBranches /></Suspense>} />
-            <Route path="branches/:branchId" element={<Suspense fallback={<PageLoader />}><HQBranchDetail /></Suspense>} />
+            <Route path="operations" element={<RutaPorRol url="/hq/operations"><Suspense fallback={<PageLoader />}><HQOperations /></Suspense></RutaPorRol>} />
+            <Route path="reports-hub" element={<RutaPorRol url="/hq/reports-hub"><Suspense fallback={<PageLoader />}><HQReportsHub /></Suspense></RutaPorRol>} />
+            <Route path="control" element={<RutaPorRol url="/hq/control"><Suspense fallback={<PageLoader />}><HQControl /></Suspense></RutaPorRol>} />
+            <Route path="sales" element={<RutaPorRol url="/hq/sales"><Suspense fallback={<PageLoader />}><HQSalesLog /></Suspense></RutaPorRol>} />
+            <Route path="returns" element={<RutaPorRol url="/hq/returns"><Suspense fallback={<PageLoader />}><HQReturns /></Suspense></RutaPorRol>} />
+            <Route path="inventory" element={<RutaPorRol url="/hq/inventory"><Suspense fallback={<PageLoader />}><HQInventory /></Suspense></RutaPorRol>} />
+            <Route path="branches" element={<RutaPorRol url="/hq/branches"><Suspense fallback={<PageLoader />}><HQBranches /></Suspense></RutaPorRol>} />
+            <Route path="branches/:branchId" element={<RutaPorRol url="/hq/branches"><Suspense fallback={<PageLoader />}><HQBranchDetail /></Suspense></RutaPorRol>} />
           </Route>
 
           {/* Admin / Core — Track 3 (POS bug-fix): cajero tiene control
@@ -319,30 +319,30 @@ export default function App() {
               </RequireRole>
             }
           />
-          <Route path="departments"   element={<Suspense fallback={<PageLoader />}><Departments /></Suspense>} />
-          <Route path="brands"        element={<Suspense fallback={<PageLoader />}><Brands /></Suspense>} />
-          <Route path="users"         element={<Suspense fallback={<PageLoader />}><Users /></Suspense>} />
-          <Route path="organization"  element={<Suspense fallback={<PageLoader />}><Organization /></Suspense>} />
+          <Route path="departments"   element={<RutaPorRol url="/departments"><Suspense fallback={<PageLoader />}><Departments /></Suspense></RutaPorRol>} />
+          <Route path="brands"        element={<RutaPorRol url="/brands"><Suspense fallback={<PageLoader />}><Brands /></Suspense></RutaPorRol>} />
+          <Route path="users"         element={<RutaPorRol url="/users"><Suspense fallback={<PageLoader />}><Users /></Suspense></RutaPorRol>} />
+          <Route path="organization"  element={<RutaPorRol url="/organization"><Suspense fallback={<PageLoader />}><Organization /></Suspense></RutaPorRol>} />
           <Route path="startup"       element={<Suspense fallback={<PageLoader />}><Startup /></Suspense>} />
 
           {/* Ventas */}
-          <Route path="sales"         element={<Suspense fallback={<PageLoader />}><SalesHistory /></Suspense>} />
-          <Route path="quotes"        element={<Suspense fallback={<PageLoader />}><Quotes /></Suspense>} />
-          <Route path="quotes/new"    element={<Suspense fallback={<PageLoader />}><QuoteMaker /></Suspense>} />
-          <Route path="returns"       element={<Suspense fallback={<PageLoader />}><Returns /></Suspense>} />
-          <Route path="seguimiento"   element={<Suspense fallback={<PageLoader />}><Seguimiento /></Suspense>} />
+          <Route path="sales"         element={<RutaPorRol url="/sales"><Suspense fallback={<PageLoader />}><SalesHistory /></Suspense></RutaPorRol>} />
+          <Route path="quotes"        element={<RutaPorRol url="/quotes"><Suspense fallback={<PageLoader />}><Quotes /></Suspense></RutaPorRol>} />
+          <Route path="quotes/new"    element={<RutaPorRol url="/quotes/new"><Suspense fallback={<PageLoader />}><QuoteMaker /></Suspense></RutaPorRol>} />
+          <Route path="returns"       element={<RutaPorRol url="/returns"><Suspense fallback={<PageLoader />}><Returns /></Suspense></RutaPorRol>} />
+          <Route path="seguimiento"   element={<RutaPorRol url="/seguimiento"><Suspense fallback={<PageLoader />}><Seguimiento /></Suspense></RutaPorRol>} />
 
           {/* Finanzas */}
-          <Route path="purchases"    element={<Suspense fallback={<PageLoader />}><Purchases /></Suspense>} />
-          <Route path="expenses"     element={<Suspense fallback={<PageLoader />}><Expenses /></Suspense>} />
-          <Route path="reports"      element={<Suspense fallback={<PageLoader />}><Reports /></Suspense>} />
-          <Route path="cash-history" element={<Suspense fallback={<PageLoader />}><CashHistory /></Suspense>} />
+          <Route path="purchases"    element={<RutaPorRol url="/purchases"><Suspense fallback={<PageLoader />}><Purchases /></Suspense></RutaPorRol>} />
+          <Route path="expenses"     element={<RutaPorRol url="/expenses"><Suspense fallback={<PageLoader />}><Expenses /></Suspense></RutaPorRol>} />
+          <Route path="reports"      element={<RutaPorRol url="/reports"><Suspense fallback={<PageLoader />}><Reports /></Suspense></RutaPorRol>} />
+          <Route path="cash-history" element={<RutaPorRol url="/cash-history"><Suspense fallback={<PageLoader />}><CashHistory /></Suspense></RutaPorRol>} />
 
           {/* Inventario */}
           <Route path="inventory" element={<Suspense fallback={<PageLoader />}><Inventory /></Suspense>} />
-          <Route path="logistics" element={<Suspense fallback={<PageLoader />}><Logistics /></Suspense>} />
-          <Route path="boxes"     element={<Suspense fallback={<PageLoader />}><Boxes /></Suspense>} />
-          <Route path="products"  element={<Suspense fallback={<PageLoader />}><Products /></Suspense>} />
+          <Route path="logistics" element={<RutaPorRol url="/logistics"><Suspense fallback={<PageLoader />}><Logistics /></Suspense></RutaPorRol>} />
+          <Route path="boxes"     element={<RutaPorRol url="/boxes"><Suspense fallback={<PageLoader />}><Boxes /></Suspense></RutaPorRol>} />
+          <Route path="products"  element={<RutaPorRol url="/products"><Suspense fallback={<PageLoader />}><Products /></Suspense></RutaPorRol>} />
           <Route path="products/new" element={
             <RequireRole roles={['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO']}>
               {/* key fuerza remount al alternar con products/:id/edit — sin esto
@@ -358,30 +358,30 @@ export default function App() {
           } />
 
           {/* CRM / HR */}
-          <Route path="customers"  element={<Suspense fallback={<PageLoader />}><Customers /></Suspense>} />
-          <Route path="hr"         element={<Suspense fallback={<PageLoader />}><HR /></Suspense>} />
-          <Route path="hr/me"      element={<Suspense fallback={<PageLoader />}><HRMe /></Suspense>} />
+          <Route path="customers"  element={<RutaPorRol url="/customers"><Suspense fallback={<PageLoader />}><Customers /></Suspense></RutaPorRol>} />
+          <Route path="hr"         element={<RutaPorRol url="/hr"><Suspense fallback={<PageLoader />}><HR /></Suspense></RutaPorRol>} />
+          <Route path="hr/me"      element={<RutaPorRol url="/hr/me"><Suspense fallback={<PageLoader />}><HRMe /></Suspense></RutaPorRol>} />
 
           {/* Atlas One preset home + stub modules */}
           <Route path="home"         element={<Suspense fallback={<PageLoader />}><PresetHome /></Suspense>} />
-          <Route path="appointments" element={<Suspense fallback={<PageLoader />}><AppointmentsComingSoon /></Suspense>} />
-          <Route path="commissions"  element={<Suspense fallback={<PageLoader />}><CommissionsComingSoon /></Suspense>} />
-          <Route path="memberships"  element={<Suspense fallback={<PageLoader />}><MembershipsComingSoon /></Suspense>} />
+          <Route path="appointments" element={<RutaPorRol url="/appointments"><Suspense fallback={<PageLoader />}><AppointmentsComingSoon /></Suspense></RutaPorRol>} />
+          <Route path="commissions"  element={<RutaPorRol url="/commissions"><Suspense fallback={<PageLoader />}><CommissionsComingSoon /></Suspense></RutaPorRol>} />
+          <Route path="memberships"  element={<RutaPorRol url="/memberships"><Suspense fallback={<PageLoader />}><MembershipsComingSoon /></Suspense></RutaPorRol>} />
           {/* Gastro — Recetas (real), Mesas, Cocina/KDS */}
-          <Route path="recipes"      element={<Suspense fallback={<PageLoader />}><Recipes /></Suspense>} />
-          <Route path="recipes/new"  element={<Suspense fallback={<PageLoader />}><RecipeForm /></Suspense>} />
-          <Route path="recipes/:id/edit" element={<Suspense fallback={<PageLoader />}><RecipeForm /></Suspense>} />
-          <Route path="tables"       element={<Suspense fallback={<PageLoader />}><FloorPlan /></Suspense>} />
-          <Route path="kitchen"      element={<Suspense fallback={<PageLoader />}><KDS /></Suspense>} />
-          <Route path="meseros"      element={<Suspense fallback={<PageLoader />}><Meseros /></Suspense>} />
-          <Route path="bar/bottles"  element={<Suspense fallback={<PageLoader />}><Botellas /></Suspense>} />
-          <Route path="menu"         element={<Suspense fallback={<PageLoader />}><MenuVisual /></Suspense>} />
-          <Route path="ai"           element={<Suspense fallback={<PageLoader />}><AIComingSoon /></Suspense>} />
-          <Route path="purchasing"   element={<Suspense fallback={<PageLoader />}><PurchasingComingSoon /></Suspense>} />
+          <Route path="recipes"      element={<RutaPorRol url="/recipes"><Suspense fallback={<PageLoader />}><Recipes /></Suspense></RutaPorRol>} />
+          <Route path="recipes/new"  element={<RutaPorRol url="/recipes"><Suspense fallback={<PageLoader />}><RecipeForm /></Suspense></RutaPorRol>} />
+          <Route path="recipes/:id/edit" element={<RutaPorRol url="/recipes"><Suspense fallback={<PageLoader />}><RecipeForm /></Suspense></RutaPorRol>} />
+          <Route path="tables"       element={<RutaPorRol url="/tables"><Suspense fallback={<PageLoader />}><FloorPlan /></Suspense></RutaPorRol>} />
+          <Route path="kitchen"      element={<RutaPorRol url="/kitchen"><Suspense fallback={<PageLoader />}><KDS /></Suspense></RutaPorRol>} />
+          <Route path="meseros"      element={<RutaPorRol url="/meseros"><Suspense fallback={<PageLoader />}><Meseros /></Suspense></RutaPorRol>} />
+          <Route path="bar/bottles"  element={<RutaPorRol url="/bar/bottles"><Suspense fallback={<PageLoader />}><Botellas /></Suspense></RutaPorRol>} />
+          <Route path="menu"         element={<RutaPorRol url="/menu"><Suspense fallback={<PageLoader />}><MenuVisual /></Suspense></RutaPorRol>} />
+          <Route path="ai"           element={<RutaPorRol url="/ai"><Suspense fallback={<PageLoader />}><AIComingSoon /></Suspense></RutaPorRol>} />
+          <Route path="purchasing"   element={<RutaPorRol url="/purchasing"><Suspense fallback={<PageLoader />}><PurchasingComingSoon /></Suspense></RutaPorRol>} />
 
           {/* POS */}
-          <Route path="pos"             element={<Suspense fallback={<PageLoader />}><POS /></Suspense>} />
-          <Route path="printer-settings" element={<Suspense fallback={<PageLoader />}><PrinterSettings /></Suspense>} />
+          <Route path="pos"             element={<RutaPorRol url="/pos"><Suspense fallback={<PageLoader />}><POS /></Suspense></RutaPorRol>} />
+          <Route path="printer-settings" element={<RutaPorRol url="/printer-settings"><Suspense fallback={<PageLoader />}><PrinterSettings /></Suspense></RutaPorRol>} />
 
           <Route path="*" element={<NotFoundPage />} />
         </Route>

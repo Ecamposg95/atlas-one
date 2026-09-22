@@ -159,7 +159,7 @@ export function SalesHistory() {
     <div className="space-y-5">
       <div className="flex items-center gap-3">
         <i className="fa-solid fa-history text-indigo-400 text-xl" />
-        <h1 className="text-2xl font-black text-white">Historial de Ventas</h1>
+        <h1 className="text-2xl font-black text-white">Mis ventas</h1>
       </div>
 
       {/* KPIs — 6 cards */}

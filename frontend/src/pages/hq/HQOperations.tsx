@@ -12,6 +12,8 @@ import { Spinner } from '../../components/ui/Spinner'
 import { formatCurrency } from '../../utils/currency'
 import { todayStr, daysAgoStr, formatDate } from '../../utils/dates'
 import useKeyboardShortcuts from '../../hooks/useKeyboardShortcuts'
+import { toast } from '../../store/toastStore'
+import { errorDetailText } from '../../utils/errorDetail'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Legend)
 
@@ -46,6 +48,19 @@ const PAYMENT_COLORS: Record<string, string> = {
   CREDIT: '#f59e0b', CREDITO: '#f59e0b',
 }
 const OTHER_COLOR = '#64748b'
+
+/** Accesos rápidos del inicio. Las clases de color se escriben enteras —
+ *  Tailwind no genera las que se arman concatenando en tiempo de ejecución. */
+const ACCESOS_RAPIDOS = [
+  { to: '/hq/branches',  label: 'Sucursales',  icon: 'fa-network-wired',
+    circulo: 'bg-emerald-500/15 text-emerald-400', borde: 'hover:border-emerald-500/30' },
+  { to: '/hq/inventory', label: 'Existencias', icon: 'fa-boxes',
+    circulo: 'bg-sky-500/15 text-sky-400',        borde: 'hover:border-sky-500/30' },
+  { to: '/hq/sales',     label: 'Ventas',      icon: 'fa-cash-register',
+    circulo: 'bg-amber-500/15 text-amber-400',    borde: 'hover:border-amber-500/30' },
+  { to: '/admin/catalog', label: 'Catálogo',   icon: 'fa-list-check',
+    circulo: 'bg-violet-500/15 text-violet-400',  borde: 'hover:border-violet-500/30' },
+]
 
 function rangeFor(period: Period, custom: { start: string; end: string }): { start: string; end: string } {
   const today = todayStr()
@@ -89,6 +104,8 @@ export function HQOperations() {
   const [stats, setStats] = useState<CommandCenterStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [lastSync, setLastSync] = useState<Date | null>(null)
+  // Si el tablero falla y no se avisa, la dueña ve ceros y cree que no vendió.
+  const [errorCarga, setErrorCarga] = useState<string | null>(null)
   const [now, setNow] = useState(new Date())
   const [countdown, setCountdown] = useState(60)
   const [branchSearch, setBranchSearch] = useState('')
@@ -107,10 +124,14 @@ export function HQOperations() {
       const { start, end } = currentRange
       const res = await reportsApi.commandCenterStats({ start_date: start, end_date: end })
       setStats(res)
+      setErrorCarga(null)
       setLastSync(new Date())
       setCountdown(60)
-    } catch (e) {
-      console.error('Operaciones error:', e)
+    } catch (e: any) {
+      setErrorCarga(errorDetailText(
+        e?.response?.data?.detail,
+        'No se pudieron cargar los números del día. Revisa tu conexión y vuelve a intentar — los ceros de abajo no son tus ventas.',
+      ))
     } finally {
       setLoading(false)
     }
@@ -150,7 +171,12 @@ export function HQOperations() {
 
   const exportCsv = useCallback(async () => {
     try { await reportsApi.exportCsv({ start_date: currentRange.start, end_date: currentRange.end }) }
-    catch (e) { console.error('export csv:', e) }
+    catch (e: any) {
+      toast.error(errorDetailText(
+        e?.response?.data?.detail,
+        'No se pudo generar el CSV. Vuelve a intentar en unos segundos.',
+      ))
+    }
   }, [currentRange])
 
   const k = stats?.global
@@ -187,7 +213,7 @@ export function HQOperations() {
   const chartData = useMemo(() => ({
     labels: hourly.map((h) => `${String(h.hour).padStart(2, '0')}:00`),
     datasets: [{
-      label: 'Revenue',
+      label: 'Ventas',
       data: hourly.map((h) => h.amount),
       backgroundColor: hourly.map((h) =>
         isTodayRange && h.hour === currentHour
@@ -271,7 +297,7 @@ export function HQOperations() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-black text-white tracking-widest uppercase" style={{ textShadow: '0 0 24px rgba(16,185,129,0.45)' }}>
-              Operaciones
+              Inicio
             </h1>
             <span className="text-[11px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 tabular-nums">
               {now.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
@@ -287,7 +313,7 @@ export function HQOperations() {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
             </span>
-            <span className="text-[9px] font-bold text-emerald-500/70 uppercase tracking-widest">Live · Auto-refresh</span>
+            <span className="text-[9px] font-bold text-emerald-500/70 uppercase tracking-widest">En vivo · se actualiza solo</span>
             <span className="text-slate-700">·</span>
             <span className="text-[9px] text-slate-600 font-mono">
               Últ. sync: {lastSync ? lastSync.toLocaleTimeString('es-MX') : '—'}
@@ -352,23 +378,32 @@ export function HQOperations() {
         </div>
       </div>
 
-      {/* Quick nav */}
+      {/* Accesos rápidos. Las clases van completas y no concatenadas: Tailwind
+          solo genera lo que ve escrito en el archivo, así que `bg-${color}-500/15`
+          no producía ninguna regla y los cuatro círculos salían transparentes. */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {[
-          { to: '/hq/branches', label: 'Sucursales', icon: 'fa-network-wired', color: 'emerald' },
-          { to: '/hq/inventory', label: 'Inventario Global', icon: 'fa-boxes', color: 'sky' },
-          { to: '/hq/sales', label: 'Log de Ventas', icon: 'fa-cash-register', color: 'amber' },
-          { to: '/admin/catalog', label: 'Catálogo Global', icon: 'fa-list-check', color: 'violet' },
-        ].map((n) => (
+        {ACCESOS_RAPIDOS.map((n) => (
           <Link key={n.to} to={n.to}
-            className={`dax-card p-4 rounded-xl hover:bg-white/5 transition group flex flex-col items-center justify-center text-center gap-2 border border-white/5 hover:border-${n.color}-500/30`}>
-            <div className={`w-10 h-10 rounded-full bg-${n.color}-500/15 text-${n.color}-400 flex items-center justify-center text-lg group-hover:scale-110 transition`}>
+            className={`dax-card p-4 rounded-xl hover:bg-white/5 transition group flex flex-col items-center justify-center text-center gap-2 border border-white/5 ${n.borde}`}>
+            <div className={`w-10 h-10 rounded-full ${n.circulo} flex items-center justify-center text-lg group-hover:scale-110 transition`}>
               <i className={`fas ${n.icon}`} />
             </div>
             <span className="text-[11px] font-bold text-slate-300 group-hover:text-white">{n.label}</span>
           </Link>
         ))}
       </div>
+
+      {errorCarga && (
+        <div className="dax-card rounded-xl border border-rose-500/30 bg-rose-500/5 p-4 flex items-start gap-3">
+          <i className="fas fa-triangle-exclamation text-rose-400 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-rose-200">{errorCarga}</p>
+          </div>
+          <button onClick={load} className="dax-btn-secondary text-xs whitespace-nowrap">
+            Reintentar
+          </button>
+        </div>
+      )}
 
       {loading && !stats ? (
         <Spinner text="Cargando operaciones..." />
@@ -377,7 +412,7 @@ export function HQOperations() {
           {/* KPI Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <KPICard
-              label={`Revenue · ${PERIOD_VS[period]}`}
+              label={`Ventas · ${PERIOD_VS[period]}`}
               value={totalSales}
               previous={previousSales}
               icon="fa-coins"
@@ -389,14 +424,14 @@ export function HQOperations() {
               <div className="flex justify-between items-end mb-1">
                 <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Tickets</p>
                 <span className="text-[10px] font-bold text-sky-400 bg-sky-500/10 px-1.5 py-0.5 rounded border border-sky-500/20 tabular-nums">
-                  {(k?.items_per_ticket || 0).toFixed(1)} IPT
+                  {(k?.items_per_ticket || 0).toFixed(1)} piezas/ticket
                 </span>
               </div>
               <h2 className="text-3xl font-bold text-white tabular-nums">{k?.total_tickets ?? 0}</h2>
               <div className="mt-1 flex justify-between items-center text-xs font-mono">
-                <span className="text-slate-400">Avg: <span className="text-white font-bold tabular-nums">{formatCurrency(k?.ticket_average || 0)}</span></span>
+                <span className="text-slate-400">Promedio: <span className="text-white font-bold tabular-nums">{formatCurrency(k?.ticket_average || 0)}</span></span>
                 {(k?.returns_total ?? 0) > 0 && (
-                  <span className="text-rose-400">Dev: <span className="tabular-nums">{formatCurrency(k?.returns_total || 0)}</span></span>
+                  <span className="text-rose-400">Devoluciones: <span className="tabular-nums">{formatCurrency(k?.returns_total || 0)}</span></span>
                 )}
               </div>
             </div>
@@ -481,7 +516,7 @@ export function HQOperations() {
             <div className="dax-card rounded-2xl p-5 border border-white/5 lg:col-span-2 flex flex-col relative overflow-hidden">
               <div className="flex justify-between items-center mb-3">
                 <h3 className="text-xs font-black uppercase text-white tracking-widest flex items-center gap-2">
-                  <i className="fas fa-wave-square text-emerald-500" /> Sales Velocity (Hourly)
+                  <i className="fas fa-wave-square text-emerald-500" /> Ritmo de venta por hora
                 </h3>
                 <span className="flex items-center gap-2">
                   {isTodayRange && (
@@ -505,7 +540,7 @@ export function HQOperations() {
               <div className="p-4 border-b border-white/5 bg-slate-900/40 space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <h3 className="text-xs font-black uppercase text-white tracking-widest flex items-center gap-2">
-                    <i className="fas fa-network-wired text-sky-500" /> Branch Status
+                    <i className="fas fa-network-wired text-sky-500" /> Estado de la tienda
                   </h3>
                   <select value={branchSort} onChange={(e) => setBranchSort(e.target.value as BranchSort)}
                     className="text-[10px] bg-slate-800/80 border border-slate-700 rounded px-1.5 py-0.5 text-slate-300">
@@ -571,19 +606,19 @@ export function HQOperations() {
             </div>
           </div>
 
-          {/* Bottom: Top Performers + Live Alerts Feed */}
+          {/* Abajo: lo más vendido + avisos */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 pb-6">
             <div className="dax-card rounded-2xl p-5 border border-white/5">
               <h3 className="text-xs font-black uppercase text-white tracking-widest mb-4 flex items-center gap-2">
-                <i className="fas fa-rocket text-amber-500" /> Top Performers
+                <i className="fas fa-rocket text-amber-500" /> Lo más vendido
               </h3>
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-slate-800">
                   <thead className="bg-slate-900/80">
                     <tr>
                       <th className="px-3 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Producto</th>
-                      <th className="px-3 py-3 text-right text-[10px] font-bold text-slate-400 uppercase tracking-wider">Revenue</th>
-                      <th className="px-3 py-3 text-right text-[10px] font-bold text-slate-400 uppercase tracking-wider">% del top</th>
+                      <th className="px-3 py-3 text-right text-[10px] font-bold text-slate-400 uppercase tracking-wider">Vendido</th>
+                      <th className="px-3 py-3 text-right text-[10px] font-bold text-slate-400 uppercase tracking-wider">% del total</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/50 text-sm">
@@ -616,7 +651,7 @@ export function HQOperations() {
             <div className="dax-card rounded-2xl p-5 border border-white/5">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-xs font-black uppercase text-white tracking-widest flex items-center gap-2">
-                  <i className="fas fa-satellite-dish text-violet-500" /> Live Comm Feed
+                  <i className="fas fa-satellite-dish text-violet-500" /> Avisos
                 </h3>
                 {unreadAlertsCount > 0 && (
                   <button onClick={markAllRead}
@@ -628,7 +663,7 @@ export function HQOperations() {
               <div className="space-y-3 lg:max-h-64 lg:overflow-y-auto max-lg:overscroll-contain">
                 {alertsByType.length === 0 ? (
                   <div className="text-center text-xs text-slate-600 py-4 italic flex items-center justify-center gap-2">
-                    <i className="fas fa-check-circle text-emerald-500" /> All Systems Nominal.
+                    <i className="fas fa-check-circle text-emerald-500" /> Todo en orden: ningún aviso pendiente.
                   </div>
                 ) : (
                   alertsByType.map(([type, items]) => (

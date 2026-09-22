@@ -89,7 +89,7 @@ export function Purchases() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <i className="fa-solid fa-shopping-cart text-indigo-400 text-xl" />
-          <h1 className="text-2xl font-black text-white">Órdenes de Compra</h1>
+          <h1 className="text-2xl font-black text-white">Compras</h1>
         </div>
         <button onClick={() => setModal(true)} className="dax-btn-primary text-xs">
           <i className="fa-solid fa-plus" /> Nueva OC

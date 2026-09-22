@@ -6,6 +6,8 @@ import { organizationApi, type Branch } from '../../api/organization'
 import { DaxCard } from '../../components/ui/DaxCard'
 import { Spinner } from '../../components/ui/Spinner'
 import { toast } from '../../store/toastStore'
+import { errorDetailText } from '../../utils/errorDetail'
+import { tipoMovimiento } from '../../utils/enumsEspanol'
 import type { Product } from '../../types/products'
 import { useEffect } from 'react'
 import { formatCurrency } from '../../utils/currency'
@@ -86,7 +88,12 @@ export function HQInventory() {
       if (actualizado) setSelected(actualizado)
       const data = await inventoryApi.getKardex(selected.variant.id)
       setKardex(data)
-    } catch { toast.error('Error al ajustar el inventario') } finally { setAdjSaving(false) }
+    } catch (e: any) {
+      toast.error(errorDetailText(
+        e?.response?.data?.detail,
+        'No se pudo ajustar la existencia. No se guardó nada: revisa la cantidad y el motivo, y vuelve a intentar.',
+      ))
+    } finally { setAdjSaving(false) }
   }
 
   const movementColor = (type: string) =>
@@ -96,7 +103,7 @@ export function HQInventory() {
     <div className="space-y-5">
       <div className="flex items-center gap-3">
         <i className="fa-solid fa-globe text-indigo-400 text-xl" />
-        <h1 className="text-2xl font-black text-white">Inventario por Sucursal</h1>
+        <h1 className="text-2xl font-black text-white">Existencias</h1>
       </div>
 
       <div className="flex gap-2">
@@ -185,7 +192,7 @@ export function HQInventory() {
                           {new Date(k.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}
                         </td>
                         <td className="text-xs">
-                          <span className={`dax-badge ${movementColor(k.movement_type)}`}>{k.movement_type}</span>
+                          <span className={`dax-badge ${movementColor(k.movement_type)}`}>{tipoMovimiento(k.movement_type)}</span>
                         </td>
                         <td className={`text-right font-bold tabular-nums ${movementColor(k.movement_type)}`}>
                           {k.qty_change > 0 ? '+' : ''}{k.qty_change}

@@ -9,6 +9,7 @@ import { Badge } from '../../components/ui/Badge'
 import type { SalesDocument } from '../../types/sales'
 import { saleLabel } from '../../types/sales'
 import { formatCurrency } from '../../utils/currency'
+import { estadoVenta, metodoPago } from '../../utils/enumsEspanol'
 import { todayStr, daysAgoStr } from '../../utils/dates'
 import { formatPct } from '../pos/cardSurcharge'
 
@@ -97,7 +98,7 @@ export function HQSalesLog() {
     <div className="space-y-5">
       <div className="flex items-center gap-3">
         <i className="fa-solid fa-receipt text-indigo-400 text-xl" />
-        <h1 className="text-2xl font-black text-white">Ventas HQ</h1>
+        <h1 className="text-2xl font-black text-white">Ventas</h1>
       </div>
 
       {/* KPI Strip */}
@@ -187,10 +188,10 @@ export function HQSalesLog() {
                     <td className="text-right font-semibold text-emerald-400">{formatCurrency(s.total_amount)}</td>
                     <td>
                       {s.payments?.map((p, i) => (
-                        <span key={i} className="dax-badge dax-badge-blue mr-1">{p.method}</span>
+                        <span key={i} className="dax-badge dax-badge-blue mr-1">{metodoPago(p.method)}</span>
                       ))}
                     </td>
-                    <td><Badge variant={statusVariant(s.status) as 'green' | 'red' | 'blue' | 'yellow'}>{s.status}</Badge></td>
+                    <td><Badge variant={statusVariant(s.status) as 'green' | 'red' | 'blue' | 'yellow'}>{estadoVenta(s.status)}</Badge></td>
                     <td>
                       <button onClick={() => setSel(s)} className="dax-btn-icon text-slate-500 hover:text-white transition-colors text-xs">
                         <i className="fa-solid fa-eye" />
@@ -228,7 +229,7 @@ export function HQSalesLog() {
               <div className="flex justify-between"><span className="text-slate-500">Sucursal</span><span>{selected.branch_name ?? '—'}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Cliente</span><span>{selected.customer_name ?? 'Público general'}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Fecha</span><span>{new Date(selected.created_at).toLocaleString('es-MX')}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Estado</span><Badge variant={statusVariant(selected.status) as 'green' | 'red' | 'blue' | 'yellow'}>{selected.status}</Badge></div>
+              <div className="flex justify-between"><span className="text-slate-500">Estado</span><Badge variant={statusVariant(selected.status) as 'green' | 'red' | 'blue' | 'yellow'}>{estadoVenta(selected.status)}</Badge></div>
             </div>
 
             <div className="mt-4 border-t border-slate-700/50 pt-4">

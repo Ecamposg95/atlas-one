@@ -21,6 +21,7 @@ from app.schemas.organization import (
     OrganizationUpdate,
 )
 from app.core.security import get_current_user
+from app.core.security.guards import require_admin_or_owner
 from app.models.users import Role
 
 from app.core.tenant_context import get_current_active_organization
@@ -44,7 +45,10 @@ def require_admin(current_user):
     return current_user
 
 
-@router.get("/", response_model=OrganizationRead)
+# La ficha de la organizacion trae RFC, datos fiscales, tipo de cambio y la
+# comision de tarjeta. Solo el PUT estaba gateado por rol; el GET lo leia
+# cualquier sesion valida (audit-funcional #13).
+@router.get("/", response_model=OrganizationRead, dependencies=[Depends(require_admin_or_owner)])
 def get_organization(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),

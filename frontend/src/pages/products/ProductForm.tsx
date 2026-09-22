@@ -8,6 +8,7 @@ import { useAuthStore } from '../../store/authStore'
 import { DaxCard } from '../../components/ui/DaxCard'
 import { Spinner } from '../../components/ui/Spinner'
 import { toast } from '../../store/toastStore'
+import { confirm } from '../../components/ui/ConfirmDialog'
 import { ProductBasicsSection } from '../../components/products/ProductBasicsSection'
 import { ProductCommercialSection } from '../../components/products/ProductCommercialSection'
 import { ProductBranchMatrixSection } from '../../components/products/ProductBranchMatrixSection'
@@ -144,7 +145,14 @@ export function ProductForm() {
       const args = argsSugerencia(form, brands)
       const { sku, available } = await productsApi.skuSuggest(args)
       if (!sku) { toast.error('Faltan datos para sugerir un SKU.'); return }
-      if (!window.confirm(mensajeSugerencia(sku, available, form.sku))) return
+      const ok = await confirm({
+        title: 'Usar el SKU sugerido',
+        // `pre-line`: el mensaje trae saltos de línea y el HTML los colapsaría.
+        message: <span style={{ whiteSpace: 'pre-line' }}>{mensajeSugerencia(sku, available, form.sku)}</span>,
+        confirmText: 'Usar este SKU',
+        variant: available ? 'info' : 'warning',
+      })
+      if (!ok) return
       setField('sku', sku)
     } catch {
       toast.error('No se pudo sugerir el SKU.')

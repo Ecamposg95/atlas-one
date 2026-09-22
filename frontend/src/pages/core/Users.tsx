@@ -6,6 +6,9 @@ import { TablaDesplazable } from '../../components/ui/TablaDesplazable'
 import { Spinner } from '../../components/ui/Spinner'
 import { Badge } from '../../components/ui/Badge'
 import { toast } from '../../store/toastStore'
+import { confirm } from '../../components/ui/ConfirmDialog'
+import { errorDetailText } from '../../utils/errorDetail'
+import { rolUsuario } from '../../utils/enumsEspanol'
 
 const ROLES = ['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO', 'VENDEDOR', 'SOPORTE_OPERATIVO']
 // Solo estos roles pueden autorizar una reimpresión desde el POS (mismo
@@ -103,10 +106,26 @@ export function Users() {
   }
 
   const handleToggle = async (u: SystemUser) => {
+    // Desactivar le quita el acceso a una persona en el acto: se pregunta.
+    // Reactivar no se pregunta — no le quita nada a nadie.
+    if (u.is_active) {
+      const ok = await confirm({
+        title: 'Desactivar usuario',
+        message: `${u.full_name || u.username} dejará de poder entrar a Atlas One. Su historial de ventas y cortes se conserva, y puedes reactivarla cuando quieras.`,
+        confirmText: 'Desactivar',
+        variant: 'danger',
+      })
+      if (!ok) return
+    }
     try {
       await usersApi.update(u.id, { is_active: !u.is_active })
       load()
-    } catch { toast.error('Error al cambiar el estado del usuario') }
+    } catch (e: any) {
+      toast.error(errorDetailText(
+        e?.response?.data?.detail,
+        'No se pudo cambiar el estado del usuario. Su acceso sigue como estaba; vuelve a intentar.',
+      ))
+    }
   }
 
   const f = (field: keyof UserForm, val: string | boolean) => setForm((prev) => ({ ...prev, [field]: val }))
@@ -119,7 +138,7 @@ export function Users() {
           <h1 className="text-2xl font-black text-white">Usuarios</h1>
         </div>
         <button onClick={openCreate} className="dax-btn-primary text-xs">
-          <i className="fa-solid fa-plus" /> Nuevo Usuario
+          <i className="fa-solid fa-plus" /> Nuevo usuario
         </button>
       </div>
 
@@ -144,8 +163,8 @@ export function Users() {
                   <tr key={u.id}>
                     <td className="font-mono text-indigo-400 text-sm">{u.username}</td>
                     <td className="text-slate-300">{u.full_name ?? '—'}</td>
-                    <td><Badge variant={roleVariant(u.role) as 'red' | 'yellow' | 'blue' | 'green' | 'slate'}>{u.role}</Badge></td>
-                    <td className="text-slate-400 text-sm">{u.branch_name ?? 'HQ'}</td>
+                    <td><Badge variant={roleVariant(u.role) as 'red' | 'yellow' | 'blue' | 'green' | 'slate'}>{rolUsuario(u.role)}</Badge></td>
+                    <td className="text-slate-400 text-sm">{u.branch_name ?? 'Sin sucursal fija'}</td>
                     <td>
                       <button onClick={() => handleToggle(u)}
                         aria-label={u.is_active ? `Desactivar a ${u.username}` : `Activar a ${u.username}`}
@@ -173,13 +192,13 @@ export function Users() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setModal(null)}>
           <div className="dax-card dax-modal p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
-              <h3 className="text-lg font-black text-white">{modal === 'create' ? 'Nuevo Usuario' : 'Editar Usuario'}</h3>
+              <h3 className="text-lg font-black text-white">{modal === 'create' ? 'Nuevo usuario' : 'Editar usuario'}</h3>
               <button onClick={() => setModal(null)} className="dax-btn-icon text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
             </div>
 
             <div className="space-y-3">
               <div>
-                <label className="dax-label">Username</label>
+                <label className="dax-label">Usuario</label>
                 <input value={form.username} onChange={(e) => f('username', e.target.value)}
                   disabled={modal === 'edit'} className="dax-input w-full disabled:opacity-50" placeholder="usuario123" />
               </div>
@@ -195,13 +214,13 @@ export function Users() {
                 <div>
                   <label className="dax-label">Rol</label>
                   <select value={form.role} onChange={(e) => f('role', e.target.value)} className="dax-input w-full">
-                    {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+                    {ROLES.map((r) => <option key={r} value={r}>{rolUsuario(r)}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="dax-label">Sucursal</label>
                   <select value={form.branch_id} onChange={(e) => f('branch_id', e.target.value)} className="dax-input w-full">
-                    <option value="">HQ / Global</option>
+                    <option value="">Sin sucursal fija</option>
                     {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
                 </div>
@@ -227,7 +246,7 @@ export function Users() {
                 </div>
                 {!rolConPin ? (
                   <p className="text-xs text-slate-500 italic">
-                    Solo aplica a ADMINISTRADOR, DUEÑO o GERENTE — son los únicos roles que pueden autorizar una reimpresión.
+                    Solo aplica a Administrador, Dueño o Gerente — son los únicos roles que pueden autorizar una reimpresión.
                   </p>
                 ) : form.clearReprintPin ? (
                   <div className="rounded-lg px-3 py-2 flex items-center justify-between gap-2 bg-red-500/10 border border-red-500/30">

@@ -296,7 +296,7 @@ export function HQReportsHub() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <i className="fa-solid fa-chart-line text-indigo-400 text-xl" />
-          <h1 className="text-2xl font-black text-white">Reportes HQ</h1>
+          <h1 className="text-2xl font-black text-white">Reportes</h1>
           <span className="text-[10px] font-bold uppercase tracking-widest text-violet-400/80 bg-violet-500/10 px-2 py-0.5 rounded-full border border-violet-500/20">
             Ultra
           </span>

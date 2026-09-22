@@ -371,7 +371,7 @@ export function PrinterSettings() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <i className="fa-solid fa-print text-indigo-400 text-xl" />
-          <h1 className="text-2xl font-black" style={{ color: 'var(--dax-text)' }}>Config. Impresora</h1>
+          <h1 className="text-2xl font-black" style={{ color: 'var(--dax-text)' }}>Impresora</h1>
         </div>
         <div className="flex gap-2">
           <button

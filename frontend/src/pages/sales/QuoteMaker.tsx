@@ -99,7 +99,7 @@ export function QuoteMaker() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <i className="fa-solid fa-file-invoice-dollar text-indigo-400 text-xl" />
-          <h1 className="text-2xl font-black text-white">Nueva Cotización</h1>
+          <h1 className="text-2xl font-black text-white">Nueva cotización</h1>
         </div>
         <button onClick={() => navigate('/quotes')} className="dax-btn-secondary text-xs">
           <i className="fa-solid fa-arrow-left" /> Volver

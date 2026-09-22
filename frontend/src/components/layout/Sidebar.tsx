@@ -2,72 +2,24 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
 import { useEnabledModulesStore } from '../../store/enabledModulesStore'
+import { useBranchCountStore, esTiendaUnica } from '../../store/branchCountStore'
 import { returnsApi } from '../../api/returns'
 import { confirm } from '../ui/ConfirmDialog'
 import { useTheme } from '../../context/ThemeContext'
 import type { Role } from '../../types/auth'
 import { BRANCH_ROLES, visibleNavItems, type NavItem } from './navVisibility'
+import {
+  ALL_NAV, ROLE_ROUTES, HQ_NAV_GROUPS, BRANCH_NAV_GROUPS,
+  GROUP_COLOR, DEFAULT_GROUP_COLOR, URL_COLOR, GASTRO_PRESETS,
+} from './navConfig'
 
 const APPROVER_ROLES: Role[] = ['ADMINISTRADOR', 'DUEÑO', 'GERENTE']
 const RETURNS_URLS = new Set(['/returns', '/hq/returns'])
 
-// Presets gastronómicos (valor de `preset` = industry_type de la org). En estos
-// verticales ocultamos los ítems marcados `hideForGastro` (lenguaje retail que
-// no aplica a una cocina). Incluye taxonomía v2 (ATLAS_ONE_*) y v1 legacy.
-const GASTRO_PRESETS = new Set([
-  'ATLAS_ONE_RESTAURANT', 'ATLAS_ONE_CAFE', 'ATLAS_ONE_BAR', 'ATLAS_ONE_GASTRO',
-  'RESTAURANT_FULL', 'RESTAURANT_QSR', 'CAFE_BAKERY',
-])
-
-// Branch nav group labels — keyed by URL, defines section header shown above each group
-const BRANCH_NAV_GROUPS: { header: string; urls: string[] }[] = [
-  { header: 'Mi día',        urls: ['/atlas-pos', '/pos'] },
-  { header: 'Restaurante',   urls: ['/menu', '/tables', '/mobile/comanda', '/kitchen', '/bar/bottles'] },
-  { header: 'Mi turno',      urls: ['/cash-history', '/sales'] },
-  { header: 'Inventario',    urls: ['/products', '/scanner', '/labels'] },
-  { header: 'Reportes',      urls: ['/reports', '/meseros'] },
-  { header: 'Configuración', urls: ['/printer-settings'] },
-]
-
-// HQ/admin nav groups — lista agrupada y etiquetada (más legible que el grid de
-// códigos crípticos). Los items no listados caen en "Más" (no se ocultan).
-const HQ_NAV_GROUPS: { header: string; urls: string[] }[] = [
-  { header: 'Restaurante',  urls: ['/menu', '/tables', '/mobile/comanda', '/kitchen', '/recipes', '/meseros', '/bar/bottles'] },
-  { header: 'Operación',    urls: ['/hq/operations', '/hq/reports-hub', '/hq/control'] },
-  { header: 'Catálogo',     urls: ['/admin/catalog', '/departments', '/brands'] },
-  { header: 'Inventario',   urls: ['/inventory', '/hq/inventory', '/boxes', '/logistics', '/scanner', '/labels'] },
-  { header: 'Ventas',       urls: ['/hq/sales', '/hq/returns', '/quotes', '/quotes/new', '/seguimiento'] },
-  { header: 'Compras',      urls: ['/purchases', '/expenses', '/purchasing'] },
-  { header: 'Clientes',     urls: ['/customers', '/appointments', '/commissions', '/memberships'] },
-  { header: 'Organización', urls: ['/organization', '/hq/branches', '/users', '/hr'] },
-  { header: 'Inteligencia', urls: ['/ai'] },
-  { header: 'Móvil',        urls: ['/mobile/owner'] },
-]
-
-// Color de acento por grupo — identidad de módulo en el sidebar. El ícono se
-// tiñe con el color del grupo; el ítem activo lo usa para el riel lateral, el
-// resplandor y el relleno suave. Los encabezados de sección y las etiquetas
-// inactivas se quedan neutros. Los matices viven en index.css (--sb-mod-*),
-// no como hex sueltos aquí.
-const GROUP_COLOR: Record<string, string> = {
-  // Grupos HQ (admin)
-  'Operación': 'var(--sb-mod-violet)', 'Catálogo': 'var(--sb-mod-green)',
-  'Ventas': 'var(--sb-mod-blue)', 'Inventario': 'var(--sb-mod-amber)',
-  'Compras': 'var(--sb-mod-teal)', 'Clientes': 'var(--sb-mod-rose)',
-  'Organización': 'var(--sb-mod-cyan)', 'Inteligencia': 'var(--sb-mod-indigo)',
-  'Restaurante': 'var(--sb-mod-orange)', 'Más': 'var(--sb-mod-slate)',
-  'Móvil': 'var(--sb-mod-blue)',
-  // Grupos de sucursal
-  'Mi día': 'var(--sb-mod-violet)', 'Mi turno': 'var(--sb-mod-green)',
-  'Reportes': 'var(--sb-mod-indigo)', 'Configuración': 'var(--sb-mod-slate)',
-}
-const DEFAULT_GROUP_COLOR = 'var(--sb-mod-violet)'
-
-// url → color del grupo, para el IconRail contraído (que no tiene secciones).
-const URL_COLOR: Record<string, string> = {}
-for (const _g of [...HQ_NAV_GROUPS, ...BRANCH_NAV_GROUPS]) {
-  const _c = GROUP_COLOR[_g.header] ?? DEFAULT_GROUP_COLOR
-  for (const _u of _g.urls) URL_COLOR[_u] = _c
+/** Cómo llamar al acceso sin sucursal fija. Con una sola tienda, "HQ Global"
+ *  no nombra nada que la dueña reconozca. */
+function rotuloAccesoGlobal(unaSolaSucursal: boolean): string {
+  return unaSolaSucursal ? 'Toda la tienda' : 'Todas las sucursales'
 }
 
 /** Mezcla un token de color con transparencia — el equivalente a un sufijo de
@@ -90,73 +42,6 @@ function usePendingReturnsCount(role: Role): number {
     return () => { cancelled = true; clearInterval(id) }
   }, [role])
   return count
-}
-
-const ALL_NAV: NavItem[] = [
-  { label: 'Operaciones',       short: 'OPS', icon: 'fa-gauge-high',          url: '/hq/operations',    group: 'hq',   sort: 0  },
-  { label: 'Reportes',          short: 'REP', icon: 'fa-chart-line',          url: '/hq/reports-hub',   group: 'hq',   sort: 1  },
-  { label: 'Control HQ',        short: 'HQ',  icon: 'fa-sliders',             url: '/hq/control',       group: 'hq',   sort: 2  },
-  { label: 'Catálogo',          short: 'CAT', icon: 'fa-book',                url: '/admin/catalog',    group: 'hq',   sort: 3,  module: 'catalog' },
-  { label: 'Deptos.',           short: 'DEP', icon: 'fa-layer-group',         url: '/departments',      group: 'hq',   sort: 4,  module: 'catalog', hideForGastro: true },
-  { label: 'Marcas',            short: 'MRC', icon: 'fa-tags',                url: '/brands',           group: 'hq',   sort: 5,  module: 'catalog', hideForGastro: true },
-  { label: 'Ventas HQ',         short: 'VTA', icon: 'fa-receipt',             url: '/hq/sales',         group: 'hq',   sort: 6,  module: 'pos' },
-  { label: 'Devoluc. HQ',       short: 'DEV', icon: 'fa-undo',                url: '/hq/returns',       group: 'hq',   sort: 7,  module: 'returns' },
-  { label: 'Cotizaciones',      short: 'COT', icon: 'fa-file-invoice',        url: '/quotes',           group: 'hq',   sort: 8,  module: 'quotes' },
-  { label: 'Nueva Cot.',        short: 'NEW', icon: 'fa-file-invoice-dollar', url: '/quotes/new',       group: 'hq',   sort: 9,  module: 'quotes' },
-  { label: 'Pedidos',           short: 'PED', icon: 'fa-clipboard-check',     url: '/seguimiento',      group: 'hq',   sort: 10, module: 'quotes' },
-  { label: 'Compras',           short: 'CMP', icon: 'fa-shopping-cart',       url: '/purchases',        group: 'hq',   sort: 11 },
-  { label: 'Gastos',            short: 'GST', icon: 'fa-money-bill-wave',     url: '/expenses',         group: 'hq',   sort: 12 },
-  { label: 'Inventario',        short: 'INV', icon: 'fa-boxes',               url: '/inventory',        group: 'hq',   sort: 13, module: 'inventory' },
-  { label: 'Scanner',           short: 'SCN', icon: 'fa-barcode',             url: '/scanner',          group: 'hq',   sort: 13.5, module: 'inventory', branchModule: 'scanner' },
-  { label: 'Etiquetas',         short: 'ETQ', icon: 'fa-tag',                 url: '/labels',           group: 'hq',   sort: 13.6, module: 'labels' },
-  { label: 'Inv. Global',       short: 'GLB', icon: 'fa-globe',               url: '/hq/inventory',     group: 'hq',   sort: 14, module: 'inventory', hideForGastro: true },
-  { label: 'Logística',         short: 'LOG', icon: 'fa-truck-loading',       url: '/logistics',        group: 'hq',   sort: 15, module: 'logistics' },
-  { label: 'Cajas',             short: 'CJA', icon: 'fa-box-open',            url: '/boxes',            group: 'hq',   sort: 16, module: 'logistics' },
-  { label: 'Clientes',          short: 'CRM', icon: 'fa-address-book',        url: '/customers',        group: 'hq',   sort: 17, module: 'crm' },
-  { label: 'Empresa',           short: 'EMP', icon: 'fa-building',            url: '/organization',     group: 'hq',   sort: 18 },
-  { label: 'Sucursales',        short: 'SCR', icon: 'fa-store',               url: '/hq/branches',      group: 'hq',   sort: 19 },
-  { label: 'Usuarios',          short: 'USR', icon: 'fa-users-cog',           url: '/users',            group: 'hq',   sort: 20 },
-  { label: 'RRHH',              short: 'HR',  icon: 'fa-user-tie',            url: '/hr',               group: 'hq',   sort: 21 },
-  // Atlas One stub modules (Beta — visible when the module is enabled for the org)
-  { label: 'Agenda',            short: 'AGE', icon: 'fa-calendar',            url: '/appointments',     group: 'hq',   sort: 22, module: 'appointments' },
-  { label: 'Comisiones',        short: 'CMS', icon: 'fa-percent',             url: '/commissions',      group: 'hq',   sort: 23, module: 'commissions' },
-  { label: 'Membresías',        short: 'MEM', icon: 'fa-id-card',             url: '/memberships',      group: 'hq',   sort: 24, module: 'memberships' },
-  { label: 'Recetas',           short: 'REC', icon: 'fa-book',                url: '/recipes',          group: 'hq',   sort: 25, module: 'recipes' },
-  { label: 'IA',                short: 'IA',  icon: 'fa-microchip',           url: '/ai',               group: 'hq',   sort: 26, module: 'ai' },
-  { label: 'Pedidos compras',   short: 'OC',  icon: 'fa-truck',               url: '/purchasing',       group: 'hq',   sort: 27, module: 'purchasing' },
-  { label: 'Mesas',             short: 'MSA', icon: 'fa-chair',               url: '/tables',           group: 'hq',   sort: 28, module: 'tables' },
-  { label: 'Cocina (KDS)',      short: 'KDS', icon: 'fa-fire-burner',         url: '/kitchen',          group: 'hq',   sort: 29, module: 'kitchen' },
-  { label: 'Meseros',           short: 'MSR', icon: 'fa-user-tie',            url: '/meseros',          group: 'hq',   sort: 30, module: 'tables' },
-  { label: 'Botellas',          short: 'BTL', icon: 'fa-wine-bottle',         url: '/bar/bottles',      group: 'hq',   sort: 31, module: 'bar' },
-  { label: 'Menú',              short: 'MNU', icon: 'fa-book-open',           url: '/menu',             group: 'hq',   sort: 32, module: 'menu' },
-  { label: 'Comanda',           short: 'CMD', icon: 'fa-clipboard-list',      url: '/mobile/comanda',   group: 'hq',   sort: 33, module: 'tables' },
-  { label: 'Mi día',            short: 'INI', icon: 'fa-house',               url: '/atlas-pos',         group: 'pos',  sort: 0  },
-  { label: 'Cobrar',            short: 'POS', icon: 'fa-cash-register',       url: '/pos',              group: 'pos',  sort: 1  },
-  { label: 'Mis ventas',        short: 'HST', icon: 'fa-history',             url: '/sales',            group: 'pos',  sort: 2  },
-  { label: 'Mi caja',           short: 'CRT', icon: 'fa-vault',               url: '/cash-history',     group: 'pos',  sort: 3  },
-  { label: 'Devoluciones',      short: 'DEV', icon: 'fa-undo',                url: '/returns',          group: 'pos',  sort: 4  },
-  { label: 'Inventario',        short: 'PRD', icon: 'fa-barcode',             url: '/products',         group: 'pos',  sort: 5  },
-  { label: 'Reportes',          short: 'REP', icon: 'fa-chart-pie',           url: '/reports',          group: 'pos',  sort: 6  },
-  { label: 'Impresora',         short: 'IMP', icon: 'fa-print',               url: '/printer-settings', group: 'pos',  sort: 7  },
-  { label: 'Mi Expediente',     short: 'YO',  icon: 'fa-id-card',             url: '/hr/me',            group: 'pos',  sort: 8  },
-  // Vuelta al armazón móvil para dueño/admin. Sin este enlace, quien entra
-  // al escritorio desde la pestaña «Más» del móvil se queda sin camino de
-  // regreso salvo escribiendo la URL (admin-findings I-10).
-  { label: 'Resumen móvil',     short: 'RSM', icon: 'fa-mobile-screen-button', url: '/mobile/owner',     group: 'mob',  sort: -1 },
-  { label: 'Dashboard Móvil',   short: 'DSH', icon: 'fa-mobile-screen',       url: '/mobile/dashboard', group: 'mob',  sort: 0  },
-  { label: 'Consulta Móvil',    short: 'QRY', icon: 'fa-mobile-alt',          url: '/mobile/query',     group: 'mob',  sort: 1  },
-  { label: 'Cotización móvil',  short: 'COT', icon: 'fa-file-invoice',        url: '/mobile/sales',     group: 'mob',  sort: 2  },
-  { label: 'Perfil Móvil',      short: 'PRF', icon: 'fa-user-circle',         url: '/mobile/profile',   group: 'mob',  sort: 3  },
-]
-
-const ROLE_ROUTES: Record<Role, string[]> = {
-  ADMINISTRADOR:    ['/labels','/mobile/owner','/cash-history','/hq/operations','/hq/reports-hub','/hq/control','/admin/catalog','/scanner','/departments','/organization','/users','/customers','/hq/branches','/hq/inventory','/hq/sales','/hq/returns','/brands','/hr','/hr/me','/logistics','/boxes','/quotes','/quotes/new','/seguimiento','/purchases','/expenses','/appointments','/commissions','/memberships','/recipes','/ai','/purchasing','/tables','/kitchen','/meseros','/bar/bottles','/menu','/mobile/comanda'],
-  DUEÑO:            ['/labels','/mobile/owner','/cash-history','/hq/operations','/hq/reports-hub','/hq/control','/admin/catalog','/scanner','/customers','/hq/sales','/hq/returns','/hr/me','/logistics','/boxes','/quotes','/quotes/new','/seguimiento','/purchases','/expenses','/appointments','/commissions','/memberships','/recipes','/ai','/purchasing','/tables','/kitchen','/meseros','/bar/bottles','/menu','/mobile/comanda'],
-  GERENTE:          ['/labels','/cash-history','/reports','/hr/me','/products','/scanner','/pos','/sales','/returns','/atlas-pos','/tables','/kitchen','/recipes','/meseros','/bar/bottles','/menu','/mobile/comanda'],
-  CAJERO:           ['/labels','/pos','/cash-history','/hr/me','/products','/scanner','/printer-settings','/sales','/returns','/atlas-pos','/tables','/kitchen','/bar/bottles','/menu','/mobile/comanda'],
-  VENDEDOR:         ['/mobile/dashboard','/mobile/query','/mobile/sales','/mobile/profile','/hr/me','/atlas-pos'],
-  SOPORTE_OPERATIVO:['/mobile/dashboard','/mobile/query','/mobile/profile','/hr/me','/atlas-pos'],
-  CLIENTE:          ['/portal'],
 }
 
 const ROLE_COLOR: Record<Role, string> = {
@@ -267,7 +152,11 @@ function BranchNav({ items, pendingReturns }: { items: NavItem[]; pendingReturns
       gItems.forEach((it) => placed.add(it.url))
     }
   }
-  // Items not matched by BRANCH_NAV_GROUPS are silently excluded from the sidebar
+  // Mismo respaldo que HQNav: lo que no cae en ningún grupo va a "Más" en vez
+  // de desaparecer. Sin esto, la cajera con permiso de Devoluciones (y el
+  // gerente con Recetas) se quedaban sin ningún enlace (audit-funcional #15).
+  const sobrantes = items.filter((it) => !placed.has(it.url))
+  if (sobrantes.length > 0) grouped.push({ header: 'Más', items: sobrantes })
 
   return (
     <nav style={{ flex: 1, overflowY: 'auto', padding: '10px 12px' }}>
@@ -347,6 +236,7 @@ function MatrixSidebar({ items, logout, isBranchRole }: { items: NavItem[]; logo
   const navigate = useNavigate()
   const { user, org, branch } = useAuthStore()
   const { theme, toggleTheme } = useTheme()
+  const unaSolaSucursal = esTiendaUnica(useBranchCountStore((s) => s.count))
   const role = (user?.role ?? 'CAJERO') as Role
   const initial = (user?.full_name || user?.username || 'U').charAt(0).toUpperCase()
   const pendingReturns = usePendingReturnsCount(role)
@@ -452,7 +342,7 @@ function MatrixSidebar({ items, logout, isBranchRole }: { items: NavItem[]; logo
                   Acceso
                 </p>
                 <p style={{ fontSize: '10px', fontWeight: 700, color: '#fbbf24', lineHeight: 1 }}>
-                  HQ Global
+                  {rotuloAccesoGlobal(unaSolaSucursal)}
                 </p>
               </div>
             </div>
@@ -568,6 +458,7 @@ function MatrixSidebar({ items, logout, isBranchRole }: { items: NavItem[]; logo
 function IconRail({ items, logout }: { items: NavItem[]; logout: () => void }) {
   const { pathname } = useLocation()
   const { user, org, branch } = useAuthStore()
+  const unaSolaSucursal = esTiendaUnica(useBranchCountStore((s) => s.count))
   const role = (user?.role ?? 'CAJERO') as Role
   const pendingReturns = usePendingReturnsCount(role)
   const initial = (user?.full_name || user?.username || 'U').charAt(0).toUpperCase()
@@ -617,7 +508,7 @@ function IconRail({ items, logout }: { items: NavItem[]; logout: () => void }) {
             <i className="fa-solid fa-store" style={{ fontSize: '7px', color: '#34d399' }} />
           </div>
         ) : (
-          <div title="HQ Global" style={{
+          <div title={rotuloAccesoGlobal(unaSolaSucursal)} style={{
             width: '28px', height: '16px', borderRadius: '5px',
             background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.2)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -717,6 +608,12 @@ export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
   useEffect(() => {
     if (isAuthenticated && !loaded) load()
   }, [isAuthenticated, loaded, load])
+
+  // Cuántas sucursales hay: decide si los rótulos dicen "tienda" o "sucursales".
+  const cargarConteoSucursales = useBranchCountStore((s) => s.load)
+  useEffect(() => {
+    if (isAuthenticated) void cargarConteoSucursales()
+  }, [isAuthenticated, cargarConteoSucursales])
 
   // El gating por módulo (y el fail-open mientras carga) vive en
   // `visibleNavItems`, que es pura y tiene pruebas.

@@ -3,11 +3,13 @@ import { returnsApi, type ReturnDocument, type ReturnStatus, returnLabel, return
 import { organizationApi, type Branch } from '../../api/organization'
 import { useAuthStore } from '../../store/authStore'
 import { toast } from '../../store/toastStore'
+import { confirm } from '../../components/ui/ConfirmDialog'
 import { DaxCard } from '../../components/ui/DaxCard'
 import { TablaDesplazable } from '../../components/ui/TablaDesplazable'
 import { Badge } from '../../components/ui/Badge'
 import { Spinner } from '../../components/ui/Spinner'
 import { formatCurrency } from '../../utils/currency'
+import { estadoDevolucion } from '../../utils/enumsEspanol'
 
 // Extrae el detail del backend (FastAPI standard `{detail: "..."}`) y cae
 // a un fallback si la respuesta no lo trae. Sin esto, errores 409/422 con
@@ -67,7 +69,17 @@ export function HQReturns() {
     } catch (err) {
       const detail = serverDetail(err, 'Error al aprobar la devolución')
       if (!force && /EFECTIVO de monto alto|force=True/i.test(detail)) {
-        if (window.confirm(`${detail}\n\n¿Confirmas el reembolso en efectivo?`)) {
+        // Reembolso en efectivo de monto alto: se confirma con el diálogo de
+        // la app (Esc cancela, el foco arranca en Cancelar), no con el del
+        // navegador, que se ve como un error del sistema.
+        const ok = await confirm({
+          title: 'Confirmar reembolso en efectivo',
+          message: detail,
+          confirmText: 'Sí, reembolsar en efectivo',
+          cancelText: 'Cancelar',
+          variant: 'danger',
+        })
+        if (ok) {
           setActionLoading(false)
           return handleApprove(id, true)
         }
@@ -104,7 +116,7 @@ export function HQReturns() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <i className="fa-solid fa-undo text-indigo-400 text-xl" />
-          <h1 className="text-2xl font-black text-white">Devoluciones HQ</h1>
+          <h1 className="text-2xl font-black text-white">Devoluciones</h1>
         </div>
         <div className="flex items-center gap-2">
           <select
@@ -167,7 +179,7 @@ export function HQReturns() {
                     </td>
                     <td className="text-xs max-w-[140px] truncate">{r.reason}</td>
                     <td className="text-right font-semibold text-red-400">{formatCurrency(r.total_refunded)}</td>
-                    <td><Badge variant={statusVariant(r.status)}>{r.status}</Badge></td>
+                    <td><Badge variant={statusVariant(r.status)}>{estadoDevolucion(r.status)}</Badge></td>
                     <td>
                       <button onClick={() => setSelected(r)} className="dax-btn-icon text-slate-500 hover:text-white text-xs">
                         <i className="fa-solid fa-eye" />
@@ -195,7 +207,7 @@ export function HQReturns() {
               <div className="flex justify-between"><span className="text-slate-500">Sucursal</span><span>{returnBranchName(selected) ?? '—'}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Solicitó</span><span>{returnRequestedBy(selected)}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Motivo</span><span className="text-right max-w-[60%]">{selected.reason}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Estado</span><Badge variant={statusVariant(selected.status)}>{selected.status}</Badge></div>
+              <div className="flex justify-between"><span className="text-slate-500">Estado</span><Badge variant={statusVariant(selected.status)}>{estadoDevolucion(selected.status)}</Badge></div>
               {selected.supervisor && <div className="flex justify-between"><span className="text-slate-500">Aprobó</span><span>{returnApprovedBy(selected)}</span></div>}
             </div>
 
