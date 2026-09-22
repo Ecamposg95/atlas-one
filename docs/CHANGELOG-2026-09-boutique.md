@@ -204,6 +204,29 @@ Detalle completo en [`docs/DEPLOY.md`](DEPLOY.md) y
   exigirla. Detalle en `docs/DATA_MODEL.md §Ventas / Caja` y
   `docs/API_REFERENCE.md §Caja`.
 
+## 10. Módulo de etiquetas dentro de Atlas One (2026-09-22, 6 commits)
+
+Hasta hoy, etiquetar era bajar un CSV y abrirlo en la app de escritorio del agente: dos
+programas y un archivo que envejece en cuanto alguien cambia un precio. El agente externo
+se queda con lo suyo —el control de la impresora— y Atlas One toma los datos, la decisión
+y la pantalla.
+
+- `app/services/labels/` — layout ZPL portado byte a byte de `atlas_labels/` (51 × 25 mm,
+  203 dpi, Zebra GX420t) más la detección EAN-13 / Code 128. Un test lo congela contra un
+  literal para que nadie mueva una coordenada sin darse cuenta.
+- `app/modules/labels/` — `GET /candidates`, `POST /preview`, `POST /jobs`, `GET /test`
+  (ver `docs/API_REFERENCE.md`). Copias por omisión = existencia; tope de 99 por renglón
+  y 500 por lote; lo que no tiene código de barras se reporta en vez de fallar.
+- `/labels` en el frontend: filtros, tabla con copias editables, vista previa en SVG
+  dibujada desde el mismo layout que genera el ZPL, resumen con confirmación, y envío al
+  agente local. En teléfono la tabla se vuelve tarjetas y la previa una hoja inferior.
+- Módulo `labels` en el catálogo y en los presets `ATLAS_POS` / `ATLAS_POS_BOUTIQUE`, con
+  backfill idempotente para las orgs que ya existían. **`scripts/init_presets_v2.py` no
+  corre solo en el deploy**: hay que ejecutarlo después o las tiendas ya dadas de alta
+  verán 403.
+- La celda de copias acepta 0 a propósito: un agotado llega en 0 y "usar existencia" no
+  debe imprimir una etiqueta de cada cosa sin stock. El backend sigue exigiendo 1 o más.
+
 ## Diferidos y deudas conocidas
 
 Pulido de las notas de sesión y de los specs/planes — lo que quedó fuera a propósito o

@@ -60,6 +60,7 @@ Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.l
 | `/hq/returns` | `hq/HQReturns` | Admin, Dueño | returns |
 | `/hq/inventory` | `hq/HQInventory` | Admin | inventory |
 | `/hq/branches`, `/:id` | `hq/HQBranches`, `HQBranchDetail` | Admin (detail: +Dueño) | inventory/pos |
+| `/labels` | `labels/Labels` | Admin, Dueño, Gerente, Cajero | labels |
 | `/products`, `/new`, `/:id/edit` | `inventory/Products`, `products/ProductForm` | Admin, Dueño, Gerente, Cajero | catalog |
 | `/inventory` | `inventory/Inventory` | — | inventory |
 | `/logistics`, `/boxes` | `inventory/Logistics`, `Boxes` | — | logistics |

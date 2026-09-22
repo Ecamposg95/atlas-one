@@ -223,15 +223,26 @@ cambio USD" / "Comisión por tarjeta" si aplican (§5).
 
 ## 4. Etiquetas
 
-- **CSV** (`GET /api/products/export/labels.csv`, §2.4) — la ruta operativa hoy:
-  exportar y abrir en la app de la etiquetadora del cliente.
-- **Zebra (ZPL)**: **no implementado**. La investigación de impresión Bluetooth
-  (2026-09-17) descartó integrar directamente una **PUQU Q1** (protocolo propietario
-  sin SDK público, familia Niimbot/Phomemo) — la ruta operativa es el CSV de arriba
-  importado a la app "PUQU Print" del fabricante, que imprime por lotes. Si el
-  siguiente cliente boutique trae una **Zebra** de verdad (ZPL estándar), el plan es un
-  módulo "Etiquetas" con una segunda cola CUPS servida por el mismo agente de
-  impresión (ver §6) — diseño pendiente, sin código todavía.
+**Módulo `labels`, desde el 2026-09-22.** Vive dentro de Atlas One (`/labels`,
+`app/modules/labels/`) y está en los presets `ATLAS_POS` y `ATLAS_POS_BOUTIQUE`.
+
+- La dueña o la cajera filtra el catálogo (búsqueda, departamento, marca, género,
+  "solo con existencia"), ajusta cuántas etiquetas quiere por renglón —arranca en la
+  existencia— y ve la etiqueta dibujada antes de imprimir, con el ZPL crudo a un clic.
+- El server **no imprime**: `POST /api/labels/jobs` devuelve el ZPL en base64 y el
+  navegador lo manda al agente local, igual que el ticket de venta.
+- Etiqueta de 51 × 25 mm a 203 dpi para **Zebra GX420t**: marca, nombre, talla/color,
+  código de barras centrado (EAN-13 si el checksum cuadra, si no Code 128), y abajo SKU
+  y precio. El layout está portado byte a byte de `atlas_labels/` del repositorio del
+  agente, y un test lo congela contra un literal: cambiar una coordenada rompe la suite.
+- Topes: 1..99 copias por renglón y 500 etiquetas por lote. Una variante sin código de
+  barras no se imprime y se reporta; `POST /api/products/barcodes/assign-missing` evita
+  que eso pase.
+- **El CSV sigue** (`GET /api/products/export/labels.csv`, §2.4) para quien use la app
+  de escritorio del agente o una etiquetadora de otro fabricante.
+- **Bluetooth**: la investigación del 2026-09-17 descartó integrar una **PUQU Q1**
+  (protocolo propietario, familia Niimbot/Phomemo); ahí la ruta sigue siendo el CSV
+  importado a la app del fabricante.
 
 ---
 
