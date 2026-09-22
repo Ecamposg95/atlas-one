@@ -62,13 +62,22 @@ Catálogo de endpoints por dominio. Todos bajo `/api`. Swagger vivo en `/docs`. 
 | Método | Ruta | Qué hace | Gating |
 |---|---|---|---|
 | GET | /status · /history · /summary | Sesión abierta / cortes / audit UI | auth |
-| POST | /open · /close · /sessions/{id}/close-guided | Abrir / cerrar / cierre guiado | dueño de turno (guiado: +GERENTE) |
-| POST | /movements · /inflow · /outflow | Movimientos de efectivo | auth |
+| POST | /open · /close · /sessions/{id}/close-guided | Abrir / cerrar / cierre guiado (conteo ciego: el cajero declara lo contado antes de ver el esperado) | dueño de turno (guiado: +GERENTE/ADMIN/DUEÑO) |
+| PATCH | /sessions/{id}/opening-balance | Corrige el fondo declarado al abrir — solo si la caja sigue limpia (sin ventas/movimientos); exige `reason` (≥10 caracteres) | dueño de turno o GERENTE/ADMIN/DUEÑO |
+| POST | /movements · /inflow · /outflow | Movimientos de efectivo manuales (motivo obligatorio ≥10 caracteres; salidas >$2,000 exigen GERENTE+) | auth |
 | GET | /{id}/audit-log · /branch-summary | Timeline / corte consolidado | [ADMIN/DUEÑO/GERENTE] |
 | GET | /{id}/pdf · /{id}/ticket | Corte PDF / JSON ESC-POS | acceso a sesión |
 
 > Cerrar bloquea si hay parked tickets sin convertir (409). Reconciliación vía `services/cash_reconciliation`.
 > `get_session_audit_data` agrega `card_surcharges` (2026-09-17): suma de `card_surcharge_amount` de las ventas de la sesión, informativo, **no** entra en `Total cobrado` (la comisión ya viaja dentro del pago `CARD`). Lo consumen `/{id}/pdf`, `/{id}/ticket` y la UI del corte.
+> **Atribución del efectivo por pago (2026-09-22):** un pago cuenta en el corte de la
+> sesión que apunta en `payments.cash_session_id`, no (solo) en la del documento de
+> venta — así un abono a crédito cobrado en un turno distinto al de la venta original
+> ya no descuadra el corte que sí lo recibió. Regla e idempotencia en
+> `app/services/cash_reconciliation.py::session_payments_filter`; detalle en
+> `docs/DATA_MODEL.md §Ventas / Caja`. `register_customer_payment` (abono de cliente)
+> ahora exige caja abierta para abonos en efectivo (409 si no la hay) — tarjeta y
+> transferencia siguen sin exigirla.
 
 ## Inventario · `/api/inventory`
 | Método | Ruta | Qué hace | Gating |
@@ -143,7 +152,7 @@ CRUD productos + aprobar/rechazar/restore/duplicate/imagen; `search` (variants/p
 agente, <https://github.com/Ecamposg95/Atlas-Print-Agent> (ZIP de `main`; dentro,
 `legacy/print_agent/` trae los launchers e instaladores de autoarranque). El agente ya no
 vive en este repo (2026-09-22). `ATLAS_PRINT_AGENT_URL` sobreescribe el destino y admite
-`{platform}` para cuando el repo publique un ZIP por plataforma.
+`{platform}` para cuando el repo publique un ZIP por plataforma. Runbook de
 autoarranque en `docs/superpowers/runbooks/print-agent-autostart.md`.
 
 ## Portal cliente · `/api/portal`
