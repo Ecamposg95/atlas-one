@@ -45,7 +45,12 @@ from . import (
 )
 
 router = APIRouter()
-router.include_router(core.router)
+# ORDEN IMPORTANTE (auditoría A-6): Starlette resuelve por orden de registro,
+# no por especificidad. `core.router` trae `GET /{product_id}`, que captura
+# CUALQUIER ruta de un solo segmento registrada después — `/boxes-inventory`,
+# `/search` y `/departments` respondían 404 "Producto no encontrado". Por eso
+# `core.router` va al FINAL: cualquier sub-router nuevo con una ruta de un
+# segmento debe quedar por encima de él.
 router.include_router(departments.router)
 router.include_router(stats.router)
 router.include_router(search.router)
@@ -57,6 +62,7 @@ router.include_router(reports.router)
 router.include_router(audit.router)
 router.include_router(variants.router)
 router.include_router(barcodes.router)
+router.include_router(core.router)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
