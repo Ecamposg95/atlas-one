@@ -309,6 +309,16 @@ def search_products(
 # -----------------------------
 # 5. Búsqueda rápida (CORREGIDA)
 # -----------------------------
+# Mapa para buscar sin acentos. Cubre TODO el latin-1, no solo el acento agudo
+# del espanol: las marcas de la boutique traen acento grave (Hermes) y cedilla
+# (Comme des Garcons), y con un mapa corto la cajera escribia "hermes" y no
+# encontraba nada. Las dos cadenas deben medir igual.
+_MAPA_ACENTOS = (
+    "áéíóúüñÁÉÍÓÚÜÑàèìòùÀÈÌÒÙâêîôûÂÊÎÔÛäëïöÄËÏÖãõÃÕçÇåÅøØ",
+    "aeiouunAEIOUUNaeiouAEIOUaeiouAEIOUaeioAEIOaoAOcCaAoO",
+)
+
+
 @router.get("/pos/search", response_model=List[ProductRead])
 def search_products_pos(
     q: str,
@@ -405,7 +415,7 @@ def search_products_pos(
             # normalizan ambos lados con translate(); SQLite (pruebas) no lo
             # tiene y ahí la comparación queda como estaba.
             _es_pg = db.bind is not None and db.bind.dialect.name == "postgresql"
-            _CON, _SIN = "áéíóúüñÁÉÍÓÚÜÑ", "aeiouunAEIOUUN"
+            _CON, _SIN = _MAPA_ACENTOS
 
             def _plano(col):
                 return func.translate(col, _CON, _SIN) if _es_pg else col
