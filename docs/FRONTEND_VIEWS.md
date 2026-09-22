@@ -325,12 +325,12 @@ Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.l
 - **Notas:** 2 tabs; solo crear + listar. Contenedores `inner_*`, cajas `outer_*`.
 
 ### `/products/new`, `/products/:id/edit` — Formulario de producto
-- **Archivo:** `pages/products/ProductForm.tsx` (295 líneas)
+- **Archivo:** `pages/products/ProductForm.tsx` (447 líneas)
 - **Propósito:** Formulario de página completa para crear/editar. Destino de Gerente/Cajero desde `/products`.
 - **Quién la ve:** `RequireRole(Admin, Dueño, Gerente, Cajero)`.
 - **Datos/API:** `productsApi.getById/create/update/getDepartments/getBrands`, `organizationApi.getBranches` (admin).
 - **Componentes clave:** secciones `ProductBasicsSection`, `ProductCommercialSection`, `ProductTieredPricesSection`, `ProductBranchMatrixSection`, `ProductInitialStockSection`.
-- **Notas:** Admin en create ve matriz + stock inicial; cajero tiene sucursal bloqueada. En edit no toca matriz/stock. Maneja 409/SKU duplicado.
+- **Notas:** Admin en create ve matriz + stock inicial; cajero tiene sucursal bloqueada. En edit no toca matriz/stock. Maneja 409/SKU duplicado. **`products/new` monta `<ProductForm key="new" />` y `products/:id/edit` monta un wrapper `ProductFormEditRoute` con `<ProductForm key={id} />`** (`App.tsx:44-50`) — fix 2026-09-22: sin el `key`, React Router reutilizaba la instancia y "Nuevo producto" heredaba los datos del producto que se estaba editando (auditoría #3, `docs/AUDITORIA-2026-09-22.md`).
 
 ### `/admin/catalog` — Catálogo (administración)
 - **Archivo:** `pages/core/AdminCatalog.tsx` (534 líneas)
@@ -341,21 +341,30 @@ Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.l
 - **Notas:** **No edita campos aquí:** "Nuevo"→AdminProductCreate, "Editar"→`/products?edit=:id`.
 
 ### `/admin/products/new` — Nuevo producto (administración)
-- **Archivo:** `pages/admin/AdminProductCreate.tsx` (202 líneas)
+- **Archivo:** `pages/admin/AdminProductCreate.tsx` (290 líneas)
 - **Propósito:** Creación de producto del flujo administrativo (siempre matriz completa, exige ≥1 sucursal). Vuelve a `/admin/catalog`.
 - **Quién la ve:** `RequireRole(Admin, Dueño, Gerente, Cajero)`.
 - **Datos/API:** `productsApi.getDepartments/getBrands/create`, `organizationApi.getBranches`.
-- **Notas:** Subconjunto "create + admin" de `ProductForm` (mismas secciones).
+- **Notas:** Subconjunto "create + admin" de `ProductForm` (mismas secciones). Fix
+  2026-09-22: el payload ya manda `gender`/`model`/`material` (antes se capturaban en
+  el formulario y se perdían al enviar — auditoría #9). Sigue **sin** botón "Sugerir
+  SKU" a diferencia de `ProductForm` (auditoría #25, abierto).
 
 ### `/departments` — Departamentos
 - **Archivo:** `pages/core/Departments.tsx` (112 líneas)
 - **Propósito:** CRUD de departamentos (categorías). **Quién la ve:** Admin — módulo `catalog`, `hideForGastro`.
 - **Datos/API:** `productsApi.get/create/update/deleteDepartment`. `confirm()`/`alert()`.
+- **Notas:** Fix 2026-09-22 (`api/products.ts`): editar/borrar devolvía 405 siempre
+  (barra final en la URL que el backend no registra) — auditoría #7, mismo fix que
+  `/brands`.
 
 ### `/brands` — Marcas
 - **Archivo:** `pages/core/Brands.tsx` (143 líneas)
 - **Propósito:** CRUD de marcas con logo opcional + búsqueda en cliente. **Quién la ve:** Admin — módulo `catalog`, `hideForGastro`.
 - **Datos/API:** `productsApi.get/create/update/deleteBrand`.
+- **Notas:** Fix 2026-09-22 (`api/products.ts`): editar/borrar devolvía 405 siempre —
+  ver nota en `/departments` arriba (auditoría #7). Relevante para boutique: es donde
+  se cargan las marcas del catálogo (`docs/presets/BOUTIQUE.md §6`).
 
 ---
 
@@ -423,11 +432,16 @@ Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.l
 - **Notas:** Username no editable en edición. Sucursal vacía = "HQ / Global". Errores muestran el detalle real del backend.
 
 ### `/organization` — Empresa y sucursales
-- **Archivo:** `pages/core/Organization.tsx` (337 líneas)
+- **Archivo:** `pages/core/Organization.tsx` (631 líneas — creció por USD/comisión de tarjeta/ticket boutique, ver `docs/presets/BOUTIQUE.md §3.4`)
 - **Propósito:** Config de empresa (datos fiscales, logo, header/footer de ticket) + CRUD de sucursales.
 - **Quién la ve:** Admin.
 - **Datos/API:** `organizationApi.getOrg/updateOrg/getBranches/createBranch/updateBranch/deleteBranch`, logo via `client`.
-- **Notas:** 2 tabs. Validación de logo (PNG/JPEG/WEBP ≤1MB). HQ no se elimina. Header/footer se imprimen en el POS.
+- **Notas:** 2 tabs. Validación de logo (PNG/JPEG/WEBP ≤1MB). HQ no se elimina.
+  Header/footer se imprimen en el POS. Fixes 2026-09-22: guardar/borrar sucursal ahora
+  muestra el motivo real del backend en vez de un mensaje genérico (auditoría #16); no
+  se puede dejar "Razón social" vacía y guardar — antes ponía `organization.name` en
+  `NULL` silenciosamente (auditoría #17, los 4 botones que comparten `saveOrg` se
+  deshabilitan si el campo está vacío).
 
 ### `/startup` — Onboarding (asistente inicial)
 - **Archivo:** `pages/core/Startup.tsx` (271 líneas)
