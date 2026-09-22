@@ -10,7 +10,7 @@
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react)](#)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript)](#)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791?logo=postgresql)](#)
-[![Railway](https://img.shields.io/badge/Deploy-Railway-0B0D0E?logo=railway)](#)
+[![Docker](https://img.shields.io/badge/Deploy-CI%2FCD%20%E2%86%92%20IONOS-0B0D0E?logo=docker)](#)
 [![PWA](https://img.shields.io/badge/PWA-Instalable-5A0FC8?logo=pwa)](#)
 
 </div>
@@ -25,27 +25,32 @@ Atlas One es una suite modular todo-en-uno para negocios físicos en México y L
 
 ## ⚠️ Antes de tocar `main`
 
-**`main` es producción en vivo.** Railway la despliega automáticamente en cada
-push y hay un negocio real cobrando ahí todos los días. No es una rama de
-integración.
+**`main` es producción en vivo.** Es tronco único (no hay `staging`, se fusionó a
+`main` el 2026-09-22) y un CI/CD (GitHub Actions) la despliega automáticamente al VPS
+IONOS en cada push, y hay un negocio real cobrando ahí todos los días. No es una rama
+de integración.
 
-- Los PRs nuevos van a **`staging`**
-- Cambios a `main`, fuera del horario de la tienda (opera hasta ~20:00 hora de México)
-- El `Dockerfile` de la raíz **no debe llegar a `main`**: Railway lo prioriza sobre Railpack
+- Los PRs nuevos van a **`main`** (no hay rama intermedia)
+- Cambios a `main`, fuera del horario de la tienda (opera hasta ~20:00 hora de México) —
+  el deploy es inmediato, no hay ventana de aprobación manual
+- El `Dockerfile` de la raíz **sí debe estar en `main`**: es el mecanismo de build de
+  producción (a diferencia del esquema anterior con Railway)
 
-Detalle completo en [`docs/infra/deployment-map.md`](docs/infra/deployment-map.md).
+Detalle completo en [`docs/DEPLOY.md`](docs/DEPLOY.md) y
+[`docs/infra/deployment-map.md`](docs/infra/deployment-map.md).
 
 ## 🌐 Dónde vive cada cosa
 
 | Destino | Rama | Base de datos |
 |---|---|---|
-| `atlas-one.up.railway.app` | `main` | Postgres de Railway — **producción, cliente real** |
-| `app.atlasone.com.mx` | `staging` | `atlas_one_beta` en el VPS — datos demo |
+| `app.atlasone.com.mx` | `main` | Postgres 18 en el VPS IONOS — **producción, cliente real** |
 | `atlasone.com.mx` | — | Landing estática |
 
-La Gastro Suite (mesas, comandas, KDS, recetas, ledger de barra) y el módulo de
-clientes POS (CRUD + estado de cuenta PDF + WhatsApp) se promovieron de `staging`
-a `main` el 2026-08-09.
+Railway (`atlas-one.up.railway.app`) dejó de servir producción el 2026-09-22, cuando se
+cortó el punto de venta de Novedades Kaory al VPS. La Gastro Suite (mesas, comandas,
+KDS, recetas, ledger de barra) y el módulo de clientes POS (CRUD + estado de cuenta PDF
++ WhatsApp) se habían promovido de `staging` a `main` el 2026-08-09; `staging` misma se
+fusionó a `main` el 2026-09-22, cerrando el esquema de dos ramas.
 
 ## 🛠️ Desarrollo local
 
@@ -91,14 +96,15 @@ organizaciones demo con contraseña `demo1234`.
 Con JSON responde 422. El frontend usa `baseURL: '/api'` relativo, así que no
 necesita variables `VITE_*` en build time.
 
-## 🔓 Deuda de seguridad abierta
+## 🔓 Deuda de seguridad — histórica, resuelta en el destino actual
 
 `app/core/security/config.py` usa
 `_DEFAULT_SECRET = "atlas_erp_secret_key_change_me_in_prod"` como respaldo de
-`SECRET_KEY`, y **Railway producción no define la variable**. Los JWT de un
-negocio real se firman con un secreto que está en este repositorio: cualquiera
-con acceso al código puede falsificar una sesión válida. Se corrige definiendo
-`SECRET_KEY` en Railway.
+`SECRET_KEY`. Cuando Railway era producción, no definía la variable y los JWT de un
+negocio real se firmaban con un secreto público del repositorio. El VPS IONOS (destino
+actual, ver [`docs/DEPLOY.md`](docs/DEPLOY.md)) sí define un `SECRET_KEY` real — ver
+`docs/infra/deployment-map.md`. Verifica siempre que cualquier destino nuevo defina la
+variable antes de recibir tráfico real.
 
 ---
 
@@ -123,21 +129,23 @@ Una sola base de código sirve a todos los verticales. Un **preset de industria*
 
 | Documento | Contenido |
 |---|---|
-| [`docs/infra/deployment-map.md`](docs/infra/deployment-map.md) | Qué rama alimenta cada destino y el checklist del corte de producción |
+| [`docs/DEPLOY.md`](docs/DEPLOY.md) | Despliegue a producción — CI/CD (GitHub Actions) al VPS IONOS |
+| [`docs/infra/deployment-map.md`](docs/infra/deployment-map.md) | Qué rama alimenta cada destino |
 | [`docs/infra/ionos-vps.md`](docs/infra/ionos-vps.md) | Runbook del VPS `atlas-prod-01` |
 | [`docs/branching-strategy.md`](docs/branching-strategy.md) | Ramas, reglas y convenciones |
-| [`RAILWAY_DEPLOY.md`](RAILWAY_DEPLOY.md) | Despliegue en Railway |
+| [`RAILWAY_DEPLOY.md`](RAILWAY_DEPLOY.md) | Histórico — despliegue en Railway, ya no describe producción |
 
 ## 🖨️ Agente de impresión
 
 El agente local que habla con las impresoras térmicas ESC/POS vive en su
 propio repositorio, común a todos los productos de Atlas:
 <https://github.com/Ecamposg95/Atlas-Print-Agent> (`GET /api/printer/download-agent`
-redirige ahí; `ATLAS_PRINT_AGENT_URL` permite apuntar a otro origen). Valida el origen de las peticiones con una lista más un regex
-que acepta **cualquier** `*.up.railway.app` — pero **no** un dominio propio. Al
-mover un punto de venta a su propio dominio hay que definir
-`ATLAS_AGENT_ORIGINS` en la PC de la tienda y verificar una impresión real, o la
-caja seguirá vendiendo sin imprimir tickets.
+redirige ahí; `ATLAS_PRINT_AGENT_URL` permite apuntar a otro origen). Su configuración
+de orígenes permitidos (`ATLAS_AGENT_ORIGINS`) ya no es parte de este repositorio —
+verifica el estado actual en el repo del agente antes de asumir cómo valida un dominio
+nuevo. Al dar de alta un punto de venta en un dominio propio, confirma con una
+impresión real que el agente lo acepta, o la caja seguirá vendiendo sin imprimir
+tickets.
 
 <br/>
 

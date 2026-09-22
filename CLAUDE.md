@@ -22,8 +22,8 @@ Orientación rápida: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) ·
 
 ## 2. Reglas de oro (NO negociables)
 
-1. **`main` = producción con clientes vivos. NUNCA hagas push a `main` sin permiso explícito del usuario.** Trabaja en **`staging`** (o `feat/*` → `staging`). Pushear `staging` despliega al entorno de staging en Railway.
-2. **Commit/push solo cuando el usuario lo pida.** Si estás en `main`, crea rama antes.
+1. **`main` = producción con clientes vivos. NUNCA hagas push a `main` sin permiso explícito del usuario.** Es tronco único (no hay `staging`, se fusionó a `main` el 2026-09-22): trabaja en `feat/*`/`fix/*` y fusiona a `main` solo con permiso. Pushear `main` despliega automáticamente a producción (VPS IONOS, `app.atlasone.com.mx`) vía CI/CD — ver [`docs/DEPLOY.md`](docs/DEPLOY.md). Railway **ya no es producción**.
+2. **Commit/push solo cuando el usuario lo pida.** Si estás en `main`, crea rama antes — un push directo a `main` dispara el deploy real.
 3. **Migraciones de esquema van en `scripts/railway_init.py`** (ALTERs idempotentes + `create_all`). Corre en cada deploy. NO uses Alembic (versions/ está vacío, de reserva). Tablas nuevas se crean solas al registrar el modelo en `app/models/__init__.py`.
 4. **FKs a IDs UUID deben ser `String(36)`, nunca Integer.** `product_variants.id`, `sales_documents.id`, `parked_tickets.id`, `departments.id` son UUID. SQLite no valida el mismatch; Postgres crashea en `create_all`. (Dos convenciones de PK conviven — ver [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md).)
 5. **Toda query de negocio filtra `organization_id`** (multi-tenancy). Usa `get_tenant_scoped`/`scoped_query` de `app/core/tenant_query.py`.
@@ -59,7 +59,7 @@ npm run build                             # tsc && vite build  (esto corre el CI
 docker compose up -d                      # DATABASE_URL=postgresql://postgres:toor@db:5432/railway
 ```
 
-**CI** (`.github/workflows/ci.yml`): Python 3.11, Node 20 — `pytest` + `tsc` + `vite build`. Corre en push y en PR a `main`.
+**CI/CD** (`.github/workflows/ci.yml`): Python 3.11, Node 20 — `pytest` + `vitest` + `tsc` + `vite build`. Corre en push y en PR a `main`. **En push a `main`, si todo pasa, un job adicional (`deploy-ionos`) despliega automáticamente a producción** (VPS IONOS, `app.atlasone.com.mx`) por SSH: construye la imagen (`Dockerfile` de la raíz), la levanta con `docker compose`, y verifica el commit desplegado + `/health`. Detalle completo en [`docs/DEPLOY.md`](docs/DEPLOY.md).
 
 ---
 
@@ -129,7 +129,7 @@ Edita `scripts/init_presets_v2.py` (seed de `industry_presets`) y/o el fallback 
 - **Doble convención de PK** (Integer vs UUID String(36)) — ver regla de oro #4.
 - **RBAC dual y débil:** solo 3 routers usan `require_module`; ADMIN/DUEÑO hacen bypass; branch scoping NO está enforced a nivel framework. **No confíes en el RBAC como candado de seguridad** — ver los 12 huecos en [`docs/RBAC.md §5`](docs/RBAC.md).
 - **`quotes convert-to-sale` NO emite el evento outbox** (a diferencia de `create_sale`): no descuenta insumos ni libera mesa.
-- **Tres mecanismos de migración, no uno.** La regla de oro #3 solo documenta `scripts/railway_init.py` (automático, corre en cada deploy — `Procfile`/`railway.json`). Pero también existen `scripts/migrate.py` + 25 `scripts/migrate_*.py` (con tabla `schema_migrations`) que **NO corren solos** — ahí viven índices únicos que protegen dinero real (`uq_sales_org_client_uuid` contra el cobro doble, `uq_sale_return_pending_per_sale` contra la devolución duplicada) y hay que correrlos a mano en cada entorno (VPS, bases restauradas). `alembic/` es el tercero: reserva vacía, no lo uses (regla de oro #3 sigue vigente para código nuevo). Ver `.superpowers/sdd/db-audit/schema-findings.md §7.1` (auditoría 2026-09-19, no versionada — gitignored).
+- **Tres mecanismos de migración, no uno.** La regla de oro #3 solo documenta `scripts/railway_init.py` (automático, corre en cada deploy — hoy vía el `CMD` del `Dockerfile` de producción; `Procfile`/`railway.json` quedan de reserva). Pero también existen `scripts/migrate.py` + 25 `scripts/migrate_*.py` (con tabla `schema_migrations`) que **NO corren solos** — ahí viven índices únicos que protegen dinero real (`uq_sales_org_client_uuid` contra el cobro doble, `uq_sale_return_pending_per_sale` contra la devolución duplicada) y hay que correrlos a mano en cada entorno (VPS, bases restauradas). `alembic/` es el tercero: reserva vacía, no lo uses (regla de oro #3 sigue vigente para código nuevo). Ver `.superpowers/sdd/db-audit/schema-findings.md §7.1` (auditoría 2026-09-19, no versionada — gitignored). **Excepción 2026-09-22:** `scripts/migrate_add_payment_cash_session.py` (columna `payments.cash_session_id` + backfill) y `scripts/migrate_add_cash_movement_author.py` (`cash_movements.created_by_user_id`) ya **no hace falta correrlos a mano** — ambas columnas se sumaron a `railway_init.py` y corren solas en cada deploy; esos scripts quedan solo como vía "en caliente, sin reiniciar" opcional. Los dos índices únicos de dinero de arriba siguen siendo la única migración verdaderamente manual.
 - **`tests/conftest.py` usa `sqlite:///file::memory:?cache=shared` sin `uri=True`.** Sin ese flag SQLAlchemy no lo interpreta como URI de SQLite: `file::memory:?cache=shared` se toma como nombre de archivo literal, así que la "DB en memoria" es en realidad un archivo real en el directorio de trabajo. Dos procesos de `pytest` corriendo en paralelo **en el mismo worktree** (dos agentes, o un worktree + su checkout original) se pisan esa base. Corre la suite de a uno por worktree, o en worktrees distintos.
 
 ---
@@ -147,8 +147,9 @@ Edita `scripts/init_presets_v2.py` (seed de `industry_presets`) y/o el fallback 
 
 - `app/routers/sales.py::create_sale` — motor de checkout (cobros reales).
 - `app/routers/platform/organizations.py` delete `?force=true` — cascade manual sobre ~30 tablas; frágil ante tablas nuevas con FK a org.
-- `scripts/railway_init.py` — corre en cada deploy contra prod al mergear a main. Cambios deben ser idempotentes y probados.
+- `scripts/railway_init.py` — corre en cada deploy contra prod al mergear a main (hoy vía CI/CD al VPS IONOS, no Railway — el nombre del archivo es historia). Cambios deben ser idempotentes y probados.
 - Cualquier cambio a `app/core/{security,tenant_query,tenant_context,events,outbox}.py` — infraestructura transversal.
+- `.github/workflows/ci.yml` job `deploy-ionos` y `Dockerfile`/`.dockerignore` de la raíz — un push a `main` los ejecuta contra producción real sin ventana de confirmación manual.
 
 ---
 
@@ -163,6 +164,7 @@ Edita `scripts/init_presets_v2.py` (seed de `industry_presets`) y/o el fallback 
 | Roles, permisos, auth, huecos de seguridad | [`docs/RBAC.md`](docs/RBAC.md) |
 | Una vista del frontend (ruta→archivo→API) | [`docs/FRONTEND_VIEWS.md`](docs/FRONTEND_VIEWS.md) |
 | Crear/mover un módulo (proceso completo) | [`docs/modules/MODULE_GUIDE.md`](docs/modules/MODULE_GUIDE.md) |
-| Deploy y ramas | [`RAILWAY_DEPLOY.md`](RAILWAY_DEPLOY.md) · [`docs/branching-strategy.md`](docs/branching-strategy.md) |
+| Deploy y ramas | [`docs/DEPLOY.md`](docs/DEPLOY.md) · [`docs/branching-strategy.md`](docs/branching-strategy.md) · [`RAILWAY_DEPLOY.md`](RAILWAY_DEPLOY.md) (histórico, ya no describe producción) |
+| Auditoría funcional del día (qué se corrigió, qué queda abierto) | [`docs/AUDITORIA-2026-09-22.md`](docs/AUDITORIA-2026-09-22.md) |
 
 Índice completo: [`docs/README.md`](docs/README.md).

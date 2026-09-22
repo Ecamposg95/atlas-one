@@ -97,7 +97,13 @@ Cajero retoma la cuenta en POS → cobra → Sale creada
 
 ## 8. Probar
 
-Contra `staging` (`https://atlas-bos-staging.up.railway.app`), demo de restaurante:
+> El entorno `staging` de Railway (`atlas-bos-staging`) que alimentaba esta demo se
+> eliminó el 2026-07-28 y la rama `staging` se fusionó a `main` el 2026-09-22 — no hay
+> URL demo pública hoy. Prueba localmente (`docker compose up -d` + `npm run dev`, ver
+> `README.md` raíz) o contra una organización con el preset gastro habilitado en
+> producción.
+
+Datos de ejemplo (si el seed local aún los siembra):
 
 ```
 usuario: demo_restaurant   PIN: demo1234

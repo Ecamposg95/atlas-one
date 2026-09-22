@@ -1,10 +1,12 @@
 # Infraestructura — VPS IONOS `atlas-prod-01`
 
-> Última actualización: 2026-07-28
+> Última actualización: 2026-09-22 — corte de producción de Railway a este servidor.
 
-Servidor propio donde vive la landing de Atlas ONE, la versión de la rama
-`staging` y el espacio reservado para RMAZH. Complementa a Railway, que sigue
-sirviendo la producción de Kaory.
+**Este servidor es producción desde el 2026-09-22** (`app.atlasone.com.mx`, cliente
+real cobrando — Kaory, Ginebra, Imaltzin, Eleven Fashion). También aloja la landing de
+Atlas ONE y el espacio reservado para RMAZH. Railway ya no sirve producción de Atlas
+One — ver [`deployment-map.md`](deployment-map.md) para el estado de ese proyecto
+(sigue existiendo, sin despliegue automático activo desde `main`).
 
 ## El servidor
 
@@ -34,34 +36,41 @@ Acceso solo por llave pública: `PasswordAuthentication no` en
                                     │  red docker "edge"
         ┌───────────────────────────┼───────────────────────────┐
         ▼                           ▼                           ▼
-  /srv/landing              atlas-one-beta               /srv/placeholder
+  /srv/landing              atlas-one-prod              /srv/placeholder
   atlasone.com.mx           app.atlasone.com.mx          rmazh.atlasone.com.mx
-                                    │
+                                    │                    PRODUCCIÓN — cliente real
                                     ▼
                             postgres (18-alpine)
-                            └ atlas_one_beta   ← rama staging, datos demo
-                            └ atlas_one        ← copia de Kaory (congelada)
+                            └ atlas_one_prod  ← main, datos reales (Kaory + clientes VPS)
 ```
 
 | Ruta | Contenido |
 |---|---|
 | `/srv/caddy/` | `Caddyfile` + compose del proxy |
 | `/srv/apps/postgres/` | Postgres compartido, volumen `pgdata_v18` |
-| `/srv/apps/atlas-one-beta/` | App de la rama `staging` + `src/` |
-| `/srv/apps/atlas-one/` | Copia de producción, sin dominio apuntando |
+| `/srv/apps/atlas-one-prod/` | **Producción.** `src/` recibe el código por push de CI/CD (ver abajo); `docker-compose.yml` con `context: ./src` |
 | `/srv/landing/` | Landing estática de `atlasone.com.mx` |
 | `/srv/backups/` | Dumps + `pg_backup.sh` (cron diario 03:30, retención 14 días) |
 
-El contenedor `atlas-one` sigue encendido pero **ningún dominio lo alcanza**.
-Su base `atlas_one` conserva una copia de los datos de Kaory congelada el
-2026-07-28 18:33 CST, guardada para el corte de producción futuro. No sirve para
-consultar datos actuales: diverge de Railway con cada venta.
+El entorno demo/beta (`atlas-one-beta`, base `atlas_one_beta`) que corrió aquí hasta el
+2026-09-22 se retiró en el corte de producción — `app.atlasone.com.mx` sirve hoy
+`atlas-one-prod`, no una demo. El contenedor `atlas-one` con la copia congelada de
+Kaory del 2026-07-28 (usada como semilla de la migración) puede seguir vivo sin
+dominio apuntando; ya no es necesario para operar, solo para auditoría del corte.
 
 ## Redesplegar
 
+**Automático:** cada push a `main` dispara `.github/workflows/ci.yml`, job
+`deploy-ionos` — ver [`../DEPLOY.md`](../DEPLOY.md) para el pipeline completo (envía el
+código por `tar`+SSH con una llave de despliegue dedicada, construye, levanta, verifica
+el commit desplegado y el `/health`). Ya no se usa `git archive`/`scp` manual ni una
+llave de despliegue de GitHub *en* el servidor: el código entra por push desde el
+runner de CI, no por `git pull` local.
+
+**Manual (rollback o depuración), mismo destino que usa CI:**
+
 ```bash
-git archive --format=tar origin/main | ssh ionos 'tar -x -C /srv/apps/atlas-one-prod/src'
-scp Dockerfile .dockerignore ionos:/srv/apps/atlas-one-prod/src/
+git archive --format=tar HEAD | ssh ionos 'tar -x -C /srv/apps/atlas-one-prod/src'
 ssh ionos 'cd /srv/apps/atlas-one-prod && docker compose build && docker compose up -d'
 ```
 
@@ -71,13 +80,12 @@ sin necesidad de adivinar. Verifica siempre contra el contenedor, no contra el
 `src/` del servidor:
 
 ```bash
+ssh ionos 'docker exec atlas-one-prod cat /app/.commit_desplegado'
 ssh ionos 'docker exec atlas-one-prod grep -c "<algo del cambio>" /app/app/routers/<archivo>.py'
 ```
 
-El `src/` del VPS es un export de `origin/staging` más el `Dockerfile` de
-producción. Mientras la llave de despliegue de GitHub no esté en el servidor,
-el código viaja por `git archive` desde `origin/main`, y el `.env` **no** entra
-en la imagen: lo aporta `env_file:` del compose en tiempo de ejecución.
+El `.env` **no** entra en la imagen: lo aporta `env_file:` del `docker-compose.yml` del
+servidor en tiempo de ejecución.
 
 ## TLS
 
@@ -87,7 +95,7 @@ proxy naranja, Cloudflare termina el TLS y Caddy nunca completa el desafío.
 
 ## Base de datos
 
-Postgres **18**, no 17. Railway corre 18.3 y el `docker-compose.yml` de
+Postgres **18**, no 17. Producción corre 18-alpine y el `docker-compose.yml` de
 desarrollo aún dice `postgres:17-alpine`.
 
 > Postgres 18 monta el volumen en `/var/lib/postgresql`, **no** en
@@ -111,7 +119,12 @@ docker events --filter event=die --filter event=oom --filter event=health_status
 
 ## Pendientes
 
-- Llave de despliegue de GitHub en el servidor para hacer `git pull` en el propio VPS
+- ~~Llave de despliegue de GitHub en el servidor para hacer `git pull` en el propio
+  VPS~~ — resuelto distinto de lo previsto: el código llega por `tar`+SSH desde el
+  runner de CI (una llave de despliegue en GitHub Actions, no en el servidor), ver
+  `docs/DEPLOY.md`.
 - Reverse DNS (PTR) de la IP hacia `atlas-prod-01.atlasone.com.mx`
 - `rmazh.mx` (servidor **74.208.195.59**, distinto a este) tiene el certificado
   vencido desde el 2026-07-19 y ese dominio se imprime en cada ticket
+- Apagar (o decidir el destino de) el proyecto `atlas-bos` en Railway, que sigue
+  encendido como rollback tras el corte del 2026-09-22 (ver `deployment-map.md`).

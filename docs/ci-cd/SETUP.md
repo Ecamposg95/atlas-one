@@ -1,22 +1,44 @@
 # CI/CD — Setup y operación
 
+> Actualizado 2026-09-22: el workflow ganó un quinto job, `deploy-ionos`, que despliega
+> a producción. Detalle del deploy en [`../DEPLOY.md`](../DEPLOY.md); este documento
+> cubre el workflow completo y cómo operarlo.
+
 Este documento describe el workflow de GitHub Actions (`.github/workflows/ci.yml`) y cómo operarlo en el día a día.
 
 ## ¿Qué corre el CI?
 
-Cada push (a cualquier rama) y cada PR contra `main` dispara tres jobs en paralelo:
+Cada push (a cualquier rama) y cada PR contra `main` dispara cuatro jobs en paralelo:
 
 | Job                  | Qué hace                                  | Falla si…                                  |
 | -------------------- | ----------------------------------------- | ------------------------------------------ |
 | `backend-tests`      | `pytest tests/ -v --tb=short` (Python 3.11) | Cualquier test del backend falla           |
 | `frontend-typecheck` | `npx tsc --noEmit` dentro de `frontend/` | Hay errores de TypeScript                  |
+| `frontend-tests`     | `npx vitest run` dentro de `frontend/`   | Cualquier test de Vitest falla              |
 | `frontend-build`     | `npm run build` dentro de `frontend/`    | Build de Vite rompe (imports, loaders, …) |
 
-Concurrency está activado: si pusheás dos veces seguidas a la misma rama, el run anterior se cancela.
+Concurrency está activado: si pusheás dos veces seguidas a la misma rama, el run
+anterior se cancela — **excepto en `main`**, donde `cancel-in-progress: false` evita
+cancelar un despliegue a mitad de construcción.
+
+**Solo en push a `main`**, y solo si los cuatro jobs de arriba pasaron
+(`needs: [backend-tests, frontend-tests, frontend-typecheck, frontend-build]`), corre un
+quinto job:
+
+| Job | Qué hace | Falla si… |
+| --- | --- | --- |
+| `deploy-ionos` | Construye la imagen Docker y la despliega al VPS IONOS por SSH; verifica el commit desplegado y `/health` | El build falla, el contenedor no arranca con el commit nuevo, o `/health` no responde 200 en ~2.5 min |
+
+Es decir: **el deploy a producción ya no corre si el CI está rojo** — el `needs` del job
+es el gate, no una convención de branch protection. Detalle completo del job en
+[`../DEPLOY.md`](../DEPLOY.md).
 
 ## Branch protection (recomendado, manual)
 
-Hoy el deploy a Railway corre aun si el CI está rojo — el gate es solo *visibilidad*. Para que `main` requiera el check verde antes de mergear:
+El `needs` de `deploy-ionos` ya impide que un push a `main` con CI rojo dispare el
+deploy. Branch protection sigue siendo útil para lo que el `needs` no cubre: impedir
+que un PR se **mergee** a `main` con checks rojos (el deploy solo se dispara en push,
+pero un mergeo ya es un push). Para exigirlo:
 
 1. GitHub → **Settings** → **Branches** → **Branch protection rules** → **Add rule**.
 2. Branch name pattern: `main`.
@@ -26,6 +48,7 @@ Hoy el deploy a Railway corre aun si el CI está rojo — el gate es solo *visib
    - En “Status checks that are required”, agregar:
      - `Backend tests (pytest)`
      - `Frontend typecheck (tsc --noEmit)`
+     - `Frontend tests (vitest)`
      - `Frontend build (vite)`
    - **Require branches to be up to date before merging** (opcional pero recomendado).
 4. Guardar.
@@ -62,4 +85,5 @@ Regla práctica: si el fix toma más de 15 minutos, revertí primero y arreglá 
 
 - Job de lint (ruff/eslint) cuando definamos la config.
 - Coverage report subiendo a Codecov o similar.
-- Bloquear el deploy de Railway con un check `SAFE_TO_DEPLOY` que dependa del CI verde.
+- ~~Bloquear el deploy con un check `SAFE_TO_DEPLOY` que dependa del CI verde~~ — hecho
+  vía `needs` en `deploy-ionos` (ver arriba), sin necesidad de un check aparte.
