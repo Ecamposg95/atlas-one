@@ -22,15 +22,18 @@ Catálogo de endpoints por dominio. Todos bajo `/api`. Swagger vivo en `/docs`. 
 | Método | Ruta | Qué hace | Gating |
 |---|---|---|---|
 | GET | /me/context | **Contexto del frontend**: user, org, branch, preset, `enabled_modules`, templates | auth |
-| GET | / · GET /me · GET /{id} | Lista / actual / detalle | auth+org |
-| POST | / · PUT /{id} · DELETE /{id} | Crear / editar / soft-delete | auth+org (⚠️ sin check de rol admin) |
+| GET | / · GET /me · GET /{id} | Lista / actual / detalle (`UserRead.has_reprint_pin`, derivado, nunca el hash) | auth+org |
+| POST | / · PUT /{id} · DELETE /{id} | Crear / editar / soft-delete; acepta `reprint_pin` (4-8 dígitos, `""` borra, 422 fuera de formato) | [admin/dueño] **(2026-09-19)** — antes sin check de rol admin, cualquier cajero podía tocar `/api/users`; corregido junto con el PIN |
 
 ## Organización · `/api/organization` (+ `/api/org/capabilities`, `/api/departments`, `/api/brands`)
 | Método | Ruta | Qué hace | Gating |
 |---|---|---|---|
-| GET/PUT | /organization/ | Org activa / update (no-admin solo campos de impresora) | auth (admin p/ resto) |
+| GET/PUT | /organization/ | Org activa / update (no-admin solo campos de impresora, ticket y comisión — misma whitelist) | auth (admin p/ resto) |
 | POST/DELETE | /organization/logo | Logo | [admin] |
 | GET | /org/capabilities/ | enabled_modules + nav + default_routes por industria | auth |
+| GET | /organization/exchange-rate **(2026-09-17)** | `{mode, rate, source, fix_rate, fix_date, margin, manual_rate}` — tipo de cambio USD resuelto; `rate: null` si `mode='off'` o no se puede resolver | auth (cualquier usuario de la org, lo consume la cajera) |
+| POST | /organization/exchange-rate/refresh **(2026-09-17)** | Baja el FIX de Banxico bajo demanda (`{ok, rate_date, rate, source}` o 503 si falta `BANXICO_TOKEN`/falla Banxico) | [admin/dueño] |
+| GET | /organization/card-surcharge **(2026-09-17)** | `{"pct": 3.50}` — % de comisión por pago con tarjeta configurado, `SELECT` barato sin red | auth |
 | — | /departments, /brands | CRUD de departamentos y marcas | auth+org |
 
 ## Setup · `/api/setup`
@@ -46,10 +49,14 @@ Catálogo de endpoints por dominio. Todos bajo `/api`. Swagger vivo en `/docs`. 
 | GET | /by-folio/{series}/{folio} · /my-last · /{id} · /{id}/print-view | Detalle / última / ticket HTML |
 | DELETE | /{id} | **cancel_sale** (revierte stock + deuda) |
 | POST | /{id}/refund | Stub (no-op) |
-| GET | /export/csv | Export CSV |
+| GET | /export/csv | Export CSV — columnas 2026-09-17 **«Comisión tarjeta»** y **«Total cobrado»** después de «Total» |
 | POST/GET/PATCH/DELETE | /parked[/{id}] | Tickets pausados / cuentas de mesa (park, resume, merge cart, soft-delete) |
 
 **create_sale** (resumen): gate de caja abierta (branch users); resolución batch de variantes/stock/PBS; validación de stock + techo de descuento (50%); IVA; **propina** (`tip_amount` suma al total y se persiste para reporte por-mesero); validación de pagos + `change_given`; crédito a cliente (→PENDING); `server_user_id` copiado de la mesa; parked→CONVERTED; **`EventBus.enqueue(SalesDocumentCreated)` en la misma txn** + `drain_now`. Commit atómico. Ver [`ARCHITECTURE.md`](ARCHITECTURE.md) §3.
+
+**Añadidos 2026-09-17, ambos con salida temprana neutra si no aplican (no tocan el resto del flujo si `pct=0`/modo `off`):**
+- Si `customer_id` llega sin `customer_name`, lo rellena desde el cliente de la misma org (`[:255]`).
+- Snapshot de `usd_rate` (envuelto en `try/except → None`: si Banxico o el servicio fallan, la venta se cobra igual) y de `card_surcharge_pct`/`card_surcharge_amount` (la comisión se suma a `cash_needed` y a la validación de cobertura de pagos — **no** a `total_amount` ni a `balance_diff`, que siguen siendo mercancía). `SaleRead` expone ambos snapshots en todas las lecturas (`GET /`, `/{id}`, `/by-folio/...`, `/my-last`).
 
 ## Caja · `/api/cash`
 | Método | Ruta | Qué hace | Gating |
@@ -61,6 +68,7 @@ Catálogo de endpoints por dominio. Todos bajo `/api`. Swagger vivo en `/docs`. 
 | GET | /{id}/pdf · /{id}/ticket | Corte PDF / JSON ESC-POS | acceso a sesión |
 
 > Cerrar bloquea si hay parked tickets sin convertir (409). Reconciliación vía `services/cash_reconciliation`.
+> `get_session_audit_data` agrega `card_surcharges` (2026-09-17): suma de `card_surcharge_amount` de las ventas de la sesión, informativo, **no** entra en `Total cobrado` (la comisión ya viaja dentro del pago `CARD`). Lo consumen `/{id}/pdf`, `/{id}/ticket` y la UI del corte.
 
 ## Inventario · `/api/inventory`
 | Método | Ruta | Qué hace | Gating |
@@ -80,8 +88,25 @@ Catálogo de endpoints por dominio. Todos bajo `/api`. Swagger vivo en `/docs`. 
 ## Transferencias · `/api/transfers`
 `POST /` crear · `GET /` listar · `POST /{id}/fulfill` · `POST /fulfillment/{id}/ship` (Movement TRANSFER_OUT) · `POST /fulfillment/{id}/receive` (TRANSFER_IN). Traspaso formal con fulfillment (distinto de `/inventory/transfer`).
 
-## Productos / Catálogo · `/api/products` (10 sub-routers)
-CRUD productos + aprobar/rechazar/restore/duplicate/imagen; `search` (variants/pos search); `stats` (catalog-kpis, branch-kpis); `packaging`; `branch_status` (habilitación de catálogo por sucursal); `bulk` (batch-action); `import_export` (excel upload/export); `reports` (hq-inventory); `audit` ({id}/audit-log). Todo tenant-scoped.
+## Productos / Catálogo · `/api/products` (11 sub-routers)
+CRUD productos + aprobar/rechazar/restore/duplicate/imagen; `search` (variants/pos search — ⚠️ inalcanzable, ver gotchas); `stats` (catalog-kpis, branch-kpis); `packaging`; `branch_status` (habilitación de catálogo por sucursal); `bulk` (batch-action); `import_export` (excel upload/export, ⚠️ no conoce `gender/model/material`); `reports` (hq-inventory); `audit` ({id}/audit-log); `barcodes` (2026-09-19). Todo tenant-scoped.
+
+**Variantes color/talla (módulo `variants`, 2026-09-17):**
+
+| Método | Ruta | Qué hace | Gating |
+|---|---|---|---|
+| POST | /{product_id}/variants | Crea una o más variantes (matriz color×talla) del producto | [module:variants] |
+| PUT | /variants/{variant_id} | Edita una variante existente | [module:variants] |
+| DELETE | /variants/{variant_id} | Soft-delete de una variante | [module:variants] |
+| GET | /sku-suggest?brand=&name=&model=&color=&size=&gender= **(2026-09-21)** | `{"sku": "...", "available": bool}` — SKU sugerido (`MARCA-PRENDA[-INICIALES]-MODELO[-MUJ\|NIN]-COLOR-TALLA`); es una sugerencia, no se aplica sola | auth+org |
+
+**Códigos de barras y etiquetas (2026-09-19, ver [`presets/BOUTIQUE.md §2.4`](presets/BOUTIQUE.md)):**
+
+| Método | Ruta | Qué hace | Gating |
+|---|---|---|---|
+| GET | /barcodes/missing-count | `{"missing": n}` de variantes visibles sin código | auth+org |
+| POST | /barcodes/assign-missing | Genera EAN-13 interno (`2`+org+secuencia+verificador) a las variantes sin código; body opcional `{product_id}` | [admin/dueño] |
+| GET | /export/labels.csv?product_id=&only_with_stock= | CSV de etiquetas (UTF-8 con BOM): `SKU,Codigo de barras,Producto,Marca,Talla,Color,Precio,Existencia,Genero,Modelo,Material,Nombre de venta` | auth+org (scope de `query_visible_products`) |
 
 ---
 
@@ -112,7 +137,15 @@ CRUD productos + aprobar/rechazar/restore/duplicate/imagen; `search` (variants/p
 | /audit/discrepancies · /aging-report · /product/{id} · /export/csv | Arqueos / antigüedad de saldos / analítica de producto / CSV |
 
 ## Impresora · `/api/printer`
-`POST /test-print · /print-ticket · /reprint-ticket/{id} · /reprint-refunded/{id} · /print-cash-cut` · `GET /printers · /download-agent`. Genera ESC/POS base64 (el agente local imprime, no el server). Registra `PrintJob`.
+`POST /test-print · /print-ticket · /reprint-ticket/{id} · /reprint-refunded/{id} · /print-cash-cut` · `GET /printers · /download-agent`. Genera ESC/POS base64 (el agente local imprime, no el server). Registra `PrintJob`. `reprint-ticket`/`reprint-refunded` aceptan `pin` (2026-09-19): si la venta no es propia-y-reciente, primero prueban el PIN de reimpresión de un supervisor (`users.reprint_pin_hash`) y si no, su contraseña.
+
+`GET /download-agent?platform=windows|linux|mac` — hoy sigue empaquetando el ZIP desde
+`tools/print_agent/` en este mismo repo (filtrado por plataforma: launcher +
+autoarranque de la plataforma pedida, certs excluidos). **El agente se está
+mudando a un repo propio**, <https://github.com/Ecamposg95/Atlas-Print-Agent> — trátalo
+como el nuevo hogar del código del agente (`main.py`, instaladores, requirements) de
+cara a futuro; este endpoint deberá apuntar ahí cuando la migración se complete. Ver
+autoarranque en `docs/superpowers/runbooks/print-agent-autostart.md`.
 
 ## Portal cliente · `/api/portal`
 `GET /accounts · /my-account/balance · /quotes · /my-account/transactions`. **Sin tenant scope** (cross-org por email del usuario). ⚠️ Contiene fallbacks demo y accesos a atributos posiblemente inexistentes.
@@ -172,7 +205,9 @@ CRUD `/stations`, `/routes` (dept→estación) · `POST /tickets` (fire) · `GET
 ---
 
 ## Gotchas transversales (para quien consume la API)
-- **`convert-to-sale` de quotes NO dispara el evento outbox** (a diferencia de `create_sale`): no descuenta insumos ni libera mesa.
+- **`convert-to-sale` de quotes NO dispara el evento outbox** (a diferencia de `create_sale`): no descuenta insumos ni libera mesa. Tampoco congela `usd_rate` ni comisión de tarjeta (ambos son exclusivos de `create_sale`).
+- **`GET /api/products/search` es inalcanzable** (preexistente, hallado 2026-09-21): `core.router` monta `/{product_id}` antes que `search.router` en `app/modules/products/router/__init__.py`, así que cualquier ruta declarada en `search.py` queda tapada por el match de `/{product_id}`.
+- **Las mutaciones de `/products/{id}/variants` y `/products/variants/{id}`** exigen `require_module("variants")`; los endpoints de `barcodes.py` no lo exigen (solo rol donde aplica). Recuerda que ADMIN/DUEÑO hacen bypass de `require_module` en general (RBAC.md §5): un admin de una org sin el módulo `variants` activo puede llamar el endpoint de variantes a mano aunque la UI no se lo muestre.
 - **Endpoints sin `get_current_user`** (solo `org_id`, menor atribución de auditoría): `returns:/stats`, `purchases:/stats,/,/{id}`, `expenses:/stats,/categories,/`, `transfers:/,/{id}/fulfill`. Logistics `/containers`,`/boxes` no tienen ni org (sin tenant scope).
 - **Debug prints en prod**: `sales.py` (export CSV), `quotes.py` (create).
 - **Definición de "HQ" divergente**: `reports/dashboard` y `command-center` excluyen GERENTE; pero `sales-by-hour`/`by-waiter`/`export-csv` lo incluyen como HQ.

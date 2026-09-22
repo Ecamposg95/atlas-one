@@ -1,4 +1,4 @@
-# Modelo de Datos · Atlas BOS (73 tablas)
+# Modelo de Datos · Atlas BOS (74 tablas)
 
 Catálogo de la base de datos por dominio. Fuente: auditoría profunda (julio 2026). Modelos en `app/models/*.py` y `app/modules/*/models.py`.
 
@@ -22,8 +22,25 @@ Catálogo de la base de datos por dominio. Fuente: auditoría profunda (julio 20
 | `modules` | **String (key)** | Catálogo global de módulos SaaS | `scope`=ModuleScope, `status`=ModuleStatus |
 | `organization_modules` | (org_id, module_key) | Habilitación de módulo por org | — |
 | `industry_presets` | Int | Preset de módulos por vertical | `industry_type` (String) |
+| `exchange_rates` | Int | FIX de Banxico diario, **global** (sin `organization_id`/`TenantMixin` a propósito — dato público) | `source`=String (`banxico`\|`manual`); UNIQUE `(currency, rate_date)` |
 
-`BranchType`{HQ,STORE,WAREHOUSE,OFFICE} · `ModuleScope`{HQ,BRANCH,WAREHOUSE,GLOBAL} · `ModuleStatus`{BETA,STABLE} · `IndustryType` (~19 valores: ATLAS_POS, DISTRIBUTOR_POS, RETAIL_CHAIN, RESTAURANT_QSR/FULL, CAFE_BAKERY, AUTO_REPAIR_SHOP, WAREHOUSE_LOGISTICS, CUSTOM, familia ATLAS_ONE_* incl. RESTAURANT/CAFE/BAR, varios legacy).
+`BranchType`{HQ,STORE,WAREHOUSE,OFFICE} · `ModuleScope`{HQ,BRANCH,WAREHOUSE,GLOBAL} · `ModuleStatus`{BETA,STABLE} · `IndustryType` (~19 valores: ATLAS_POS, **ATLAS_POS_BOUTIQUE** (2026-09-16, ver [`presets/BOUTIQUE.md`](presets/BOUTIQUE.md)), DISTRIBUTOR_POS, RETAIL_CHAIN, RESTAURANT_QSR/FULL, CAFE_BAKERY, AUTO_REPAIR_SHOP, WAREHOUSE_LOGISTICS, CUSTOM, familia ATLAS_ONE_* incl. RESTAURANT/CAFE/BAR, varios legacy).
+
+**Columnas boutique/2026-09 en `organization`** (`app/modules/tenants/models.py`, todas
+con `ALTER` idempotente en `railway_init.py`, todas opcionales/apagadas por default —
+ninguna organización existente cambia de comportamiento sin configurarlas):
+
+| Columna | Tipo | Default | Propósito |
+|---|---|---|---|
+| `ticket_terms` | `Text` | `NULL` | Términos y condiciones impresos al pie del ticket |
+| `ticket_terms_url` | `String` | `NULL` | URL de términos; si está capturada, el ticket emite un QR nativo ESC/POS |
+| `ticket_instagram`/`ticket_facebook`/`ticket_tiktok`/`ticket_whatsapp` | `String` | `NULL` | Redes sociales del bloque "SIGUENOS" del ticket |
+| `ticket_show_vendor` | `Boolean` | `false` | Imprime "Sistema: Atlas One \| Atlas Tech" + dominio al pie |
+| `ticket_line_style` | `String(12)` | `'compact'` | `compact` (una línea por producto, formato de hoy) \| `detailed` (marca/nombre/talla en 2-4 líneas, ver [`presets/BOUTIQUE.md §3.3`](presets/BOUTIQUE.md)) |
+| `card_surcharge_pct` | `Numeric(5,2)` | `0` | % de comisión por pago con tarjeta, `0`=apagado. `NUMERIC(5,2)` y no `(6,3)`: con 3 decimales la etiqueta del ticket desborda el papel de 58 mm |
+| `usd_rate_mode` | `String(10)` | `'off'` | `off`\|`auto`(FIX+margen)\|`manual`. String con constantes Python, no enum de Postgres (regla de oro §5) |
+| `usd_rate_manual` | `Numeric(10,4)` | `NULL` | Tipo fijo si `mode='manual'` |
+| `usd_rate_margin` | `Numeric(10,4)` | `0` | Se suma al FIX en modo `auto` |
 
 ## Usuarios / Auth
 | Tabla | PK | Propósito | Enums |
@@ -32,6 +49,13 @@ Catálogo de la base de datos por dominio. Fuente: auditoría profunda (julio 20
 | `user_organizations` | (user_id, org_id) | Membresía M2M user↔org | `org_role` String (ADMIN/MEMBER/OWNER) |
 
 `Role`{ADMINISTRADOR,GERENTE,CAJERO,DUEÑO,VENDEDOR,SOPORTE_OPERATIVO,CLIENTE} · `PlatformRole`{SUPERADMIN,SUPPORT,NONE}. `users` **no** usa TenantMixin (scoping vía `user_organizations`). Ver [`RBAC.md`](RBAC.md).
+
+`users.reprint_pin_hash` (`String`, nullable, 2026-09-19) — PIN de reimpresión de 4-8
+dígitos, hasheado igual que la contraseña, **independiente de ella**; solo tiene efecto
+en roles gerenciales (ADMINISTRADOR/DUEÑO/GERENTE). Nunca se expone: `UserRead` solo
+trae el derivado `has_reprint_pin: bool` (propiedad `User.has_reprint_pin`). El POS
+prueba primero el PIN de los supervisores de la sucursal y luego su contraseña —
+mismo orden que ya existía, con el PIN como primer intento.
 
 ## Productos / Catálogo (`modules/products/models.py`, PK UUID)
 | Tabla | Propósito |
@@ -44,6 +68,21 @@ Catálogo de la base de datos por dominio. Fuente: auditoría profunda (julio 20
 | `product_prices` | Precios escalonados por cantidad |
 | `packaging_units` | Jerarquía de empaque (caja/pack) |
 | `product_branch_status` | Matriz habilitación producto×sucursal — UNIQUE `(variant_id, branch_id)` |
+
+**Columnas boutique/2026-09 (preset `ATLAS_POS_BOUTIQUE`, ver [`presets/BOUTIQUE.md`](presets/BOUTIQUE.md)):**
+
+- `products.gender` `String(10)` nullable — `HOMBRE|MUJER|UNISEX|NINO`. String con
+  constantes Python (`app/modules/products/sale_name.py::GENDERS`), no enum de Postgres.
+- `products.model` `String(80)` nullable — nombre comercial del modelo ("Air Force 1").
+- `products.material` `String(80)` nullable — informativo; no entra en `sale_name` ni SKU.
+- `product_variants.color` `String(60)` nullable, `product_variants.size` `String(30)`
+  nullable (2026-09-17, módulo `variants`) — la unidad de venta real de una prenda con
+  variaciones; conviven con la `variant_name` heredada (etiqueta libre, sigue en uso en
+  el catálogo viejo 1:1). **`barcode` sigue sin UNIQUE a nivel de base** (§Gotchas E más
+  abajo y CLAUDE.md §6): la unicidad de código por talla/color es solo aplicativa.
+- `sale_name` (producto y variante) **no es columna**: es un campo calculado y aplanado
+  en la respuesta por `app/modules/products/sale_name.py` + `_compute_product_read`
+  (`app/modules/products/router/_shared.py`). Ver la fórmula en `presets/BOUTIQUE.md §2.2`.
 
 ## Inventario (`app/models/inventory.py`)
 | Tabla | PK | Propósito | Enums |
@@ -65,6 +104,17 @@ Catálogo de la base de datos por dominio. Fuente: auditoría profunda (julio 20
 | `cash_audit_log` | Int | Log append-only monetario | `event_type` String |
 
 `DocumentType`{QUOTE,ORDER,INVOICE,RETURN} · `DocumentStatus`{DRAFT,PENDING,PAID,CANCELLED,REFUNDED_PARTIAL,REFUNDED_TOTAL} · `PaymentMethod`{CASH,CARD,TRANSFER,OTHER} · `CashSessionStatus`{OPEN,CLOSED}.
+
+**Columnas 2026-09 en `sales_documents`** (`app/models/sales.py`), ambas snapshot —
+se congelan al cobrar y una reimpresión/reenvío idempotente NUNCA las recalcula:
+
+- `usd_rate` `Numeric(10,4)` nullable — tipo de cambio efectivo aplicado a esta venta
+  (`NULL` = sin equivalente mostrado, venta anterior a la función, u organización en
+  modo `off`). Ver `app/services/exchange_rate.py`.
+- `card_surcharge_pct` `Numeric(5,2)` nullable (`NULL` = no aplicó comisión, distinto
+  de `0`) y `card_surcharge_amount` `Numeric(10,2)` NOT NULL default `0`. `total_amount`
+  **sigue siendo la mercancía**; la comisión vive aparte para no mover ningún KPI
+  histórico. Ver `app/services/card_surcharge.py`.
 
 ## CRM / Finanzas
 | Tabla | PK | Propósito | Enums |
@@ -120,7 +170,11 @@ Catálogo de la base de datos por dominio. Fuente: auditoría profunda (julio 20
 - `parked_tickets.status VARCHAR(16) DEFAULT 'ACTIVE'` (ACTIVE→CONVERTED/CANCELLED) — usada por tables/services y el subscriber.
 - `parked_tickets.converted_to_sale_id VARCHAR(36) → sales_documents.id` — seteada en checkout.
 - `sales_documents.global_discount_pct NUMERIC(5,2)` — descuento global.
-- `branches.printer_cols INTEGER` — en DDL raw, no en el modelo Branch.
+- `branches.printer_cols INTEGER` — en DDL raw (creada también por
+  `scripts/migrate_add_printer_cols.py`), no en el modelo `Branch`. La auditoría de
+  esquema de 2026-09-19 confirmó **cero lectores** en todo `app/` (ni el impresor la
+  lee ni ningún endpoint la escribe) — candidata a `DROP COLUMN`, verificando antes
+  que ninguna integración externa la consulte.
 
 **C) Tablas SIN tenant scoping** (ni TenantMixin ni FK org): `cash_movements`, `event_outbox`, `branch_assignments`, `attendances`, `purchase_order_lines`. `cash_audit_log` tiene `organization_id` Integer manual **sin FK**. El scoping depende de joins con la tabla padre.
 
@@ -130,4 +184,9 @@ Catálogo de la base de datos por dominio. Fuente: auditoría profunda (julio 20
 
 **F) Divergencias ORM↔DB:** `payments.sales_document_id` es `nullable=True` en el ORM pero railway_init lo fuerza a NOT NULL en prod. `CashSessionStatus` está definido dos veces (sales.py y cash.py). `event_outbox` usa `datetime.utcnow` **naive** (el resto usa tz-aware). `IndustryPreset` existe en el ORM pero no se exporta en `app/models/__init__.py` (se crea vía create_all porque comparte metadata).
 
-**Conteo:** 73 tablas (41 en `app/models/*` + 32 en `app/modules/*/models.py`).
+**Conteo:** 74 tablas registradas en `Base.metadata` (corregido por la auditoría de
+esquema de 2026-09-19, `.superpowers/sdd/db-audit/schema-findings.md` §resumen, que
+introspeccionó `Base.metadata` directamente; el conteo previo de 73 estaba desactualizado).
+Incluye `exchange_rates` (§Organización) y las columnas nuevas de esta sección — ningún
+módulo nuevo (`app/modules/`) se agregó por el preset boutique, solo columnas y una
+tabla global.
