@@ -30,6 +30,8 @@ router = APIRouter()
 LARGE_CASH_OUTFLOW_THRESHOLD = Decimal("2000")
 MIN_REASON_LENGTH = 10
 ROLES_SALIDA_ALTA = {"ADMINISTRADOR", "DUEÑO", "GERENTE"}
+# Roles que ven TODA la organización (no se les acota a su sucursal).
+ROLES_HQ = {"ADMINISTRADOR", "DUEÑO"}
 
 
 def _lock_cash_session_query(query):
@@ -533,8 +535,31 @@ def close_session_guided(
         raise HTTPException(status_code=404, detail="session not found")
     if session.closed_at is not None:
         raise HTTPException(status_code=409, detail="session already closed")
-    if session.user_id != current_user.id and current_user.role != Role.GERENTE:
-        raise HTTPException(status_code=403, detail="only the shift owner or branch GERENTE can close")
+    # El dueño del turno siempre puede cerrar el suyo (aunque lo hayan
+    # reasignado de sucursal a media jornada).
+    if session.user_id != current_user.id:
+        # M-3: la dueña también cierra el turno de su cajera. Antes solo se
+        # comparaba contra `Role.GERENTE`, así que un ADMINISTRADOR/DUEÑO
+        # recibía 403 — justo lo contrario de lo que promete el comentario de
+        # `corregir_saldo_inicial`, que cita esta ruta como la regla canónica.
+        if current_user.role not in ROLES_SALIDA_ALTA:
+            raise HTTPException(
+                status_code=403,
+                detail="only the shift owner or a GERENTE/ADMINISTRADOR/DUEÑO can close",
+            )
+        # A-3: el mensaje decía "branch GERENTE" pero el alcance real era la
+        # organización entera: un GERENTE de la sucursal A cerraba (fijando
+        # closing_balance/difference) la caja de un cajero de la sucursal B.
+        # ADMINISTRADOR/DUEÑO sí ven toda la organización.
+        if (
+            current_user.role not in ROLES_HQ
+            and session.branch_id is not None
+            and session.branch_id != current_user.branch_id
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail="only the shift owner or branch GERENTE can close",
+            )
     return _apply_close_to_session(db, session, current_user, payload.counted_cash, payload.notes)
 
 # --------------------------------------------------------------------------
@@ -1211,7 +1236,18 @@ def get_branch_cash_summary(
     if current_user.role not in ("ADMINISTRADOR", "DUEÑO", "GERENTE"):
         raise HTTPException(403, "Solo administradores, dueños o gerentes pueden ver el corte global.")
 
-    target_branch = branch_id or current_user.branch_id
+    # A-4: un GERENTE solo ve SU sucursal. Antes el único filtro era la
+    # organización, así que pasando `?branch_id=` ajeno obtenía el corte
+    # consolidado de otra sucursal (ventas, efectivo, tarjeta y diferencia por
+    # cajero, con nombre). ADMINISTRADOR/DUEÑO sí consolidan toda la org.
+    if current_user.role not in ROLES_HQ:
+        if not current_user.branch_id:
+            raise HTTPException(400, "No se especificó sucursal.")
+        if branch_id and branch_id != current_user.branch_id:
+            raise HTTPException(403, "Solo puedes ver el corte de tu sucursal.")
+        target_branch = current_user.branch_id
+    else:
+        target_branch = branch_id or current_user.branch_id
     if not target_branch:
         raise HTTPException(400, "No se especificó sucursal.")
 
