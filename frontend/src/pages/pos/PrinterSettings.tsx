@@ -749,9 +749,28 @@ export function PrinterSettings() {
                 <div>
                   <p className="text-sm font-bold" style={{ color: 'var(--dax-text)' }}>Impresora Bluetooth</p>
                   <p className="text-xs" style={{ color: 'var(--dax-text-muted)' }}>
-                    Conexión directa sin agente local · requiere Chrome/Edge
+                    Solo para probar la impresora · requiere Chrome/Edge
                   </p>
                 </div>
+              </div>
+
+              {/* El agente de impresion todavia no tiene transporte Bluetooth: el
+                  cobro y la reimpresion van SIEMPRE por el agente local, que
+                  escribe en una cola del sistema. Lo que se empareja aqui solo
+                  sirve para la prueba de esta pantalla, asi que hay que decirlo
+                  antes de que la cajera cobre y se quede esperando el papel.
+                  Cuando el agente unificado traiga Bluetooth (SPP), las colas
+                  apareceran en /printers como cualquier otra y este aviso se
+                  quita. T5 del paquete del 2026-09-22. */}
+              <div className="p-3 rounded-xl mb-4" style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.25)' }}>
+                <p className="text-xs font-bold mb-1" style={{ color: '#fbbf24' }}>
+                  <i className="fa-solid fa-triangle-exclamation mr-1" />Todavía no imprime tickets de venta
+                </p>
+                <p className="text-[10px]" style={{ color: 'var(--dax-text-muted)' }}>
+                  Puedes emparejar la impresora y mandarle una prueba desde aquí, pero al cobrar
+                  el ticket sale por el agente local, no por Bluetooth. Para cobrar, configura la
+                  impresora en la pestaña de tu sistema.
+                </p>
               </div>
 
               {!btSupported && (
