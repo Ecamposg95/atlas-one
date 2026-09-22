@@ -54,7 +54,7 @@ type AgentMode = 'local' | 'server'
 type Tab = 'windows' | 'linux' | 'mac' | 'bluetooth'
 
 /** Comandos de conversión al autoarranque. Los nombres de archivo que aparecen
- *  en esta pantalla están cubiertos por `tests/test_print_agent_bundle.py`: en
+ *  en esta pantalla viven en https://github.com/Ecamposg95/Atlas-Print-Agent: en
  *  el repo de origen un renombrado dejó la pantalla dictando archivos
  *  inexistentes durante dos meses y el autoarranque quedó inalcanzable. */
 const AUTOSTART_CMD_LINUX = 'sudo bash core/instalar-servicio-linux.sh'
@@ -474,7 +474,7 @@ export function PrinterSettings() {
                   </p>
                   {[
                     'Descomprime el ZIP en el Escritorio o cualquier carpeta.',
-                    'Abre la carpeta print_agent y ejecuta impresora_win.bat (doble clic).',
+                    'Abre Atlas-Print-Agent-main/legacy/print_agent y ejecuta impresora_win.bat (doble clic).',
                     'Si Windows bloquea: «Más información → Ejecutar de todas formas».',
                     'Deja la ventana negra abierta — es el agente corriendo.',
                     'Acepta el certificado haciendo clic en el botón de abajo.',
@@ -572,7 +572,7 @@ export function PrinterSettings() {
                       Instrucciones Linux
                     </p>
                     {[
-                      'Descomprime el ZIP y entra a la carpeta print_agent.',
+                      'Descomprime el ZIP y entra a Atlas-Print-Agent-main/legacy/print_agent.',
                       'Instala CUPS si no lo tienes: sudo apt install cups',
                       'Ejecuta el agente: bash impresora_linux.sh',
                       'Acepta el certificado haciendo clic en el botón de abajo.',
@@ -669,7 +669,7 @@ export function PrinterSettings() {
                     Instrucciones macOS
                   </p>
                   {[
-                    'Descomprime el ZIP y entra a la carpeta print_agent.',
+                    'Descomprime el ZIP y entra a Atlas-Print-Agent-main/legacy/print_agent.',
                     'Abre Terminal (Finder → Aplicaciones → Utilidades → Terminal).',
                     'Arrastra impresora_mac.sh a la terminal y presiona Enter.',
                     'Acepta el certificado haciendo clic en el botón de abajo.',

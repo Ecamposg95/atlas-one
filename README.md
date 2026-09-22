@@ -130,8 +130,10 @@ Una sola base de código sirve a todos los verticales. Un **preset de industria*
 
 ## 🖨️ Agente de impresión
 
-`tools/print_agent/` contiene el agente local que habla con las impresoras
-térmicas ESC/POS. Valida el origen de las peticiones con una lista más un regex
+El agente local que habla con las impresoras térmicas ESC/POS vive en su
+propio repositorio, común a todos los productos de Atlas:
+<https://github.com/Ecamposg95/Atlas-Print-Agent> (`GET /api/printer/download-agent`
+redirige ahí; `ATLAS_PRINT_AGENT_URL` permite apuntar a otro origen). Valida el origen de las peticiones con una lista más un regex
 que acepta **cualquier** `*.up.railway.app` — pero **no** un dominio propio. Al
 mover un punto de venta a su propio dominio hay que definir
 `ATLAS_AGENT_ORIGINS` en la PC de la tienda y verificar una impresión real, o la

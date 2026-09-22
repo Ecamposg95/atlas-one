@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Body
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
 from typing import Optional, Tuple
@@ -10,6 +10,10 @@ from app.models.print_job import PrintJob, PrintJobStatus
 from app.models.cash_audit import CashAuditEvent
 from app.core.security import get_current_user
 from app.core.tenant_context import get_current_active_organization
+
+# Repositorio del agente de impresión (fuente única desde 2026-09-22).
+PRINT_AGENT_REPO_URL = "https://github.com/Ecamposg95/Atlas-Print-Agent"
+PRINT_AGENT_DOWNLOAD_URL = PRINT_AGENT_REPO_URL + "/archive/refs/heads/main.zip"
 from app.pos_printer import PosPrinter
 from app.routers.sales import _assert_sale_branch_access
 import base64
@@ -314,75 +318,21 @@ class PrintRequest(BaseModel):
 
 
 @router.get("/download-agent")
-def download_print_agent(
-    platform: str = "windows",  # 'windows' | 'linux' | 'mac'
-    current_user: User = Depends(get_current_user)
-):
-    """Descarga el Agente Local de Impresión como ZIP, filtrado por plataforma."""
-    agent_dir = Path(__file__).parent.parent.parent / "tools" / "print_agent"
-    if not agent_dir.exists():
-        raise HTTPException(status_code=404, detail="Agente no encontrado en el servidor.")
+def download_print_agent(platform: str = "windows"):
+    """Descarga del Agente Local de Impresión.
 
+    El agente ya no vive en este repositorio: se mantiene en
+    https://github.com/Ecamposg95/Atlas-Print-Agent (unificado para todos los
+    productos de Atlas). Aquí solo redirigimos. `ATLAS_PRINT_AGENT_URL` permite
+    apuntar a otra ubicación; si contiene `{platform}`, se rellena con
+    windows|linux|mac (para cuando el repo publique un ZIP por plataforma).
+    """
+    import os
     plat = platform.lower()
     if plat not in ("windows", "linux", "mac"):
         raise HTTPException(status_code=400, detail="platform debe ser 'windows', 'linux' o 'mac'")
-
-    ALWAYS_EXCLUDE_DIRS = {"certs", "__pycache__", "venv", "venv_v2"}
-    ALWAYS_EXCLUDE_SUFFIXES = {".pyc"}
-    ALWAYS_EXCLUDE_FILES: set[str] = set()
-
-    # Launcher por plataforma — los demás se excluyen para no confundir al usuario.
-    # Archivos del autoarranque, por plataforma. Cada ZIP lleva SOLO los suyos:
-    # una caja no debe recibir un instalador que no puede correr.
-    AUTOSTART_LINUX = {
-        "instalar-servicio-linux.sh", "atlas-print-agent.service",
-        "atlas-print-agent.desktop", "INSTALL_LINUX.txt",
-    }
-    AUTOSTART_MAC = {
-        "instalar-servicio-mac.sh", "com.atlasone.print-agent.plist",
-        "INSTALL_MAC.txt",
-    }
-
-    if plat == "windows":
-        platform_exclude = {
-            "impresora_linux.sh", "impresora_mac.sh",
-            "requirements_linux.txt", "requirements_mac.txt",
-            *AUTOSTART_LINUX, *AUTOSTART_MAC,
-        }
-    elif plat == "mac":
-        platform_exclude = {
-            "impresora_win.bat", "impresora_linux.sh",
-            "requirements_linux.txt",
-            *AUTOSTART_LINUX,
-        }
-    else:  # linux
-        platform_exclude = {
-            "impresora_win.bat", "impresora_mac.sh",
-            "requirements_mac.txt",
-            *AUTOSTART_MAC,
-        }
-
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for file in agent_dir.rglob("*"):
-            if not file.is_file():
-                continue
-            if any(part in ALWAYS_EXCLUDE_DIRS for part in file.parts):
-                continue
-            if file.suffix in ALWAYS_EXCLUDE_SUFFIXES:
-                continue
-            if file.name in ALWAYS_EXCLUDE_FILES or file.name in platform_exclude:
-                continue
-            zf.write(file, file.relative_to(agent_dir.parent))
-    buf.seek(0)
-
-    filename = f"atlas_print_agent_{plat}.zip"
-    return StreamingResponse(
-        buf,
-        media_type="application/zip",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
-    )
-
+    url = os.environ.get("ATLAS_PRINT_AGENT_URL") or PRINT_AGENT_DOWNLOAD_URL
+    return RedirectResponse(url.replace("{platform}", plat), status_code=302)
 
 @router.get("/printers")
 def get_printers(
