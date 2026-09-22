@@ -117,7 +117,9 @@ export function Organization() {
       else if (editingBranch) await organizationApi.updateBranch(editingBranch.id, payload)
       setBranchModal(null)
       organizationApi.getBranches().then(setBranches).catch(() => {})
-    } catch { toast.error('Error al guardar la sucursal') } finally { setBranchSaving(false) }
+    } catch (e: any) {
+      toast.error(errorDetailText(e?.response?.data?.detail, 'Error al guardar la sucursal'))
+    } finally { setBranchSaving(false) }
   }
 
   const deleteBranch = async (branch: Branch) => {
@@ -131,7 +133,9 @@ export function Organization() {
     try {
       await organizationApi.deleteBranch(branch.id)
       setBranches((prev) => prev.filter((b) => b.id !== branch.id))
-    } catch { toast.error('Error al eliminar la sucursal') }
+    } catch (e: any) {
+      toast.error(errorDetailText(e?.response?.data?.detail, 'Error al eliminar la sucursal'))
+    }
   }
 
   const uploadOrgLogo = async (file: File) => {
