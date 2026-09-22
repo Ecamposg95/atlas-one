@@ -350,11 +350,14 @@ class TestLineDescription:
 
     def test_con_marca_usa_el_nombre_de_venta(self):
         v = _variant("Chamarra", marca="Louis Vuitton", modelo="mezclilla", talla="M")
-        assert _line_description(v) == "Louis Vuitton · Chamarra mezclilla · Talla M"
+        assert _line_description(v, detallado=True) == "Louis Vuitton · Chamarra mezclilla · Talla M"
+        # Ticket compacto: el texto de siempre aunque haya marca y modelo.
+        assert _line_description(v) == "Chamarra (M)"
 
     def test_con_marca_sin_talla(self):
         v = _variant("Playera", marca="Gucci")
-        assert _line_description(v) == "Gucci · Playera"
+        assert _line_description(v, detallado=True) == "Gucci · Playera"
+        assert _line_description(v) == "Playera"
 
 
 # ── 8. Estilo de linea del ticket (configuracion de la organizacion) ────────

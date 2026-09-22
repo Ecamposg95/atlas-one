@@ -366,21 +366,26 @@ def read_sales(
     return {"items": items, "total": total, "page": skip // limit if limit else 0, "pages": pages}
 
 @router.post("", response_model=Dict[str, Any], include_in_schema=False)
-def _line_description(variant) -> str:
+def _line_description(variant, detallado: bool = False) -> str:
     """Descripcion que se CONGELA en `sales_lines.description`.
 
-    Con marca o modelo capturados es el nombre de venta de la boutique:
-    "Louis Vuitton · Chamarra mezclilla · Talla M" (la marca primero, que es
-    como se pide la prenda en el mostrador).
+    `detallado` (la organizacion tiene `ticket_line_style = "detailed"`): el
+    nombre de venta de la boutique, "Louis Vuitton · Chamarra mezclilla ·
+    Talla M" (la marca primero, que es como se pide la prenda en el mostrador).
 
-    SIN marca ni modelo el texto es el de siempre -- "Playera (Rojo / M)",
-    "Refresco (600ml)" o "Playera" a secas -- para que ninguna tienda que no
-    capture los campos nuevos vea cambiar su ticket. La regla entera (incluida
-    la etiqueta escrita a mano del catalogo viejo) vive en `variant_sale_name`.
+    Compacto (todas las demas tiendas): el texto de siempre -- "Playera (Rojo
+    / M)", "Refresco (600ml)" o "Playera" a secas -- aunque el producto tenga
+    marca o modelo. Novedades Kaory tiene sus 305 productos con la marca
+    "Kaory": anteponerla en un renglon compacto de 32 letras recortaba el
+    nombre real. La regla del texto vive en `variant_sale_name`.
     """
     from app.modules.products.sale_name import variant_sale_name
 
     producto = variant.product
+    if not detallado:
+        return variant_sale_name(
+            None, producto.name or "", None, variant.color, variant.size, variant.variant_name,
+        )
     # `brand_id` primero: sin marca no se dispara la consulta perezosa de
     # `producto.brand` por cada renglon del ticket.
     marca = producto.brand.name if (getattr(producto, "brand_id", None) and producto.brand) else None
@@ -684,7 +689,7 @@ def create_sale(
             # `variant_name` puede venir NULL en catalogos cargados fuera de la
             # aplicacion: sin el `or ''` la condicion era verdadera y se
             # intentaba concatenar None, tumbando el cobro con un 500.
-            description=_line_description(variant),
+            description=_line_description(variant, detallado=getattr(_org_venta, "ticket_line_style", "compact") == "detailed"),
             quantity=item.quantity,
             unit_price=unit_price,
             unit_cost=variant.cost,
