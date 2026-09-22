@@ -5,6 +5,7 @@ import { DaxCard } from '../../components/ui/DaxCard'
 import { Spinner } from '../../components/ui/Spinner'
 import { Link } from 'react-router-dom'
 import { formatCurrency } from '../../utils/currency'
+import { accionBitacora } from '../../utils/enumsEspanol'
 import { todayStr } from '../../utils/dates'
 
 interface AuditLogEntry {
@@ -189,7 +190,7 @@ export function HQControl() {
                     <div className="flex-1 min-w-0">
                       <p className="text-xs text-slate-300 truncate font-medium">{e.entity_type ?? 'Sistema'}{e.entity_id ? ` #${e.entity_id}` : ''}</p>
                       <p className="text-[10px] text-slate-600 mt-0.5">
-                        <span className={`${color} font-bold`}>{e.action}</span>
+                        <span className={`${color} font-bold`}>{accionBitacora(e.action)}</span>
                         {ts ? ` · ${ts}` : ''}
                       </p>
                     </div>

@@ -7,6 +7,7 @@ import { DaxCard } from '../../components/ui/DaxCard'
 import { Spinner } from '../../components/ui/Spinner'
 import { toast } from '../../store/toastStore'
 import { errorDetailText } from '../../utils/errorDetail'
+import { tipoMovimiento } from '../../utils/enumsEspanol'
 import type { Product } from '../../types/products'
 import { useEffect } from 'react'
 import { formatCurrency } from '../../utils/currency'
@@ -191,7 +192,7 @@ export function HQInventory() {
                           {new Date(k.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}
                         </td>
                         <td className="text-xs">
-                          <span className={`dax-badge ${movementColor(k.movement_type)}`}>{k.movement_type}</span>
+                          <span className={`dax-badge ${movementColor(k.movement_type)}`}>{tipoMovimiento(k.movement_type)}</span>
                         </td>
                         <td className={`text-right font-bold tabular-nums ${movementColor(k.movement_type)}`}>
                           {k.qty_change > 0 ? '+' : ''}{k.qty_change}

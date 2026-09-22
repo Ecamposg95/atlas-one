@@ -8,6 +8,7 @@ import { TablaDesplazable } from '../../components/ui/TablaDesplazable'
 import { Badge } from '../../components/ui/Badge'
 import { Spinner } from '../../components/ui/Spinner'
 import { formatCurrency } from '../../utils/currency'
+import { estadoDevolucion } from '../../utils/enumsEspanol'
 
 // Extrae el detail del backend (FastAPI standard `{detail: "..."}`) y cae
 // a un fallback si la respuesta no lo trae. Sin esto, errores 409/422 con
@@ -167,7 +168,7 @@ export function HQReturns() {
                     </td>
                     <td className="text-xs max-w-[140px] truncate">{r.reason}</td>
                     <td className="text-right font-semibold text-red-400">{formatCurrency(r.total_refunded)}</td>
-                    <td><Badge variant={statusVariant(r.status)}>{r.status}</Badge></td>
+                    <td><Badge variant={statusVariant(r.status)}>{estadoDevolucion(r.status)}</Badge></td>
                     <td>
                       <button onClick={() => setSelected(r)} className="dax-btn-icon text-slate-500 hover:text-white text-xs">
                         <i className="fa-solid fa-eye" />
@@ -195,7 +196,7 @@ export function HQReturns() {
               <div className="flex justify-between"><span className="text-slate-500">Sucursal</span><span>{returnBranchName(selected) ?? '—'}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Solicitó</span><span>{returnRequestedBy(selected)}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Motivo</span><span className="text-right max-w-[60%]">{selected.reason}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Estado</span><Badge variant={statusVariant(selected.status)}>{selected.status}</Badge></div>
+              <div className="flex justify-between"><span className="text-slate-500">Estado</span><Badge variant={statusVariant(selected.status)}>{estadoDevolucion(selected.status)}</Badge></div>
               {selected.supervisor && <div className="flex justify-between"><span className="text-slate-500">Aprobó</span><span>{returnApprovedBy(selected)}</span></div>}
             </div>
 

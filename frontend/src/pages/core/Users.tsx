@@ -6,6 +6,7 @@ import { TablaDesplazable } from '../../components/ui/TablaDesplazable'
 import { Spinner } from '../../components/ui/Spinner'
 import { Badge } from '../../components/ui/Badge'
 import { toast } from '../../store/toastStore'
+import { rolUsuario } from '../../utils/enumsEspanol'
 
 const ROLES = ['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO', 'VENDEDOR', 'SOPORTE_OPERATIVO']
 // Solo estos roles pueden autorizar una reimpresión desde el POS (mismo
@@ -144,7 +145,7 @@ export function Users() {
                   <tr key={u.id}>
                     <td className="font-mono text-indigo-400 text-sm">{u.username}</td>
                     <td className="text-slate-300">{u.full_name ?? '—'}</td>
-                    <td><Badge variant={roleVariant(u.role) as 'red' | 'yellow' | 'blue' | 'green' | 'slate'}>{u.role}</Badge></td>
+                    <td><Badge variant={roleVariant(u.role) as 'red' | 'yellow' | 'blue' | 'green' | 'slate'}>{rolUsuario(u.role)}</Badge></td>
                     <td className="text-slate-400 text-sm">{u.branch_name ?? 'HQ'}</td>
                     <td>
                       <button onClick={() => handleToggle(u)}
@@ -195,7 +196,7 @@ export function Users() {
                 <div>
                   <label className="dax-label">Rol</label>
                   <select value={form.role} onChange={(e) => f('role', e.target.value)} className="dax-input w-full">
-                    {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+                    {ROLES.map((r) => <option key={r} value={r}>{rolUsuario(r)}</option>)}
                   </select>
                 </div>
                 <div>
@@ -227,7 +228,7 @@ export function Users() {
                 </div>
                 {!rolConPin ? (
                   <p className="text-xs text-slate-500 italic">
-                    Solo aplica a ADMINISTRADOR, DUEÑO o GERENTE — son los únicos roles que pueden autorizar una reimpresión.
+                    Solo aplica a Administrador, Dueño o Gerente — son los únicos roles que pueden autorizar una reimpresión.
                   </p>
                 ) : form.clearReprintPin ? (
                   <div className="rounded-lg px-3 py-2 flex items-center justify-between gap-2 bg-red-500/10 border border-red-500/30">
