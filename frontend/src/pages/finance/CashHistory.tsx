@@ -67,8 +67,8 @@ function CloseModal({ summary, onClose, onConfirm }: { summary: CashSummary; onC
   const diff = parseFloat(closing) - summary.expected_cash
 
   const submit = async () => {
-    setLoading(true)
     if (!isValidCount(closing)) return
+    setLoading(true)
     try { await onConfirm(parseFloat(closing)) } finally { setLoading(false) }
   }
 
