@@ -41,10 +41,19 @@ export function isNativeDetectorAvailable(): boolean {
  *
  * Los ceros a la izquierda NO se tocan: un EAN-13 puede empezar con 0 y
  * recortarlo lo convierte en el código de otro producto.
+ *
+ * `qr_code` (boutiques etiquetan con QR que lleva el SKU) puede traer un SKU
+ * alfanumérico con guion (`M-1151`) — ahí el guion es significativo y
+ * `scanExact` compara por igualdad exacta contra `ProductVariant.sku`; quitarlo
+ * deja `m1151`, que no empata con nada. Solo los códigos puramente numéricos
+ * (EAN/UPC, donde algunos lectores insertan guiones o espacios como ruido) se
+ * limpian de verdad.
  */
 export function normalizeCode(raw: string | null | undefined): ScannedCode {
   if (!raw) return ''
-  return raw.replace(/[\s-]/g, '').trim()
+  const trimmed = raw.trim()
+  if (!/^[\d\s-]+$/.test(trimmed)) return trimmed
+  return trimmed.replace(/[\s-]/g, '')
 }
 
 /**

@@ -60,6 +60,18 @@ describe('normalizeCode', () => {
     // código en otro producto.
     expect(normalizeCode('0750123456789')).toBe('0750123456789')
   })
+
+  // Regresión #6: el QR de una prenda boutique trae el SKU (`M-1151`), no un
+  // EAN numérico. Quitarle el guion como si fuera ruido de lector deja
+  // `m1151`, que `scanExact` ya no empata contra `ProductVariant.sku`.
+  it('CONSERVA el guion de un SKU alfanumérico leído por QR', () => {
+    expect(normalizeCode('M-1151')).toBe('M-1151')
+    expect(normalizeCode('  M-1151  ')).toBe('M-1151')
+  })
+
+  it('sigue limpiando guiones/espacios de ruido en un EAN puramente numérico', () => {
+    expect(normalizeCode('750 123 456 789')).toBe('750123456789')
+  })
 })
 
 // El scanner tiene DOS entradas y no pueden limpiarse igual.
