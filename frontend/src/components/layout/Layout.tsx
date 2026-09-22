@@ -11,44 +11,7 @@ import { useTheme } from '../../context/ThemeContext'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { estiloCajon, cajonEsInerte } from '../../utils/cajonLateral'
 import type { Role } from '../../types/auth'
-
-const ROUTE_TITLES: Record<string, string> = {
-  '/hq/operations':     'Operaciones HQ',
-  '/hq/reports-hub':   'Reportes HQ',
-  '/hq/control':       'Control HQ',
-  '/hq/sales':         'Ventas HQ',
-  '/hq/returns':       'Devoluciones HQ',
-  '/hq/inventory':     'Inventario Global',
-  '/hq/branches':      'Sucursales',
-  '/admin/catalog':    'Catálogo',
-  '/departments':      'Departamentos',
-  '/brands':           'Marcas',
-  '/quotes/new':       'Nueva Cotización',
-  '/quotes':           'Cotizaciones',
-  '/seguimiento':      'Pedidos',
-  '/purchases':        'Compras',
-  '/expenses':         'Gastos',
-  '/inventory':        'Inventario',
-  '/logistics':        'Logística',
-  '/boxes':            'Cajas y Contenedores',
-  '/customers':        'Clientes',
-  '/organization':     'Empresa',
-  '/users':            'Usuarios',
-  '/hr/me':            'Mi Expediente',
-  '/hr':               'Recursos Humanos',
-  '/atlas-pos':         'Inicio',
-  '/pos':              'Punto de Venta',
-  '/sales':            'Historial de Ventas',
-  '/cash-history':     'Cortes de Caja',
-  '/returns':          'Devoluciones',
-  '/products':         'Consulta de Productos',
-  '/reports':          'Reportes',
-  '/printer-settings': 'Config. Impresora',
-  '/mobile/dashboard': 'Dashboard Móvil',
-  '/mobile/query':     'Consulta Móvil',
-  '/mobile/sales':     'Cotización móvil',
-  '/mobile/profile':   'Perfil Móvil',
-}
+import { routeTitle } from './navConfig'
 
 const ADMIN_ROLES: Role[] = ['ADMINISTRADOR', 'DUEÑO']
 
@@ -103,14 +66,9 @@ export function Layout() {
     }
   }, [esMovil, cajonAbierto])
 
-  const pageTitle = useMemo(() => {
-    const exact = ROUTE_TITLES[location.pathname]
-    if (exact) return exact
-    const prefix = Object.keys(ROUTE_TITLES).find(
-      k => k.length > 1 && location.pathname.startsWith(k + '/')
-    )
-    return prefix ? ROUTE_TITLES[prefix] : 'Atlas One'
-  }, [location.pathname])
+  // Un solo nombre por pantalla: el título de la barra sale del mismo
+  // `NavItem` que dibuja el menú (`navConfig.ALL_NAV`).
+  const pageTitle = useMemo(() => routeTitle(location.pathname), [location.pathname])
 
   const userInitial = ((user?.full_name || user?.username) ?? 'U').charAt(0).toUpperCase()
   const userName = user?.full_name || user?.username || ''
@@ -201,21 +159,6 @@ export function Layout() {
                   className="truncate"
                 >
                   {pageTitle}
-                </span>
-                <span
-                  className="hidden sm:inline"
-                  style={{
-                    padding: '0.1rem 0.4rem',
-                    borderRadius: '4px',
-                    fontSize: '0.55rem',
-                    fontWeight: 800,
-                    letterSpacing: '0.1em',
-                    background: 'var(--p-accent-soft)',
-                    color: 'var(--dax-accent)',
-                    flexShrink: 0,
-                  }}
-                >
-                  ACTIVO
                 </span>
               </div>
             </div>
