@@ -9,6 +9,7 @@ import { CustomerFormModal } from './CustomerFormModal'
 import { toast } from '../../store/toastStore'
 import { confirm as confirmDialog } from '../../components/ui/ConfirmDialog'
 import { ErrorState } from '../../components/ui/ErrorState'
+import { useAuthStore } from '../../store/authStore'
 
 interface PayModal { id: number; name: string }
 
@@ -18,6 +19,12 @@ const apiErrorMessage = (err: unknown, fallback: string) => {
 }
 
 export function Customers() {
+  // Borrar un cliente y registrar un abono son de administrador/dueño; la
+  // cajera consulta, da de alta y edita. El backend responde 403 en esos dos
+  // endpoints (app/modules/customers/router.py), así que esconder los botones
+  // evita ofrecer algo que va a fallar — no es el candado.
+  const user = useAuthStore((s) => s.user)
+  const esAdmin = user?.role === 'ADMINISTRADOR' || user?.role === 'DUEÑO'
   const [customers, setCustomers] = useState<Customer[]>([])
   const [stats, setStats] = useState<CustomerStats | null>(null)
   const [loading, setLoading] = useState(true)
@@ -189,7 +196,7 @@ export function Customers() {
                       <button onClick={() => openDetail(c)} className="dax-btn-icon text-slate-500 hover:text-white text-xs mr-2">
                         <i className="fa-solid fa-eye" />
                       </button>
-                      {c.current_balance > 0 && (
+                      {esAdmin && c.current_balance > 0 && (
                         <button onClick={() => setPayModal({ id: c.id, name: c.name })} className="text-emerald-500 hover:text-emerald-400 text-xs">
                           <i className="fa-solid fa-money-bill-wave" />
                         </button>
@@ -225,7 +232,7 @@ export function Customers() {
                   className="text-slate-500 hover:text-white" title="Editar">
                   <i className="fa-solid fa-pen" />
                 </button>
-                <button
+                {esAdmin && <button
                   onClick={async () => {
                     const ok = await confirmDialog({
                       title: `Eliminar a ${selected.name}`,
@@ -246,7 +253,7 @@ export function Customers() {
                   }}
                   className="text-slate-500 hover:text-red-400 disabled:opacity-40" title="Eliminar" disabled={deleting}>
                   <i className="fa-solid fa-trash" />
-                </button>
+                </button>}
                 <button onClick={() => setSelected(null)} className="dax-btn-icon text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
               </div>
             </div>
@@ -266,7 +273,7 @@ export function Customers() {
               </div>
             </div>
 
-            {selected.current_balance > 0 && (
+            {esAdmin && selected.current_balance > 0 && (
               <button onClick={() => setPayModal({ id: selected.id, name: selected.name })}
                 className="dax-btn-primary w-full justify-center mb-4 text-sm">
                 <i className="fa-solid fa-money-bill-wave" /> Registrar Pago

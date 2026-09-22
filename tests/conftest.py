@@ -234,6 +234,24 @@ def auth_vendedor_sin_sucursal(vendedor_sin_sucursal):
 
 
 @pytest.fixture()
+def admin_a(db, org, branch_a):
+    """ADMINISTRADOR asignado a la Sucursal A — el que cobra en mostrador.
+
+    Registrar un abono (`POST /api/customers/{id}/pay`) exige administrador o
+    dueño desde 2026-09-22, pero el guard de efectivo NO hace excepción de rol:
+    quien cobra efectivo desde una sucursal necesita su propia caja abierta.
+    Las pruebas de atribución de abonos cobran con este usuario (antes lo hacía
+    `cajero_a`, que ya no puede).
+    """
+    return _make_user(db, org, branch_a, "admin_a", Role.ADMINISTRADOR)
+
+
+@pytest.fixture()
+def auth_admin_a(admin_a):
+    return _auth_header(admin_a)
+
+
+@pytest.fixture()
 def admin_user(db, org, hq_branch):
     """ADMINISTRADOR user (HQ, sees all)."""
     return _make_user(db, org, hq_branch, "admin_test", Role.ADMINISTRADOR)

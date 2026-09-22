@@ -139,7 +139,7 @@ def test_completar_venta_pendiente_en_turno_posterior_reasigna_la_sesion(
 # ── Reactivacion de credito (Task 5) ─────────────────────────────────────────
 
 def test_abono_en_turno_1_y_liquidacion_en_turno_2_no_reescribe_el_corte_cerrado(
-    client, db, org, branch_a, cajero_a, auth_cajero_a
+    client, db, org, branch_a, admin_a, auth_admin_a
 ):
     """El escenario completo que motivo el plan: abono parcial en el turno 1,
     turno 1 CERRADO, y liquidacion del resto en el turno 2 -- via el mismo
@@ -159,8 +159,8 @@ def test_abono_en_turno_1_y_liquidacion_en_turno_2_no_reescribe_el_corte_cerrado
     )
     db.add(customer); db.flush()
 
-    sesion_1 = _abrir_caja(db, org, branch_a, cajero_a)
-    venta = _venta_pendiente(db, org, branch_a, cajero_a, sesion_1, total="100.00", folio=2001)
+    sesion_1 = _abrir_caja(db, org, branch_a, admin_a)
+    venta = _venta_pendiente(db, org, branch_a, admin_a, sesion_1, total="100.00", folio=2001)
     venta.customer_id = customer.id
     db.commit(); db.refresh(venta)
 
@@ -168,7 +168,7 @@ def test_abono_en_turno_1_y_liquidacion_en_turno_2_no_reescribe_el_corte_cerrado
     resp1 = client.post(
         f"/api/customers/{customer.id}/pay",
         json={"amount": "40", "method": "CASH", "sales_document_id": venta.id},
-        headers=auth_cajero_a,
+        headers=auth_admin_a,
     )
     assert resp1.status_code == 200, resp1.text
 
@@ -180,18 +180,18 @@ def test_abono_en_turno_1_y_liquidacion_en_turno_2_no_reescribe_el_corte_cerrado
     # El turno 1 cierra (el gerente ya dio el cuadre por bueno).
     close_resp = client.post(
         "/api/cash/close", json={"closing_balance": "40.00"},
-        headers={**auth_cajero_a, "X-Organization-ID": str(org.id)},
+        headers={**auth_admin_a, "X-Organization-ID": str(org.id)},
     )
     assert close_resp.status_code in (200, 201), close_resp.text
 
     # Turno 2: mismo cajero, sesion distinta.
-    sesion_2 = _abrir_caja(db, org, branch_a, cajero_a)
+    sesion_2 = _abrir_caja(db, org, branch_a, admin_a)
 
     # El cliente liquida el resto (60) en el turno 2, mismo endpoint de abono.
     resp2 = client.post(
         f"/api/customers/{customer.id}/pay",
         json={"amount": "60", "method": "CASH", "sales_document_id": venta.id},
-        headers=auth_cajero_a,
+        headers=auth_admin_a,
     )
     assert resp2.status_code == 200, resp2.text
 

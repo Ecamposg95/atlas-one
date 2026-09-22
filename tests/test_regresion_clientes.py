@@ -6,6 +6,7 @@ sólo por esa tabla, así que el cliente recibía 403 en todo endpoint
 org-scoped: el portal nacía inservible.
 """
 from app.core.security import create_access_token
+from app.models.modules import Module, OrganizationModule
 from app.models.users import User, UserOrganization
 
 
@@ -13,9 +14,29 @@ def _h(headers, org):
     return {**headers, "X-Organization-ID": str(org.id)}
 
 
+def _habilitar_crm(db, org):
+    """El router de clientes exige `require_module("crm")`; ADMIN/DUEÑO lo
+    saltan, pero la cuenta de portal (role=CLIENTE) no. Sin esta fila el probe
+    de abajo respondería 403 por el módulo y no por el tenant, que es lo que
+    esta regresión vigila."""
+    if db.query(Module).filter(Module.key == "crm").first() is None:
+        db.add(Module(key="crm", name="CRM"))
+        db.flush()
+    ya = db.query(OrganizationModule).filter(
+        OrganizationModule.organization_id == org.id,
+        OrganizationModule.module_key == "crm",
+    ).first()
+    if ya is None:
+        db.add(OrganizationModule(organization_id=org.id, module_key="crm", is_enabled=True))
+    else:
+        ya.is_enabled = True
+    db.commit()
+
+
 def test_a7_el_alta_con_portal_vincula_al_usuario_con_la_organizacion(
     client, db, org, auth_admin
 ):
+    _habilitar_crm(db, org)
     r = client.post("/api/customers/", json={
         "name": "Cliente Portal Regresion",
         "email": "cliente.portal.regresion@example.com",

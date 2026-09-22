@@ -120,7 +120,7 @@ def test_pagos_recreados_al_completar_venta_pendiente_quedan_en_la_sesion_nueva(
 
 
 def test_liquidar_en_otro_turno_conserva_la_atribucion_del_abono_previo(
-    client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup
+    client, db, org, branch_a, admin_a, auth_admin_a, products_setup
 ):
     """Ronda de correcciones final (MAYOR-1): la prueba de arriba siembra la
     venta PENDING SIN pagos, asi que el `delete()` de la rama `existing_sale`
@@ -145,8 +145,8 @@ def test_liquidar_en_otro_turno_conserva_la_atribucion_del_abono_previo(
     )
     db.add(cliente); db.flush()
 
-    sesion_1 = _abrir_caja(db, org, branch_a, cajero_a)
-    venta = _venta_pendiente(db, org, branch_a, cajero_a, sesion_1, folio=4001)
+    sesion_1 = _abrir_caja(db, org, branch_a, admin_a)
+    venta = _venta_pendiente(db, org, branch_a, admin_a, sesion_1, folio=4001)
     venta.customer_id = cliente.id
     db.commit(); db.refresh(venta); db.refresh(cliente)
 
@@ -154,7 +154,7 @@ def test_liquidar_en_otro_turno_conserva_la_atribucion_del_abono_previo(
     abono = client.post(
         f"/api/customers/{cliente.id}/pay",
         json={"amount": "40", "method": "CASH", "sales_document_id": venta.id},
-        headers=auth_cajero_a,
+        headers=auth_admin_a,
     )
     assert abono.status_code == 200, abono.text
     assert Decimal(str(compute_expected_cash(db, sesion_1).expected)) == Decimal("40.00")
@@ -162,21 +162,21 @@ def test_liquidar_en_otro_turno_conserva_la_atribucion_del_abono_previo(
     # El turno 1 cierra contando los 40 reales: cuadra.
     cierre = client.post(
         "/api/cash/close", json={"closing_balance": "40.00"},
-        headers={**auth_cajero_a, "X-Organization-ID": str(org.id)},
+        headers={**auth_admin_a, "X-Organization-ID": str(org.id)},
     )
     assert cierre.status_code in (200, 201), cierre.text
     db.refresh(sesion_1)
     assert Decimal(str(sesion_1.difference)) == Decimal("0.00")
 
     # Turno 2: se liquida el resto (60) por `/api/sales/`.
-    sesion_2 = _abrir_caja(db, org, branch_a, cajero_a)
+    sesion_2 = _abrir_caja(db, org, branch_a, admin_a)
     resp = client.post("/api/sales/", json={
         "id": venta.id,
         "doc_type": "ORDER",
         "customer_id": cliente.id,
         "items": [{"sku": variant.sku, "quantity": 1}],
         "payments": [{"method": "CASH", "amount": "60.00"}],
-    }, headers={**auth_cajero_a, "X-Organization-ID": str(org.id)})
+    }, headers={**auth_admin_a, "X-Organization-ID": str(org.id)})
     assert resp.status_code in (200, 201), resp.text
 
     pagos = db.query(Payment).filter(Payment.sales_document_id == venta.id).all()

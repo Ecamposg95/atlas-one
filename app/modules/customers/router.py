@@ -24,12 +24,20 @@ from app.modules.customers.schemas import (
     CustomerPaymentCreate,
 )
 from app.core.security import get_current_user
+from app.core.security.guards import require_admin_or_owner
+from app.core.permissions import require_module
 from app.models import User
 from app.core.tenant_context import get_current_active_organization
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+# El CRM se abre por módulo, no por defecto: hasta 2026-09-22 este router no
+# tenía NINGÚN candado y cualquier sesión válida hacía el CRUD completo de
+# clientes —incluido borrar— en cualquier organización a la que perteneciera.
+# `crm` entró a los presets ATLAS_POS y ATLAS_POS_BOUTIQUE en el mismo cambio
+# (scripts/init_presets_v2.py + su backfill), así que las tiendas de mostrador
+# lo tienen encendido; las que no lo tengan ven 403 en toda la pantalla.
+router = APIRouter(dependencies=[Depends(require_module("crm"))])
 
 
 def _vincular_portal_a_org(db: Session, portal_user: User, org_id: int) -> None:
@@ -346,9 +354,12 @@ def update_customer(
 def delete_customer(
     customer_id: int, 
     db: Session = Depends(get_db), 
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin_or_owner),
     org_id: int = Depends(get_current_active_organization)
 ):
+    """Baja lógica del cliente. Solo administrador/dueño: la cajera consulta y
+    edita su cartera, pero dar de baja a un cliente (con su historial de
+    crédito colgando) es decisión de quien responde por el negocio."""
     customer = db.query(Customer).filter(
         Customer.id == customer_id,
         Customer.organization_id == org_id
@@ -456,12 +467,18 @@ def register_customer_payment(
     customer_id: int,
     payment_in: CustomerPaymentCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin_or_owner),
     org_id: int = Depends(get_current_active_organization)
 ):
     """
     Registra un abono/pago de un cliente y actualiza su saldo.
     Si se proporciona sales_document_id, vincula el pago a ese documento específico.
+
+    Solo administrador/dueño: un abono mueve el saldo de crédito del cliente y
+    —cuando es en efectivo— entra al cajón de quien lo cobra. Ojo: el guard de
+    efectivo de más abajo sigue vigente para TODOS los roles, así que quien
+    registre un abono en efectivo desde una sucursal necesita su propia caja
+    abierta.
     """
     from app.models import SalesDocument
     
