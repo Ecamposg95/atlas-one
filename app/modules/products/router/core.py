@@ -1032,20 +1032,25 @@ def update_product(
         # en su sucursal (validado arriba) y no puede modificar productos
         # de otras sucursales.
 
-    # Update basic fields
-    if prod_in.name is not None:
-        product.name = prod_in.name
-    if prod_in.description is not None:
-        product.description = prod_in.description
-    if prod_in.unit is not None:
-        product.unit = prod_in.unit
-    if prod_in.image_url is not None:
-        product.image_url = prod_in.image_url.strip() if prod_in.image_url.strip() else None
     # `is not None` no distingue "no lo mandes" de "bórralo": un null explícito
     # se descartaba en silencio y la pantalla decía "guardado" sin cambiar nada.
     # No podía quitarse una marca ni un departamento desde ninguna pantalla.
     # `model_fields_set` es lo que Pydantic expone justo para esta diferencia.
     _campos_enviados = prod_in.model_fields_set
+
+    # Update basic fields — mismo criterio de `model_fields_set` que abajo:
+    # un null explícito BORRA descripción/unidad/imagen, y no mandar el campo
+    # lo deja como está (auditoría A-5). `name` es la excepción: un producto
+    # sin nombre no existe, así que un null/vacío se ignora en vez de
+    # vaciar la ficha.
+    if prod_in.name is not None and prod_in.name.strip():
+        product.name = prod_in.name
+    if "description" in _campos_enviados:
+        product.description = prod_in.description
+    if "unit" in _campos_enviados:
+        product.unit = prod_in.unit
+    if "image_url" in _campos_enviados:
+        product.image_url = (prod_in.image_url or "").strip() or None
     if "department_id" in _campos_enviados:
         product.department_id = prod_in.department_id
     if "brand_id" in _campos_enviados:

@@ -180,7 +180,9 @@
             {% set net_subtotal = [0] %}
             {% set net_articles = [0] %}
 
-            {% for line in sale.lines %}
+            {# `lineas` viene del router con quantity/unit_price ya en Decimal:
+               `sale.lines` los mezcla (Float × Decimal) y revienta. M-6. #}
+            {% for line in lineas %}
             {# Calculate total returned for this variant #}
             {% set returned_qty = [0] %}
             {% if approved_returns %}

@@ -909,16 +909,16 @@ class PosPrinter:
         raw += self.CMD["BOLD_ON"] + b"CORTE DE CAJA\n" + self.CMD["BOLD_OFF"]
         raw += self.CMD["SIZE_NORMAL"] + self.CMD["LF"]
         
-        raw += f"ID SESION: {session['id']}\n".encode("latin-1")
-        raw += f"SUCURSAL:  {session['branch_name'].upper()}\n".encode("latin-1")
-        raw += f"CAJERO:    {session['user_name'].upper()}\n".encode("latin-1")
+        raw += f"ID SESION: {session['id']}\n".encode("latin-1", "replace")
+        raw += f"SUCURSAL:  {session['branch_name'].upper()}\n".encode("latin-1", "replace")
+        raw += f"CAJERO:    {session['user_name'].upper()}\n".encode("latin-1", "replace")
         
         opened_str = session['opened_at'].strftime("%d/%m/%y %H:%M")
-        raw += f"APERTURA: {opened_str}\n".encode("latin-1")
+        raw += f"APERTURA: {opened_str}\n".encode("latin-1", "replace")
         
         if session['closed_at']:
             closed_str = session['closed_at'].strftime("%d/%m/%y %H:%M")
-            raw += f"CIERRE:   {closed_str}\n".encode("latin-1")
+            raw += f"CIERRE:   {closed_str}\n".encode("latin-1", "replace")
         else:
             raw += b"ESTADO:   EN OPERACION\n"
         
@@ -1055,7 +1055,7 @@ class PosPrinter:
         raw += self.CMD["BOLD_OFF"] + self.CMD["LEFT"]
 
         raw += self._rline("Ventas Totales", kpis['total_sales'])
-        raw += f"Tickets: {kpis['total_tickets']}".rjust(self.cols).encode("latin-1") + b"\n"
+        raw += f"Tickets: {kpis['total_tickets']}".rjust(self.cols).encode("latin-1", "replace") + b"\n"
         raw += self._rline("Ticket Promedio", kpis['avg_ticket'])
         raw += self._rline("Impuestos (IVA)", kpis['total_taxes'])
 
@@ -1451,5 +1451,9 @@ class PosPrinter:
             return cmd
 
         except Exception as e:
-            logger.exception("logo rasterize failed for %s: %s", final_path, e)
+            # `image_path` y no `final_path`: esta última solo se asigna en la
+            # rama de disco, así que un fallo rasterizando un logo remoto
+            # (Cloudinary/CDN, el caso de producción) lanzaba NameError dentro
+            # del except y devolvía 500 en vez de imprimir sin logo. M-1.
+            logger.exception("logo rasterize failed for %s: %s", image_path, e)
             return b""

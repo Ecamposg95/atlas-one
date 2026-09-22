@@ -536,6 +536,20 @@ def create_sale(
                 ),
             )
 
+    # --- 0a. El cliente tiene que ser de ESTA organización ---
+    # `customers.id` es un entero global: un id de otra org es un entero
+    # válido. La única validación de pertenencia vivía en la rama de crédito,
+    # así que una venta pagada de contado dejaba `sales_documents.customer_id`
+    # apuntando a un cliente ajeno (fuga multi-tenant en historial y reportes
+    # por cliente). Se resuelve UNA vez, arriba, para las dos ramas. A-2.
+    if sale_in.customer_id:
+        _cliente_valido = db.query(Customer.id).filter(
+            Customer.id == sale_in.customer_id,
+            Customer.organization_id == org_id,
+        ).first()
+        if _cliente_valido is None:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado en esta organización")
+
     # --- 0. Verificar si es una actualización de una venta existente ---
     existing_sale = None
     # Dinero ya cobrado sobre este documento antes de esta llamada (rama
@@ -549,6 +563,13 @@ def create_sale(
         ).first()
         
         if existing_sale:
+            # El id de una venta PENDING no es una credencial: sin este guard
+            # cualquier usuario que lo conociera la "actualizaba" con su
+            # carrito —cobrando en SU caja y descontando el stock de SU
+            # sucursal— mientras el documento seguia diciendo que era de la
+            # sucursal original. Mismo criterio (404, no 403) que el resto de
+            # las rutas de venta. Auditoria C-3.
+            _assert_sale_branch_access(existing_sale, current_user)
             if existing_sale.status != DocumentStatus.PENDING:
                 raise HTTPException(status_code=400, detail="Solo se pueden modificar ventas con estatus PENDING")
             
@@ -689,6 +710,16 @@ def create_sale(
         stock_record = stock_by_variant.get(variant.id)
 
         qty_dec = Decimal(str(item.quantity))
+        # Cinturon y tirantes con `SaleItemCreate.quantity` (gt=0): una linea
+        # con cantidad <= 0 nunca llega aqui desde el schema, pero este loop
+        # tambien decide stock y totales y no puede confiar en que el unico
+        # guard viva en Pydantic. Con un negativo, `current_stock < qty_dec`
+        # es falso y `qty_on_hand -= qty_dec` SUMA inventario. Auditoria C-2.
+        if qty_dec <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cantidad invalida para '{variant.sku}': debe ser mayor a 0.",
+            )
         current_stock = stock_record.qty_on_hand if stock_record else Decimal(0.0)
 
         if current_stock < qty_dec:
@@ -716,20 +747,26 @@ def create_sale(
         # ADMINISTRADOR y DUEÑO pueden autorizar descuentos mayores; los demás roles
         # no pueden vender por debajo del (precio mínimo de referencia) * (1 - MAX_DISCOUNT_PCT).
         # Skip si hay branch_price_override: ya es un precio autorizado por admin.
+        # El guard mide el precio EFECTIVO (`unit_price` ya con el descuento de
+        # linea aplicado), no el de catalogo: antes solo comparaba `unit_price`
+        # y `item.discount` —0..100% segun el schema— se aplicaba DESPUES sin
+        # mirar el rol, asi que un CAJERO regalaba el producto mandando
+        # `discount: 100` con el precio de lista intacto. Auditoria C-1.
+        discount_factor = Decimal(1) - Decimal(str(item.discount or 0)) / Decimal(100)
+        effective_price = unit_price * discount_factor
         _role_str_discount = str(current_user.role.value) if hasattr(current_user.role, 'value') else str(current_user.role)
         if _role_str_discount not in ("ADMINISTRADOR", "DUEÑO") and branch_price_override is None:
             tier_prices = [Decimal(str(p.unit_price)) for p in (variant.prices or []) if p.unit_price is not None]
             reference_price = min([Decimal(str(variant.price))] + tier_prices) if variant.price is not None else (min(tier_prices) if tier_prices else None)
-            if reference_price is not None and unit_price < reference_price:
+            if reference_price is not None and effective_price < reference_price:
                 min_allowed = reference_price * (Decimal(1) - MAX_DISCOUNT_PCT)
-                if unit_price < min_allowed:
+                if effective_price < min_allowed:
                     _variant_label = variant.product.name if (variant.product and variant.product.name) else variant.sku
                     raise HTTPException(
                         status_code=403,
                         detail=f"Descuento excede el límite permitido ({int(MAX_DISCOUNT_PCT*100)}%) en '{_variant_label}'. Precio mínimo permitido: ${float(min_allowed):.2f}"
                     )
 
-        discount_factor = Decimal(1) - Decimal(str(item.discount or 0)) / Decimal(100)
         line_total = unit_price * qty_dec * discount_factor
         
         # IVA: fuente única (app/services/tax.py). Antes la fórmula vivía aquí
@@ -1484,17 +1521,32 @@ def get_sale_print_view(
     _nombre_cliente = (sale.customer_name or "").strip()
     cliente_display = _nombre_cliente if _nombre_cliente and not _es_publico_general(_nombre_cliente) else None
 
+    # `sales_lines.quantity` es Float y `unit_price` Numeric: multiplicarlos en
+    # el template (`remaining_qty * line_price`) reventaba con TypeError y el
+    # endpoint devolvía 500 para CUALQUIER venta con partidas. El casteo se
+    # hace aquí, en el contexto, y no sobre el objeto ORM —asignarle un
+    # Decimal a una columna Float lo dejaría sucio y el siguiente autoflush lo
+    # escribiría en la base. El template itera `lineas`. Auditoría M-6.
+    lineas = [
+        {
+            "variant_id": l.variant_id,
+            "description": l.description,
+            "quantity": Decimal(str(l.quantity or 0)),
+            "unit_price": Decimal(str(l.unit_price or 0)),
+            "total_line": Decimal(str(l.total_line or 0)),
+        }
+        for l in sale.lines
+    ]
+
     # Sprint 4 (tech-debt): template movido a app/templates/print/ — KEEP-SSR
     # justificado para impresión térmica (HTML estático sin React).
     # `TemplateResponse(request, name, context)` es la firma moderna de
     # Starlette. La pineada (0.50) acepta ambas (la vieja con
     # DeprecationWarning); Starlette >= 1.0 solo esta. Se cambió para no
-    # depender de la firma deprecada. OJO: el template sigue mezclando float
-    # (quantity) con Decimal (unit_price) en el total por línea, así que este
-    # endpoint devuelve 500 para ventas con partidas — bug preexistente, sin
-    # llamador en el frontend; pendiente de castear en el contexto.
+    # depender de la firma deprecada.
     return templates.TemplateResponse(request, "print/ticket.html", {
         "sale": sale,
+        "lineas": lineas,
         "organization": organization,
         "branch": branch,
         "seller": sale.seller,
@@ -1526,6 +1578,10 @@ def cancel_sale(
     ).first()
     if not sale:
         raise HTTPException(status_code=404, detail="Venta no encontrada")
+    # Cancelar repone stock y revierte deuda: pesa mas que leer el detalle, que
+    # ya estaba protegido. Sin esto, un cajero cancelaba ventas de cualquier
+    # sucursal de la organizacion. Auditoria C-4.
+    _assert_sale_branch_access(sale, current_user)
 
     if sale.status == DocumentStatus.CANCELLED:
         raise HTTPException(status_code=400, detail="Esta venta ya está cancelada")
@@ -1635,7 +1691,9 @@ def cancel_sale(
 # --------------------------------------------------------------------------
 @router.post("/{sale_id}/refund")
 def refund_sale(
-    sale_id: int,
+    # Los ids de venta son UUID (String(36)): con `int` FastAPI rechazaba
+    # cualquier id real con 422 antes de entrar al handler. Auditoria B-1.
+    sale_id: str,
     amount: Decimal = None, # Opcional: Monto parcial. Si es nulo, total.
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),

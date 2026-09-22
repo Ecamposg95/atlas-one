@@ -41,11 +41,16 @@ class UserCreate(UserBase):
     _validar_reprint_pin = field_validator("reprint_pin")(_validar_reprint_pin)
 
 class UserUpdate(BaseModel):
+    # `platform_role` NO se declara a propósito: el router aplicaba todo el
+    # payload con un setattr genérico, así que un ADMINISTRADOR de tenant se
+    # autopromovía a SUPERADMIN de plataforma con
+    # `PUT /api/users/{mi_id} {"platform_role": "SUPERADMIN"}`. El rol de
+    # plataforma solo se toca desde `app/routers/platform/*` (que además lo
+    # excluye de su propia asignación masiva). Auditoría C-5.
     username: Optional[str] = None
     email: Optional[str] = None
     full_name: Optional[str] = None
     role: Optional[str] = None
-    platform_role: Optional[str] = None
     branch_id: Optional[int] = None
     organization_id: Optional[int] = None
     password: Optional[str] = None
