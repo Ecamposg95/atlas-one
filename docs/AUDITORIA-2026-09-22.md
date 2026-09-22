@@ -39,6 +39,7 @@ tampoco versionada) — solo bugs funcionales.
 | A9 | Alta | `app/routers/reports.py:231,259` | `aging-report` restaba datetime naive − aware → 500 en Postgres |
 | M1 | Media | `app/pos_printer.py:1453-1454` | Logo remoto que fallaba al rasterizar producía `NameError` en el `except` (variable indefinida) → 500 en vez de degradar a "sin logo" |
 | M3 | Media | `app/routers/cash.py:512-513` | `close-guided` bloqueaba a ADMINISTRADOR/DUEÑO (solo aceptaba GERENTE), contradiciendo su propio comentario |
+| M4 | Media | `app/routers/cash.py` (`corregir_saldo_inicial`) | Misma fuga cross-sucursal que A3 al corregir el fondo inicial; mismo guard (dueño del turno; GERENTE solo su sucursal; ADMINISTRADOR/DUEÑO cualquiera) — corregido 2026-09-22 |
 | M6 | Media | `app/routers/sales.py:1379-1384`, `templates/print/ticket.html:201` | `GET /sales/{id}/print-view` → 500 en cualquier venta con líneas (float × Decimal) |
 | M14 | Media | `app/pos_printer.py:912-921,1058` | Corte de caja impreso reventaba con un carácter fuera de latin-1 en sucursal/cajero (sin `errors="replace"`) |
 | B1 | Baja | `app/routers/sales.py:1525` | `POST /sales/{sale_id}/refund` declaraba `sale_id: int` (los ids son UUID) → siempre 422, endpoint muerto |
@@ -49,7 +50,6 @@ tampoco versionada) — solo bugs funcionales.
 |---|---|---|---|---|
 | A1 | Alta | `app/routers/sales.py:702-716,1428-1454` | Ningún `with_for_update()` en `sales.py`: overselling y doble reversión bajo concurrencia | PLAUSIBLE, Postgres-only — SQLite no reproduce el lock real (regla de oro #7); fuera del lote priorizado |
 | M2 | Media | `app/routers/cash.py:1065-1080`, `printer.py:531` | `_verify_session_access` ignora la org activa y toma `UserOrganization.first()` sin `order_by` | Solo afecta usuarios multi-org (QA/soporte); confirmado pero de bajo alcance práctico hoy |
-| M4 | Media | `app/routers/cash.py:281-300` | `corregir_saldo_inicial` tiene la misma fuga cross-sucursal que A3 | Mismo código que A3, sin sonda propia — pendiente de aplicar el mismo fix |
 | M5 | Media | `app/routers/cash.py:480-487,498-507` | Cierre de sesión sin lock de fila → doble cierre concurrente | PLAUSIBLE, Postgres-only |
 | M7 | Media | `app/modules/products/models.py:101`, `app/services/barcodes.py:59-73` | `product_variants.barcode` sin índice único a nivel de base (solo check-then-act en app) | PLAUSIBLE bajo concurrencia; requiere limpiar 2 duplicados preexistentes en prod antes de poder indexar (ver `docs/presets/BOUTIQUE.md §2.4`) |
 | M8 | Media | `app/modules/products/router/variants.py:109-116,175-177,261-281` | Pareja color+talla duplicada bajo concurrencia (sin constraint DB) | PLAUSIBLE bajo concurrencia; requiere índice único parcial nuevo, fuera del lote |
