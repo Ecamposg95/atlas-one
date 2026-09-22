@@ -109,7 +109,9 @@ export function LoginPage() {
     try {
       const data = await authApi.login(username, password)
       setAuth(data.user, data.access_token, data.organization)
-      if (data.branch) setBranch(data.branch)
+      // Sin sucursal en la respuesta hay que limpiar la que haya quedado en
+      // localStorage de una sesión anterior (ver authStore#setAuth).
+      setBranch(data.branch ?? null)
       setIsSuccess(true)
       setTimeout(() => {
         if (data.user.platform_role === 'SUPERADMIN') { navigate('/platform/metrics'); return }
