@@ -1,5 +1,14 @@
 # Guía de Despliegue — Atlas API en Railway
 
+> ⚠️ **Histórica, ya no describe producción.** Desde el 2026-09-22, producción es el
+> VPS IONOS (`https://app.atlasone.com.mx`), desplegado automáticamente por CI/CD en
+> cada push a `main` — ver [`docs/DEPLOY.md`](docs/DEPLOY.md). Railway dejó de servir a
+> Novedades Kaory ese día; el proyecto de Railway sigue existiendo (por `rmazh`, ver
+> [`docs/infra/deployment-map.md`](docs/infra/deployment-map.md)) pero **no** es la
+> puerta de Atlas One. Se conserva esta guía porque el significado de cada variable de
+> entorno y el comportamiento de `railway_init.py` siguen siendo los mismos en el VPS —
+> solo cambió dónde se capturan las variables y quién dispara el build.
+
 ## Requisitos Previos
 
 - Cuenta en [Railway](https://railway.app)
@@ -256,8 +265,10 @@ Healthcheck → ✅ Deploy completo
 
 ### Ramas y Ambientes
 
-> Corregido 2026-07-28. La tabla anterior listaba `release/production` y
-> `release/qa`, ramas del repositorio **Data X POS** que nunca existieron aquí.
+> **Desactualizado desde 2026-09-22.** `staging` se unificó a `main` (fast-forward) y
+> ya no existe como destino de despliegue; producción se cortó de Railway al VPS IONOS.
+> Ver [`docs/DEPLOY.md`](docs/DEPLOY.md) y [`docs/branching-strategy.md`](docs/branching-strategy.md)
+> para el esquema vigente (un solo tronco, CI/CD a IONOS). Tabla histórica, sin tocar:
 
 | Rama | Destino | Auto-deploy |
 |------|---------|-------------|

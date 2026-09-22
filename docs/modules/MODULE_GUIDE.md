@@ -18,7 +18,7 @@
 □ 7. Frontend: crear pages/<modulo>/, api/<modulo>.ts, ruta en App.tsx, item en Sidebar.tsx
 □ 8. Tests: tests/test_<modulo>_*.py con fixtures de conftest.py
 □ 9. Migración (si toca DB): ALTER TABLE en scripts/railway_init.py run_migrations()
-□ 10. Push → Railway auto-aplica → correr seed si se cambió MODULE_UPSELL
+□ 10. Push a main → CI/CD despliega al VPS IONOS automáticamente (ver docs/DEPLOY.md) → correr seed si se cambió MODULE_UPSELL
 ```
 
 ---
@@ -321,7 +321,7 @@ Lista negra (revisar antes de PR):
 | Tocar `industry_type` viejo (ej. RESTAURANT_QSR) | Mantén compat; no borres valores del enum. Aditivo siempre. |
 | Crear tabla nueva sin `organization_id` | Si es de negocio, va tenant-scoped. Si es global (catálogo), documentar explícitamente. |
 | Sidebar entry sin gate por módulo | Cuando llegue el gating (sub-proyecto E), todos los items que no chequeen `OrganizationModule.is_enabled` se romperán. |
-| `print()` en lugar de logger | Usa el logger de `app.core.logging` para que aparezca en Railway logs estructurados. |
+| `print()` en lugar de logger | Usa el logger de `app.core.logging` para que aparezca en los logs estructurados del contenedor (`docker logs atlas-one-prod`). |
 
 ---
 

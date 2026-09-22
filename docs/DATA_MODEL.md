@@ -116,6 +116,37 @@ se congelan al cobrar y una reimpresión/reenvío idempotente NUNCA las recalcul
   **sigue siendo la mercancía**; la comisión vive aparte para no mover ningún KPI
   histórico. Ver `app/services/card_surcharge.py`.
 
+**Columnas 2026-09-22 — atribución del efectivo por pago** (fusión
+`feat/pago-atribuido-a-caja`, `63ee8a2`; reporte de la fusión en
+`.superpowers/sdd/audit-funcional/pago-merge-report.md`, no versionado):
+
+- `payments.cash_session_id` `Integer` nullable, FK → `cash_sessions.id`, con índice
+  `ix_payments_cash_session_id`. **Un pago cuenta en el corte de la sesión que lo
+  recibió** (nueva regla primaria), no en la del documento de venta —
+  `sales_documents.cash_session_id` se queda como respaldo/índice, no como criterio
+  primario (sigue alimentando `_compute_change_given` y `branch_dashboard.py`, que
+  mantiene su propia copia del filtro por documento — inconsistencia conocida, ver
+  `pago-merge-report.md §5.3`). Regla completa e idempotente en
+  `app/services/cash_reconciliation.py::session_payments_filter` — un pago cuenta si
+  `cash_session_id` apunta a la sesión, **o** es `NULL` y su documento cae en el filtro
+  por documento (mutuamente excluyentes, sin doble conteo). Escritores:
+  `app/routers/sales.py::create_sale`, `app/modules/customers/router.py::register_customer_payment`,
+  `app/routers/quotes.py::convert_quote_to_sale`. Pagos históricos: backfill automático
+  en cada deploy (`rellenar_payments_cash_session()` en `railway_init.py`) — copia
+  `sales_documents.cash_session_id` a los pagos huérfanos, no inventa sesión para los
+  que tampoco tenían una en el documento.
+- `cash_movements.created_by_user_id` `Integer` nullable, FK → `users.id`, con índice
+  `ix_cash_movements_created_by`. Autoría de una entrada/salida de efectivo manual —
+  el modelo ya existía en `main`, pero su DDL solo vivía en un script manual
+  (`scripts/migrate_add_cash_movement_author.py`); desde el 2026-09-22 es automática
+  (`railway_init.py`), ver `CLAUDE.md §6`.
+
+Consecuencia de negocio (no de esquema): `CASH_INCLUDED_STATUSES` volvió a incluir
+`DocumentStatus.PENDING` — con atribución por pago, liquidar una venta a crédito ya
+no reatribuye retroactivamente el abono viejo a la sesión de hoy (antes vaciaba un
+corte ya cerrado). `SALES_REPORT_STATUSES` sigue **sin** `PENDING` — una venta a
+crédito con abono parcial no debe inflar "ventas totales" con la deuda aún no cobrada.
+
 ## CRM / Finanzas
 | Tabla | PK | Propósito | Enums |
 |---|---|---|---|

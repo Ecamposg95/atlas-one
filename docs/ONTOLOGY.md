@@ -156,6 +156,10 @@ CashSession:
   tabla: cash_sessions        pk: Integer
   owns: [CashMovement, CashAuditLog]
   agrupa: SalesDocument (para arqueo)
+  atribucion: Payment.cash_session_id (2026-09-22) — un pago cuenta en la sesión que lo
+    recibió, no (solo) en la del documento de venta; SalesDocument.cash_session_id
+    queda como respaldo/índice. Ver session_payments_filter en
+    app/services/cash_reconciliation.py y docs/DATA_MODEL.md §Ventas / Caja.
 
 DiningTable:    # agregado gastro-piso
   tabla: dining_tables        pk: Integer

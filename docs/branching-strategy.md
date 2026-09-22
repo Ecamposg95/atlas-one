@@ -1,40 +1,48 @@
 # Branching Strategy
 
-> Actualizado: 2026-07-28
+> Actualizado: 2026-09-22
 > Rama por defecto: `main`
 
-> **Nota histórica:** hasta esta revisión, este archivo describía el esquema
-> `release/beta → release/qa → release/production`. Ese flujo pertenece al
-> repositorio **Data X POS**, no a este. En `atlas-one` solo existen `main` y
-> `staging`, y `main` no está congelada: **es producción en vivo.**
+> **Nota histórica:** hasta el 2026-07-28 este archivo describía el esquema
+> `release/beta → release/qa → release/production` (ajeno a este repo, es de **Data X
+> POS**). Del 2026-07-28 al 2026-09-22 hubo dos ramas activas, `main` (Railway,
+> producción) y `staging` (VPS IONOS). El 2026-09-22, `staging` se fusionó a `main`
+> (fast-forward limpio — `staging` era ancestro estricto) y producción se cortó de
+> Railway al VPS. **Hoy solo existe `main`.**
 
-## Ramas activas
+## Rama activa
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │  main                                          [DEFAULT]     │
-│  · PRODUCCIÓN EN VIVO — Novedades Kaory vende aquí a diario  │
-│  · Railway despliega automáticamente en cada push            │
-│  · atlas-one.up.railway.app                                  │
-│                                                              │
-│  staging                                                     │
-│  · Desarrollo activo — 95 commits adelante de main           │
-│  · Se despliega en el VPS IONOS: app.atlasone.com.mx         │
-│  · Incluye Gastro Suite y ledger de barra, que main revirtió │
+│  · TRONCO ÚNICO — no hay `staging`                            │
+│  · PRODUCCIÓN EN VIVO — app.atlasone.com.mx (VPS IONOS)       │
+│  · CI/CD (GitHub Actions) construye y despliega automático    │
+│    en cada push, después de pytest + vitest + tsc + build     │
 └──────────────────────────────────────────────────────────────┘
 ```
 
+`staging` (`origin/staging`) queda como rama muerta en el remoto — es ancestro de
+`main`, no diverge, y no alimenta ningún destino. No se borra por ahora (referencia
+histórica), pero **no trabajes sobre ella**: cualquier PR nuevo va contra `main`.
+
 ## Reglas
 
-1. **`main` es producción.** Un push la reconstruye y reemplaza el punto de venta
-   que Kaory usa para cobrar. No es una rama de integración.
-2. **Los PRs nuevos apuntan a `staging`.**
-3. **El `Dockerfile` de la raíz no debe llegar a `main`.** Railway lo prioriza por
-   encima de Railpack; existe para el despliegue del VPS y vive en `staging`.
-4. **Cambios a `main` fuera del horario de la tienda** (opera hasta cerca de las
-   20:00 hora de México).
-5. **Force-push prohibido** en `main` y `staging`.
-6. **Las bases son independientes** por destino. Sin sincronización automática.
+1. **`main` es producción.** Un push la reconstruye y despliega automáticamente al VPS
+   IONOS (`app.atlasone.com.mx`) — ver [`../docs/DEPLOY.md`](DEPLOY.md). No es una rama
+   de integración: es producción en vivo.
+2. **Los PRs nuevos apuntan a `main`.** Ya no hay una rama de staging intermedia; el
+   propio CI (pytest + vitest + tsc + build) es el gate antes de que el job de deploy
+   corra.
+3. **Cambios a `main` fuera del horario de la tienda** (opera hasta cerca de las
+   20:00 hora de México) — el deploy es automático e inmediato, así que un push a
+   media tarde reconstruye producción en el momento, no en una ventana elegida.
+4. **Force-push prohibido** en `main`.
+5. **`Dockerfile`, `.dockerignore` y `.github/workflows/ci.yml` SÍ deben estar en
+   `main`** — son parte del pipeline de despliegue, no algo a evitar (a diferencia del
+   esquema anterior, donde el `Dockerfile` estaba reservado a `staging` porque Railway
+   lo priorizaba sobre Railpack sin que lo pidiera nadie). `nixpacks.toml`/`railway.json`/
+   `Procfile` se conservan de reserva, sin uso activo hoy.
 
 ## Convenciones de nombres
 
@@ -44,21 +52,24 @@
 - `security/<scope>` — endurecimiento
 - `docs/<scope>` — solo documentación
 
+Todas se integran a `main` vía merge (o PR) cuando están listas — no hay una rama de
+integración intermedia que absorba el riesgo antes de producción; el CI es el único
+colchón.
+
 ## Despliegue
 
 | Rama | Destino | Base | Builder |
 |---|---|---|---|
-| `main` | Railway `atlas-bos` producción | Postgres de Railway | RAILPACK |
-| `staging` | VPS `atlas-prod-01` | `atlas_one_beta` (demo) | Dockerfile |
+| `main` | VPS IONOS `atlas-prod-01` (`app.atlasone.com.mx`) — **cliente real cobrando** | Postgres 18 en el VPS | `Dockerfile` (multi-stage), CI/CD por GitHub Actions |
 
-El entorno `staging` de Railway se eliminó el 2026-07-28; su contenido corre
-ahora en el VPS. Detalle en [`infra/deployment-map.md`](./infra/deployment-map.md).
+Detalle completo del pipeline en [`DEPLOY.md`](DEPLOY.md). Mapa de qué corre en cada
+dominio del VPS en [`infra/deployment-map.md`](./infra/deployment-map.md).
 
 ## Deuda abierta
 
-- [ ] **`SECRET_KEY` en Railway producción** — sin definir, así que los JWT se
-      firman con el default público del repositorio (`app/core/security/config.py`)
-- [ ] Cada destino debe tener su propio `SECRET_KEY` para que un token no sea
-      válido entre entornos
-- [ ] Decidir el destino de `main` tras el corte de producción al VPS
-- [ ] Llave de despliegue de GitHub en el VPS para sustituir `rsync` por `git pull`
+- [ ] **`SECRET_KEY` en producción** — verificar que el VPS la define (el histórico de
+      Railway nunca la definió y firmaba JWT con el default público del repositorio,
+      `app/core/security/config.py`). Ver `docs/infra/deployment-map.md`.
+- [ ] Decidir el destino final de `origin/staging` (borrarla o dejarla como referencia).
+- [ ] Decidir el destino final del proyecto de Railway (`rmazh` sigue ahí, fuera de
+      alcance de este repo — ver `docs/infra/deployment-map.md`).
