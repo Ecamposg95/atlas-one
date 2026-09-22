@@ -348,40 +348,65 @@ def run_migrations():
             ))
     print(f"  ✓ industrytype enum synced ({len(list(IndustryType))} values)")
 
-    # Track 1 — Audit + cleanup de Payment huérfanos antes de NOT NULL.
-    # Listar count en logs; en QA borramos. En prod, ESTA acción se replantea
-    # antes de promover (ver tech-debt roadmap).
-    print("\n  Track 1 — Auditando payments huérfanos (sales_document_id IS NULL)…")
+    # Track 1 — Un pago nunca queda huérfano, pero SÍ puede no tener venta.
+    # La version anterior ponia `sales_document_id` en NOT NULL para que ningun
+    # pago quedara suelto. Iba demasiado lejos: el modelo documenta desde
+    # siempre que un ABONO A CUENTA de un cliente no pertenece a una venta
+    # (`app/models/sales.py`, `sales_document_id = ... nullable=True`), y con el
+    # NOT NULL puesto `POST /api/customers/{id}/pay` sin documento reventaba con
+    # 500 (NotNullViolation) — un saldo a favor no se podia registrar.
+    # La garantia se conserva con un CHECK: todo pago apunta a una venta O a un
+    # cliente. Lo que se prohibe es el pago sin dueño, que es la evidencia de un
+    # checkout a medias que la migracion original queria cazar.
+    print("\n  Track 1 — Auditando payments sin venta NI cliente…")
     with engine.begin() as conn:
         orphan_count = conn.execute(text(
-            "SELECT count(*) FROM payments WHERE sales_document_id IS NULL"
+            "SELECT count(*) FROM payments "
+            "WHERE sales_document_id IS NULL AND customer_id IS NULL"
         )).scalar() or 0
-        print(f"  · payments huérfanos detectados: {orphan_count}")
+        print(f"  · payments sin dueño detectados: {orphan_count}")
         if orphan_count > 0:
-            # Un pago sin venta es EVIDENCIA de dinero recibido: puede venir de
-            # un checkout que fallo a medias. Borrarlo en silencio en cada
-            # arranque destruye el rastro. Solo se limpia si alguien lo pide
-            # explicitamente con ATLAS_PURGE_ORPHAN_PAYMENTS=1.
+            # Un pago sin venta y sin cliente es EVIDENCIA de dinero recibido:
+            # puede venir de un checkout que fallo a medias. Borrarlo en
+            # silencio en cada arranque destruye el rastro. Solo se limpia si
+            # alguien lo pide con ATLAS_PURGE_ORPHAN_PAYMENTS=1.
             if os.getenv("ATLAS_PURGE_ORPHAN_PAYMENTS", "").strip().lower() in {"1", "true", "yes"}:
-                conn.execute(text("DELETE FROM payments WHERE sales_document_id IS NULL"))
-                print(f"  ✓ {orphan_count} payments huérfanos eliminados (purga explícita)")
+                conn.execute(text(
+                    "DELETE FROM payments "
+                    "WHERE sales_document_id IS NULL AND customer_id IS NULL"
+                ))
+                print(f"  ✓ {orphan_count} payments sin dueño eliminados (purga explícita)")
             else:
                 print(
-                    f"  ⚠ {orphan_count} payments huérfanos NO se tocan. Revísalos a mano; "
+                    f"  ⚠ {orphan_count} payments sin dueño NO se tocan. Revísalos a mano; "
                     f"para purgarlos usa ATLAS_PURGE_ORPHAN_PAYMENTS=1."
                 )
-        # Aplicar NOT NULL si aún no lo es
+        # Quitar el NOT NULL si quedo puesto por la migracion anterior.
         is_nullable = conn.execute(text(
             "SELECT is_nullable FROM information_schema.columns "
             "WHERE table_name='payments' AND column_name='sales_document_id'"
         )).scalar()
-        if is_nullable == 'YES':
+        if is_nullable == 'NO':
             conn.execute(text(
-                "ALTER TABLE payments ALTER COLUMN sales_document_id SET NOT NULL"
+                "ALTER TABLE payments ALTER COLUMN sales_document_id DROP NOT NULL"
             ))
-            print("  ✓ payments.sales_document_id ahora NOT NULL")
+            print("  ✓ payments.sales_document_id vuelve a aceptar NULL (abono a cuenta)")
         else:
-            print("  · payments.sales_document_id ya era NOT NULL")
+            print("  · payments.sales_document_id ya aceptaba NULL")
+        # El CHECK solo se puede poner si no hay filas que lo violen; si las
+        # hay, el aviso de arriba ya las reporto y se deja para la proxima.
+        if orphan_count == 0:
+            ya = conn.execute(text(
+                "SELECT 1 FROM pg_constraint WHERE conname = 'ck_payments_venta_o_cliente'"
+            )).first()
+            if not ya:
+                conn.execute(text(
+                    "ALTER TABLE payments ADD CONSTRAINT ck_payments_venta_o_cliente "
+                    "CHECK (sales_document_id IS NOT NULL OR customer_id IS NOT NULL)"
+                ))
+                print("  ✓ CHECK ck_payments_venta_o_cliente creado")
+            else:
+                print("  · CHECK ck_payments_venta_o_cliente ya existía")
 
     with engine.connect() as conn:
         aplicar_migraciones_de_columna(conn, COLUMN_MIGRATIONS)
