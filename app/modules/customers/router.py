@@ -32,6 +32,36 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _vincular_portal_a_org(db: Session, portal_user: User, org_id: int) -> None:
+    """Da de alta (idempotente) la membresía del usuario de portal en la org.
+
+    `get_current_active_organization` resuelve el tenant únicamente por
+    `user_organizations`: un cliente con portal pero sin esa fila no puede
+    usar NINGÚN endpoint org-scoped (403). Solo aplica a cuentas CLIENTE —
+    nunca se le agrega una organización a una cuenta de personal que resulte
+    compartir el correo. Auditoría A-7.
+    """
+    from app.models.users import Role, UserOrganization
+
+    rol = getattr(portal_user.role, "value", portal_user.role)
+    if str(rol) != Role.CLIENTE.value:
+        return
+    ya = db.query(UserOrganization).filter(
+        UserOrganization.user_id == portal_user.id,
+        UserOrganization.organization_id == org_id,
+    ).first()
+    if ya is not None:
+        if not ya.is_active:
+            ya.is_active = True
+        return
+    db.add(UserOrganization(
+        user_id=portal_user.id,
+        organization_id=org_id,
+        org_role="MEMBER",
+        is_active=True,
+    ))
+
+
 # --------------------------------------------------------------------------
 # 0. STATS (KPIs)
 # --------------------------------------------------------------------------
@@ -232,6 +262,13 @@ def create_customer(
                 is_active=True
             )
             db.add(new_user)
+            db.flush()
+            # Sin esta fila el portal nace inservible: `get_current_active_
+            # organization` resuelve el tenant EXCLUSIVAMENTE por
+            # `user_organizations`, así que el cliente recién creado recibía
+            # 403 ("User belongs to no active organizations") en todos los
+            # endpoints org-scoped, con o sin header. Auditoría A-7.
+            _vincular_portal_a_org(db, new_user, org_id)
             db.commit()
         else:
             # Optionally update existing user role if not ADMIN/STAFF?
@@ -286,12 +323,19 @@ def update_customer(
                     is_active=True
                 )
                 db.add(new_user)
+                db.flush()
+                _vincular_portal_a_org(db, new_user, org_id)
                 db.commit()
         else:
             # Update password if provided
             if customer_in.password:
                 user.password_hash = get_password_hash(customer_in.password)
-                db.commit()
+            # Alta vieja (o portal habilitado después): si el usuario del
+            # portal quedó sin membresía, se la damos ahora. Solo para
+            # usuarios CLIENTE: jamás se le agrega una organización a una
+            # cuenta de personal que resulte tener el mismo correo. A-7.
+            _vincular_portal_a_org(db, user, org_id)
+            db.commit()
 
     return customer
 
