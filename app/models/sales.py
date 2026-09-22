@@ -158,6 +158,13 @@ class Payment(Base, UUIDMixin, AuditMixin, TenantMixin):
     method = Column(Enum(PaymentMethod), default=PaymentMethod.CASH)
     reference = Column(String, nullable=True) # Referencia bancaria / Folio
 
+    # Caja que RECIBIO este dinero. Antes el efectivo se atribuia por el
+    # documento de venta, lo que mandaba el abono de un credito liquidado hoy
+    # al corte del dia en que se abrio la venta. Nullable: los pagos
+    # historicos y los de ventas sin caja se quedan sin atribucion explicita y
+    # caen al respaldo por documento.
+    cash_session_id = Column(Integer, ForeignKey("cash_sessions.id"), nullable=True, index=True)
+
     sales_document = relationship("SalesDocument", back_populates="payments")
 
 

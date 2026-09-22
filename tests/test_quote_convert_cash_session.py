@@ -75,6 +75,11 @@ class TestConversionDeCotizacion:
         assert resp.status_code in (200, 201), resp.text
         venta = db.query(SalesDocument).filter(SalesDocument.id == qid).one()
         assert venta.cash_session_id == sesion.id
+        # El pago tambien: la atribucion por pago manda sobre la del documento
+        # (app/services/cash_reconciliation.py::session_payments_filter), asi
+        # que un pago en NULL aqui dependeria del respaldo por documento y se
+        # movria de corte si el pedido se reprocesa en otro turno.
+        assert [p.cash_session_id for p in venta.payments] == [sesion.id]
 
     def test_tarjeta_sin_caja_tambien_se_rechaza(
         self, client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup
