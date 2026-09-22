@@ -6,6 +6,8 @@ import { TablaDesplazable } from '../../components/ui/TablaDesplazable'
 import { Spinner } from '../../components/ui/Spinner'
 import { Badge } from '../../components/ui/Badge'
 import { toast } from '../../store/toastStore'
+import { confirm } from '../../components/ui/ConfirmDialog'
+import { errorDetailText } from '../../utils/errorDetail'
 import { rolUsuario } from '../../utils/enumsEspanol'
 
 const ROLES = ['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO', 'VENDEDOR', 'SOPORTE_OPERATIVO']
@@ -104,10 +106,26 @@ export function Users() {
   }
 
   const handleToggle = async (u: SystemUser) => {
+    // Desactivar le quita el acceso a una persona en el acto: se pregunta.
+    // Reactivar no se pregunta — no le quita nada a nadie.
+    if (u.is_active) {
+      const ok = await confirm({
+        title: 'Desactivar usuario',
+        message: `${u.full_name || u.username} dejará de poder entrar a Atlas One. Su historial de ventas y cortes se conserva, y puedes reactivarla cuando quieras.`,
+        confirmText: 'Desactivar',
+        variant: 'danger',
+      })
+      if (!ok) return
+    }
     try {
       await usersApi.update(u.id, { is_active: !u.is_active })
       load()
-    } catch { toast.error('Error al cambiar el estado del usuario') }
+    } catch (e: any) {
+      toast.error(errorDetailText(
+        e?.response?.data?.detail,
+        'No se pudo cambiar el estado del usuario. Su acceso sigue como estaba; vuelve a intentar.',
+      ))
+    }
   }
 
   const f = (field: keyof UserForm, val: string | boolean) => setForm((prev) => ({ ...prev, [field]: val }))
@@ -146,7 +164,7 @@ export function Users() {
                     <td className="font-mono text-indigo-400 text-sm">{u.username}</td>
                     <td className="text-slate-300">{u.full_name ?? '—'}</td>
                     <td><Badge variant={roleVariant(u.role) as 'red' | 'yellow' | 'blue' | 'green' | 'slate'}>{rolUsuario(u.role)}</Badge></td>
-                    <td className="text-slate-400 text-sm">{u.branch_name ?? 'HQ'}</td>
+                    <td className="text-slate-400 text-sm">{u.branch_name ?? 'Sin sucursal fija'}</td>
                     <td>
                       <button onClick={() => handleToggle(u)}
                         aria-label={u.is_active ? `Desactivar a ${u.username}` : `Activar a ${u.username}`}

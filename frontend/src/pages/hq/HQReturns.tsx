@@ -3,6 +3,7 @@ import { returnsApi, type ReturnDocument, type ReturnStatus, returnLabel, return
 import { organizationApi, type Branch } from '../../api/organization'
 import { useAuthStore } from '../../store/authStore'
 import { toast } from '../../store/toastStore'
+import { confirm } from '../../components/ui/ConfirmDialog'
 import { DaxCard } from '../../components/ui/DaxCard'
 import { TablaDesplazable } from '../../components/ui/TablaDesplazable'
 import { Badge } from '../../components/ui/Badge'
@@ -68,7 +69,17 @@ export function HQReturns() {
     } catch (err) {
       const detail = serverDetail(err, 'Error al aprobar la devolución')
       if (!force && /EFECTIVO de monto alto|force=True/i.test(detail)) {
-        if (window.confirm(`${detail}\n\n¿Confirmas el reembolso en efectivo?`)) {
+        // Reembolso en efectivo de monto alto: se confirma con el diálogo de
+        // la app (Esc cancela, el foco arranca en Cancelar), no con el del
+        // navegador, que se ve como un error del sistema.
+        const ok = await confirm({
+          title: 'Confirmar reembolso en efectivo',
+          message: detail,
+          confirmText: 'Sí, reembolsar en efectivo',
+          cancelText: 'Cancelar',
+          variant: 'danger',
+        })
+        if (ok) {
           setActionLoading(false)
           return handleApprove(id, true)
         }

@@ -12,6 +12,7 @@ import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { ACCIONES_CATALOGO, accionesDeProducto, type ClaveAccionCatalogo } from './catalogActions'
 import { formatCurrency } from '../../utils/currency'
 import { toast } from '../../store/toastStore'
+import { confirm } from '../../components/ui/ConfirmDialog'
 import type { Product, Department, Brand } from '../../types/products'
 
 const PAGE_LIMIT = 50
@@ -152,7 +153,13 @@ export function AdminCatalog() {
   }
 
   const handleDelete = async (product: Product) => {
-    if (!window.confirm(`¿Archivar "${product.name}"? Se desactivará en todas las sucursales.`)) return
+    const ok = await confirm({
+      title: 'Archivar producto',
+      message: `"${product.name}" se desactivará en todas las sucursales. Podrás volver a verlo filtrando por archivados.`,
+      confirmText: 'Archivar',
+      variant: 'danger',
+    })
+    if (!ok) return
     try {
       await (await import('../../api/client')).default.delete(`/products/${product.id}`)
       toast.success('Producto archivado.')
@@ -164,7 +171,13 @@ export function AdminCatalog() {
   }
 
   const handleDuplicate = async (product: Product) => {
-    if (!window.confirm(`¿Duplicar "${product.name}"? La copia arranca sin existencias.`)) return
+    const ok = await confirm({
+      title: 'Duplicar producto',
+      message: `Se creará una copia de "${product.name}" con SKU nuevo y sin existencias.`,
+      confirmText: 'Duplicar',
+      variant: 'info',
+    })
+    if (!ok) return
     try {
       const copy = await productsApi.duplicate(product.id)
       toast.success(`Copia creada: ${copy.sku}`)
@@ -187,7 +200,13 @@ export function AdminCatalog() {
   }
 
   const handleReject = async (product: Product) => {
-    if (!window.confirm(`¿Rechazar "${product.name}"? Se desactivará en POS de todas las sucursales.`)) return
+    const ok = await confirm({
+      title: 'Rechazar producto',
+      message: `"${product.name}" se desactivará en el punto de venta de todas las sucursales.`,
+      confirmText: 'Rechazar',
+      variant: 'danger',
+    })
+    if (!ok) return
     try {
       await productsApi.reject(product.id)
       toast.success(`Rechazado: ${product.name}`)
