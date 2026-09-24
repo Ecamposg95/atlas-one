@@ -21,6 +21,35 @@
 - Cada commit termina con la línea `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`.
 - **No** se toca el acomodo del punto de venta ni se le pone candado a routers que no representen una función del catálogo.
 
+## Orden de ejecución y paralelismo
+
+Las tareas NO se ejecutan en orden numérico. Hay una dependencia que importa: la
+prueba de la tarea 1 comprueba que cada función del catálogo apunte a un módulo que
+existe de verdad, y el módulo `tips` no existe hasta la tarea 3. **La tarea 3 va
+antes que la 1.**
+
+```
+Ronda A (en paralelo)   Tarea 3  ·  Tarea 6      ninguna depende de nada
+Ronda B                 Tarea 1                  necesita el módulo tips de la 3
+Ronda C (en paralelo)   Tarea 2  ·  Tarea 4      ambas necesitan el catálogo de la 1
+Ronda D                 Tarea 5                  necesita el campo `capacidades` de la 2
+```
+
+Las tareas que corren en paralelo tocan archivos distintos y ninguna comparte prueba
+con la otra:
+
+| Ronda | Tarea | Archivos que toca |
+|---|---|---|
+| A | 3 | `scripts/init_presets_v2.py` |
+| A | 6 | `frontend/src/index.css` |
+| C | 2 | `app/modules/users/router.py` |
+| C | 4 | `app/core/permissions.py`, `app/routers/sales.py` |
+
+Cada tarea en paralelo se implementa en su propia copia de trabajo de git y se fusiona
+después: dos procesos escribiendo en el mismo repositorio se pelean por el índice, y
+dos corridas de pytest en la misma carpeta se pisan la base de pruebas
+(ver `CLAUDE.md §6`).
+
 ## Estructura de archivos
 
 | Archivo | Responsabilidad |
