@@ -786,7 +786,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 1. Correr las dos suites completas: `python3 -m pytest -q --ignore=tests/test_cash_complete.py -p no:warnings` y `cd frontend && npx tsc --noEmit && npx vitest run && npm run build`.
 2. Fusionar a `main` y empujar: el despliegue a producción es automático desde el CI.
-3. **Correr el seed después de desplegar**: `docker exec atlas-one-prod python scripts/init_presets_v2.py`. No corre solo, y sin él el módulo `tips` no existe en la base.
+3. **El seed corre solo**: `scripts/railway_init.py:752` invoca `seed_modules_and_presets` en cada despliegue, así que el módulo `tips` se registra sin que nadie haga nada. (El comentario de `init_presets_v2.py:109` que dice "run manually post-deploy" está desactualizado.) Solo hace falta correrlo a mano si el despliegue falló a medias.
 4. Comprobar en producción que Eleven (org 17) no trae `propina` ni `factura` en sus capacidades, y que su pantalla se ve en ciruela.
 
 ## Lo que NO entra en esta ola
