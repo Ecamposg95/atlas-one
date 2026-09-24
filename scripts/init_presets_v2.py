@@ -42,6 +42,7 @@ MODULES_CATALOG = [
     ("crm", "CRM / Clientes", "Gestión de clientes, crédito, fidelidad", ModuleScope.GLOBAL, ModuleStatus.STABLE),
     ("users", "Usuarios", "Control de acceso y roles", ModuleScope.GLOBAL, ModuleStatus.STABLE),
     ("finance", "Finanzas", "Cuentas por cobrar/pagar, gastos", ModuleScope.GLOBAL, ModuleStatus.STABLE),
+    ("invoicing", "Facturación", "Factura electrónica con IVA/CFDI al cobrar", ModuleScope.GLOBAL, ModuleStatus.BETA),
     ("reports", "Reportes", "Inteligencia de negocios básica", ModuleScope.GLOBAL, ModuleStatus.STABLE),
     ("quotes", "Cotizaciones", "Generación de presupuestos", ModuleScope.GLOBAL, ModuleStatus.STABLE),
     ("workshops", "Taller / Servicio", "Órdenes de servicio y reparación", ModuleScope.GLOBAL, ModuleStatus.STABLE),

@@ -1,0 +1,16 @@
+[
+  {
+    "clave": "propina",
+    "modulo": "tips",
+    "nombre": "Propina",
+    "donde": ["pos.carrito"],
+    "ayuda": "Botones de 10 % y 15 % al cobrar"
+  },
+  {
+    "clave": "factura",
+    "modulo": "invoicing",
+    "nombre": "Factura con IVA",
+    "donde": ["pos.carrito"],
+    "ayuda": "Casilla que suma el 16 % al cobro"
+  }
+]
