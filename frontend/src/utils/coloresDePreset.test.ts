@@ -1,4 +1,5 @@
 // frontend/src/utils/coloresDePreset.test.ts
+/// <reference types="node" />
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 

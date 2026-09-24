@@ -18,8 +18,21 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]
-    }
+    },
+    /* La app corre en el navegador: no auto-incluir los globales de @types/node
+       (process, Buffer, require, NodeJS.*) en src/. */
+    "types": []
   },
   "include": ["src"],
+  /* Las pruebas quedan fuera de este programa: `import ... from "node:fs"` en
+     una prueba obliga a TypeScript a cargar @types/node completo (globals.d.ts
+     incluido), y esos globales no se pueden acotar a un solo archivo dentro
+     del mismo programa — una vez cargado el paquete, "process"/"Buffer" quedan
+     visibles en cualquier .tsx de la app. Por eso el archivo de prueba pide
+     `/// <reference types="node" />` para sí mismo en vez de depender de
+     "types" aquí, y ese archivo se excluye de ESTE tsconfig (el que corre
+     `npm run build`). Vitest no usa este tsconfig para correr las pruebas
+     (ver vitest.config.ts), así que esto no le afecta. */
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
