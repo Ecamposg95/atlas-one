@@ -903,7 +903,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
           })()}
         </div>
 
-        {requiresInvoice && (
+        {hayFactura && requiresInvoice && (
           <div className="flex justify-between text-dax-warning font-semibold">
             <span>IVA 16%</span><span className="tabular-nums">{formatCurrency(tax)}</span>
           </div>

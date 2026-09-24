@@ -11,6 +11,7 @@ import { requierePin } from '../../utils/reimpresion'
 import { usePOSStore } from '../../store/posStore'
 import { useAuthStore } from '../../store/authStore'
 import { useCapacidad } from '../../store/enabledModulesStore'
+import { saneaCobro } from '../../utils/capacidades'
 import { useEsTelefono } from '../../hooks/useIsMobile'
 import { useExchangeRateStore } from '../../store/exchangeRateStore'
 import { useCardSurchargeStore } from '../../store/cardSurchargeStore'
@@ -55,6 +56,15 @@ export function POS() {
   const savedPrinterName = usePOSStore((s) => s.printerName)
   const hayPropina = useCapacidad('propina')
   const hayFactura = useCapacidad('factura')
+
+  // El estado del carrito no puede contradecir a la capacidad: si no, la pantalla
+  // suma el 16 % de un IVA que el servidor no va a cobrar y la terminal cobra de
+  // mas. Entra por reanudar un ticket pausado antes del despliegue, y tambien por
+  // una sesion que cambio de organizacion sin recargar.
+  useEffect(() => {
+    if (!hayFactura && store.requiresInvoice) store.setRequiresInvoice(false)
+    if (!hayPropina && store.tip) store.setTip(0)
+  }, [hayFactura, hayPropina, store.requiresInvoice, store.tip])
 
   // En teléfono (< md) el POS es de una sola columna: el buscador ocupa la
   // pantalla y el carrito vive en una hoja inferior. El corte se decide en JS
@@ -352,7 +362,9 @@ export function POS() {
       if (navigator.onLine !== false && (await listPending()).length > 0) {
         await loadSurcharge(true)
       }
-      const result = await flushPending((payload) => salesApi.create(payload as Parameters<typeof salesApi.create>[0]))
+      const result = await flushPending((payload) =>
+        salesApi.create(saneaCobro(payload as Parameters<typeof salesApi.create>[0],
+                                   hayPropina, hayFactura)))
       if (result.droppedMessages.length > 0) {
         // Prioridad sobre el "enviadas": esto es dinero cobrado que no quedó
         // registrado, y el aviso se queda en pantalla hasta que lo cierren.
@@ -364,7 +376,7 @@ export function POS() {
     } catch (e) {
       console.warn('[POS] flushPending error:', e)
     }
-  }, [refreshOfflineQueue, loadSurcharge])
+  }, [refreshOfflineQueue, loadSurcharge, hayPropina, hayFactura])
 
   useEffect(() => {
     // Initial flush + queue snapshot on mount

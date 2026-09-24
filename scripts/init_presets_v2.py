@@ -467,7 +467,7 @@ def seed_modules_and_presets(db: Session) -> None:
 
 
 def _backfill_gastro_modules(db: Session) -> None:
-    """Backfill de módulos gastro nuevos (menu/bar/recipes) en orgs YA existentes.
+    """Backfill de módulos gastro nuevos (menu/bar/recipes/tips) en orgs YA existentes.
 
     `apply_industry_preset` solo corre al crear una org (o al re-aplicar preset
     manualmente), así que las orgs gastro creadas ANTES de agregar `menu`/`bar`
@@ -479,10 +479,10 @@ def _backfill_gastro_modules(db: Session) -> None:
     from app.models.modules import OrganizationModule
 
     backfill = {
-        IndustryType.ATLAS_ONE_RESTAURANT: ["menu", "bar"],
-        IndustryType.ATLAS_ONE_CAFE:       ["menu", "recipes"],
-        IndustryType.ATLAS_ONE_BAR:        ["menu", "bar"],
-        IndustryType.ATLAS_ONE_GASTRO:     ["menu", "bar"],
+        IndustryType.ATLAS_ONE_RESTAURANT: ["menu", "bar", "tips"],
+        IndustryType.ATLAS_ONE_CAFE:       ["menu", "recipes", "tips"],
+        IndustryType.ATLAS_ONE_BAR:        ["menu", "bar", "tips"],
+        IndustryType.ATLAS_ONE_GASTRO:     ["menu", "bar", "tips"],
     }
     added = 0
     for industry, keys in backfill.items():
