@@ -86,3 +86,14 @@ def test_sin_el_modulo_la_factura_se_rechaza(
     r = _vender(client, auth_cajero_a, org, variant, "100.00", requires_invoice=True)
     assert r.status_code == 403, r.text
     assert "factura" in r.json()["detail"].lower()
+
+
+def test_una_clave_fuera_del_catalogo_siempre_esta_disponible(db, org):
+    """Lista blanca: solo se bloquea lo declarado.
+
+    Si esta prueba se pone roja, cualquier candado nuevo que alguien escriba con una
+    clave mal tecleada bloquearia el cobro en silencio en vez de dejarlo pasar.
+    """
+    from app.core.permissions import tiene_capacidad
+
+    assert tiene_capacidad(db, org.id, "clave_que_no_existe_en_el_catalogo") is True

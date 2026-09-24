@@ -60,15 +60,19 @@ def tiene_capacidad(db: Session, org_id: int, clave: str) -> bool:
     Lista blanca: una clave que no esté en el catálogo se considera siempre
     disponible. Así, agregar un candado nuevo exige declararlo primero.
     """
-    from app.capacidades import modulo_de
+    try:
+        from app.capacidades import modulo_de
 
-    modulo = modulo_de(clave)
+        modulo = modulo_de(clave)
+    except Exception:  # catálogo ausente o ilegible: la promesa es fallar abierto
+        return True
+
     if modulo is None:
         return True
-    return db.query(
+    return bool(db.query(
         db.query(OrganizationModule).filter(
             OrganizationModule.organization_id == org_id,
             OrganizationModule.module_key == modulo,
             OrganizationModule.is_enabled == True,  # noqa: E712
         ).exists()
-    ).scalar()
+    ).scalar())
