@@ -52,3 +52,23 @@ def require_module(module_key: str):
         return True
 
     return _enforce
+
+
+def tiene_capacidad(db: Session, org_id: int, clave: str) -> bool:
+    """¿La organización puede usar esa función del catálogo?
+
+    Lista blanca: una clave que no esté en el catálogo se considera siempre
+    disponible. Así, agregar un candado nuevo exige declararlo primero.
+    """
+    from app.capacidades import modulo_de
+
+    modulo = modulo_de(clave)
+    if modulo is None:
+        return True
+    return db.query(
+        db.query(OrganizationModule).filter(
+            OrganizationModule.organization_id == org_id,
+            OrganizationModule.module_key == modulo,
+            OrganizationModule.is_enabled == True,  # noqa: E712
+        ).exists()
+    ).scalar()

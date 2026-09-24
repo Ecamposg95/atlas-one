@@ -69,7 +69,7 @@ except ImportError:
 
 MX_TZ = ZoneInfo("America/Mexico_City")
 
-from app.core.permissions import require_module
+from app.core.permissions import require_module, tiene_capacidad
 
 # Máximo descuento permitido por línea para roles no-admin (CAJERO/GERENTE/etc.)
 # Rechazamos ventas donde unit_price < reference_price * (1 - MAX_DISCOUNT_PCT).
@@ -502,6 +502,26 @@ def create_sale(
             detail="Descuento global fuera de rango (0–50%). Excedentes requieren autorización."
         )
 
+    # --- Candados de capacidad: la tienda solo cobra lo que contrató ---
+    # Antes la propina se aceptaba de cualquier tienda y lo único que se miraba
+    # era el signo, así que una boutique podía cobrar propina que ni siquiera
+    # sale en su ticket. Se valida aquí arriba, antes de tocar inventario o
+    # pagos, para que la venta se rechace sin dejar rastro a medias.
+    # `requires_invoice` además entra en el cálculo de IVA de cada renglón.
+    tip_amount = Decimal(str(sale_in.tip_amount or 0))
+    if tip_amount < 0:
+        raise HTTPException(status_code=400, detail="La propina no puede ser negativa")
+    if tip_amount > 0 and not tiene_capacidad(db, org_id, "propina"):
+        raise HTTPException(
+            status_code=403,
+            detail="Esta tienda no tiene propina habilitada.",
+        )
+    if sale_in.requires_invoice and not tiene_capacidad(db, org_id, "factura"):
+        raise HTTPException(
+            status_code=403,
+            detail="Esta tienda no tiene facturación habilitada.",
+        )
+
     # --- 0b. Cash session gate (H-5) ---
     # El efectivo es fisico y no admite excepciones de rol: si esta venta mete
     # billetes en un cajon de sucursal, tiene que haber una caja abierta que
@@ -827,9 +847,7 @@ def create_sale(
     # --- Gastro: propina ---
     # La propina se suma al total a cobrar (los pagos deben cubrir bienes + propina).
     # Se persiste por separado en tip_amount para el reporte de propinas por mesero.
-    tip_amount = Decimal(str(sale_in.tip_amount or 0))
-    if tip_amount < 0:
-        raise HTTPException(status_code=400, detail="La propina no puede ser negativa")
+    # `tip_amount` se resolvió y validó arriba, con los candados de capacidad.
     total_sale += tip_amount
 
     # --- 2. Análisis Financiero ---
