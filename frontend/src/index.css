@@ -138,9 +138,10 @@
   }
 
   /* ── PRESET THEMING (2026-05-14) ──
-     `data-preset="ATLAS_ONE_*"` en <html> dispara el color del vertical
-     globalmente. Sobrescribe --p-accent y sus aliases para que botones,
-     activos del sidebar, badges y links cambien de color con el preset. */
+     `data-preset="ATLAS_ONE_*"` (verticales) o `ATLAS_POS*`/`CUSTOM` (mostrador)
+     en <html> dispara el color del vertical globalmente. Sobrescribe --p-accent
+     y sus aliases para que botones, activos del sidebar, badges y links
+     cambien de color con el preset. */
   [data-preset="ATLAS_ONE_BEAUTY"] {
     --p-accent:        #B16E78;
     --p-accent-hover:  #8E5862;
@@ -231,7 +232,34 @@
     --p-teal:          #7c3aed;
     --p-cyan:          #7c3aed;
   }
-  /* ATLAS_POS y CUSTOM mantienen el azul default. */
+  /* Mostrador: azul sobrio, el giro más común y el que no debe llamar la atención. */
+  [data-preset="ATLAS_POS"] {
+    --p-accent:        #2563eb;
+    --p-accent-hover:  #1d4ed8;
+    --p-accent-soft:   rgba(37, 99, 235, 0.12);
+    --p-accent-line:   rgba(37, 99, 235, 0.32);
+    --p-teal:          #2563eb;
+    --p-cyan:          #2563eb;
+  }
+  /* Boutique: ciruela, para que la dueña de Eleven no vea la misma pantalla
+     que una tienda de novedades. */
+  [data-preset="ATLAS_POS_BOUTIQUE"] {
+    --p-accent:        #8a4b6d;
+    --p-accent-hover:  #6f3b57;
+    --p-accent-soft:   rgba(138, 75, 109, 0.14);
+    --p-accent-line:   rgba(138, 75, 109, 0.32);
+    --p-teal:          #8a4b6d;
+    --p-cyan:          #8a4b6d;
+  }
+  /* Personalizado: gris grafito, deliberadamente neutro. */
+  [data-preset="CUSTOM"] {
+    --p-accent:        #52525b;
+    --p-accent-hover:  #3f3f46;
+    --p-accent-soft:   rgba(82, 82, 91, 0.12);
+    --p-accent-line:   rgba(82, 82, 91, 0.32);
+    --p-teal:          #52525b;
+    --p-cyan:          #52525b;
+  }
 
   /* ── MODO OSCURO (override) — void índigo (login v2) ── */
   .dark {
