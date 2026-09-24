@@ -16,22 +16,31 @@ from app.models.products import Product, ProductBranchStatus, ProductVariant
 from app.models.sales import SalesDocument
 
 
-def _habilitar_pos(db, org):
-    if db.query(Module).filter(Module.key == "pos").first() is None:
-        db.add(Module(key="pos", name="Punto de venta"))
-        db.flush()
-    ya = (
-        db.query(OrganizationModule)
-        .filter(
-            OrganizationModule.organization_id == org.id,
-            OrganizationModule.module_key == "pos",
+def _habilitar_modulos(db, org):
+    """Prende el POS y la facturacion.
+
+    Desde el 24/09/26 `create_sale` rechaza `requires_invoice` si la
+    organizacion no tiene el modulo `invoicing` (candado de capacidad), y casi
+    todo este archivo cobra con factura para que haya IVA que desglosar.
+    """
+    for clave, nombre in (("pos", "Punto de venta"), ("invoicing", "Facturacion")):
+        if db.query(Module).filter(Module.key == clave).first() is None:
+            db.add(Module(key=clave, name=nombre))
+            db.flush()
+        ya = (
+            db.query(OrganizationModule)
+            .filter(
+                OrganizationModule.organization_id == org.id,
+                OrganizationModule.module_key == clave,
+            )
+            .first()
         )
-        .first()
-    )
-    if ya is None:
-        db.add(OrganizationModule(organization_id=org.id, module_key="pos", is_enabled=True))
-    else:
-        ya.is_enabled = True
+        if ya is None:
+            db.add(OrganizationModule(
+                organization_id=org.id, module_key=clave, is_enabled=True,
+            ))
+        else:
+            ya.is_enabled = True
     db.commit()
 
 
@@ -50,7 +59,7 @@ def _abrir_caja(db, org, branch, user):
 
 
 def _producto(db, org, branch, sku, precio, *, has_iva=True, tax_rate=Decimal("16")):
-    _habilitar_pos(db, org)
+    _habilitar_modulos(db, org)
     p = Product(name=f"Producto {sku}", organization_id=org.id, is_active=True)
     db.add(p); db.flush()
     v = ProductVariant(
