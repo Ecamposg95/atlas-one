@@ -10,7 +10,7 @@ import { printerApi } from '../../api/printer'
 import { requierePin } from '../../utils/reimpresion'
 import { usePOSStore } from '../../store/posStore'
 import { useAuthStore } from '../../store/authStore'
-import { useCapacidad } from '../../store/enabledModulesStore'
+import { useCapacidad, useEnabledModulesStore } from '../../store/enabledModulesStore'
 import { saneaCobro } from '../../utils/capacidades'
 import { useEsTelefono } from '../../hooks/useIsMobile'
 import { useExchangeRateStore } from '../../store/exchangeRateStore'
@@ -56,15 +56,20 @@ export function POS() {
   const savedPrinterName = usePOSStore((s) => s.printerName)
   const hayPropina = useCapacidad('propina')
   const hayFactura = useCapacidad('factura')
+  // `capacidades` arranca vacia y se llena cuando responde /users/me/context. Sin
+  // esta bandera, "todavia no se" es indistinguible de "no lo tiene contratado", y
+  // todo lo que decide con esa respuesta se equivoca en la primera carga.
+  const capsListas = useEnabledModulesStore((s) => s.loaded)
 
   // El estado del carrito no puede contradecir a la capacidad: si no, la pantalla
   // suma el 16 % de un IVA que el servidor no va a cobrar y la terminal cobra de
   // mas. Entra por reanudar un ticket pausado antes del despliegue, y tambien por
   // una sesion que cambio de organizacion sin recargar.
   useEffect(() => {
+    if (!capsListas) return
     if (!hayFactura && store.requiresInvoice) store.setRequiresInvoice(false)
     if (!hayPropina && store.tip) store.setTip(0)
-  }, [hayFactura, hayPropina, store.requiresInvoice, store.tip])
+  }, [capsListas, hayFactura, hayPropina, store.requiresInvoice, store.tip])
 
   // En teléfono (< md) el POS es de una sola columna: el buscador ocupa la
   // pantalla y el carrito vive en una hoja inferior. El corte se decide en JS
@@ -349,6 +354,12 @@ export function POS() {
   }, [])
 
   const runFlush = useCallback(async () => {
+    // Nunca reenviar antes de saber que contrato la tienda: el saneo de abajo
+    // borraria la propina de una venta ya cobrada, y el cambio de identidad de
+    // este callback al resolver el contexto dispararia un segundo reenvio
+    // encimado con el primero. Al cargar, el efecto vuelve a correr y manda una
+    // sola vez, ya con los valores buenos.
+    if (!capsListas) return
     try {
       // El porcentaje de comisión primero: una venta con tarjeta encolada trae
       // el importe que el POS calculó ANTES de perder la red. Si el
@@ -376,7 +387,7 @@ export function POS() {
     } catch (e) {
       console.warn('[POS] flushPending error:', e)
     }
-  }, [refreshOfflineQueue, loadSurcharge, hayPropina, hayFactura])
+  }, [refreshOfflineQueue, loadSurcharge, capsListas, hayPropina, hayFactura])
 
   useEffect(() => {
     // Initial flush + queue snapshot on mount
