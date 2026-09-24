@@ -32,6 +32,7 @@ MODULES_CATALOG = [
     ("scanner", "Scanner de tienda", "Lectura con la cámara para cajeros: consulta, precio y conteo en piso", ModuleScope.BRANCH, ModuleStatus.STABLE),
     ("labels", "Etiquetas", "Etiquetas de mostrador para impresora Zebra: selección, copias, vista previa y envío al agente", ModuleScope.BRANCH, ModuleStatus.STABLE),
     ("variants", "Variantes color/talla", "Prendas con varias tallas y colores: matriz de variantes, selector en el POS y existencia por variante", ModuleScope.GLOBAL, ModuleStatus.STABLE),
+    ("tips", "Propina", "Propina en el cobro: botones de porcentaje y su reporte por mesero", ModuleScope.GLOBAL, ModuleStatus.STABLE),
     ("catalog", "Catálogo", "Productos, servicios, listas de precio", ModuleScope.GLOBAL, ModuleStatus.STABLE),
     ("branch_catalog_enablement", "Habilitación de Catálogo por Sucursal", "Control de productos disponibles por sucursal", ModuleScope.BRANCH, ModuleStatus.STABLE),
     ("returns", "Devoluciones", "Gestión de devoluciones y notas de crédito", ModuleScope.GLOBAL, ModuleStatus.STABLE),
@@ -323,7 +324,7 @@ PRESETS = [
             "core", "users", "catalog", "inventory", "payments",
             "cash_management", "crm", "pos",
             "kitchen", "tables", "menu", "bar", "recipes",
-            "reports",
+            "reports", "tips",
         ],
     },
 
@@ -365,6 +366,7 @@ PRESETS = [
             "core", "users", "catalog", "inventory", "payments",
             "cash_management", "crm", "pos",
             "kitchen", "tables", "menu", "bar", "recipes", "commissions", "reports",
+            "tips",
         ],
     },
     {
@@ -374,7 +376,7 @@ PRESETS = [
         "mods": [
             "core", "users", "catalog", "inventory", "payments",
             "cash_management", "crm", "pos",
-            "kitchen", "menu", "recipes", "reports",
+            "kitchen", "menu", "recipes", "reports", "tips",
         ],
     },
     {
@@ -384,7 +386,7 @@ PRESETS = [
         "mods": [
             "core", "users", "catalog", "inventory", "payments",
             "cash_management", "crm", "pos",
-            "tables", "menu", "bar", "recipes", "commissions", "reports",
+            "tables", "menu", "bar", "recipes", "commissions", "reports", "tips",
         ],
     },
     {
