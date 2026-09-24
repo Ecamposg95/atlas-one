@@ -118,6 +118,12 @@ def read_user_context(
         )
         ctx["enabled_modules"] = sorted({"core", *(row[0] for row in enabled)})
 
+    # Capacidades resueltas: la pantalla pregunta `puede('propina')` y no hace
+    # cuentas de módulos. Si mañana una función exige dos módulos o un permiso,
+    # cambia `resolver()` y ningún componente se entera.
+    from app.capacidades import resolver
+    ctx["capacidades"] = resolver(ctx["enabled_modules"])
+
     return ctx
 
 
