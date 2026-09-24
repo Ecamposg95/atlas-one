@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import client from '../api/client'
+import { puede } from '../utils/capacidades'
 
 /**
  * Apply or clear the `data-preset` attribute on <html>.
@@ -18,12 +19,14 @@ function applyPresetAttribute(preset: string | null) {
 interface ContextResponse {
   enabled_modules?: string[]
   preset?: string | null
+  capacidades?: string[]
   // (other fields present in /me/context but not needed here)
 }
 
 interface EnabledModulesStore {
   enabledModules: string[]
   preset: string | null
+  capacidades: string[]
   loaded: boolean
   loading: boolean
   load: () => Promise<void>
@@ -40,6 +43,7 @@ interface EnabledModulesStore {
 export const useEnabledModulesStore = create<EnabledModulesStore>((set, get) => ({
   enabledModules: [],
   preset: null,
+  capacidades: [],
   loaded: false,
   loading: false,
 
@@ -50,9 +54,11 @@ export const useEnabledModulesStore = create<EnabledModulesStore>((set, get) => 
       const r = await client.get<ContextResponse>('/users/me/context')
       const mods = Array.isArray(r.data?.enabled_modules) ? r.data!.enabled_modules! : []
       const preset = r.data?.preset ?? null
+      const capacidades = Array.isArray(r.data?.capacidades) ? r.data!.capacidades! : []
       set({
         enabledModules: mods,
         preset,
+        capacidades,
         loaded: true,
         loading: false,
       })
@@ -60,13 +66,20 @@ export const useEnabledModulesStore = create<EnabledModulesStore>((set, get) => 
     } catch {
       // Fail open: if context fetch fails, leave the sidebar showing all
       // items. Better than locking the user out of navigation.
-      set({ enabledModules: [], preset: null, loaded: true, loading: false })
+      // Las capacidades NO siguen esta política: fallan cerradas (lista
+      // vacía), igual que cuando el servidor sí responde pero la tienda no
+      // tiene ninguna encendida.
+      set({ enabledModules: [], preset: null, capacidades: [], loaded: true, loading: false })
       applyPresetAttribute(null)
     }
   },
 
   reset: () => {
-    set({ enabledModules: [], preset: null, loaded: false, loading: false })
+    set({ enabledModules: [], preset: null, capacidades: [], loaded: false, loading: false })
     applyPresetAttribute(null)
   },
 }))
+
+/** `useCapacidad('propina')` — true si la tienda tiene esa función. */
+export const useCapacidad = (clave: string): boolean =>
+  useEnabledModulesStore((s) => puede(s.capacidades, clave))

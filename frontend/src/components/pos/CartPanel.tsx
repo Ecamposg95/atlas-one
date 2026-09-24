@@ -14,6 +14,7 @@ import { autoTierTarget, forcedTierMap, cajaTierOf } from '../../pages/pos/cartT
 import { groupCart, type CartGroup } from '../../pages/pos/cartGroups'
 import { useExchangeRateStore } from '../../store/exchangeRateStore'
 import { usdSummary } from '../../utils/usd'
+import { useCapacidad } from '../../store/enabledModulesStore'
 
 type PaymentMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'MIXED'
 
@@ -44,6 +45,8 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
   // se lee. `null` (organización sin tipo de cambio) ⇒ no se pinta nada.
   const usdRate = useExchangeRateStore((s) => s.rate)
   const usdLine = usdSummary(total, usdRate)
+  const hayPropina = useCapacidad('propina')
+  const hayFactura = useCapacidad('factura')
   const [editingGlobalDisc, setEditingGlobalDisc] = useState(false)
   // El cliente se asigna desde aquí: el cajero no tenía dónde hacerlo.
   const [clienteAbierto, setClienteAbierto] = useState(false)
@@ -905,31 +908,33 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
             <span>IVA 16%</span><span className="tabular-nums">{formatCurrency(tax)}</span>
           </div>
         )}
-        {/* Propina (gastro): quick % sobre el subtotal con descuento */}
-        <div className="flex items-center justify-between gap-2 pt-1">
-          <span className="text-xs uppercase tracking-wide" style={{ color: 'var(--dax-text-muted)' }}>
-            Propina{tip > 0 && <span className="ml-1 tabular-nums" style={{ color: 'var(--p-accent)' }}>{formatCurrency(tip)}</span>}
-          </span>
-          <div className="flex items-center gap-1">
-            {[0, 0.10, 0.15].map((pct) => {
-              const amt = pct === 0 ? 0 : Math.round(discountedSubtotal * pct)
-              const active = pct === 0 ? tip === 0 : tip > 0 && Math.abs(tip - amt) < 0.5
-              return (
-                <button
-                  key={pct}
-                  onClick={() => setTip(amt)}
-                  className="text-xs font-bold px-2.5 py-1 rounded-lg transition-colors"
-                  style={{
-                    background: active ? 'var(--p-accent)' : 'var(--dax-elevated)',
-                    color: active ? '#fff' : 'var(--dax-text-muted)',
-                  }}
-                >
-                  {pct === 0 ? 'Sin' : `${pct * 100}%`}
-                </button>
-              )
-            })}
+        {/* Propina: solo donde el giro la contrató (módulo tips) */}
+        {hayPropina && (
+          <div className="flex items-center justify-between gap-2 pt-1">
+            <span className="text-xs uppercase tracking-wide" style={{ color: 'var(--dax-text-muted)' }}>
+              Propina{tip > 0 && <span className="ml-1 tabular-nums" style={{ color: 'var(--p-accent)' }}>{formatCurrency(tip)}</span>}
+            </span>
+            <div className="flex items-center gap-1">
+              {[0, 0.10, 0.15].map((pct) => {
+                const amt = pct === 0 ? 0 : Math.round(discountedSubtotal * pct)
+                const active = pct === 0 ? tip === 0 : tip > 0 && Math.abs(tip - amt) < 0.5
+                return (
+                  <button
+                    key={pct}
+                    onClick={() => setTip(amt)}
+                    className="text-xs font-bold px-2.5 py-1 rounded-lg transition-colors"
+                    style={{
+                      background: active ? 'var(--p-accent)' : 'var(--dax-elevated)',
+                      color: active ? '#fff' : 'var(--dax-text-muted)',
+                    }}
+                  >
+                    {pct === 0 ? 'Sin' : `${pct * 100}%`}
+                  </button>
+                )
+              })}
+            </div>
           </div>
-        </div>
+        )}
         <div className="flex justify-between items-baseline font-black pt-2" style={{ borderTop: '1px solid var(--dax-row-border)', color: 'var(--dax-text)' }}>
           <span className="text-lg uppercase tracking-wide">Total</span>
           <span className="tabular-nums text-dax-text text-4xl">{formatCurrency(total)}</span>
@@ -943,19 +948,21 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
             {usdLine}
           </div>
         )}
-        <div className="flex items-center gap-2 pt-0.5">
-          <button
-            onClick={() => setRequiresInvoice(!requiresInvoice)}
-            className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors ${
-              requiresInvoice
-                ? 'bg-dax-warning-soft text-dax-text border border-dax-warning'
-                : 'text-dax-muted hover:text-dax-text'
-            }`}
-          >
-            <i className={`fa-solid ${requiresInvoice ? 'fa-check-square' : 'fa-square'}`} />
-            Factura (IVA)
-          </button>
-        </div>
+        {hayFactura && (
+          <div className="flex items-center gap-2 pt-0.5">
+            <button
+              onClick={() => setRequiresInvoice(!requiresInvoice)}
+              className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors ${
+                requiresInvoice
+                  ? 'bg-dax-warning-soft text-dax-text border border-dax-warning'
+                  : 'text-dax-muted hover:text-dax-text'
+              }`}
+            >
+              <i className={`fa-solid ${requiresInvoice ? 'fa-check-square' : 'fa-square'}`} />
+              Factura (IVA)
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Botones de pago */}

@@ -10,6 +10,7 @@ import { printerApi } from '../../api/printer'
 import { requierePin } from '../../utils/reimpresion'
 import { usePOSStore } from '../../store/posStore'
 import { useAuthStore } from '../../store/authStore'
+import { useCapacidad } from '../../store/enabledModulesStore'
 import { useEsTelefono } from '../../hooks/useIsMobile'
 import { useExchangeRateStore } from '../../store/exchangeRateStore'
 import { useCardSurchargeStore } from '../../store/cardSurchargeStore'
@@ -52,6 +53,8 @@ export function POS() {
   const itemCount = usePOSStore((s) => s.itemCount())
   const pendingCount = usePOSStore((s) => s.parkedTickets.length)
   const savedPrinterName = usePOSStore((s) => s.printerName)
+  const hayPropina = useCapacidad('propina')
+  const hayFactura = useCapacidad('factura')
 
   // En teléfono (< md) el POS es de una sola columna: el buscador ocupa la
   // pantalla y el carrito vive en una hoja inferior. El corte se decide en JS
@@ -255,10 +258,14 @@ export function POS() {
       items: buildSaleItems(store.cart, store.globalDiscount),
       payments,
       doc_type: 'SALE',
-      requires_invoice: store.requiresInvoice,
+      // Una función que la tienda no contrató nunca sale en el cobro, venga de
+      // donde venga: un ticket pausado antes del despliegue trae `requires_invoice`
+      // dentro de su cart_json y la casilla ya no se dibuja para desmarcarlo. Sin
+      // esto ese ticket queda atascado en 403.
+      requires_invoice: hayFactura && store.requiresInvoice,
       // Wave-1: backend audita el descuento global y marca el parked CONVERTED.
       global_discount_pct: store.globalDiscount || 0,
-      tip_amount: store.tip || 0,
+      tip_amount: hayPropina ? store.tip || 0 : 0,
       parked_ticket_id: store.currentParkedId ?? undefined,
     }
     try {
