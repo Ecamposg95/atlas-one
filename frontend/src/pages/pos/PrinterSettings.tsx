@@ -26,6 +26,8 @@ declare global {
   }
 }
 import { useAuthStore } from '../../store/authStore'
+import type { Branch } from '../../types/auth'
+import { elegirSucursalParaImpresora } from '../../utils/sucursalParaImpresora'
 import { usePOSStore } from '../../store/posStore'
 import { DaxCard } from '../../components/ui/DaxCard'
 import { Spinner } from '../../components/ui/Spinner'
@@ -74,7 +76,7 @@ const SAMPLE_IVA = 12.97
 const SAMPLE_TOTAL = 94.0
 
 export function PrinterSettings() {
-  const { branch, org, user } = useAuthStore()
+  const { branch, org, user, setBranch } = useAuthStore()
   // El bloque de autoarranque se le oculta a la cajera: su rutina de cada
   // mañana no cambia hasta que el dueño convierta la caja en persona.
   const esAdmin = user?.role === 'ADMINISTRADOR' || user?.role === 'DUEÑO'
@@ -116,6 +118,22 @@ export function PrinterSettings() {
   const btSupported = typeof navigator !== 'undefined' && 'bluetooth' in navigator
 
   const [wizardOpen, setWizardOpen] = useState(false)
+  // La dueña entra en contexto HQ, sin sucursal, y esta pantalla carga y guarda
+  // por sucursal. Cuando no hay duda se resuelve sola; si hay varias que
+  // venden, se le pregunta bajo el título.
+  const [sucursales, setSucursales] = useState<Branch[]>([])
+  const elegirSucursal = (b: Branch) =>
+    setBranch({ id: b.id, name: b.name, branch_type: b.branch_type, is_headquarters: !!b.is_headquarters })
+  useEffect(() => {
+    if (branch?.id || !esAdmin) return
+    client.get<Branch[]>('/branches/').then(({ data }) => {
+      const lista = Array.isArray(data) ? data : []
+      setSucursales(lista)
+      const elegida = elegirSucursalParaImpresora(user?.branch_id ?? null, lista)
+      if (elegida) elegirSucursal(elegida as Branch)
+    }).catch(() => setSucursales([]))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branch?.id, esAdmin, user?.branch_id])
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type })
@@ -372,6 +390,16 @@ export function PrinterSettings() {
         <div className="flex items-center gap-3">
           <i className="fa-solid fa-print text-indigo-400 text-xl" />
           <h1 className="text-2xl font-black" style={{ color: 'var(--dax-text)' }}>Impresora</h1>
+          {branch && (
+            <span className="text-xs text-slate-400">Configurando: <b>{branch.name}</b></span>
+          )}
+          {!branch && esAdmin && sucursales.length > 1 && (
+            <select className="dax-input text-xs" value="" aria-label="Sucursal a configurar"
+                    onChange={(e) => { const b = sucursales.find(s => String(s.id) === e.target.value); if (b) elegirSucursal(b) }}>
+              <option value="" disabled>¿Qué sucursal vas a configurar?</option>
+              {sucursales.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          )}
         </div>
         <div className="flex gap-2">
           <button
