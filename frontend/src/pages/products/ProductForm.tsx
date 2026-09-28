@@ -55,6 +55,8 @@ export function ProductForm() {
   const [prices, setPrices] = useState<PriceRow[]>([])
   const [errors, setErrors] = useState<ProductErrors>({})
   const hasVariantsModule = useEnabledModulesStore((s) => s.enabledModules.includes('variants'))
+  // El precio de la ficha es el de la talla principal; con la casilla baja a todas.
+  const [precioATodas, setPrecioATodas] = useState(true)
   const [variantRows, setVariantRows] = useState<VariantRow[]>([])
   const [loaded, setLoaded] = useState<Product | null>(null)
   const [sugiriendoSku, setSugiriendoSku] = useState(false)
@@ -316,6 +318,8 @@ export function ProductForm() {
           model: form.model.trim() || null,
           material: form.material.trim() || null,
           price: Number(form.price),
+          // Solo tiene sentido con varias tallas; sin ellas no se manda.
+          precio_a_todas_las_tallas: (loaded?.variants?.length ?? 0) > 1 ? precioATodas : undefined,
           cost: Number(form.cost),
           has_iva: form.has_iva,
           tax_rate: form.has_iva ? Number(form.tax_rate) : 0,
@@ -392,6 +396,12 @@ export function ProductForm() {
             <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
               {avisoPrincipal}
             </p>
+          )}
+          {principalCargada && (
+            <label className="flex items-center gap-2 text-sm text-slate-300">
+              <input type="checkbox" checked={precioATodas} onChange={(e) => setPrecioATodas(e.target.checked)} />
+              Aplicar el precio a todas las tallas
+            </label>
           )}
           <ProductBasicsSection
             value={form} onChange={setField} errors={errors}

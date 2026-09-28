@@ -173,6 +173,9 @@ class ProductUpdate(BaseModel):
     color: Optional[str] = None
     size: Optional[str] = None
     price: Optional[Decimal] = None
+    # Casilla del formulario: el precio nuevo baja a todas las tallas vivas
+    # del producto, no solo a la principal. Ausente = comportamiento de antes.
+    precio_a_todas_las_tallas: Optional[bool] = None
     cost: Optional[Decimal] = None
     has_iva: Optional[bool] = None
     tax_rate: Optional[Decimal] = None

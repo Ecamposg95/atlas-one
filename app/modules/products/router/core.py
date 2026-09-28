@@ -1116,6 +1116,11 @@ def update_product(
             v.variant_name = variant_label(_color_pal, _size_pal)
         if prod_in.price is not None:
             v.price = prod_in.price
+            # La ficha edita la talla principal; con la casilla del formulario
+            # el precio nuevo baja a todas las tallas vivas (las retiradas no).
+            if prod_in.precio_a_todas_las_tallas:
+                for hermana in variantes_vivas(product):
+                    hermana.price = prod_in.price
         if prod_in.cost is not None:
             v.cost = prod_in.cost
         if prod_in.has_iva is not None:
