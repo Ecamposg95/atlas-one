@@ -36,6 +36,8 @@ interface ProductCreate {
   name: string
   cost: number
   price: number
+  // Al editar: baja el precio nuevo a todas las tallas vivas (casilla del formulario).
+  precio_a_todas_las_tallas?: boolean
   brand_id?: string | null       // UUID
   department_id?: string | null  // UUID
   unit?: string                  // "unit" field (not unit_of_measure)
