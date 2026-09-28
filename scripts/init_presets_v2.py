@@ -32,6 +32,7 @@ MODULES_CATALOG = [
     ("scanner", "Scanner de tienda", "Lectura con la cámara para cajeros: consulta, precio y conteo en piso", ModuleScope.BRANCH, ModuleStatus.STABLE),
     ("labels", "Etiquetas", "Etiquetas de mostrador para impresora Zebra: selección, copias, vista previa y envío al agente", ModuleScope.BRANCH, ModuleStatus.STABLE),
     ("variants", "Variantes color/talla", "Prendas con varias tallas y colores: matriz de variantes, selector en el POS y existencia por variante", ModuleScope.GLOBAL, ModuleStatus.STABLE),
+    ("tips", "Propina", "Propina en el cobro: botones de porcentaje y su reporte por mesero", ModuleScope.GLOBAL, ModuleStatus.STABLE),
     ("catalog", "Catálogo", "Productos, servicios, listas de precio", ModuleScope.GLOBAL, ModuleStatus.STABLE),
     ("branch_catalog_enablement", "Habilitación de Catálogo por Sucursal", "Control de productos disponibles por sucursal", ModuleScope.BRANCH, ModuleStatus.STABLE),
     ("returns", "Devoluciones", "Gestión de devoluciones y notas de crédito", ModuleScope.GLOBAL, ModuleStatus.STABLE),
@@ -41,6 +42,7 @@ MODULES_CATALOG = [
     ("crm", "CRM / Clientes", "Gestión de clientes, crédito, fidelidad", ModuleScope.GLOBAL, ModuleStatus.STABLE),
     ("users", "Usuarios", "Control de acceso y roles", ModuleScope.GLOBAL, ModuleStatus.STABLE),
     ("finance", "Finanzas", "Cuentas por cobrar/pagar, gastos", ModuleScope.GLOBAL, ModuleStatus.STABLE),
+    ("invoicing", "Facturación", "Factura electrónica con IVA/CFDI al cobrar", ModuleScope.GLOBAL, ModuleStatus.BETA),
     ("reports", "Reportes", "Inteligencia de negocios básica", ModuleScope.GLOBAL, ModuleStatus.STABLE),
     ("quotes", "Cotizaciones", "Generación de presupuestos", ModuleScope.GLOBAL, ModuleStatus.STABLE),
     ("workshops", "Taller / Servicio", "Órdenes de servicio y reparación", ModuleScope.GLOBAL, ModuleStatus.STABLE),
@@ -323,7 +325,7 @@ PRESETS = [
             "core", "users", "catalog", "inventory", "payments",
             "cash_management", "crm", "pos",
             "kitchen", "tables", "menu", "bar", "recipes",
-            "reports",
+            "reports", "tips",
         ],
     },
 
@@ -365,6 +367,7 @@ PRESETS = [
             "core", "users", "catalog", "inventory", "payments",
             "cash_management", "crm", "pos",
             "kitchen", "tables", "menu", "bar", "recipes", "commissions", "reports",
+            "tips",
         ],
     },
     {
@@ -374,7 +377,7 @@ PRESETS = [
         "mods": [
             "core", "users", "catalog", "inventory", "payments",
             "cash_management", "crm", "pos",
-            "kitchen", "menu", "recipes", "reports",
+            "kitchen", "menu", "recipes", "reports", "tips",
         ],
     },
     {
@@ -384,7 +387,7 @@ PRESETS = [
         "mods": [
             "core", "users", "catalog", "inventory", "payments",
             "cash_management", "crm", "pos",
-            "tables", "menu", "bar", "recipes", "commissions", "reports",
+            "tables", "menu", "bar", "recipes", "commissions", "reports", "tips",
         ],
     },
     {
@@ -464,7 +467,7 @@ def seed_modules_and_presets(db: Session) -> None:
 
 
 def _backfill_gastro_modules(db: Session) -> None:
-    """Backfill de módulos gastro nuevos (menu/bar/recipes) en orgs YA existentes.
+    """Backfill de módulos gastro nuevos (menu/bar/recipes/tips) en orgs YA existentes.
 
     `apply_industry_preset` solo corre al crear una org (o al re-aplicar preset
     manualmente), así que las orgs gastro creadas ANTES de agregar `menu`/`bar`
@@ -476,10 +479,10 @@ def _backfill_gastro_modules(db: Session) -> None:
     from app.models.modules import OrganizationModule
 
     backfill = {
-        IndustryType.ATLAS_ONE_RESTAURANT: ["menu", "bar"],
-        IndustryType.ATLAS_ONE_CAFE:       ["menu", "recipes"],
-        IndustryType.ATLAS_ONE_BAR:        ["menu", "bar"],
-        IndustryType.ATLAS_ONE_GASTRO:     ["menu", "bar"],
+        IndustryType.ATLAS_ONE_RESTAURANT: ["menu", "bar", "tips"],
+        IndustryType.ATLAS_ONE_CAFE:       ["menu", "recipes", "tips"],
+        IndustryType.ATLAS_ONE_BAR:        ["menu", "bar", "tips"],
+        IndustryType.ATLAS_ONE_GASTRO:     ["menu", "bar", "tips"],
     }
     added = 0
     for industry, keys in backfill.items():

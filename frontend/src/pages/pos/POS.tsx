@@ -10,6 +10,8 @@ import { printerApi } from '../../api/printer'
 import { requierePin } from '../../utils/reimpresion'
 import { usePOSStore } from '../../store/posStore'
 import { useAuthStore } from '../../store/authStore'
+import { useCapacidad, useEnabledModulesStore } from '../../store/enabledModulesStore'
+import { saneaCobro } from '../../utils/capacidades'
 import { useEsTelefono } from '../../hooks/useIsMobile'
 import { useExchangeRateStore } from '../../store/exchangeRateStore'
 import { useCardSurchargeStore } from '../../store/cardSurchargeStore'
@@ -52,6 +54,22 @@ export function POS() {
   const itemCount = usePOSStore((s) => s.itemCount())
   const pendingCount = usePOSStore((s) => s.parkedTickets.length)
   const savedPrinterName = usePOSStore((s) => s.printerName)
+  const hayPropina = useCapacidad('propina')
+  const hayFactura = useCapacidad('factura')
+  // `capacidades` arranca vacia y se llena cuando responde /users/me/context. Sin
+  // esta bandera, "todavia no se" es indistinguible de "no lo tiene contratado", y
+  // todo lo que decide con esa respuesta se equivoca en la primera carga.
+  const capsListas = useEnabledModulesStore((s) => s.loaded)
+
+  // El estado del carrito no puede contradecir a la capacidad: si no, la pantalla
+  // suma el 16 % de un IVA que el servidor no va a cobrar y la terminal cobra de
+  // mas. Entra por reanudar un ticket pausado antes del despliegue, y tambien por
+  // una sesion que cambio de organizacion sin recargar.
+  useEffect(() => {
+    if (!capsListas) return
+    if (!hayFactura && store.requiresInvoice) store.setRequiresInvoice(false)
+    if (!hayPropina && store.tip) store.setTip(0)
+  }, [capsListas, hayFactura, hayPropina, store.requiresInvoice, store.tip])
 
   // En teléfono (< md) el POS es de una sola columna: el buscador ocupa la
   // pantalla y el carrito vive en una hoja inferior. El corte se decide en JS
@@ -255,10 +273,14 @@ export function POS() {
       items: buildSaleItems(store.cart, store.globalDiscount),
       payments,
       doc_type: 'SALE',
-      requires_invoice: store.requiresInvoice,
+      // Una función que la tienda no contrató nunca sale en el cobro, venga de
+      // donde venga: un ticket pausado antes del despliegue trae `requires_invoice`
+      // dentro de su cart_json y la casilla ya no se dibuja para desmarcarlo. Sin
+      // esto ese ticket queda atascado en 403.
+      requires_invoice: hayFactura && store.requiresInvoice,
       // Wave-1: backend audita el descuento global y marca el parked CONVERTED.
       global_discount_pct: store.globalDiscount || 0,
-      tip_amount: store.tip || 0,
+      tip_amount: hayPropina ? store.tip || 0 : 0,
       parked_ticket_id: store.currentParkedId ?? undefined,
     }
     try {
@@ -332,6 +354,12 @@ export function POS() {
   }, [])
 
   const runFlush = useCallback(async () => {
+    // Nunca reenviar antes de saber que contrato la tienda: el saneo de abajo
+    // borraria la propina de una venta ya cobrada, y el cambio de identidad de
+    // este callback al resolver el contexto dispararia un segundo reenvio
+    // encimado con el primero. Al cargar, el efecto vuelve a correr y manda una
+    // sola vez, ya con los valores buenos.
+    if (!capsListas) return
     try {
       // El porcentaje de comisión primero: una venta con tarjeta encolada trae
       // el importe que el POS calculó ANTES de perder la red. Si el
@@ -345,7 +373,9 @@ export function POS() {
       if (navigator.onLine !== false && (await listPending()).length > 0) {
         await loadSurcharge(true)
       }
-      const result = await flushPending((payload) => salesApi.create(payload as Parameters<typeof salesApi.create>[0]))
+      const result = await flushPending((payload) =>
+        salesApi.create(saneaCobro(payload as Parameters<typeof salesApi.create>[0],
+                                   hayPropina, hayFactura)))
       if (result.droppedMessages.length > 0) {
         // Prioridad sobre el "enviadas": esto es dinero cobrado que no quedó
         // registrado, y el aviso se queda en pantalla hasta que lo cierren.
@@ -357,7 +387,7 @@ export function POS() {
     } catch (e) {
       console.warn('[POS] flushPending error:', e)
     }
-  }, [refreshOfflineQueue, loadSurcharge])
+  }, [refreshOfflineQueue, loadSurcharge, capsListas, hayPropina, hayFactura])
 
   useEffect(() => {
     // Initial flush + queue snapshot on mount
