@@ -78,7 +78,8 @@ const HRMe            = lazy(() => import('./pages/hr/HRMe').then(m => ({ defaul
 // POS / Branch
 const AtlasPOS        = lazy(() => import('./pages/pos/AtlasPOS').then(m => ({ default: m.AtlasPOS })))
 const POS             = lazy(() => import('./pages/pos/POS').then(m => ({ default: m.POS })))
-const PrinterSettings = lazy(() => import('./pages/pos/PrinterSettings').then(m => ({ default: m.PrinterSettings })))
+// Admin/dueño: pantalla completa; caja: solo elegir impresora y probar (utils/vistaDeImpresora).
+const PrinterSettings = lazy(() => import('./pages/pos/PrinterSettingsPorRol').then(m => ({ default: m.PrinterSettingsPorRol })))
 
 // Mobile
 const MobileDashboard = lazy(() => import('./pages/mobile/MobileDashboard').then(m => ({ default: m.MobileDashboard })))
