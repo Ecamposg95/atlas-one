@@ -10,8 +10,12 @@ import { MAX_COPIAS } from '../../pages/labels/lote'
  * vista, nunca escondidas: esconderlas deja a la tienda buscando una prenda que
  * no aparece nunca y sin saber por qué.
  *
- * En teléfono la tabla se vuelve tarjetas (la misma información, apilada): una
- * rejilla de diez columnas a 390 px no se lee ni con scroll horizontal.
+ * Tocar el renglón entero lo marca (la casilla es chica y en mostrador se
+ * falla); la vista previa vive en el botón del ojo. Cinco columnas, con el
+ * nombre partido en dos líneas si hace falta, para que la tabla quepa en una
+ * laptop sin scroll horizontal.
+ *
+ * En teléfono la tabla se vuelve tarjetas (la misma información, apilada).
  */
 
 interface Props {
@@ -48,6 +52,21 @@ function CeldaCopias({
   )
 }
 
+function BotonPrevia({ item, activa, onVerPrevia }: { item: LabelCandidate; activa: boolean; onVerPrevia: (i: LabelCandidate) => void }) {
+  return (
+    <button
+      type="button"
+      className={`px-2 py-1 rounded-lg text-sm ${activa ? 'text-blue-300 bg-blue-500/15' : 'text-slate-400 hover:text-white'}`}
+      disabled={!item.printable}
+      onClick={(e) => { e.stopPropagation(); onVerPrevia(item) }}
+      aria-label={`Ver etiqueta de ${item.sku}`}
+      title="Ver cómo saldrá la etiqueta"
+    >
+      <i className="fa-regular fa-eye" />
+    </button>
+  )
+}
+
 export function TablaEtiquetas({
   items, copias, seleccion, activa, onAlternar, onAlternarTodo, onCopias, onVerPrevia, esTelefono,
 }: Props) {
@@ -62,6 +81,8 @@ export function TablaEtiquetas({
     )
   }
 
+  const detalle = (it: LabelCandidate) => [it.brand, it.size && `Talla ${it.size}`, it.color].filter(Boolean).join(' · ')
+
   if (esTelefono) {
     return (
       <div className="space-y-2">
@@ -69,51 +90,53 @@ export function TablaEtiquetas({
           <input type="checkbox" className="rounded" checked={todoMarcado} onChange={onAlternarTodo} />
           Marcar todo lo imprimible ({imprimibles.length})
         </label>
-        {items.map((it) => (
-          <div
-            key={it.variant_id}
-            onClick={() => it.printable && onVerPrevia(it)}
-            className={`rounded-xl border p-3 space-y-2 ${
-              activa === it.variant_id ? 'border-blue-500/60 bg-blue-500/5' : 'border-slate-700/50'
-            } ${it.printable ? '' : 'opacity-50'}`}
-          >
-            <div className="flex items-start gap-2">
-              <input
-                type="checkbox"
-                className="rounded mt-0.5"
-                checked={seleccion.has(it.variant_id)}
-                disabled={!it.printable}
-                onClick={(e) => e.stopPropagation()}
-                onChange={() => onAlternar(it.variant_id)}
-                aria-label={`Seleccionar ${it.sku}`}
-              />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-white leading-snug">{it.sale_name || it.product_name}</p>
-                <p className="text-[11px] text-slate-500 font-mono">{it.sku} · {it.barcode || 'sin código'}</p>
+        {items.map((it) => {
+          const marcada = seleccion.has(it.variant_id)
+          return (
+            <div
+              key={it.variant_id}
+              onClick={() => it.printable && onAlternar(it.variant_id)}
+              className={`rounded-xl border p-3 space-y-2 ${
+                marcada ? 'border-blue-500/60 bg-blue-500/10' : 'border-slate-700/50'
+              } ${it.printable ? 'cursor-pointer' : 'opacity-50'}`}
+            >
+              <div className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  className="rounded mt-0.5"
+                  checked={marcada}
+                  disabled={!it.printable}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={() => onAlternar(it.variant_id)}
+                  aria-label={`Seleccionar ${it.sku}`}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-white leading-snug">{it.sale_name || it.product_name}</p>
+                  <p className="text-[11px] text-slate-500 font-mono">{it.sku} · {it.barcode || 'sin código'}</p>
+                </div>
+                <CeldaCopias item={it} valor={copias[it.variant_id] ?? 0} onCopias={onCopias} />
+                <BotonPrevia item={it} activa={activa === it.variant_id} onVerPrevia={onVerPrevia} />
               </div>
-              <CeldaCopias item={it} valor={copias[it.variant_id] ?? 0} onCopias={onCopias} />
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-400">
+                {detalle(it) && <span>{detalle(it)}</span>}
+                <span className="text-slate-300">{formatCurrency(it.price)}</span>
+                <span>Exist. {it.stock}</span>
+              </div>
+              {!it.printable && (
+                <p className="text-[11px] text-amber-300">
+                  <i className="fa-solid fa-triangle-exclamation mr-1" />{it.reason}
+                </p>
+              )}
             </div>
-            <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-400">
-              {it.brand && <span>{it.brand}</span>}
-              {it.size && <span>Talla {it.size}</span>}
-              {it.color && <span>{it.color}</span>}
-              <span className="text-slate-300">{formatCurrency(it.price)}</span>
-              <span>Exist. {it.stock}</span>
-            </div>
-            {!it.printable && (
-              <p className="text-[11px] text-amber-300">
-                <i className="fa-solid fa-triangle-exclamation mr-1" />{it.reason}
-              </p>
-            )}
-          </div>
-        ))}
+          )
+        })}
       </div>
     )
   }
 
   return (
     <TablaDesplazable sangrado={false}>
-      <table className="dax-table text-sm">
+      <table className="dax-table text-sm w-full">
         <thead>
           <tr>
             <th className="w-8">
@@ -125,59 +148,57 @@ export function TablaEtiquetas({
                 aria-label="Marcar todo lo imprimible"
               />
             </th>
-            <th>SKU</th>
+            <th>Prenda</th>
             <th>Código</th>
-            <th>Marca</th>
-            <th>Nombre de venta</th>
-            <th>Talla</th>
-            <th>Color</th>
-            <th className="text-right">Precio</th>
-            <th className="text-right">Exist.</th>
+            <th className="text-right">Precio · Exist.</th>
             <th className="text-center">Etiquetas</th>
           </tr>
         </thead>
         <tbody>
-          {items.map((it) => (
-            <tr
-              key={it.variant_id}
-              onClick={() => it.printable && onVerPrevia(it)}
-              className={`${it.printable ? 'cursor-pointer' : 'opacity-50'} ${
-                activa === it.variant_id ? 'bg-blue-500/10' : ''
-              }`}
-            >
-              <td>
-                <input
-                  type="checkbox"
-                  className="rounded"
-                  checked={seleccion.has(it.variant_id)}
-                  disabled={!it.printable}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={() => onAlternar(it.variant_id)}
-                  aria-label={`Seleccionar ${it.sku}`}
-                />
-              </td>
-              <td className="font-mono text-xs whitespace-nowrap">{it.sku}</td>
-              <td className="font-mono text-xs whitespace-nowrap">
-                {it.barcode || <span className="text-slate-600">—</span>}
-              </td>
-              <td className="text-xs whitespace-nowrap">{it.brand}</td>
-              <td className="min-w-[16rem]">
-                <span className="text-slate-200">{it.sale_name || it.product_name}</span>
-                {!it.printable && (
-                  <span className="block text-[11px] text-amber-300">
-                    <i className="fa-solid fa-triangle-exclamation mr-1" />{it.reason}
-                  </span>
-                )}
-              </td>
-              <td className="text-xs whitespace-nowrap">{it.size}</td>
-              <td className="text-xs whitespace-nowrap">{it.color}</td>
-              <td className="text-right whitespace-nowrap">{formatCurrency(it.price)}</td>
-              <td className="text-right whitespace-nowrap">{it.stock}</td>
-              <td className="text-center">
-                <CeldaCopias item={it} valor={copias[it.variant_id] ?? 0} onCopias={onCopias} />
-              </td>
-            </tr>
-          ))}
+          {items.map((it) => {
+            const marcada = seleccion.has(it.variant_id)
+            return (
+              <tr
+                key={it.variant_id}
+                onClick={() => it.printable && onAlternar(it.variant_id)}
+                aria-selected={marcada}
+                className={`${it.printable ? 'cursor-pointer' : 'opacity-50'} ${marcada ? 'bg-blue-500/10' : ''}`}
+              >
+                <td>
+                  <input
+                    type="checkbox"
+                    className="rounded"
+                    checked={marcada}
+                    disabled={!it.printable}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={() => onAlternar(it.variant_id)}
+                    aria-label={`Seleccionar ${it.sku}`}
+                  />
+                </td>
+                <td>
+                  <span className="text-slate-200 leading-snug">{it.sale_name || it.product_name}</span>
+                  {detalle(it) && <span className="block text-[11px] text-slate-500">{detalle(it)}</span>}
+                  {!it.printable && (
+                    <span className="block text-[11px] text-amber-300">
+                      <i className="fa-solid fa-triangle-exclamation mr-1" />{it.reason}
+                    </span>
+                  )}
+                </td>
+                <td className="font-mono text-xs">
+                  <span className="block">{it.sku}</span>
+                  <span className="block text-slate-500">{it.barcode || '—'}</span>
+                </td>
+                <td className="text-right whitespace-nowrap">
+                  <span className="block">{formatCurrency(it.price)}</span>
+                  <span className="block text-[11px] text-slate-500">{it.stock} pzas</span>
+                </td>
+                <td className="text-center whitespace-nowrap">
+                  <CeldaCopias item={it} valor={copias[it.variant_id] ?? 0} onCopias={onCopias} />
+                  <BotonPrevia item={it} activa={activa === it.variant_id} onVerPrevia={onVerPrevia} />
+                </td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </TablaDesplazable>
