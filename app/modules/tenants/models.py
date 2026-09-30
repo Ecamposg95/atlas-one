@@ -117,6 +117,12 @@ class Branch(Base, TenantMixin):
     paper_width_mm = Column(Integer, nullable=True, default=80)
     open_drawer_on_print = Column(Boolean, default=True, nullable=False)
 
+    # Primer folio que emite esta sucursal (todas las series). Sirve para que
+    # una tienda que llega de otro sistema siga su numeracion en vez de
+    # volver al 1 (Coqueta: rmazh llego al 1463, aqui arranca en 1464).
+    # NULL = comportamiento de siempre. Ver app/utils/folios.py.
+    folio_inicial = Column(Integer, nullable=True)
+
     # Cockpit / day-mode
     daily_sales_goal = Column(Numeric(12, 2), nullable=True)
     closing_time = Column(Time, nullable=True)
