@@ -1853,7 +1853,7 @@ Nada de esto se ejecuta sin que el usuario lo autorice paso por paso. Cada bloqu
 cd /mnt/d/Devs/atlas-one
 git checkout main && git merge --no-ff feat/coqueta-migracion -m "merge: importadores de rmazh y folio_inicial para la mudanza de Coqueta"
 git push origin main
-gh run watch --exit-status   # CI + deploy-ionos
+gh run watch "$(gh run list --branch main --limit 1 --json databaseId -q '.[0].databaseId')" --exit-status   # CI + deploy-ionos
 ssh ionos 'docker exec atlas-one-prod cat /app/.commit_desplegado; echo; curl -fsS https://app.atlasone.com.mx/health'
 ssh ionos 'docker exec atlas-one-prod python -c "
 from app.core.database import SessionLocal; from sqlalchemy import text

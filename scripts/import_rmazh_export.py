@@ -52,6 +52,8 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
+from sqlalchemy.exc import SQLAlchemyError
+
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -425,7 +427,10 @@ def import_rmazh_export(
                 resumen["creados"] += 1
             else:
                 producto = variante.product
-                producto.department_id = dep.id if dep is not None else None
+                # Una recorrida nunca borra el departamento que la duena puso
+                # a mano: solo se asigna cuando el archivo trae uno vigente.
+                if dep is not None:
+                    producto.department_id = dep.id
                 if marca is not None:
                     producto.brand_id = marca.id
                 if f.get("descripcion"):
@@ -565,6 +570,10 @@ def _existencias(db, org_id, branch_id, variante, f, nfila, etiqueta, admin, top
         # La fila de existencias siempre queda activa.
         existencias.is_active = True
 
+    if stock < 0:
+        resumen["incidencias"].append(
+            f"{etiqueta}: existencias negativas ({stock}) en rmazh, se cargan en 0 — revisar con la duena"
+        )
     if stock <= 0:
         return
 
@@ -631,12 +640,22 @@ def main() -> None:
             print(f"  tope          {args.tope}")
         print("=" * 60)
 
-        r = import_rmazh_export(
-            db, args.xlsx, args.org, args.branch,
-            dry_run=args.dry_run, tope=args.tope,
-            conservar_departamentos=args.conservar_departamentos,
-            conservar_marcas=args.conservar_marcas,
-        )
+        # Nunca se imprime str(e) de un error de SQLAlchemy: trae los
+        # `[parameters: ...]` de la sentencia y podria exponer datos sensibles.
+        try:
+            r = import_rmazh_export(
+                db, args.xlsx, args.org, args.branch,
+                dry_run=args.dry_run, tope=args.tope,
+                conservar_departamentos=args.conservar_departamentos,
+                conservar_marcas=args.conservar_marcas,
+            )
+        except ValueError as e:
+            print(f"ABORTADO: {e}", file=sys.stderr)
+            raise SystemExit(2)
+        except SQLAlchemyError as e:
+            nombre = type(e.orig).__name__ if getattr(e, "orig", None) else type(e).__name__
+            print(f"ABORTADO: {nombre} — revisa la base; no se escribio nada", file=sys.stderr)
+            raise SystemExit(2)
     finally:
         db.close()
 

@@ -17,8 +17,8 @@ Reglas:
     escribir nada.
   - El rol de rmazh debe existir en `Role` (los nombres coinciden:
     ADMINISTRADOR, CAJERO…). Uno desconocido aborta antes de escribir.
-  - ADMINISTRADOR y DUEÑO enlazan a la organizacion como `org_role=ADMIN`;
-    los demas como `MEMBER`.
+  - ADMINISTRADOR enlaza a la organizacion como `org_role=ADMIN`, DUEÑO como
+    `OWNER` y los demas como `MEMBER`.
   - Todo se confirma en un solo commit al final.
 
 Uso:
@@ -33,6 +33,8 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from sqlalchemy.exc import SQLAlchemyError
+
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -41,7 +43,7 @@ import app.models  # noqa: F401  (puebla la metadata)
 from app.models.organization import Branch, Organization
 from app.modules.users.models import PlatformRole, Role, User, UserOrganization
 
-ROLES_ADMIN = {Role.ADMINISTRADOR, Role.DUEÑO}
+ORG_ROLES = {Role.ADMINISTRADOR: "ADMIN", Role.DUEÑO: "OWNER"}  # el resto: MEMBER
 
 
 def validar_destino(db, org_id: int, branch_id: int) -> Tuple[Organization, Branch]:
@@ -158,7 +160,7 @@ def import_rmazh_users(
                         user_id=usuario.id,
                         organization_id=org_id,
                         is_active=True,
-                        org_role="ADMIN" if rol in ROLES_ADMIN else "MEMBER",
+                        org_role=ORG_ROLES.get(rol, "MEMBER"),
                     )
                 )
                 db.flush()
@@ -199,10 +201,16 @@ def main() -> None:
         print(f"  sucursal      {sucursal.name} (id={sucursal.id})")
         print(f"  usuarios      {', '.join(u.get('username', '?') for u in usuarios)}")
         print("=" * 60)
+        # Nunca se imprime str(e) de un error de SQLAlchemy: trae los
+        # `[parameters: ...]` de la sentencia y podria exponer un hash de contrasena.
         try:
             r = import_rmazh_users(db, usuarios, args.org, args.branch, dry_run=args.dry_run)
         except ValueError as e:
             print(f"ABORTADO: {e}", file=sys.stderr)
+            raise SystemExit(2)
+        except SQLAlchemyError as e:
+            nombre = type(e.orig).__name__ if getattr(e, "orig", None) else type(e).__name__
+            print(f"ABORTADO: {nombre} — revisa la base; no se escribio nada", file=sys.stderr)
             raise SystemExit(2)
     finally:
         db.close()

@@ -103,7 +103,7 @@ scratchpad; nunca se versiona ni se pega en el chat.**
 Por cada usuario: si `username` no existe, crea `User` con `role` = rol de rmazh (los nombres del
 enum coinciden: ADMINISTRADOR, CAJERO), `branch_id` = la sucursal destino, `platform_role=NONE`,
 `password_hash` y `reprint_pin_hash` copiados tal cual, `is_active` respetado; y el
-`UserOrganization` con `org_role` = `ADMIN` para ADMINISTRADOR y `MEMBER` para el resto. Si el
+`UserOrganization` con `org_role` = `ADMIN` para ADMINISTRADOR, `OWNER` para DUEÑO y `MEMBER` para el resto. Si el
 `username` **ya existe y pertenece a la org destino** (el admin que creó `onboard_org.py`),
 actualiza `full_name`, `password_hash`, `reprint_pin_hash` y `branch_id`. Si existe en **otra**
 organización, falla sin escribir nada: `users.username` es único global.
@@ -139,7 +139,7 @@ corra con `!`.
 2. **Alta**: `onboard_org.py --name "Novedades Coqueta" --industry ATLAS_POS --admin Mirna
    --branch "Novedades Coqueta" --full-name Mirna`. Crea la matriz con `can_sell=True`. La
    contraseña generada se descarta (paso 3 la reemplaza).
-3. **Ajustes de sucursal** (SQL de una fila, o `PUT /api/branches/{id}` como Mirna):
+3. **Ajustes de sucursal** (una fila por Python dentro del contenedor; `folio_inicial` no se expone por la API):
    `printer_name='POS-80'`, `folio_inicial=1464`, `ticket_header` y `ticket_footer` vacíos.
 4. **Usuarios**: `import_rmazh_users.py --dry-run` → real. Mirna recupera su hash y PIN; Jose nace
    CAJERO en la matriz.

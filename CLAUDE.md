@@ -35,7 +35,7 @@ Orientación rápida: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) ·
 
 ## 3. Comandos (verificados)
 
-Requiere **Python 3.11+** y **Node 20**. Si existe `.venv/` úsalo; si no, el `python3` del sistema (3.12) ya trae las dependencias y corre la suite.
+Requiere **Python 3.11+** y **Node 20**. Si existe `.venv/` úsalo; si no, cualquier Python 3.11+ con `requirements.txt` instalado corre la suite (en esta máquina es el `python3` del sistema).
 
 ```bash
 # --- Backend ---

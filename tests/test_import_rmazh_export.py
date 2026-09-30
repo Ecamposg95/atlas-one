@@ -318,6 +318,18 @@ class TestIdempotencia:
         qty = {v.sku: Decimal(str(s.qty_on_hand)) for s, v in db.query(StockOnHand, ProductVariant).join(ProductVariant, ProductVariant.id == StockOnHand.variant_id)}
         assert qty == {"8888172121301": Decimal("2556"), "STITCH": Decimal("10000")}
 
+    def test_recorrida_no_borra_el_departamento_puesto_a_mano(self, db, org, cargar):
+        cargar([CASCANUECES])
+        navidad = Department(name="Navidad", organization_id=org.id)
+        db.add(navidad)
+        db.flush()
+        producto = db.query(Product).filter(Product.organization_id == org.id).one()
+        producto.department_id = navidad.id
+        db.flush()
+        cargar([CASCANUECES])
+        db.refresh(producto)
+        assert producto.department_id == navidad.id
+
     def test_renglon_duplicado_en_el_mismo_archivo(self, db, cargar):
         """Review Focus #2: misma (codigo, nombre) dos veces = un producto, un movimiento."""
         r = cargar([CASCANUECES, dict(CASCANUECES, Stock=999)])
@@ -325,6 +337,12 @@ class TestIdempotencia:
         assert db.query(Product).count() == 1
         assert db.query(InventoryMovement).count() == 1
         assert Decimal(str(db.query(StockOnHand).one().qty_on_hand)) == 2556
+
+    def test_stock_negativo_queda_en_cero_con_incidencia(self, db, cargar):
+        r = cargar([dict(CASCANUECES, Stock=-3)])
+        assert Decimal(str(db.query(StockOnHand).one().qty_on_hand)) == 0
+        assert db.query(InventoryMovement).count() == 0
+        assert len(r["incidencias"]) == 1 and "negativas" in r["incidencias"][0]
 
 
 class TestDryRun:
@@ -357,6 +375,18 @@ class TestCLI:
         out = capsys.readouterr().out
         assert "ENSAYO" in out and "productos creados      2" in out
         assert "EXISTENCIAS MAYORES A 500" in out and "STITCH" in out and "10000" in out
+
+    def test_main_aborta_limpio_con_destino_inexistente(self, db, branch_a, tmp_path, monkeypatch, capsys):
+        import sys as _sys
+        ruta = _xlsx(tmp_path, [CASCANUECES])
+        monkeypatch.setattr(_sys, "argv", ["import_rmazh_export.py", ruta, "--org", "999999", "--branch", str(branch_a.id)])
+        import app.core.database as database
+        monkeypatch.setattr(database, "SessionLocal", lambda: db)
+        monkeypatch.setattr(db, "close", lambda: None)
+        with pytest.raises(SystemExit) as exc:
+            imp.main()
+        assert exc.value.code == 2
+        assert "ABORTADO" in capsys.readouterr().err
 
 
 class TestEscalonesSinDuplicar:

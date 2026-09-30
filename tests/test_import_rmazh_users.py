@@ -40,6 +40,12 @@ class TestCrea:
         enlace = db.query(UserOrganization).filter_by(user_id=jose.id, organization_id=org.id).one()
         assert enlace.org_role == "MEMBER"
 
+    def test_dueno_enlaza_como_owner(self, db, org, branch_a):
+        imp.import_rmazh_users(db, [dict(MIRNA, username="Duena", rol="DUEÑO")], org.id, branch_a.id)
+        u = db.query(User).filter(User.username == "Duena").one()
+        enlace = db.query(UserOrganization).filter_by(user_id=u.id, organization_id=org.id).one()
+        assert enlace.org_role == "OWNER"
+
     def test_respeta_is_active_false(self, db, org, branch_a):
         imp.import_rmazh_users(db, [dict(JOSE, is_active=False)], org.id, branch_a.id)
         assert db.query(User).filter(User.username == "Jose").one().is_active is False
