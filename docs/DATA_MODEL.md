@@ -42,6 +42,14 @@ ninguna organización existente cambia de comportamiento sin configurarlas):
 | `usd_rate_manual` | `Numeric(10,4)` | `NULL` | Tipo fijo si `mode='manual'` |
 | `usd_rate_margin` | `Numeric(10,4)` | `0` | Se suma al FIX en modo `auto` |
 
+**Columnas en `branches`** (`app/modules/tenants/models.py`):
+
+| Columna | Tipo | Propósito |
+|---|---|---|
+| `printer_name` | `String` | Nombre de la impresora ESC/POS de la sucursal (seteada por el gerente o dueño) |
+| `ticket_footer` | `String` | Pie de ticket por sucursal (sobreescribe el de org si está seteado) |
+| `folio_inicial` | Integer, NULL | Primer folio que emite la sucursal en todas sus series; `get_next_folio` devuelve `max(máximo+1, folio_inicial)`. Para tiendas que llegan de otro sistema (Coqueta: 1464). |
+
 ## Usuarios / Auth
 | Tabla | PK | Propósito | Enums |
 |---|---|---|---|

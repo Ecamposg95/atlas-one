@@ -35,7 +35,7 @@ Orientación rápida: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) ·
 
 ## 3. Comandos (verificados)
 
-Requiere **Python 3.11** y **Node 20**. El venv local es `.venv/`.
+Requiere **Python 3.11+** y **Node 20**. Si existe `.venv/` úsalo; si no, el `python3` del sistema (3.12) ya trae las dependencias y corre la suite.
 
 ```bash
 # --- Backend ---
@@ -117,6 +117,13 @@ tests/               # pytest (SQLite en memoria); conftest.py = fixtures + seed
 
 ### Habilitar un módulo en un preset
 Edita `scripts/init_presets_v2.py` (seed de `industry_presets`) y/o el fallback en `app/services/capabilities_service.py`. El módulo debe existir en el catálogo `modules` (`seed_global_modules`).
+
+### Dar de alta una tienda que llega de rmazh (Data X POS)
+1. Exportar desde rmazh en **solo lectura** con `scripts/adhoc/2026-09-01/coqueta/export_coq2.py` (repo Atlas-Rmazh, por `railway ssh`; pasar la sucursal con existencias, no el HQ). Guarda el xlsx y el JSON de usuarios **fuera del repo** (trae hashes).
+2. `scripts/onboard_org.py` crea org + matriz (`can_sell=True`) + admin. Luego fija `branches.printer_name` y, si la tienda ya emitía folios, `branches.folio_inicial` (siguiente al último de rmazh).
+3. `scripts/import_rmazh_users.py usuarios.json --org N --branch M --dry-run` → real. Copia los hashes bcrypt: la gente entra con su contraseña de siempre.
+4. `scripts/import_rmazh_export.py catalogo.xlsx --org N --branch M --dry-run` → revisar incidencias y "EXISTENCIAS MAYORES A 500" → real. Idempotente; `--tope N` recorta relleno.
+5. Verificar el POS **con el cajero**, no con el admin (`GET /api/products/pos/search`).
 
 ---
 
