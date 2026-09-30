@@ -463,6 +463,8 @@ def _cargar_escalones(db, org_id, variante, f, nfila, etiqueta, resumen) -> None
     `min_quantity` como piezas por caja). rmazh comparte ese flujo, asi que
     respetar el nombre es respetar la intencion de la tienda.
     """
+    # Sin autoflush, los escalones pendientes de un renglon anterior no se verian.
+    db.flush()
     actuales = {
         p.price_name: p
         for p in db.query(ProductPrice).filter(
@@ -489,15 +491,16 @@ def _cargar_escalones(db, org_id, variante, f, nfila, etiqueta, resumen) -> None
 
         escalon = actuales.get(nombre)
         if escalon is None:
-            db.add(
-                ProductPrice(
-                    variant_id=variante.id,
-                    price_name=nombre,
-                    min_quantity=minimo,
-                    unit_price=precio,
-                    organization_id=org_id,
-                )
+            nuevo = ProductPrice(
+                variant_id=variante.id,
+                price_name=nombre,
+                min_quantity=minimo,
+                unit_price=precio,
+                organization_id=org_id,
             )
+            db.add(nuevo)
+            # Sin esto, un renglon repetido o dos Pn con el mismo nombre duplican el escalon.
+            actuales[nombre] = nuevo
         else:
             escalon.min_quantity = minimo
             escalon.unit_price = precio
@@ -525,6 +528,7 @@ def _estado_en_sucursal(db, org_id, branch_id, variante) -> None:
                 is_visible=True,
             )
         )
+        db.flush()
 
 
 def _existencias(db, org_id, branch_id, variante, f, nfila, etiqueta, admin, tope, resumen) -> None:

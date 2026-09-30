@@ -357,3 +357,19 @@ class TestCLI:
         out = capsys.readouterr().out
         assert "ENSAYO" in out and "productos creados      2" in out
         assert "EXISTENCIAS MAYORES A 500" in out and "STITCH" in out and "10000" in out
+
+
+class TestEscalonesSinDuplicar:
+    def test_rerun_con_renglon_repetido_no_duplica_escalon_nuevo(self, db, cargar):
+        cargar([CASCANUECES])
+        fila = dict(CASCANUECES, **{"P2 Nombre": "Caja", "P2 Min": 12, "P2 Precio": 200})
+        cargar([fila, fila])
+        nombres = [p.price_name for p in db.query(ProductPrice).all()]
+        assert sorted(nombres) == ["Caja", "Mayoreo"]
+
+    def test_dos_pn_con_el_mismo_nombre_dejan_un_escalon(self, db, cargar):
+        cargar([dict(CASCANUECES, **{"P2 Nombre": "Mayoreo", "P2 Min": 6, "P2 Precio": 200})])
+        escalones = db.query(ProductPrice).all()
+        assert len(escalones) == 1 and escalones[0].price_name == "Mayoreo"
+        # Gana el ultimo Pn del renglon.
+        assert Decimal(str(escalones[0].min_quantity)) == 6 and Decimal(str(escalones[0].unit_price)) == 200
