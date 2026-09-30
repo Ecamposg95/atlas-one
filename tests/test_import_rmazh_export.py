@@ -184,6 +184,9 @@ class TestCatalogo:
         r = cargar([dict(CASCANUECES, **{"E1 Nombre": "Caja 12", "E1 Cantidad": 12, "E1 Precio": 2000})])
         assert r["creados"] == 1
         assert any("empaque" in i.lower() for i in r["incidencias"])
+        # Unidad "pza" sin empaques no avisa nada.
+        r2 = cargar([CASCANUECES])
+        assert not any("empaque" in i.lower() for i in r2["incidencias"])
 
     def test_destino_ajeno_aborta(self, db, org, branch_a, tmp_path):
         from app.models.organization import Organization, Branch
@@ -280,3 +283,77 @@ class TestExistencias:
         assert qty == {"STITCH": Decimal("50"), "8888172121301": Decimal("40")}
         assert any("STITCH" in i and "tope" in i for i in r["incidencias"])
         assert Decimal(str(db.query(InventoryMovement).filter_by(variant_id=db.query(ProductVariant).filter_by(sku="STITCH").one().id).one().qty_change)) == 50
+
+
+class TestCarrySobre:
+    def test_codigo_de_barras_repetido_avisa_ambiguo(self, db, cargar):
+        r = cargar([
+            dict(CASCANUECES, SKU="A1", Nombre="UNO", **{"Codigo Barras": "777"}),
+            dict(CASCANUECES, SKU="A2", Nombre="DOS", **{"Codigo Barras": "777"}),
+        ])
+        assert r["creados"] == 2
+        assert db.query(ProductVariant).count() == 2
+        avisos = [i for i in r["incidencias"] if "ambiguo" in i]
+        assert len(avisos) == 1 and "777" in avisos[0] and "A1" in avisos[0]
+
+    def test_existencias_existentes_se_reactivan(self, db, org, branch_a, cargar):
+        cargar([STITCH])
+        v = db.query(ProductVariant).one()
+        s = db.query(StockOnHand).filter_by(variant_id=v.id).one()
+        s.is_active = False
+        db.flush()
+        cargar([STITCH])
+        assert db.query(StockOnHand).filter_by(variant_id=v.id).one().is_active is True
+
+
+class TestIdempotencia:
+    def test_segunda_corrida_no_duplica_ni_recarga_stock(self, db, org, cargar):
+        cargar([CASCANUECES, STITCH])
+        r = cargar([CASCANUECES, STITCH])
+        assert r["creados"] == 0 and r["actualizados"] == 2
+        assert db.query(Product).filter(Product.organization_id == org.id).count() == 2
+        assert db.query(ProductVariant).count() == 2
+        assert db.query(ProductPrice).count() == 3
+        assert db.query(InventoryMovement).count() == 2, "el stock no se vuelve a cargar"
+        qty = {v.sku: Decimal(str(s.qty_on_hand)) for s, v in db.query(StockOnHand, ProductVariant).join(ProductVariant, ProductVariant.id == StockOnHand.variant_id)}
+        assert qty == {"8888172121301": Decimal("2556"), "STITCH": Decimal("10000")}
+
+    def test_renglon_duplicado_en_el_mismo_archivo(self, db, cargar):
+        """Review Focus #2: misma (codigo, nombre) dos veces = un producto, un movimiento."""
+        r = cargar([CASCANUECES, dict(CASCANUECES, Stock=999)])
+        assert r["creados"] == 1 and r["actualizados"] == 1
+        assert db.query(Product).count() == 1
+        assert db.query(InventoryMovement).count() == 1
+        assert Decimal(str(db.query(StockOnHand).one().qty_on_hand)) == 2556
+
+
+class TestDryRun:
+    def test_dry_run_reporta_sin_escribir(self, db, org, cargar):
+        r = cargar([CASCANUECES, STITCH], dry_run=True)
+        assert r["creados"] == 2 and r["escalones"] == 3 and r["movimientos"] == 2
+        assert len(r["existencias_altas"]) == 2
+        assert db.query(Product).filter(Product.organization_id == org.id).count() == 0
+        assert db.query(InventoryMovement).count() == 0
+        assert db.query(Department).count() == 0
+
+
+class TestCLI:
+    def test_pos_search_lee_lo_cargado(self, db, org, branch_a, cargar):
+        """Lo que tumba al POS es un NULL en price/cost: el schema de lectura debe aceptar todo."""
+        from app.modules.products.schemas import ProductRead
+        cargar([CASCANUECES, dict(STITCH, Costo="")])
+        for p in db.query(Product).filter(Product.organization_id == org.id):
+            ProductRead.model_validate(p)
+
+    def test_main_dry_run_imprime_resumen(self, db, org, branch_a, admin_user, tmp_path, monkeypatch, capsys):
+        import sys as _sys
+        ruta = _xlsx(tmp_path, [CASCANUECES, STITCH])
+        monkeypatch.setattr(_sys, "argv", ["import_rmazh_export.py", ruta, "--org", str(org.id), "--branch", str(branch_a.id), "--dry-run"])
+        # El CLI abre su propia sesion; se le presta la de la prueba.
+        import app.core.database as database
+        monkeypatch.setattr(database, "SessionLocal", lambda: db)
+        monkeypatch.setattr(db, "close", lambda: None)
+        imp.main()
+        out = capsys.readouterr().out
+        assert "ENSAYO" in out and "productos creados      2" in out
+        assert "EXISTENCIAS MAYORES A 500" in out and "STITCH" in out and "10000" in out

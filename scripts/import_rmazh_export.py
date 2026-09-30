@@ -370,6 +370,20 @@ def import_rmazh_export(
             variante = _existente(codigo, nombre)
 
             if variante is None:
+                if codigo:
+                    otra = (
+                        db.query(ProductVariant)
+                        .filter(
+                            ProductVariant.organization_id == org_id,
+                            ProductVariant.deleted_at.is_(None),
+                            ProductVariant.barcode == codigo,
+                        )
+                        .first()
+                    )
+                    if otra is not None:
+                        resumen["incidencias"].append(
+                            f"{etiqueta}: el codigo de barras {codigo} ya lo usa otra variante ({otra.sku}) — al escanearlo el POS sera ambiguo"
+                        )
                 sku = sku_archivo or codigo or _sku_desde_nombre(nombre)
                 generado = not sku_archivo
                 if sku in usados:
@@ -543,6 +557,9 @@ def _existencias(db, org_id, branch_id, variante, f, nfila, etiqueta, admin, top
         )
         db.add(existencias)
         db.flush()
+    else:
+        # La fila de existencias siempre queda activa.
+        existencias.is_active = True
 
     if stock <= 0:
         return
@@ -576,11 +593,70 @@ def _existencias(db, org_id, branch_id, variante, f, nfila, etiqueta, admin, top
             organization_id=org_id,
         )
     )
+    # Sin autoflush, el renglon repetido del mismo archivo no veria este movimiento.
+    db.flush()
     resumen["movimientos"] += 1
 
 
 def main() -> None:
-    """Tarea 5."""
+    p = argparse.ArgumentParser(description="Carga de catalogo desde la exportacion de rmazh")
+    p.add_argument("xlsx")
+    p.add_argument("--org", type=int, required=True)
+    p.add_argument("--branch", type=int, required=True)
+    p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--tope", type=Decimal, default=None, help="recorta las existencias a este maximo")
+    p.add_argument("--conservar-departamentos", action="store_true")
+    p.add_argument("--conservar-marcas", action="store_true")
+    args = p.parse_args()
+
+    from app.core.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        try:
+            org, sucursal = validar_destino(db, args.org, args.branch)
+        except ValueError as e:
+            print(f"ABORTADO: {e}", file=sys.stderr)
+            raise SystemExit(2)
+        print("=" * 60)
+        print("ENSAYO (nada se guarda)" if args.dry_run else "CARGA REAL")
+        print(f"  organizacion  {org.name} (id={org.id})")
+        print(f"  sucursal      {sucursal.name} (id={sucursal.id})")
+        print(f"  archivo       {args.xlsx}")
+        if args.tope is not None:
+            print(f"  tope          {args.tope}")
+        print("=" * 60)
+
+        r = import_rmazh_export(
+            db, args.xlsx, args.org, args.branch,
+            dry_run=args.dry_run, tope=args.tope,
+            conservar_departamentos=args.conservar_departamentos,
+            conservar_marcas=args.conservar_marcas,
+        )
+    finally:
+        db.close()
+
+    print("=" * 60)
+    print("ENSAYO — nada se guardo" if args.dry_run else "CARGA APLICADA")
+    print(f"  organizacion           {r['organizacion']}")
+    print(f"  sucursal               {r['sucursal']}")
+    print(f"  productos creados      {r['creados']}")
+    print(f"  productos actualizados {r['actualizados']}")
+    print(f"  renglones omitidos     {r['omitidos']}")
+    print(f"  escalones de precio    {r['escalones']}")
+    print(f"  movimientos de stock   {r['movimientos']}")
+    print(f"  departamentos creados  {r['departamentos_creados']}")
+    print(f"  marcas creadas         {r['marcas_creadas']}")
+    print(f"  codigos generados      {r['codigos_generados']}")
+    print(f"  incidencias            {len(r['incidencias'])}")
+    for inc in r["incidencias"]:
+        print("   ·", inc)
+    if r["existencias_altas"]:
+        print("-" * 60)
+        print(f"EXISTENCIAS MAYORES A {UMBRAL_EXISTENCIAS_ALTAS} ({len(r['existencias_altas'])} renglones) — para revisar con la duena:")
+        for sku, nombre, qty in sorted(r["existencias_altas"], key=lambda t: -t[2]):
+            print(f"   {qty:>10}  {sku:<16} {nombre}")
+    print("=" * 60)
 
 
 if __name__ == "__main__":
