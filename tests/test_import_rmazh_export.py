@@ -204,3 +204,79 @@ class TestCatalogo:
             z.writestr("xl/worksheets/sheet1.xml", f'<worksheet {ns}><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c></row></sheetData></worksheet>')
         with pytest.raises(ValueError, match="cabeceras"):
             imp.import_rmazh_export(db, str(ruta), org.id, branch_a.id)
+
+
+class TestEscalones:
+    def test_un_escalon_con_su_nombre_y_minimo(self, db, cargar):
+        r = cargar([CASCANUECES])
+        assert r["escalones"] == 1
+        e = db.query(ProductPrice).one()
+        assert e.price_name == "Mayoreo"
+        assert Decimal(str(e.min_quantity)) == 3 and Decimal(str(e.unit_price)) == 210
+
+    def test_dos_escalones_conservan_caja(self, db, cargar):
+        r = cargar([STITCH])
+        assert r["escalones"] == 2
+        nombres = {e.price_name: (Decimal(str(e.min_quantity)), Decimal(str(e.unit_price))) for e in db.query(ProductPrice)}
+        assert nombres == {"Mayoreo": (Decimal("3"), Decimal("120")), "Caja": (Decimal("12"), Decimal("100"))}
+
+    def test_nombres_numerados_de_rmazh_se_respetan(self, db, cargar):
+        cargar([dict(CASCANUECES, **{"P1 Nombre": "Precio 1", "P2 Nombre": "Precio 2", "P2 Min": 6, "P2 Precio": 200})])
+        assert {e.price_name for e in db.query(ProductPrice)} == {"Precio 1", "Precio 2"}
+
+    def test_min_vacio_es_uno(self, db, cargar):
+        cargar([dict(CASCANUECES, **{"P1 Min": ""})])
+        assert Decimal(str(db.query(ProductPrice).one().min_quantity)) == 1
+
+    def test_escalon_sin_precio_no_se_crea_y_avisa(self, db, cargar):
+        r = cargar([dict(CASCANUECES, **{"P1 Precio": ""})])
+        assert db.query(ProductPrice).count() == 0
+        assert any("Mayoreo" in i and "sin precio" in i for i in r["incidencias"])
+
+    def test_escalon_mas_caro_que_el_base_se_carga_y_avisa(self, db, cargar):
+        """Review Focus #1: no se corrige en silencio."""
+        r = cargar([dict(CASCANUECES, **{"P1 Precio": 300})])
+        assert Decimal(str(db.query(ProductPrice).one().unit_price)) == 300
+        assert any("mayor que el Precio Base" in i for i in r["incidencias"])
+
+    def test_recorrer_refresca_el_escalon_sin_duplicarlo(self, db, cargar):
+        cargar([CASCANUECES])
+        cargar([dict(CASCANUECES, **{"P1 Precio": 205})])
+        e = db.query(ProductPrice).one()
+        assert Decimal(str(e.unit_price)) == 205
+
+
+class TestExistencias:
+    def test_stock_entra_como_movimiento_con_referencia(self, db, org, branch_a, admin_user, cargar):
+        r = cargar([CASCANUECES])
+        assert r["movimientos"] == 1
+        s = db.query(StockOnHand).filter_by(branch_id=branch_a.id).one()
+        assert Decimal(str(s.qty_on_hand)) == 2556 and s.is_active is True
+        m = db.query(InventoryMovement).one()
+        assert m.movement_type == MovementType.ADJUSTMENT_IN
+        assert m.reference == imp.REFERENCIA_CARGA
+        assert Decimal(str(m.qty_change)) == 2556 and Decimal(str(m.qty_before)) == 0 and Decimal(str(m.qty_after)) == 2556
+        assert m.user_id == admin_user.id
+        assert m.organization_id == org.id
+
+    def test_stock_cero_crea_fila_sin_movimiento(self, db, branch_a, cargar):
+        r = cargar([dict(CASCANUECES, Stock=0)])
+        assert r["movimientos"] == 0
+        assert db.query(StockOnHand).filter_by(branch_id=branch_a.id).count() == 1
+        assert db.query(InventoryMovement).count() == 0
+
+    def test_mayores_a_500_se_listan_y_entran_tal_cual(self, db, cargar):
+        r = cargar([CASCANUECES, STITCH])
+        assert sorted(r["existencias_altas"]) == [
+            ("8888172121301", "CASCANUECES", Decimal("2556")),
+            ("STITCH", "STITCH", Decimal("10000")),
+        ]
+        qty = {v.sku: Decimal(str(s.qty_on_hand)) for s, v in db.query(StockOnHand, ProductVariant).join(ProductVariant, ProductVariant.id == StockOnHand.variant_id)}
+        assert qty == {"8888172121301": Decimal("2556"), "STITCH": Decimal("10000")}
+
+    def test_tope_recorta_y_avisa(self, db, cargar):
+        r = cargar([STITCH, dict(CASCANUECES, Stock=40)], tope=Decimal("50"))
+        qty = {v.sku: Decimal(str(s.qty_on_hand)) for s, v in db.query(StockOnHand, ProductVariant).join(ProductVariant, ProductVariant.id == StockOnHand.variant_id)}
+        assert qty == {"STITCH": Decimal("50"), "8888172121301": Decimal("40")}
+        assert any("STITCH" in i and "tope" in i for i in r["incidencias"])
+        assert Decimal(str(db.query(InventoryMovement).filter_by(variant_id=db.query(ProductVariant).filter_by(sku="STITCH").one().id).one().qty_change)) == 50

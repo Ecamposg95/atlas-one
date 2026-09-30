@@ -442,7 +442,52 @@ def import_rmazh_export(
 
 
 def _cargar_escalones(db, org_id, variante, f, nfila, etiqueta, resumen) -> None:
-    """Tarea 4."""
+    """Un ProductPrice por cada Pn con nombre, CON SU NOMBRE ORIGINAL.
+
+    En este repo "Caja" no es una etiqueta sino un comportamiento (el carrito
+    arma renglones de caja con el escalon cuyo nombre contiene "caja" y trata
+    `min_quantity` como piezas por caja). rmazh comparte ese flujo, asi que
+    respetar el nombre es respetar la intencion de la tienda.
+    """
+    actuales = {
+        p.price_name: p
+        for p in db.query(ProductPrice).filter(
+            ProductPrice.organization_id == org_id,
+            ProductPrice.variant_id == variante.id,
+        )
+    }
+    precio_base = Decimal(str(variante.price or 0))
+    for n in range(1, 6):
+        nombre = (f.get(f"p{n}_nombre") or "").strip()
+        if not nombre:
+            continue
+        precio = _positivo(_num(f.get(f"p{n}_precio"), f"P{n} Precio", nfila))
+        if precio is None:
+            resumen["incidencias"].append(
+                f"{etiqueta}: escalon {nombre} sin precio valido — no se creo"
+            )
+            continue
+        if precio_base and precio > precio_base:
+            resumen["incidencias"].append(
+                f"{etiqueta}: escalon {nombre} (${precio}) mayor que el Precio Base (${precio_base}) — se carga igual, revisalo"
+            )
+        minimo = _num(f.get(f"p{n}_min"), f"P{n} Min", nfila) or Decimal("1")
+
+        escalon = actuales.get(nombre)
+        if escalon is None:
+            db.add(
+                ProductPrice(
+                    variant_id=variante.id,
+                    price_name=nombre,
+                    min_quantity=minimo,
+                    unit_price=precio,
+                    organization_id=org_id,
+                )
+            )
+        else:
+            escalon.min_quantity = minimo
+            escalon.unit_price = precio
+        resumen["escalones"] += 1
 
 
 def _estado_en_sucursal(db, org_id, branch_id, variante) -> None:
@@ -469,7 +514,69 @@ def _estado_en_sucursal(db, org_id, branch_id, variante) -> None:
 
 
 def _existencias(db, org_id, branch_id, variante, f, nfila, etiqueta, admin, tope, resumen) -> None:
-    """Tarea 4."""
+    """Carga el stock inicial como movimiento de inventario, una sola vez."""
+    stock = _num(f.get("stock"), "Stock", nfila) or Decimal("0")
+    if tope is not None and stock > tope:
+        resumen["incidencias"].append(
+            f"{etiqueta}: existencias {stock} recortadas al tope {tope}"
+        )
+        stock = tope
+    if stock > UMBRAL_EXISTENCIAS_ALTAS:
+        resumen["existencias_altas"].append((variante.sku, variante.product.name, stock))
+
+    existencias = (
+        db.query(StockOnHand)
+        .filter(
+            StockOnHand.organization_id == org_id,
+            StockOnHand.variant_id == variante.id,
+            StockOnHand.branch_id == branch_id,
+        )
+        .first()
+    )
+    if existencias is None:
+        existencias = StockOnHand(
+            variant_id=variante.id,
+            branch_id=branch_id,
+            organization_id=org_id,
+            qty_on_hand=Decimal("0"),
+            is_active=True,
+        )
+        db.add(existencias)
+        db.flush()
+
+    if stock <= 0:
+        return
+
+    ya_cargado = (
+        db.query(InventoryMovement)
+        .filter(
+            InventoryMovement.organization_id == org_id,
+            InventoryMovement.branch_id == branch_id,
+            InventoryMovement.variant_id == variante.id,
+            InventoryMovement.reference == REFERENCIA_CARGA,
+        )
+        .first()
+    )
+    if ya_cargado is not None:
+        return
+
+    antes = Decimal(str(existencias.qty_on_hand or 0))
+    existencias.qty_on_hand = antes + stock
+    db.add(
+        InventoryMovement(
+            branch_id=branch_id,
+            variant_id=variante.id,
+            user_id=admin.id if admin is not None else None,
+            movement_type=MovementType.ADJUSTMENT_IN,
+            qty_change=stock,
+            qty_before=antes,
+            qty_after=existencias.qty_on_hand,
+            reference=REFERENCIA_CARGA,
+            notes=f"Fila {nfila} de la exportacion de rmazh",
+            organization_id=org_id,
+        )
+    )
+    resumen["movimientos"] += 1
 
 
 def main() -> None:
