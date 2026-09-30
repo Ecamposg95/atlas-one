@@ -83,6 +83,8 @@ COLUMN_MIGRATIONS = [
     ("branches", "closing_time",     "ALTER TABLE branches ADD COLUMN closing_time TIME;"),
     # Branch logo (E#2) — per-branch ticket logo override
     ("branches", "logo_url",         "ALTER TABLE branches ADD COLUMN logo_url VARCHAR;"),
+    # Folio inicial por sucursal (2026-09-30, mudanza de Coqueta desde rmazh).
+    ("branches", "folio_inicial",    "ALTER TABLE branches ADD COLUMN folio_inicial INTEGER;"),
     ("cash_sessions", "total_change_given", "ALTER TABLE cash_sessions ADD COLUMN total_change_given NUMERIC(10,2) DEFAULT 0.00;"),
     ("sales_lines", "discount_percent", "ALTER TABLE sales_lines ADD COLUMN discount_percent NUMERIC(5,2) DEFAULT 0.00;"),
     # Sprint 2 — multi-tenancy completa (S2.2)

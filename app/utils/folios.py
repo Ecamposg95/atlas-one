@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 from app.models import SalesDocument
+from app.models.organization import Branch
 
 
 def get_next_folio(db: Session, branch_id: int, series: str = "A") -> int:
@@ -30,5 +31,12 @@ def get_next_folio(db: Session, branch_id: int, series: str = "A") -> int:
         SalesDocument.branch_id == branch_id,
         SalesDocument.series == series,
     ).scalar()
+    siguiente = 1 if max_folio is None else max_folio + 1
 
-    return 1 if max_folio is None else max_folio + 1
+    # Una sucursal que llega de otro sistema puede pedir que su numeracion
+    # arranque donde la dejo (Branch.folio_inicial). Solo empuja hacia arriba:
+    # si ya hay ventas por encima, manda el maximo, nunca se repite un folio.
+    folio_inicial = db.query(Branch.folio_inicial).filter(Branch.id == branch_id).scalar()
+    if folio_inicial is not None and folio_inicial > siguiente:
+        return folio_inicial
+    return siguiente
