@@ -9,6 +9,11 @@ import { Bar, Doughnut } from 'react-chartjs-2'
 import { reportsApi, type CommandCenterStats } from '../../api/reports'
 import { KPICard } from '../../components/reports/KPICard'
 import { Spinner } from '../../components/ui/Spinner'
+import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
+import { ListaTarjetas } from '../../components/ui/ListaTarjetas'
+import { TarjetaFila } from '../../components/ui/TarjetaFila'
+import { ParFechas } from '../../components/ui/BarraFiltros'
+import { useEsTelefono } from '../../hooks/useIsMobile'
 import { formatCurrency } from '../../utils/currency'
 import { todayStr, daysAgoStr, formatDate } from '../../utils/dates'
 import useKeyboardShortcuts from '../../hooks/useKeyboardShortcuts'
@@ -16,6 +21,19 @@ import { toast } from '../../store/toastStore'
 import { errorDetailText } from '../../utils/errorDetail'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Legend)
+
+/** "% del total" de Lo más vendido: el número y su barra. Lo usan la fila de
+ *  la tabla (escritorio) y la tarjeta (teléfono), así no se copia el formato. */
+function PorcentajeBarra({ pct }: { pct: number }) {
+  return (
+    <>
+      <span className="text-[10px] font-mono text-slate-400 tabular-nums">{pct.toFixed(0)}%</span>
+      <div className="w-16 h-1 bg-slate-700 rounded-full overflow-hidden">
+        <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${Math.round(pct)}%` }} />
+      </div>
+    </>
+  )
+}
 
 type Period = 'today' | 'yesterday' | '7d' | 'week' | 'month' | 'custom'
 type BranchSort = 'sales' | 'name' | 'alerts'
@@ -98,6 +116,7 @@ function saveReadAlerts(set: Set<string>): void {
 }
 
 export function HQOperations() {
+  const esTelefono = useEsTelefono()
   const [period, setPeriod] = useState<Period>('today')
   const [customStart, setCustomStart] = useState(todayStr())
   const [customEnd, setCustomEnd] = useState(todayStr())
@@ -292,10 +311,14 @@ export function HQOperations() {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      {/* Header. `CabeceraPagina` reproduce desde md la fila de siempre
+          (título a la izquierda, cuenta regresiva a la derecha); en teléfono
+          se apila. Los periodos, CSV y actualizar siguen en su propia barra
+          de abajo: meterlos aquí juntaría dos filas en escritorio. */}
+      <CabeceraPagina
+        titulo={
         <div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-xl font-black text-white tracking-widest uppercase" style={{ textShadow: '0 0 24px rgba(16,185,129,0.45)' }}>
               Inicio
             </h1>
@@ -308,7 +331,7 @@ export function HQOperations() {
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2 mt-0.5">
+          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
@@ -320,10 +343,14 @@ export function HQOperations() {
             </span>
           </div>
         </div>
-        <div className="text-[10px] text-slate-500 font-mono">
-          Próxima actualización en <span className="text-emerald-400 font-bold ml-1">{countdown}s</span>
-        </div>
-      </div>
+        }
+        acciones={
+          // Texto, no botón: sin piso de 44 px en teléfono.
+          <div className="text-[10px] text-slate-500 font-mono max-md:!min-h-0">
+            Próxima actualización en <span className="text-emerald-400 font-bold ml-1">{countdown}s</span>
+          </div>
+        }
+      />
 
       {/* Filters bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/5 pb-4">
@@ -337,7 +364,7 @@ export function HQOperations() {
               : 'fa-calendar-alt'
             return (
               <button key={p} onClick={() => setPeriod(p)}
-                className={`px-3 py-2 text-xs font-bold uppercase tracking-wider rounded-lg border transition ${
+                className={`px-3 py-2 max-md:min-h-[44px] text-xs font-bold uppercase tracking-wider rounded-lg border transition ${
                   active
                     ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
                     : 'bg-transparent text-slate-500 hover:text-slate-300 border-transparent hover:bg-slate-800/50'
@@ -347,7 +374,7 @@ export function HQOperations() {
             )
           })}
           <button onClick={() => setPeriod('custom')}
-            className={`px-3 py-2 text-xs font-bold uppercase tracking-wider rounded-lg border transition ${
+            className={`px-3 py-2 max-md:min-h-[44px] text-xs font-bold uppercase tracking-wider rounded-lg border transition ${
               period === 'custom'
                 ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
                 : 'bg-transparent text-slate-500 hover:text-slate-300 border-transparent hover:bg-slate-800/50'
@@ -355,23 +382,29 @@ export function HQOperations() {
             <i className="fas fa-sliders mr-1.5" /> Rango
           </button>
           {period === 'custom' && (
-            <div className="flex items-center gap-2 ml-2">
-              <input type="date" value={customStart} max={customEnd}
-                onChange={(e) => setCustomStart(e.target.value)}
-                className="bg-slate-800/80 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300" />
-              <span className="text-slate-600 text-xs">→</span>
-              <input type="date" value={customEnd} min={customStart} max={todayStr()}
-                onChange={(e) => setCustomEnd(e.target.value)}
-                className="bg-slate-800/80 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300" />
+            // Bajo sm el rango ocupa su propia línea y las fechas van en 2
+            // columnas (`ParFechas`); desde sm `sm:contents` deja la fila de hoy.
+            <div className="flex items-center gap-2 ml-2 max-sm:ml-0 max-sm:w-full">
+              <ParFechas className="max-sm:w-full">
+                <input type="date" value={customStart} max={customEnd}
+                  onChange={(e) => setCustomStart(e.target.value)}
+                  aria-label="Desde"
+                  className="bg-slate-800/80 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 max-sm:w-full max-sm:min-w-0 max-md:min-h-[44px]" />
+                <span className="text-slate-600 text-xs max-sm:hidden">→</span>
+                <input type="date" value={customEnd} min={customStart} max={todayStr()}
+                  onChange={(e) => setCustomEnd(e.target.value)}
+                  aria-label="Hasta"
+                  className="bg-slate-800/80 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 max-sm:w-full max-sm:min-w-0 max-md:min-h-[44px]" />
+              </ParFechas>
             </div>
           )}
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={exportCsv} title="Exportar CSV"
-            className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg bg-slate-800/80 border border-slate-700 hover:border-emerald-500/50 hover:text-emerald-400 text-slate-400 transition">
+          <button onClick={exportCsv} title="Exportar CSV" aria-label="Exportar CSV"
+            className="px-3 py-1.5 max-md:min-h-[44px] max-md:min-w-[44px] text-[10px] font-bold uppercase tracking-wider rounded-lg bg-slate-800/80 border border-slate-700 hover:border-emerald-500/50 hover:text-emerald-400 text-slate-400 transition">
             <i className="fas fa-download mr-1" /> CSV
           </button>
-          <button onClick={load} title="Actualizar ahora (R)"
+          <button onClick={load} title="Actualizar ahora (R)" aria-label="Actualizar ahora"
             className="dax-btn-icon w-9 h-9 flex items-center justify-center rounded-full bg-slate-800/80 border border-slate-700 hover:bg-emerald-500/20 hover:border-emerald-500/50 hover:text-emerald-400 transition text-slate-400">
             <i className={`fas fa-sync-alt text-xs ${loading ? 'fa-spin' : ''}`} />
           </button>
@@ -427,7 +460,7 @@ export function HQOperations() {
                   {(k?.items_per_ticket || 0).toFixed(1)} piezas/ticket
                 </span>
               </div>
-              <h2 className="text-3xl font-bold text-white tabular-nums">{k?.total_tickets ?? 0}</h2>
+              <h2 className="text-2xl md:text-3xl font-bold text-white tabular-nums">{k?.total_tickets ?? 0}</h2>
               <div className="mt-1 flex justify-between items-center text-xs font-mono">
                 <span className="text-slate-400">Promedio: <span className="text-white font-bold tabular-nums">{formatCurrency(k?.ticket_average || 0)}</span></span>
                 {(k?.returns_total ?? 0) > 0 && (
@@ -491,7 +524,7 @@ export function HQOperations() {
               <div className="h-10 w-10 rounded-full bg-rose-500/10 flex items-center justify-center text-rose-500 mb-2 ring-1 ring-rose-500/30 animate-pulse">
                 <i className="fas fa-triangle-exclamation text-lg" />
               </div>
-              <h2 className="text-3xl font-bold text-white tabular-nums" style={{ textShadow: '0 0 12px rgba(244,63,94,0.5)' }}>
+              <h2 className="text-2xl md:text-3xl font-bold text-white tabular-nums" style={{ textShadow: '0 0 12px rgba(244,63,94,0.5)' }}>
                 {alerts.length}
               </h2>
               <p className="text-[10px] font-black uppercase text-rose-400 tracking-widest">Alertas Críticas</p>
@@ -538,12 +571,15 @@ export function HQOperations() {
 
             <div className="dax-card rounded-2xl p-0 border border-white/5 flex flex-col overflow-hidden">
               <div className="p-4 border-b border-white/5 bg-slate-900/40 space-y-2">
-                <div className="flex items-center justify-between gap-2">
+                {/* Solo bajo md: en la columna angosta de escritorio (lg, 1/3) el
+                    título ya se parte en dos líneas y `flex-wrap` bajaría el select. */}
+                <div className="flex items-center justify-between gap-2 max-md:flex-wrap">
                   <h3 className="text-xs font-black uppercase text-white tracking-widest flex items-center gap-2">
                     <i className="fas fa-network-wired text-sky-500" /> Estado de la tienda
                   </h3>
                   <select value={branchSort} onChange={(e) => setBranchSort(e.target.value as BranchSort)}
-                    className="text-[10px] bg-slate-800/80 border border-slate-700 rounded px-1.5 py-0.5 text-slate-300">
+                    aria-label="Ordenar sucursales"
+                    className="text-[10px] bg-slate-800/80 border border-slate-700 rounded px-1.5 py-0.5 text-slate-300 max-md:min-h-[44px]">
                     <option value="sales">Ventas</option>
                     <option value="name">Nombre</option>
                     <option value="alerts">Alertas</option>
@@ -551,7 +587,7 @@ export function HQOperations() {
                 </div>
                 <input type="search" value={branchSearch} onChange={(e) => setBranchSearch(e.target.value)}
                   placeholder="Buscar sucursal..."
-                  className="w-full bg-slate-800/80 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 placeholder-slate-600" />
+                  className="w-full bg-slate-800/80 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 placeholder-slate-600 max-md:min-h-[44px]" />
               </div>
               {/* En teléfono la lista fluye y el scroll lo hace la página:
               dos cajas de scroll interno dentro del scroll de la página
@@ -612,6 +648,25 @@ export function HQOperations() {
               <h3 className="text-xs font-black uppercase text-white tracking-widest mb-4 flex items-center gap-2">
                 <i className="fas fa-rocket text-amber-500" /> Lo más vendido
               </h3>
+              {esTelefono ? (
+                // Teléfono: una tarjeta por producto, mismo formato que la fila.
+                <ListaTarjetas vacio={topProducts.length === 0} textoVacio="Sin datos">
+                  {topProducts.map((p, i) => {
+                    const pct = (p.value / topProductsRevenue) * 100
+                    return (
+                      <TarjetaFila
+                        key={i}
+                        titulo={p.name}
+                        importe={formatCurrency(p.value)}
+                        datos={[{
+                          etiqueta: '% del total',
+                          valor: <span className="flex items-center gap-2"><PorcentajeBarra pct={pct} /></span>,
+                        }]}
+                      />
+                    )
+                  })}
+                </ListaTarjetas>
+              ) : (
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-slate-800">
                   <thead className="bg-slate-900/80">
@@ -633,10 +688,7 @@ export function HQOperations() {
                             <td className="px-3 py-3 text-right font-mono text-emerald-400 font-bold text-xs">{formatCurrency(p.value)}</td>
                             <td className="px-3 py-3 text-right">
                               <div className="flex items-center justify-end gap-2">
-                                <span className="text-[10px] font-mono text-slate-400 tabular-nums">{pct.toFixed(0)}%</span>
-                                <div className="w-16 h-1 bg-slate-700 rounded-full overflow-hidden">
-                                  <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${Math.round(pct)}%` }} />
-                                </div>
+                                <PorcentajeBarra pct={pct} />
                               </div>
                             </td>
                           </tr>
@@ -646,6 +698,7 @@ export function HQOperations() {
                   </tbody>
                 </table>
               </div>
+              )}
             </div>
 
             <div className="dax-card rounded-2xl p-5 border border-white/5">
