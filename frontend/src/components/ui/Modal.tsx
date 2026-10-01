@@ -97,7 +97,10 @@ export function Modal({ open, onClose, title, children, footer, size = 'md', clo
       <div
         ref={panelRef}
         tabIndex={-1}
-        className={`w-full ${SIZES[size]} rounded-xl flex flex-col max-h-[90vh] outline-none`}
+        // `.dax-modal` da el tope de alto (90dvh) y, bajo `sm`, la hoja
+        // inferior a todo lo ancho (ver `index.css §2`). Es CSS puro: cruzar
+        // el corte no remonta el contenido ni pierde lo capturado.
+        className={`dax-modal w-full ${SIZES[size]} rounded-xl flex flex-col outline-none`}
         style={{
           background: 'var(--dax-card-solid)',
           border: '1px solid var(--dax-border)',
@@ -121,7 +124,14 @@ export function Modal({ open, onClose, title, children, footer, size = 'md', clo
         <div className="px-5 py-4 overflow-y-auto">{children}</div>
 
         {footer && (
-          <div className="flex items-center justify-end gap-2 px-5 py-4" style={{ borderTop: '1px solid var(--dax-border-dim)' }}>
+          // `.dax-modal-footer`: pie pegado abajo, visible con el teclado
+          // abierto. Su `padding-top` (0.75rem) vive fuera de @layer y le
+          // ganaría a `py-4`; el inline lo devuelve a 1rem para que
+          // escritorio quede igual que antes.
+          <div
+            className="dax-modal-footer flex items-center justify-end gap-2 px-5 py-4"
+            style={{ borderTop: '1px solid var(--dax-border-dim)', paddingTop: '1rem' }}
+          >
             {footer}
           </div>
         )}

@@ -744,3 +744,18 @@
   background: var(--dax-card-solid);
   padding-top: 0.75rem;
 }
+
+/* ─── 3. Barra de filtros: en teléfono cada control ocupa el ancho ────
+   `BarraFiltros` (components/ui) pinta `.dax-filtros`; en escritorio es
+   la fila `flex flex-wrap` de siempre y cada hijo conserva su `w-36`.
+   Bajo `sm` cada hijo directo va a todo lo ancho (esta regla, fuera de
+   @layer, gana a la utilidad `w-36`). `ParFechas` es el hijo `.grid`:
+   conserva sus 2 columnas y sus dos campos llenan cada una. La acción
+   (aplicar/exportar) queda a todo lo ancho y con 44 px de alto. */
+@media (max-width: 639px) {
+  .dax-filtros > * { width: 100%; max-width: none; }
+  .dax-filtros > .grid { display: grid; }          /* ParFechas conserva sus 2 columnas */
+  .dax-filtros > .grid > * { width: 100%; max-width: none; min-width: 0; }
+  .dax-filtros .dax-input { width: 100%; }
+  .dax-filtros-accion > * { width: 100%; min-height: 44px; }
+}
