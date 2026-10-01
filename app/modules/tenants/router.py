@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Body
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from pathlib import Path
+import logging
 import shutil
 import time
 
@@ -25,6 +26,8 @@ from app.core.security.guards import require_admin_or_owner
 from app.models.users import Role
 
 from app.core.tenant_context import get_current_active_organization
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -75,6 +78,20 @@ def update_organization(
     # `exclude_unset` una sola vez: el bloque de permisos y el de escritura
     # tienen que mirar exactamente el mismo diccionario.
     data_to_update = org_in.dict(exclude_unset=True)
+
+    # Plan, estado y activacion son campos de PLATAFORMA: solo se cambian por
+    # `/api/platform/organizations/{id}`. Un admin de tienda no puede subirse
+    # de plan ni reactivarse por aqui. Se descartan siempre; el panel de
+    # Organizacion manda el objeto completo de vuelta, asi que solo se avisa
+    # cuando el valor de verdad intentaba cambiar.
+    for _campo_plataforma in ("plan", "status", "is_active"):
+        if _campo_plataforma in data_to_update:
+            nuevo = data_to_update.pop(_campo_plataforma)
+            if nuevo != getattr(org, _campo_plataforma):
+                logger.warning(
+                    "PLAN_IGNORED: campo %s ignorado en PUT de tenant org_id=%s actor_id=%s",
+                    _campo_plataforma, org_id, getattr(current_user, "id", None),
+                )
 
     # [HARDENING] Refined Logic: Check what is ACTUALLY changing
     if current_user.role not in ADMIN_ROLES:

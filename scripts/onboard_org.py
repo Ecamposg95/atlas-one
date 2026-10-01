@@ -162,13 +162,15 @@ def onboard(
 
 
 def main() -> None:
+    from app.services.plans import claves_validas
+
     p = argparse.ArgumentParser(description="Alta de una organizacion cliente")
     p.add_argument("--name", required=True)
     p.add_argument("--industry", required=True)
     p.add_argument("--admin", required=True, dest="admin_username")
     p.add_argument("--branch", dest="branch_name", default=None)
     p.add_argument("--password", default=None)
-    p.add_argument("--plan", default="FREE", help="FREE, START, PRO, BUSINESS, SCALE o ULTRA_PLUS")
+    p.add_argument("--plan", default="FREE", choices=claves_validas(), help="FREE, START, PRO, BUSINESS, SCALE o ULTRA_PLUS")
     p.add_argument("--full-name", dest="full_name", default=None)
     p.add_argument("--email", default=None)
     args = p.parse_args()

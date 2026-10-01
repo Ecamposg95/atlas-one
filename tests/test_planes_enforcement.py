@@ -135,6 +135,13 @@ class TestToggleModulo:
         r = client.patch(f"/api/platform/organizations/{org.id}/modules/tables?enable=true", headers=auth_superadmin)
         assert r.status_code == 200, r.text
 
+    def test_encender_modulo_desconocido_es_404(self, client, auth_superadmin, db, org):
+        org.industry_type = IndustryType.ATLAS_POS; org.plan = "ULTRA_PLUS"; db.commit()
+        r = client.patch(f"/api/platform/organizations/{org.id}/modules/no_existe?enable=true", headers=auth_superadmin)
+        assert r.status_code == 404
+        assert r.json()["detail"] == "Módulo desconocido"
+        assert db.query(OrganizationModule).filter_by(organization_id=org.id, module_key="no_existe").first() is None
+
 
 class TestCambioDePlan:
     def test_put_plan_valido_no_toca_modulos(self, client, auth_superadmin, db, org):
@@ -161,12 +168,53 @@ class TestCambioDePlan:
 
 
 class TestHerencia:
-    def test_modulo_fuera_de_plan_encendido_sigue_pasando_require_module(self, client, auth_admin, db, org, admin_user, hq_branch):
+    # `require_module` deja pasar siempre a ADMINISTRADOR/DUEÑO, asi que la
+    # herencia se prueba con una cajera: para ella el candado SI es el
+    # OrganizationModule.
+    def test_modulo_fuera_de_plan_encendido_sigue_pasando_require_module(self, client, auth_cajero_a, db, org, cajero_a):
         """Review Focus #4: nada se apaga."""
         org.industry_type = IndustryType.ATLAS_POS; org.plan = "FREE"
         db.add(OrganizationModule(organization_id=org.id, module_key="quotes", is_enabled=True)); db.commit()
-        r = client.get("/api/quotes/", headers=auth_admin)
+        r = client.get("/api/quotes/", headers=auth_cajero_a)
         assert r.status_code != 403, r.text
+
+    def test_control_sin_modulo_la_misma_cajera_recibe_403(self, client, auth_cajero_a, db, org, cajero_a):
+        """Control negativo: sin `quotes` encendido el mismo GET es 403, asi que
+        el OrganizationModule del test de arriba es lo que abre la puerta."""
+        org.industry_type = IndustryType.ATLAS_POS; org.plan = "FREE"
+        db.query(OrganizationModule).filter(
+            OrganizationModule.organization_id == org.id,
+            OrganizationModule.module_key == "quotes",
+        ).delete(); db.commit()
+        r = client.get("/api/quotes/", headers=auth_cajero_a)
+        assert r.status_code == 403, r.text
+        assert "quotes" in r.json()["detail"]
+
+
+class TestTenantNoCambiaPlan:
+    def test_admin_no_puede_cambiar_su_plan_ni_su_estado(self, client, auth_admin, db, org, admin_user):
+        org.plan = "FREE"; org.status = "ACTIVE"; db.commit()
+        r = client.put(
+            "/api/organization/",
+            json={"name": "Mi tienda", "plan": "ULTRA_PLUS", "status": "SUSPENDED"},
+            headers={**auth_admin, "X-Organization-ID": str(org.id)},
+        )
+        assert r.status_code == 200, r.text
+        db.refresh(org)
+        assert org.plan == "FREE"
+        assert org.status == "ACTIVE"
+        assert org.name == "Mi tienda"
+
+    def test_admin_no_puede_reactivar_ni_desactivar_la_org(self, client, auth_admin, db, org, admin_user):
+        org.plan = "FREE"; db.commit()
+        r = client.put(
+            "/api/organization/",
+            json={"is_active": False},
+            headers={**auth_admin, "X-Organization-ID": str(org.id)},
+        )
+        assert r.status_code == 200, r.text
+        db.refresh(org)
+        assert org.is_active is True
 
 
 class TestOnboard:

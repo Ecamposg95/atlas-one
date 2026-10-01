@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.models.modules import IndustryPreset, Module, OrganizationModule
 from app.models.organization import Branch, Organization
-from app.modules.users.models import PlatformRole, User, UserOrganization
+from app.modules.users.models import PlatformRole, Role, User, UserOrganization
 from app.services.capabilities_service import INDUSTRY_PRESETS
 
 # Modulos que toda organizacion puede tener, en cualquier plan: son el POS
@@ -157,7 +157,10 @@ class Uso:
 
 def uso(db: Session, org_id: int) -> Uso:
     """Usuarios activos enlazados a la org (sin personal de plataforma) y sucursales
-    activas que venden."""
+    activas que venden.
+
+    Los clientes del portal (CLIENTE) no son personal y no consumen asiento.
+    """
     usuarios = (
         db.query(UserOrganization)
         .join(User, User.id == UserOrganization.user_id)
@@ -166,6 +169,7 @@ def uso(db: Session, org_id: int) -> Uso:
             UserOrganization.is_active.is_(True),
             User.is_active.is_(True),
             User.platform_role == PlatformRole.NONE,
+            User.role != Role.CLIENTE,
         )
         .count()
     )

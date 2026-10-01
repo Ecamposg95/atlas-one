@@ -744,8 +744,12 @@ def toggle_org_module(
     if enable:
         from app.models.modules import Module
         mod = db.query(Module).filter(Module.key == module_key).first()
+        # Una clave que no esta en el catalogo no se puede encender: sin esto
+        # quedaria un OrganizationModule huerfano que ningun gate reconoce.
+        if mod is None:
+            raise HTTPException(status_code=404, detail="Módulo desconocido")
         try:
-            plans.verificar_activar_modulo(db, org, module_key, mod.name if mod else None)
+            plans.verificar_activar_modulo(db, org, module_key, mod.name)
         except plans.ModuloFueraDePlan as e:
             raise HTTPException(status_code=403, detail=str(e))
 

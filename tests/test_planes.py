@@ -8,8 +8,8 @@ from app.modules.users.models import PlatformRole, Role, User, UserOrganization
 from app.services import plans
 
 
-def _usuario(db, org, username, activo=True, platform_role=PlatformRole.NONE, enlace_activo=True):
-    u = User(username=username, password_hash="x", role=Role.CAJERO, is_active=activo, platform_role=platform_role)
+def _usuario(db, org, username, activo=True, platform_role=PlatformRole.NONE, enlace_activo=True, role=Role.CAJERO):
+    u = User(username=username, password_hash="x", role=role, is_active=activo, platform_role=platform_role)
     db.add(u); db.flush()
     db.add(UserOrganization(user_id=u.id, organization_id=org.id, org_role="MEMBER", is_active=enlace_activo)); db.flush()
     return u
@@ -136,6 +136,12 @@ class TestUso:
         u = plans.uso(db, org.id)
         assert u.usuarios_activos == 1
         assert u.sucursales_venta == 1
+
+    def test_cliente_del_portal_no_consume_asiento(self, db, org, admin_user):
+        _usuario(db, org, "cliente_portal", role=Role.CLIENTE)
+        assert plans.uso(db, org.id).usuarios_activos == 1
+        _usuario(db, org, "cajera_real")
+        assert plans.uso(db, org.id).usuarios_activos == 2
 
 
 class TestVerificaciones:

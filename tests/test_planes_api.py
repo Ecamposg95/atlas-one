@@ -70,11 +70,18 @@ class TestModulosConPlan:
 
 class TestUpsellConPlan:
     def test_recomendacion_trae_plan_minimo(self, client, auth_superadmin, db, org):
+        # El endpoint solo considera modulos con upsell_metadata, que el
+        # fixture del catalogo no siembra: se pone la real de init_presets_v2.
+        from app.models.modules import Module
+        from scripts.init_presets_v2 import MODULE_UPSELL
+        for mod in db.query(Module).all():
+            mod.upsell_metadata = MODULE_UPSELL.get(mod.key)
         org.industry_type = IndustryType.ATLAS_POS; org.plan = "FREE"; db.commit()
         r = client.get(f"/api/platform/organizations/{org.id}/upsell-recommendations", headers=auth_superadmin)
         assert r.status_code == 200
         recs = {x["module_key"]: x for x in r.json()["recommendations"]}
-        if "purchasing" in recs:
-            assert recs["purchasing"]["plan_minimo"] == "PRO"
+        # ATLAS_POS nunca enciende purchasing: siempre es recomendacion.
+        assert "purchasing" in recs, sorted(recs)
+        assert recs["purchasing"]["plan_minimo"] == "PRO"
         for x in recs.values():
             assert "plan_minimo" in x

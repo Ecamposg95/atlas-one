@@ -7,6 +7,8 @@ import {
   AnnouncementStatus,
   AnnouncementCreatePayload,
   IndustryPreset,
+  NOMBRE_PLAN,
+  nombrePlan,
 } from '../../api/platform'
 import { toast } from '../../store/toastStore'
 import { KPICardV2 } from '../../components/platform/v2/KPICardV2'
@@ -17,8 +19,10 @@ import '../../styles/platform-v2.css'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const PLANS = ['FREE', 'PRO', 'ENTERPRISE'] as const
-type Plan = typeof PLANS[number]
+// Claves del catalogo de planes (fuente unica: NOMBRE_PLAN). Se guarda la
+// clave; en pantalla se muestra el nombre comercial con `nombrePlan`.
+const PLANS: string[] = Object.keys(NOMBRE_PLAN)
+type Plan = string
 
 const SEVERITIES: AnnouncementSeverity[] = ['info', 'warning', 'critical', 'success']
 
@@ -120,7 +124,7 @@ function formFromAnnouncement(a: PlatformAnnouncement): FormState {
     body_md: a.body_md,
     severity: a.severity,
     industries: a.targets?.industries ?? [],
-    plans: (a.targets?.plans ?? []).filter((p): p is Plan => (PLANS as readonly string[]).includes(p)),
+    plans: (a.targets?.plans ?? []).filter((p) => PLANS.includes(p)),
     org_ids_text: ids.join(', '),
     expires_at: isoToLocalInput(a.expires_at),
   }
@@ -887,8 +891,9 @@ function EditorForm({
         <label style={labelStyle}>Targeting · planes</label>
         <ChipMulti<Plan>
           values={form.plans}
-          options={[...PLANS]}
+          options={PLANS}
           onToggle={togglePlan}
+          labelFor={nombrePlan}
         />
       </div>
 

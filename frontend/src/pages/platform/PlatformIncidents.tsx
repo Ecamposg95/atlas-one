@@ -8,6 +8,8 @@ import {
   IncidentCreatePayload,
   IndustryPreset,
   PlatformOrg,
+  NOMBRE_PLAN,
+  nombrePlan,
 } from '../../api/platform'
 import { KPICardV2 } from '../../components/platform/v2/KPICardV2'
 import { SideDrawer } from '../../components/platform/SideDrawer'
@@ -17,8 +19,10 @@ import '../../styles/platform-v2.css'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const PLANS = ['FREE', 'PRO', 'ENTERPRISE'] as const
-type Plan = typeof PLANS[number]
+// Claves del catalogo de planes (fuente unica: NOMBRE_PLAN). Se guarda la
+// clave; en pantalla se muestra el nombre comercial con `nombrePlan`.
+const PLANS: string[] = Object.keys(NOMBRE_PLAN)
+type Plan = string
 
 const STATUS_FILTERS: { key: IncidentStatusFilter; label: string }[] = [
   { key: 'active',   label: 'Activos' },
@@ -726,7 +730,7 @@ function IncidentForm({ form, setForm, industryOptions, previewCount, activeTota
             style={inputStyle}
           >
             {PLANS.map((p) => (
-              <option key={p} value={p}>{p}</option>
+              <option key={p} value={p}>{nombrePlan(p)}</option>
             ))}
           </select>
         </div>
