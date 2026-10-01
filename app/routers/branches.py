@@ -58,9 +58,11 @@ def create_branch(
     else:
         branch.is_headquarters = False
 
-    # Tope del plan: solo las sucursales que venden cuentan.
-    if branch.can_sell:
+    # Tope del plan: solo cuentan las sucursales activas que venden.
+    if branch.can_sell and branch.is_active:
         org = db.query(Organization).filter(Organization.id == org_id).first()
+        if not org:
+            raise HTTPException(status_code=404, detail="Organización no encontrada")
         try:
             plans.verificar_alta_sucursal(db, org)
         except plans.LimitePlanAlcanzado as e:
@@ -183,10 +185,15 @@ def update_branch(
     elif branch.branch_type is not None:
         db_branch.is_headquarters = False
 
-    # Pasar a vender una sucursal que no vendia es un alta para el tope del plan.
+    # Reactivar o pasar a vender cuentan igual: lo que importa es si la sucursal
+    # pasa a estar activa y vendiendo.
     datos = branch.dict(exclude_unset=True)
-    if datos.get("can_sell") is True and not db_branch.can_sell:
+    nuevo_activa = datos.get("is_active", db_branch.is_active)
+    nuevo_vende = datos.get("can_sell", db_branch.can_sell)
+    if (nuevo_activa and nuevo_vende) and not (db_branch.is_active and db_branch.can_sell):
         org = db.query(Organization).filter(Organization.id == org_id).first()
+        if not org:
+            raise HTTPException(status_code=404, detail="Organización no encontrada")
         try:
             plans.verificar_alta_sucursal(db, org)
         except plans.LimitePlanAlcanzado as e:

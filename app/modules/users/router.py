@@ -191,6 +191,8 @@ def create_user(
     # Un alta inactiva no consume tope; se cobra cuando se reactive (update_user).
     if user.is_active:
         org = db.query(Organization).filter(Organization.id == org_id).first()
+        if not org:
+            raise HTTPException(status_code=404, detail="Organización no encontrada")
         try:
             plans.verificar_alta_usuario(db, org)
         except plans.LimitePlanAlcanzado as e:
@@ -281,6 +283,8 @@ def update_user(
     # Reactivar a alguien es un alta para el tope del plan.
     if update_data.get("is_active") is True and not user_db.is_active:
         org = db.query(Organization).filter(Organization.id == org_id).first()
+        if not org:
+            raise HTTPException(status_code=404, detail="Organización no encontrada")
         try:
             plans.verificar_alta_usuario(db, org)
         except plans.LimitePlanAlcanzado as e:

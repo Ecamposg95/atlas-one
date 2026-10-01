@@ -87,6 +87,19 @@ class TestSucursales:
         r = client.post("/api/branches/", json={"name": "Matriz", "branch_type": "HQ", "can_sell": True}, headers=auth_admin_a)
         assert r.status_code == 403, r.text
 
+    def test_reactivar_sucursal_al_tope_rechaza(self, client, auth_admin, db, org, admin_user, branch_a):
+        org.plan = "FREE"; branch_a.is_active = False; db.commit()
+        r = client.post("/api/branches/", json={"name": "Tienda 2", "branch_type": "STORE", "can_sell": True}, headers=auth_admin)
+        assert r.status_code in (200, 201), r.text
+        r = client.put(f"/api/branches/{branch_a.id}", json={"is_active": True}, headers=auth_admin)
+        assert r.status_code == 403
+        assert r.json()["detail"] == "Tu plan ONE FREE permite 1 sucursal que vende. Para abrir otra, sube a ONE PRO."
+
+    def test_crear_sucursal_inactiva_que_vende_no_cuenta(self, client, auth_admin, db, org, admin_user, branch_a):
+        org.plan = "FREE"; db.commit()
+        r = client.post("/api/branches/", json={"name": "Dormida", "branch_type": "STORE", "can_sell": True, "is_active": False}, headers=auth_admin)
+        assert r.status_code in (200, 201), r.text
+
     def test_pro_permite_la_segunda(self, client, auth_admin, db, org, admin_user, branch_a):
         org.plan = "PRO"; db.commit()
         r = client.post("/api/branches/", json={"name": "Tienda 2", "branch_type": "STORE", "can_sell": True}, headers=auth_admin)
