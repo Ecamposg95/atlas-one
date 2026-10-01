@@ -3,7 +3,9 @@ import { GENEROS } from '../products/ProductCommercialSection'
 
 /**
  * Filtros de la pantalla de etiquetas. Los mismos ejes con los que la tienda
- * piensa el piso: búsqueda libre, departamento, marca, género y existencia.
+ * piensa el piso: búsqueda libre, departamento, marca, género, existencia y
+ * fecha de alta (para etiquetar el lote recién capturado sin pescar entre el
+ * catálogo viejo).
  *
  * Se envían tal cual a `GET /api/labels/candidates`, que es quien decide el
  * alcance real (una cajera solo ve lo de su sucursal).
@@ -15,6 +17,8 @@ export interface EstadoFiltros {
   brand_id: string
   gender: string
   only_with_stock: boolean
+  /** `YYYY-MM-DD` local; vacío = sin filtro. */
+  created_after: string
 }
 
 export const FILTROS_VACIOS: EstadoFiltros = {
@@ -23,6 +27,7 @@ export const FILTROS_VACIOS: EstadoFiltros = {
   brand_id: '',
   gender: '',
   only_with_stock: false,
+  created_after: '',
 }
 
 interface Props {
@@ -33,6 +38,13 @@ interface Props {
   /** Se dispara al enviar el formulario (Enter en la búsqueda) o al tocar Buscar. */
   onBuscar: () => void
   cargando: boolean
+}
+
+/** Fecha de hoy en la zona del navegador, en el formato del `<input type="date">`. */
+function hoyLocal(): string {
+  const d = new Date()
+  const dos = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}`
 }
 
 export function FiltrosEtiquetas({ valor, onChange, departamentos, marcas, onBuscar, cargando }: Props) {
@@ -102,15 +114,51 @@ export function FiltrosEtiquetas({ valor, onChange, departamentos, marcas, onBus
         </select>
       </div>
 
-      <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer sm:col-span-2 lg:col-span-5">
-        <input
-          type="checkbox"
-          className="rounded"
-          checked={valor.only_with_stock}
-          onChange={(e) => set('only_with_stock', e.target.checked)}
-        />
-        Solo con existencia
-      </label>
+      <div className="sm:col-span-2 lg:col-span-5 flex flex-wrap items-end gap-x-5 gap-y-3">
+        <div>
+          <label htmlFor="etiquetas-altas-desde"
+                 className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+            Altas desde
+          </label>
+          <div className="flex gap-2">
+            <input
+              id="etiquetas-altas-desde"
+              type="date"
+              className="dax-input text-sm"
+              value={valor.created_after}
+              onChange={(e) => set('created_after', e.target.value)}
+            />
+            <button
+              type="button"
+              className="dax-btn-secondary px-3 text-sm whitespace-nowrap"
+              onClick={() => set('created_after', hoyLocal())}
+              title="Solo lo dado de alta hoy"
+            >
+              Hoy
+            </button>
+            {valor.created_after && (
+              <button
+                type="button"
+                className="dax-btn-secondary px-3 text-sm"
+                onClick={() => set('created_after', '')}
+                aria-label="Quitar el filtro de fecha"
+              >
+                <i className="fa-solid fa-xmark" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer pb-2.5">
+          <input
+            type="checkbox"
+            className="rounded"
+            checked={valor.only_with_stock}
+            onChange={(e) => set('only_with_stock', e.target.checked)}
+          />
+          Solo con existencia
+        </label>
+      </div>
     </form>
   )
 }

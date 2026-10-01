@@ -164,3 +164,19 @@ export function textoResumen(resumen: ResumenLote): string {
   }
   return partes.join(' · ')
 }
+
+/**
+ * Fecha del filtro "Altas desde" (`YYYY-MM-DD`, en la zona de la tienda) al
+ * instante ISO de su medianoche local. El backend compara en UTC, así que
+ * mandar la fecha a secas perdería las altas de la madrugada en México.
+ * Vacía o mal escrita -> `undefined` (no se filtra).
+ */
+export function inicioDelDiaISO(fecha: string): string | undefined {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(fecha.trim())
+  if (!m) return undefined
+  const [anio, mes, dia] = [Number(m[1]), Number(m[2]) - 1, Number(m[3])]
+  const d = new Date(anio, mes, dia, 0, 0, 0, 0)
+  // `new Date` acepta 2026-13-40 y lo "corrige": si no coincide, era inválida.
+  if (d.getFullYear() !== anio || d.getMonth() !== mes || d.getDate() !== dia) return undefined
+  return d.toISOString()
+}

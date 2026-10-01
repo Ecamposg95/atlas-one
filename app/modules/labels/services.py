@@ -7,6 +7,7 @@ admin/dueño suma la organización entera, el resto solo su sucursal.
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -105,8 +106,12 @@ def variantes_visibles(
     department_id: Optional[str] = None,
     brand_id: Optional[str] = None,
     gender: Optional[str] = None,
+    created_after: Optional[datetime] = None,
 ) -> List[Par]:
     """Pares (producto, variante) vivos y visibles, ordenados por nombre.
+
+    `created_after` filtra por la fecha de alta de la VARIANTE, no del
+    producto: una talla nueva de una prenda vieja también es "alta de hoy".
 
     Mismo alcance que el CSV de etiquetas: el filtro de sucursal es a nivel
     PRODUCTO (`query_visible_products`), así que si un producto está activo en
@@ -135,8 +140,23 @@ def variantes_visibles(
         (p, v)
         for p in productos
         for v in sorted(p.variants, key=lambda x: (x.sku or ""))
-        if v.deleted_at is None
+        if v.deleted_at is None and _alta_desde(v, created_after)
     ]
+
+
+def _alta_desde(variante: ProductVariant, desde: Optional[datetime]) -> bool:
+    """SQLite devuelve `created_at` naive y Postgres con zona: se comparan
+    ambos en UTC para que el corte sea el mismo en pruebas y en producción."""
+    if desde is None:
+        return True
+    alta = variante.created_at
+    if alta is None:
+        return False
+    if alta.tzinfo is None:
+        alta = alta.replace(tzinfo=timezone.utc)
+    if desde.tzinfo is None:
+        desde = desde.replace(tzinfo=timezone.utc)
+    return alta >= desde
 
 
 def candidatos(

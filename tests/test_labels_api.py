@@ -326,3 +326,45 @@ def test_sin_el_modulo_el_cajero_no_entra(client, db, org, tienda, auth_cajero_a
 
 def test_con_el_modulo_el_cajero_si_entra(client, tienda, auth_cajero_a, org):
     assert client.get("/api/labels/test", headers=_h(auth_cajero_a, org)).status_code == 200
+
+
+# ─── Altas desde ─────────────────────────────────────────────────────────────
+
+def test_altas_desde_solo_trae_variantes_dadas_de_alta_despues(client, db, org, branch_a, tienda, auth_admin):
+    """La tienda carga un lote del cuaderno y quiere etiquetar SOLO eso, sin
+    pescar entre el catálogo viejo (que además trae relleno de plantilla)."""
+    from datetime import datetime, timezone
+    vieja = datetime(2026, 1, 15, 12, 0, tzinfo=timezone.utc)
+    for _, variante in tienda.values():
+        variante.created_at = vieja
+    _prenda(db, org, branch_a, name="Gorra", sku="GORR-NEG-U",
+            barcode="2017000000044", stock="2", size="U", color="Negro")
+    db.commit()
+
+    r = client.get("/api/labels/candidates?created_after=2026-06-01T06:00:00Z",
+                   headers=_h(auth_admin, org))
+    assert r.status_code == 200
+    assert list(_por_sku(r.json()["items"])) == ["GORR-NEG-U"]
+
+    # Sin el filtro, el catálogo viejo sigue ahí.
+    todos = _por_sku(client.get("/api/labels/candidates", headers=_h(auth_admin, org)).json()["items"])
+    assert {"GORR-NEG-U", "LV-CHAM-SLI-NEG-M"} <= set(todos)
+
+
+def test_altas_desde_combina_con_los_otros_filtros(client, db, org, branch_a, tienda, auth_admin):
+    from datetime import datetime, timezone
+    for _, variante in tienda.values():
+        variante.created_at = datetime(2026, 1, 15, tzinfo=timezone.utc)
+    _prenda(db, org, branch_a, name="Gorra", sku="GORR-NEG-U",
+            barcode="2017000000044", stock="0", size="U", color="Negro")
+    _prenda(db, org, branch_a, name="Bufanda", sku="BUFA-GRI-U",
+            barcode="2017000000051", stock="1", size="U", color="Gris")
+    db.commit()
+    r = client.get("/api/labels/candidates?created_after=2026-06-01T00:00:00Z&only_with_stock=true",
+                   headers=_h(auth_admin, org))
+    assert list(_por_sku(r.json()["items"])) == ["BUFA-GRI-U"]
+
+
+def test_altas_desde_invalida_es_422(client, tienda, auth_admin, org):
+    r = client.get("/api/labels/candidates?created_after=ayer", headers=_h(auth_admin, org))
+    assert r.status_code == 422
