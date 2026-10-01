@@ -6,7 +6,8 @@ from pathlib import Path
 import shutil
 import time
 from app.core.database import get_db
-from app.models.organization import Branch
+from app.models.organization import Branch, Organization
+from app.services import plans
 from app.schemas.branches import BranchCreate, BranchRead, BranchUpdate
 from app.core.security import get_current_user, require_admin_or_owner
 from app.models.users import User, Role
@@ -56,6 +57,16 @@ def create_branch(
         branch.is_headquarters = False
     else:
         branch.is_headquarters = False
+
+    # Tope del plan: solo cuentan las sucursales activas que venden.
+    if branch.can_sell and branch.is_active:
+        org = db.query(Organization).filter(Organization.id == org_id).first()
+        if not org:
+            raise HTTPException(status_code=404, detail="Organización no encontrada")
+        try:
+            plans.verificar_alta_sucursal(db, org)
+        except plans.LimitePlanAlcanzado as e:
+            raise HTTPException(status_code=403, detail=str(e))
 
     # Force org_id; strip inherit_catalog (not a DB column)
     branch_data = branch.dict(exclude_unset=True)
@@ -173,6 +184,20 @@ def update_branch(
         db_branch.is_headquarters = True
     elif branch.branch_type is not None:
         db_branch.is_headquarters = False
+
+    # Reactivar o pasar a vender cuentan igual: lo que importa es si la sucursal
+    # pasa a estar activa y vendiendo.
+    datos = branch.dict(exclude_unset=True)
+    nuevo_activa = datos.get("is_active", db_branch.is_active)
+    nuevo_vende = datos.get("can_sell", db_branch.can_sell)
+    if (nuevo_activa and nuevo_vende) and not (db_branch.is_active and db_branch.can_sell):
+        org = db.query(Organization).filter(Organization.id == org_id).first()
+        if not org:
+            raise HTTPException(status_code=404, detail="Organización no encontrada")
+        try:
+            plans.verificar_alta_sucursal(db, org)
+        except plans.LimitePlanAlcanzado as e:
+            raise HTTPException(status_code=403, detail=str(e))
 
     for key, value in branch.dict(exclude_unset=True).items():
         setattr(db_branch, key, value)

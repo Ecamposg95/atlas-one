@@ -63,6 +63,9 @@ def onboard(
     Devuelve un resumen con los identificadores y la contrasena usada. La clave
     `created` dice si la organizacion se creo en esta corrida o ya existia.
     """
+    from app.services.plans import claves_validas, es_plan_valido
+    if not es_plan_valido(plan):
+        raise ValueError(f"plan desconocido {plan!r}. Validos: {', '.join(claves_validas())}")
     tipo = _giro(industry)
     branch_name = branch_name or f"HQ - {name}"
     clave = password or generar_password()
@@ -165,7 +168,7 @@ def main() -> None:
     p.add_argument("--admin", required=True, dest="admin_username")
     p.add_argument("--branch", dest="branch_name", default=None)
     p.add_argument("--password", default=None)
-    p.add_argument("--plan", default="FREE")
+    p.add_argument("--plan", default="FREE", help="FREE, START, PRO, BUSINESS, SCALE o ULTRA_PLUS")
     p.add_argument("--full-name", dest="full_name", default=None)
     p.add_argument("--email", default=None)
     args = p.parse_args()
