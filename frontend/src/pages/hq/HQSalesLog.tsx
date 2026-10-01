@@ -6,6 +6,11 @@ import { DaxCard } from '../../components/ui/DaxCard'
 import { TablaDesplazable } from '../../components/ui/TablaDesplazable'
 import { Spinner } from '../../components/ui/Spinner'
 import { Badge } from '../../components/ui/Badge'
+import { TarjetaFila } from '../../components/ui/TarjetaFila'
+import { ListaTarjetas } from '../../components/ui/ListaTarjetas'
+import { BarraFiltros, ParFechas } from '../../components/ui/BarraFiltros'
+import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
+import { useEsTelefono } from '../../hooks/useIsMobile'
 import type { SalesDocument } from '../../types/sales'
 import { saleLabel } from '../../types/sales'
 import { formatCurrency } from '../../utils/currency'
@@ -19,6 +24,16 @@ const PRESETS = [
   { label: 'Semana', start: () => daysAgoStr(7), end: () => todayStr() },
   { label: 'Mes', start: () => daysAgoStr(30), end: () => todayStr() },
 ]
+
+// Formatos de la fila: los comparten la tabla (escritorio) y la tarjeta (teléfono).
+const fechaVenta = (s: SalesDocument) =>
+  new Date(s.created_at).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+const clienteVenta = (s: SalesDocument) =>
+  s.customer_name ?? <span className="text-slate-600 italic">Público general</span>
+const pagosVenta = (s: SalesDocument) =>
+  s.payments?.map((p, i) => (
+    <span key={i} className="dax-badge dax-badge-blue mr-1">{metodoPago(p.method)}</span>
+  ))
 
 interface SalesStats {
   total_sales: number
@@ -40,6 +55,7 @@ export function HQSalesLog() {
   const [search, setSearch] = useState('')
   const [salesStats, setSalesStats] = useState<SalesStats | null>(null)
   const LIMIT = 100
+  const esTelefono = useEsTelefono()
 
   const load = useCallback(async (start: string, end: string, pg: number, bid: number | '') => {
     setLoading(true)
@@ -93,13 +109,30 @@ export function HQSalesLog() {
   const pages = Math.ceil(total / LIMIT)
   const statusVariant = (s: string) =>
     s === 'CLOSED' ? 'green' : s === 'CANCELLED' ? 'red' : s === 'OPEN' ? 'blue' : 'yellow'
+  const badgeEstado = (s: SalesDocument) => (
+    <Badge variant={statusVariant(s.status) as 'green' | 'red' | 'blue' | 'yellow'}>{estadoVenta(s.status)}</Badge>
+  )
+
+  // Paginación: una sola, debajo de la tabla (escritorio) o de las tarjetas (teléfono).
+  // En teléfono va en su propia tarjeta, sin el borde superior que la separa de la tabla.
+  const paginacion = pages > 1 && (
+    <div className={`flex items-center justify-between px-4 py-3 ${esTelefono ? '' : 'border-t border-slate-700/50'}`}>
+      <button onClick={() => { const np = page - 1; setPage(np); load(startDate, endDate, np, branchId) }} disabled={page === 0} className="dax-btn-secondary text-xs disabled:opacity-40 max-md:min-h-[44px]">← Anterior</button>
+      <span className="text-slate-500 text-xs">Pág. {page + 1} / {pages} · {total} registros</span>
+      <button onClick={() => { const np = page + 1; setPage(np); load(startDate, endDate, np, branchId) }} disabled={page >= pages - 1} className="dax-btn-secondary text-xs disabled:opacity-40 max-md:min-h-[44px]">Siguiente →</button>
+    </div>
+  )
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center gap-3">
-        <i className="fa-solid fa-receipt text-indigo-400 text-xl" />
-        <h1 className="text-2xl font-black text-white">Ventas</h1>
-      </div>
+      <CabeceraPagina
+        titulo={
+          <div className="flex items-center gap-3">
+            <i className="fa-solid fa-receipt text-indigo-400 text-xl" />
+            <h1 className="text-2xl font-black text-white">Ventas</h1>
+          </div>
+        }
+      />
 
       {/* KPI Strip */}
       {salesStats && (
@@ -125,17 +158,29 @@ export function HQSalesLog() {
       )}
 
       {/* Filtros */}
-      <div className="flex flex-wrap gap-2 items-center">
-        {PRESETS.map((p) => (
-          <button key={p.label} onClick={() => applyPreset(p)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-              startDate === p.start() && endDate === p.end()
-                ? 'bg-indigo-600 text-white'
-                : 'bg-slate-700/50 text-slate-400 hover:text-white'
-            }`}>
-            {p.label}
+      {/* `!items-center` conserva la alineación de hoy (BarraFiltros trae items-end).
+          Los atajos de fecha van juntos en una fila en teléfono; `sm:contents`
+          disuelve la envoltura de 640 px hacia arriba. */}
+      <BarraFiltros
+        className="!items-center"
+        accion={
+          <button onClick={() => { setPage(0); load(startDate, endDate, 0, branchId) }} className="dax-btn-primary text-xs">
+            <i className="fa-solid fa-search" /> Filtrar
           </button>
-        ))}
+        }
+      >
+        <div className="flex gap-2 sm:contents max-sm:[&>button]:flex-1 max-md:[&>button]:min-h-[44px]">
+          {PRESETS.map((p) => (
+            <button key={p.label} onClick={() => applyPreset(p)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                startDate === p.start() && endDate === p.end()
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-slate-700/50 text-slate-400 hover:text-white'
+              }`}>
+              {p.label}
+            </button>
+          ))}
+        </div>
         <select
           value={branchId}
           onChange={(e) => setBranchId(e.target.value ? Number(e.target.value) : '')}
@@ -143,8 +188,10 @@ export function HQSalesLog() {
           <option value="">Todas las sucursales</option>
           {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
         </select>
-        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="dax-input w-36 text-xs" />
-        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="dax-input w-36 text-xs" />
+        <ParFechas>
+          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="dax-input w-36 text-xs" />
+          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="dax-input w-36 text-xs" />
+        </ParFechas>
         <input
           type="text"
           placeholder="Buscar folio o cliente..."
@@ -152,12 +199,30 @@ export function HQSalesLog() {
           onChange={(e) => setSearch(e.target.value)}
           className="dax-input text-xs w-44"
         />
-        <button onClick={() => { setPage(0); load(startDate, endDate, 0, branchId) }} className="dax-btn-primary text-xs">
-          <i className="fa-solid fa-search" /> Filtrar
-        </button>
-      </div>
+      </BarraFiltros>
 
-      {/* Tabla */}
+      {/* Teléfono: tarjetas; escritorio: la tabla de siempre (nunca ambos) */}
+      {esTelefono ? (
+        <>
+          <ListaTarjetas cargando={loading} vacio={filteredSales.length === 0} textoVacio="Sin ventas en este período">
+            {filteredSales.map((s) => (
+              <TarjetaFila
+                key={s.id}
+                titulo={<span className="font-mono text-indigo-400">{saleLabel(s)}</span>}
+                subtitulo={[fechaVenta(s), s.branch_name].filter(Boolean).join(' · ')}
+                importe={<span className="text-emerald-400">{formatCurrency(s.total_amount)}</span>}
+                estado={badgeEstado(s)}
+                datos={[
+                  { etiqueta: 'Cliente', valor: clienteVenta(s) },
+                  { etiqueta: 'Pago', valor: s.payments?.length ? pagosVenta(s) : '—' },
+                ]}
+                onClick={() => setSel(s)}
+              />
+            ))}
+          </ListaTarjetas>
+          {paginacion && <DaxCard padding={false}>{paginacion}</DaxCard>}
+        </>
+      ) : (
       <DaxCard padding={false}>
         {loading ? <Spinner text="Cargando ventas..." /> : filteredSales.length === 0 ? (
           <div className="p-12 text-center text-slate-600">Sin ventas en este período</div>
@@ -182,16 +247,14 @@ export function HQSalesLog() {
                     <td className="font-mono text-indigo-400 text-xs">{saleLabel(s)}</td>
                     <td className="text-xs text-slate-400">{s.branch_name ?? '—'}</td>
                     <td className="text-xs text-slate-400">
-                      {new Date(s.created_at).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      {fechaVenta(s)}
                     </td>
-                    <td className="text-sm">{s.customer_name ?? <span className="text-slate-600 italic">Público general</span>}</td>
+                    <td className="text-sm">{clienteVenta(s)}</td>
                     <td className="text-right font-semibold text-emerald-400">{formatCurrency(s.total_amount)}</td>
                     <td>
-                      {s.payments?.map((p, i) => (
-                        <span key={i} className="dax-badge dax-badge-blue mr-1">{metodoPago(p.method)}</span>
-                      ))}
+                      {pagosVenta(s)}
                     </td>
-                    <td><Badge variant={statusVariant(s.status) as 'green' | 'red' | 'blue' | 'yellow'}>{estadoVenta(s.status)}</Badge></td>
+                    <td>{badgeEstado(s)}</td>
                     <td>
                       <button onClick={() => setSel(s)} className="dax-btn-icon text-slate-500 hover:text-white transition-colors text-xs">
                         <i className="fa-solid fa-eye" />
@@ -204,14 +267,9 @@ export function HQSalesLog() {
           </TablaDesplazable>
         )}
 
-        {pages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-slate-700/50">
-            <button onClick={() => { const np = page - 1; setPage(np); load(startDate, endDate, np, branchId) }} disabled={page === 0} className="dax-btn-secondary text-xs disabled:opacity-40">← Anterior</button>
-            <span className="text-slate-500 text-xs">Pág. {page + 1} / {pages} · {total} registros</span>
-            <button onClick={() => { const np = page + 1; setPage(np); load(startDate, endDate, np, branchId) }} disabled={page >= pages - 1} className="dax-btn-secondary text-xs disabled:opacity-40">Siguiente →</button>
-          </div>
-        )}
+        {paginacion}
       </DaxCard>
+      )}
 
       {/* Modal detalle */}
       {selected && (

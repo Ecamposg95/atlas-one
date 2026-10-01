@@ -5,6 +5,11 @@ import { usePOSStore } from '../../store/posStore'
 import { DaxCard } from '../../components/ui/DaxCard'
 import { Spinner } from '../../components/ui/Spinner'
 import { Badge } from '../../components/ui/Badge'
+import { TarjetaFila } from '../../components/ui/TarjetaFila'
+import { ListaTarjetas } from '../../components/ui/ListaTarjetas'
+import { BarraFiltros, ParFechas } from '../../components/ui/BarraFiltros'
+import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
+import { useEsTelefono } from '../../hooks/useIsMobile'
 import type { SalesDocument } from '../../types/sales'
 import { saleLabel } from '../../types/sales'
 import { ReturnModal } from '../../components/pos/modals/ReturnModal'
@@ -40,6 +45,15 @@ const METHOD_LABELS: Record<string, string> = {
   MIXED:        'Mixto',
 }
 
+// Formatos de la fila: los comparten la tabla (escritorio) y la tarjeta (teléfono).
+const fechaVenta = (s: SalesDocument) =>
+  new Date(s.created_at).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+const clienteVenta = (s: SalesDocument) =>
+  s.customer_name ?? <span className="text-slate-600 italic">Público general</span>
+const pagosVenta = (s: SalesDocument) =>
+  s.payments?.map((p, i) => (
+    <span key={i} className="dax-badge dax-badge-blue mr-1">{METHOD_LABELS[p.method] ?? p.method}</span>
+  ))
 
 export function SalesHistory() {
   const printerName = usePOSStore(s => s.printerName)
@@ -56,6 +70,7 @@ export function SalesHistory() {
   // Venta cuya reimpresión espera el PIN de un supervisor (428 del backend).
   const [ventaPorAutorizar, setVentaPorAutorizar] = useState<SalesDocument | null>(null)
   const LIMIT = 100
+  const esTelefono = useEsTelefono()
 
   // Track 2 (POS bug-fix): por defecto historial muestra solo ventas
   // realizadas (PAID, REFUNDED_*) y CANCELLED. Excluye PENDING y DRAFT
@@ -154,13 +169,61 @@ export function SalesHistory() {
     : s === 'CANCELLED' ? 'red'
     : s.startsWith('REFUNDED') ? 'blue'
     : 'yellow' // PENDING / DRAFT / desconocidos
+  const badgeEstado = (s: SalesDocument) => (
+    <Badge variant={statusVariant(s.status) as 'green' | 'red' | 'blue' | 'yellow'}>{STATUS_LABELS[s.status] ?? s.status}</Badge>
+  )
+
+  // Ver / Reimprimir / Devolver: los mismos botones en la fila y en la tarjeta.
+  // `stopPropagation` evita que el toque abra además el detalle de la fila.
+  const accionesVenta = (s: SalesDocument) => (
+    <>
+      <button
+        onClick={(e) => { e.stopPropagation(); setSel(s) }}
+        className="px-3 py-2 rounded-lg text-xs font-bold bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/25 transition-colors"
+        title="Ver detalle"
+      >
+        <i className="fa-solid fa-eye" /> Ver
+      </button>
+      <button
+        onClick={(e) => { e.stopPropagation(); reprintTicket(s) }}
+        disabled={reprinting || !printerName}
+        className="px-3 py-2 rounded-lg text-xs font-bold bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/25 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        title={printerName ? 'Reimprimir ticket' : 'Configura una impresora'}
+      >
+        <i className="fa-solid fa-print" /> Reimprimir
+      </button>
+      {(s.status === 'PAID' || s.status === 'REFUNDED_PARTIAL') && (
+        <button
+          onClick={(e) => { e.stopPropagation(); setReturnSale(s) }}
+          className="px-3 py-2 rounded-lg text-xs font-bold bg-rose-500/15 text-rose-300 hover:bg-rose-500/25 transition-colors"
+          title="Iniciar devolución"
+        >
+          <i className="fa-solid fa-undo" /> Devolver
+        </button>
+      )}
+    </>
+  )
+
+  // Paginación: una sola, debajo de la tabla (escritorio) o de las tarjetas (teléfono).
+  // En teléfono va en su propia tarjeta, sin el borde superior que la separa de la tabla.
+  const paginacion = pages > 1 && (
+    <div className={`flex items-center justify-between px-4 py-3 ${esTelefono ? '' : 'border-t border-slate-700/50'}`}>
+      <button onClick={() => { const np = page - 1; setPage(np); load(startDate, endDate, np) }} disabled={page === 0} className="dax-btn-secondary text-xs disabled:opacity-40 max-md:min-h-[44px]">← Anterior</button>
+      <span className="text-slate-500 text-xs">Pág. {page + 1} / {pages} · {total} registros</span>
+      <button onClick={() => { const np = page + 1; setPage(np); load(startDate, endDate, np) }} disabled={page >= pages - 1} className="dax-btn-secondary text-xs disabled:opacity-40 max-md:min-h-[44px]">Siguiente →</button>
+    </div>
+  )
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center gap-3">
-        <i className="fa-solid fa-history text-indigo-400 text-xl" />
-        <h1 className="text-2xl font-black text-white">Mis ventas</h1>
-      </div>
+      <CabeceraPagina
+        titulo={
+          <div className="flex items-center gap-3">
+            <i className="fa-solid fa-history text-indigo-400 text-xl" />
+            <h1 className="text-2xl font-black text-white">Mis ventas</h1>
+          </div>
+        }
+      />
 
       {/* KPIs — 6 cards */}
       {stats && (
@@ -203,26 +266,37 @@ export function SalesHistory() {
       )}
 
       {/* Filtros */}
-      <div className="flex flex-wrap gap-2 items-center">
-        {PRESETS.map((p) => (
-          <button
-            key={p.label}
-            onClick={() => applyPreset(p)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-              startDate === p.start() && endDate === p.end()
-                ? 'bg-indigo-600 text-white'
-                : 'bg-slate-700/50 text-slate-400 hover:text-white'
-            }`}
-          >
-            {p.label}
+      {/* `!items-center` conserva la alineación de hoy (BarraFiltros trae items-end).
+          Los atajos de fecha van juntos en una fila en teléfono (`sm:contents`
+          disuelve la envoltura de 640 px hacia arriba). "Filtrar" va a mano en
+          `dax-filtros-accion` —no en la prop `accion`, que lo pondría al final—
+          para no cambiar su orden de hoy, antes de la casilla. */}
+      <BarraFiltros className="!items-center">
+        <div className="flex gap-2 sm:contents max-sm:[&>button]:flex-1 max-md:[&>button]:min-h-[44px]">
+          {PRESETS.map((p) => (
+            <button
+              key={p.label}
+              onClick={() => applyPreset(p)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                startDate === p.start() && endDate === p.end()
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-slate-700/50 text-slate-400 hover:text-white'
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+        <ParFechas>
+          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="dax-input w-36 text-xs" />
+          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="dax-input w-36 text-xs" />
+        </ParFechas>
+        <div className="dax-filtros-accion">
+          <button onClick={() => { setPage(0); load(startDate, endDate, 0) }} className="dax-btn-primary text-xs">
+            <i className="fa-solid fa-search" /> Filtrar
           </button>
-        ))}
-        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="dax-input w-36 text-xs" />
-        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="dax-input w-36 text-xs" />
-        <button onClick={() => { setPage(0); load(startDate, endDate, 0) }} className="dax-btn-primary text-xs">
-          <i className="fa-solid fa-search" /> Filtrar
-        </button>
-        <label className="ml-2 flex items-center gap-1.5 text-[10px] text-slate-400 cursor-pointer">
+        </div>
+        <label className="ml-2 flex items-center gap-1.5 text-[10px] text-slate-400 cursor-pointer max-sm:ml-0 max-md:min-h-[44px]">
           <input
             type="checkbox"
             checked={includeOpenStates}
@@ -231,9 +305,31 @@ export function SalesHistory() {
           />
           Incluir abiertas/borradores
         </label>
-      </div>
+      </BarraFiltros>
 
-      {/* Tabla */}
+      {/* Teléfono: tarjetas; escritorio: la tabla de siempre (nunca ambos) */}
+      {esTelefono ? (
+        <>
+          <ListaTarjetas cargando={loading} vacio={sales.length === 0} textoVacio="Sin ventas en este período">
+            {sales.map((s) => (
+              <TarjetaFila
+                key={s.id}
+                titulo={<span className="font-mono text-indigo-400">{saleLabel(s)}</span>}
+                subtitulo={fechaVenta(s)}
+                importe={<span className="text-emerald-400">{formatCurrency(s.total_amount)}</span>}
+                estado={badgeEstado(s)}
+                datos={[
+                  { etiqueta: 'Cliente', valor: clienteVenta(s) },
+                  { etiqueta: 'Pago', valor: s.payments?.length ? pagosVenta(s) : '—' },
+                ]}
+                acciones={accionesVenta(s)}
+                onClick={() => setSel(s)}
+              />
+            ))}
+          </ListaTarjetas>
+          {paginacion && <DaxCard padding={false}>{paginacion}</DaxCard>}
+        </>
+      ) : (
       <DaxCard padding={false}>
         {loading ? <Spinner text="Cargando ventas..." /> : sales.length === 0 ? (
           <div className="p-12 text-center text-slate-600">Sin ventas en este período</div>
@@ -260,42 +356,17 @@ export function SalesHistory() {
                   >
                     <td className="font-mono text-indigo-400 text-xs">{saleLabel(s)}</td>
                     <td className="text-xs text-slate-400">
-                      {new Date(s.created_at).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      {fechaVenta(s)}
                     </td>
-                    <td className="text-sm">{s.customer_name ?? <span className="text-slate-600 italic">Público general</span>}</td>
+                    <td className="text-sm">{clienteVenta(s)}</td>
                     <td className="text-right font-semibold text-emerald-400">{formatCurrency(s.total_amount)}</td>
                     <td>
-                      {s.payments?.map((p, i) => (
-                        <span key={i} className="dax-badge dax-badge-blue mr-1">{METHOD_LABELS[p.method] ?? p.method}</span>
-                      ))}
+                      {pagosVenta(s)}
                     </td>
-                    <td><Badge variant={statusVariant(s.status) as 'green' | 'red' | 'blue' | 'yellow'}>{STATUS_LABELS[s.status] ?? s.status}</Badge></td>
+                    <td>{badgeEstado(s)}</td>
                     <td className="text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setSel(s) }}
-                          className="px-3 py-2 rounded-lg text-xs font-bold bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/25 transition-colors"
-                          title="Ver detalle"
-                        >
-                          <i className="fa-solid fa-eye" /> Ver
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); reprintTicket(s) }}
-                          disabled={reprinting || !printerName}
-                          className="px-3 py-2 rounded-lg text-xs font-bold bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/25 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                          title={printerName ? 'Reimprimir ticket' : 'Configura una impresora'}
-                        >
-                          <i className="fa-solid fa-print" /> Reimprimir
-                        </button>
-                        {(s.status === 'PAID' || s.status === 'REFUNDED_PARTIAL') && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setReturnSale(s) }}
-                            className="px-3 py-2 rounded-lg text-xs font-bold bg-rose-500/15 text-rose-300 hover:bg-rose-500/25 transition-colors"
-                            title="Iniciar devolución"
-                          >
-                            <i className="fa-solid fa-undo" /> Devolver
-                          </button>
-                        )}
+                        {accionesVenta(s)}
                       </div>
                     </td>
                   </tr>
@@ -305,25 +376,20 @@ export function SalesHistory() {
           </div>
         )}
 
-        {pages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-slate-700/50">
-            <button onClick={() => { const np = page - 1; setPage(np); load(startDate, endDate, np) }} disabled={page === 0} className="dax-btn-secondary text-xs disabled:opacity-40">← Anterior</button>
-            <span className="text-slate-500 text-xs">Pág. {page + 1} / {pages} · {total} registros</span>
-            <button onClick={() => { const np = page + 1; setPage(np); load(startDate, endDate, np) }} disabled={page >= pages - 1} className="dax-btn-secondary text-xs disabled:opacity-40">Siguiente →</button>
-          </div>
-        )}
+        {paginacion}
       </DaxCard>
+      )}
 
       {/* Modal detalle */}
       {selected && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setSel(null)}>
-          <div className="dax-card p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="dax-card dax-modal p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <div>
                 <p className="text-[10px] text-slate-500 uppercase tracking-widest">Folio</p>
                 <p className="text-xl font-black text-indigo-400 font-mono">{saleLabel(selected)}</p>
               </div>
-              <button onClick={() => setSel(null)} className="text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
+              <button onClick={() => setSel(null)} className="dax-btn-icon text-slate-500 hover:text-white" aria-label="Cerrar"><i className="fa-solid fa-xmark text-lg" /></button>
             </div>
 
             <div className="space-y-3 text-sm">
@@ -367,8 +433,9 @@ export function SalesHistory() {
               )}
             </div>
 
-            {/* Acciones */}
-            <div className="mt-4 border-t border-slate-700/50 pt-4 flex flex-col gap-2">
+            {/* Acciones. En teléfono quedan pegadas al pie de la hoja (`dax-modal-footer`);
+                en escritorio no se aplica: su margen y relleno propios cambiarían el pie de hoy. */}
+            <div className={`mt-4 border-t border-slate-700/50 pt-4 flex flex-col gap-2 ${esTelefono ? 'dax-modal-footer -mx-6 px-6' : ''}`}>
               <button
                 disabled={reprinting || !printerName}
                 onClick={() => reprintTicket(selected)}
