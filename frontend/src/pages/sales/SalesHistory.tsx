@@ -433,9 +433,9 @@ export function SalesHistory() {
               )}
             </div>
 
-            {/* Acciones. En teléfono quedan pegadas al pie de la hoja (`dax-modal-footer`);
-                en escritorio no se aplica: su margen y relleno propios cambiarían el pie de hoy. */}
-            <div className={`mt-4 border-t border-slate-700/50 pt-4 flex flex-col gap-2 ${esTelefono ? 'dax-modal-footer -mx-6 px-6' : ''}`}>
+            {/* Acciones, pegadas al pie del modal (`dax-modal-footer`, como el resto del kit).
+                El margen y el relleno superior los pone esa clase. */}
+            <div className="dax-modal-footer -mx-6 px-6 border-t border-slate-700/50 flex flex-col gap-2">
               <button
                 disabled={reprinting || !printerName}
                 onClick={() => reprintTicket(selected)}

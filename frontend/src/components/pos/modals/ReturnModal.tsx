@@ -401,9 +401,11 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
               </div>
             )}
 
-            {/* En teléfono, Cancelar/Registrar quedan pegados al pie de la hoja (visibles
-                con el teclado abierto). En escritorio no: el relleno de `dax-modal-footer`
-                movería el pie de hoy. */}
+            {/* Este modal es compartido con el POS de la cajera, que no debe cambiar en
+                escritorio: por eso `dax-modal-footer` (cuyo relleno movería el pie de hoy)
+                solo se aplica en teléfono, donde Cancelar/Registrar quedan pegados al pie
+                y visibles con el teclado abierto. Bajo 640 px el modal, también en el POS,
+                pasa a hoja inferior por `dax-modal`: mejora aceptada. */}
             <div className={`flex gap-2 ${esTelefono ? 'dax-modal-footer -mx-6 px-6' : ''}`}>
               <button onClick={onClose} className="dax-btn-secondary flex-1">Cancelar</button>
               <button
