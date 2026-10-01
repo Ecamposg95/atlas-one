@@ -26,6 +26,8 @@ Catálogo de la base de datos por dominio. Fuente: auditoría profunda (julio 20
 
 `BranchType`{HQ,STORE,WAREHOUSE,OFFICE} · `ModuleScope`{HQ,BRANCH,WAREHOUSE,GLOBAL} · `ModuleStatus`{BETA,STABLE} · `IndustryType` (~19 valores: ATLAS_POS, **ATLAS_POS_BOUTIQUE** (2026-09-16, ver [`presets/BOUTIQUE.md`](presets/BOUTIQUE.md)), DISTRIBUTOR_POS, RETAIL_CHAIN, RESTAURANT_QSR/FULL, CAFE_BAKERY, AUTO_REPAIR_SHOP, WAREHOUSE_LOGISTICS, CUSTOM, familia ATLAS_ONE_* incl. RESTAURANT/CAFE/BAR, varios legacy).
 
+**`organization.plan`** (2026-09-30): String. Claves: FREE, START, PRO, BUSINESS, SCALE, ULTRA_PLUS (NULL o desconocido se tratan como FREE). Catálogo, topes y módulos por plan en `app/services/plans.py`. No tiene FK ni enum DB a propósito.
+
 **Columnas boutique/2026-09 en `organization`** (`app/modules/tenants/models.py`, todas
 con `ALTER` idempotente en `railway_init.py`, todas opcionales/apagadas por default —
 ninguna organización existente cambia de comportamiento sin configurarlas):

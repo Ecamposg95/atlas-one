@@ -33,6 +33,7 @@ export interface PlatformOrg {
   status: string | null
   is_active: boolean
   created_at: string
+  plan: string | null
 }
 
 export interface OrgDependencies {
@@ -224,7 +225,33 @@ export interface OrgModule {
   scope: string
   status: string
   is_enabled: boolean
+  plan_minimo: string | null
+  permitido_por_plan: boolean
 }
+
+export interface Plan {
+  clave: string
+  nombre: string
+  lema: string
+  precio_mxn: number
+  precio_desde: boolean
+  max_usuarios: number | null
+  max_sucursales_venta: number | null
+  modulos_crecimiento: string[]
+  permite_todo: boolean
+}
+
+export interface PlanUso {
+  plan: Plan
+  usuarios_activos: number
+  sucursales_venta: number
+  modulos_fuera_de_plan: string[]
+}
+
+export const NOMBRE_PLAN: Record<string, string> = {
+  FREE: 'ONE FREE', START: 'ONE START', PRO: 'ONE PRO', BUSINESS: 'BUSINESS', SCALE: 'SCALE', ULTRA_PLUS: 'ULTRA+',
+}
+export const nombrePlan = (clave: string | null | undefined) => NOMBRE_PLAN[clave ?? 'FREE'] ?? (clave || 'ONE FREE')
 
 export interface IndustryPreset {
   id: number
@@ -250,6 +277,7 @@ export interface UpsellRecommendation {
   upgrade_prompt: string | null
   icon: string | null
   sort_hint: number
+  plan_minimo: string | null
 }
 
 export interface UpsellResponse {
@@ -400,6 +428,9 @@ export const platformApi = {
     client.get<OrgModule[]>(`/platform/organizations/${orgId}/modules`).then((r) =>
       Array.isArray(r.data) ? r.data : (r.data as any)?.items ?? []
     ),
+
+  getPlans: () => client.get<Plan[]>('/platform/plans').then((r) => r.data),
+  getPlanUso: (orgId: number) => client.get<PlanUso>(`/platform/organizations/${orgId}/plan-uso`).then((r) => r.data),
 
   toggleModule: (orgId: number, moduleKey: string, enable: boolean) =>
     client.patch(`/platform/organizations/${orgId}/modules/${moduleKey}?enable=${enable}`).then((r) => r.data),

@@ -16,6 +16,7 @@ class UpsellRecommendation(BaseModel):
     upgrade_prompt: Optional[str] = None
     icon: Optional[str] = None
     sort_hint: int = 100
+    plan_minimo: Optional[str] = None  # clave del plan que lo incluye; None si no depende del plan
 
     class Config:
         from_attributes = True

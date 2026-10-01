@@ -9,6 +9,9 @@ import {
   PlatformBranch,
   PlatformOrg,
   PlatformUser,
+  Plan,
+  PlanUso,
+  nombrePlan,
   UpsellResponse,
 } from '../../api/platform'
 import { toast } from '../../store/toastStore'
@@ -253,6 +256,10 @@ export function PlatformOrgDetail() {
 
   // Upsell recommendations
   const [upsell, setUpsell] = useState<UpsellResponse | null>(null)
+  const [plans, setPlans] = useState<Plan[]>([])
+  const [planUso, setPlanUso] = useState<PlanUso | null>(null)
+  const [planPendiente, setPlanPendiente] = useState<string | null>(null)
+  const [cambiandoPlan, setCambiandoPlan] = useState(false)
   const [upsellLoading, setUpsellLoading] = useState(false)
   const [activatingModule, setActivatingModule] = useState<string | null>(null)
 
@@ -306,13 +313,15 @@ export function PlatformOrgDetail() {
     setLoading(true)
     setLoadError(false)
     try {
-      const [o, m, u, b, p, cat] = await Promise.all([
+      const [o, m, u, b, p, cat, pl, uso] = await Promise.all([
         platformApi.getOrg(id),
         platformApi.getOrgModules(id),
         platformApi.getUsers({ organization_id: id }),
         platformApi.getBranches(id),
         platformApi.getPresets(),
         platformApi.getModulesCatalog().catch(() => [] as Module[]),
+        platformApi.getPlans().catch(() => [] as Plan[]),
+        platformApi.getPlanUso(id).catch(() => null),
       ])
       loadUpsell()
       setOrg(o)
@@ -321,6 +330,8 @@ export function PlatformOrgDetail() {
       setBranches(b)
       setPresets(p)
       setCatalog(cat)
+      setPlans(pl)
+      setPlanUso(uso)
       setEditForm({
         name: o.name || '',
         legal_name: o.legal_name || '',
@@ -381,6 +392,29 @@ export function PlatformOrgDetail() {
     } finally {
       setTogglingModule(null)
     }
+  }
+
+  // ── Cambio de plan ─────────────────────────────────────────────────────
+  const aplicarPlan = async (nuevo: string) => {
+    setCambiandoPlan(true)
+    try {
+      await platformApi.updateOrg(id, { plan: nuevo })
+      toast.success('Plan actualizado')
+      setPlanPendiente(null)
+      await load()
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || 'No se pudo cambiar el plan')
+    } finally {
+      setCambiandoPlan(false)
+    }
+  }
+
+  const onSelectPlan = (nuevo: string) => {
+    const actual = org?.plan ?? 'FREE'
+    if (nuevo === actual) return
+    const idx = (k: string) => plans.findIndex(p => p.clave === k)
+    if (idx(nuevo) < idx(actual)) setPlanPendiente(nuevo)
+    else aplicarPlan(nuevo)
   }
 
   // ── Edit drawer save ───────────────────────────────────────────────────
@@ -609,6 +643,16 @@ export function PlatformOrgDetail() {
           }}>
             {org.industry_type || 'SIN INDUSTRIA'}
           </span>
+          <span style={{
+            background: 'rgba(20,184,166,0.12)',
+            color: 'var(--p-teal)',
+            padding: '4px 10px',
+            borderRadius: 4,
+            fontSize: 11,
+            fontWeight: 600,
+          }}>
+            {nombrePlan(org.plan)}
+          </span>
           {!org.is_active ? (
             <StatusBadge status="archived" />
           ) : org.status === 'SUSPENDED' ? (
@@ -628,6 +672,43 @@ export function PlatformOrgDetail() {
           <div><strong style={{ color: 'var(--p-text)' }}>{counts.activeModules}</strong> módulos activos</div>
         </div>
       </div>
+
+      {/* ── Sección Plan y uso ────────────────────────────────────────── */}
+      <section style={card}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+          <p style={sectionTitle}>Plan y uso</p>
+          <select
+            value={org.plan ?? 'FREE'}
+            onChange={e => onSelectPlan(e.target.value)}
+            disabled={cambiandoPlan || plans.length === 0}
+            aria-label="Plan de la organización"
+            style={{ ...inputStyle, width: 'auto', minWidth: 220 }}
+          >
+            {plans.map(p => (
+              <option key={p.clave} value={p.clave}>
+                {`${p.nombre} · ${p.precio_desde ? 'desde ' : ''}$${p.precio_mxn.toLocaleString('es-MX')}/mes`}
+              </option>
+            ))}
+          </select>
+        </div>
+        {!planUso ? (
+          <p style={{ margin: 0, fontSize: 12, color: 'var(--p-muted)' }}>Sin datos de plan</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: 'var(--p-text)' }}>
+            <div style={{ color: planUso.plan.max_usuarios != null && planUso.usuarios_activos > planUso.plan.max_usuarios ? 'var(--p-danger)' : undefined }}>
+              Usuarios activos <strong>{planUso.usuarios_activos}</strong> de {planUso.plan.max_usuarios ?? 'sin tope'}
+            </div>
+            <div style={{ color: planUso.plan.max_sucursales_venta != null && planUso.sucursales_venta > planUso.plan.max_sucursales_venta ? 'var(--p-danger)' : undefined }}>
+              Sucursales que venden <strong>{planUso.sucursales_venta}</strong> de {planUso.plan.max_sucursales_venta ?? 'sin tope'}
+            </div>
+            {planUso.modulos_fuera_de_plan.length > 0 && (
+              <div style={{ fontSize: 12, color: 'var(--p-muted)' }}>
+                Fuera de plan (heredados, siguen activos): {planUso.modulos_fuera_de_plan.join(', ')}
+              </div>
+            )}
+          </div>
+        )}
+      </section>
 
       {/* ── Sección Módulos ───────────────────────────────────────────── */}
       <section style={card}>
@@ -675,6 +756,15 @@ export function PlatformOrgDetail() {
                       </span>
                       {isBeta && <StatusBadge status="beta" />}
                       {isStable && <StatusBadge status="stable" />}
+                      {!m.permitido_por_plan && !m.is_enabled && m.plan_minimo && (
+                        <StatusBadge status="beta" label={`Requiere ${nombrePlan(m.plan_minimo)}`} />
+                      )}
+                      {!m.permitido_por_plan && !m.is_enabled && !m.plan_minimo && (
+                        <StatusBadge status="beta" label="Fuera del preset" />
+                      )}
+                      {!m.permitido_por_plan && m.is_enabled && (
+                        <StatusBadge status="archived" label="Fuera de plan" />
+                      )}
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--p-muted)', fontFamily: 'monospace' }}>
                       {m.key} · {m.scope}
@@ -773,6 +863,12 @@ export function PlatformOrgDetail() {
                       {rec.status}
                     </span>
                   </div>
+
+                  {rec.plan_minimo && (
+                    <span style={{ fontSize: 11, color: 'var(--p-muted)' }}>
+                      Incluido desde {nombrePlan(rec.plan_minimo)}
+                    </span>
+                  )}
 
                   {rec.in_recommended_preset && (
                     <span style={{
@@ -1191,6 +1287,16 @@ export function PlatformOrgDetail() {
       </SideDrawer>
 
       {/* ── Apply preset confirms ─────────────────────────────────────── */}
+      <SimpleConfirm
+        open={planPendiente !== null}
+        title="Bajar de plan"
+        message="No se apaga ningún módulo; solo cambian los topes para altas nuevas. Los módulos que el plan nuevo no cubre quedarán marcados como fuera de plan."
+        confirmLabel={cambiandoPlan ? 'Cambiando…' : 'Bajar de plan'}
+        busy={cambiandoPlan}
+        onClose={() => setPlanPendiente(null)}
+        onConfirm={() => planPendiente && aplicarPlan(planPendiente)}
+      />
+
       <SimpleConfirm
         open={applySimpleConfirm}
         title={`Aplicar preset "${selectedPreset?.display_name ?? ''}"`}

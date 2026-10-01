@@ -18,6 +18,7 @@ from app.schemas.users import UserCreate, UserRead, UserUpdate
 from app.core.security import get_current_user, get_password_hash
 from app.core.security.guards import require_admin_or_owner
 from app.core.tenant_context import get_current_active_organization
+from app.services import plans
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -186,6 +187,17 @@ def create_user(
     if db_user:
         raise HTTPException(status_code=400, detail="El nombre de usuario ya existe")
 
+    # Tope del plan: cuenta usuarios activos de la organizacion (ver app/services/plans.py).
+    # Un alta inactiva no consume tope; se cobra cuando se reactive (update_user).
+    if user.is_active:
+        org = db.query(Organization).filter(Organization.id == org_id).first()
+        if not org:
+            raise HTTPException(status_code=404, detail="Organización no encontrada")
+        try:
+            plans.verificar_alta_usuario(db, org)
+        except plans.LimitePlanAlcanzado as e:
+            raise HTTPException(status_code=403, detail=str(e))
+
     # Hashear password
     hashed_password = get_password_hash(user.password)
 
@@ -267,6 +279,16 @@ def update_user(
     if 'reprint_pin' in update_data:
         pin_raw = update_data.pop('reprint_pin')
         user_db.reprint_pin_hash = get_password_hash(pin_raw) if pin_raw else None
+
+    # Reactivar a alguien es un alta para el tope del plan.
+    if update_data.get("is_active") is True and not user_db.is_active:
+        org = db.query(Organization).filter(Organization.id == org_id).first()
+        if not org:
+            raise HTTPException(status_code=404, detail="Organización no encontrada")
+        try:
+            plans.verificar_alta_usuario(db, org)
+        except plans.LimitePlanAlcanzado as e:
+            raise HTTPException(status_code=403, detail=str(e))
 
     for field, value in update_data.items():
         if hasattr(user_db, field):
