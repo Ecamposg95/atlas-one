@@ -11,6 +11,7 @@ from app.models.organization import Organization
 from app.models.users import User, UserOrganization, Role as AppRole
 from app.schemas.organization import OrganizationCreate, OrganizationRead, OrganizationUpdate
 from app.core.security import get_password_hash
+from app.services import plans
 from app.modules.platform.dependencies import require_platform_admin, require_superadmin
 
 from ._shared import (
@@ -688,6 +689,9 @@ def get_org_module_status(org_id: int, db: Session = Depends(get_db)):
     from app.models.modules import Module, OrganizationModule
 
     all_modules = db.query(Module).all()
+    # Marcas de plan: se calculan una vez por organizacion.
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    permitidos = plans.modulos_permitidos(db, org) if org is not None else set()
     enabled_map = {
         m.module_key: m
         for m in db.query(OrganizationModule).filter(OrganizationModule.organization_id == org_id).all()
@@ -699,12 +703,15 @@ def get_org_module_status(org_id: int, db: Session = Depends(get_db)):
         if mod.key in enabled_map and enabled_map[mod.key].is_enabled:
             is_enabled = True
 
+        minimo = plans.plan_minimo_para(mod.key)
         result.append({
             "key": mod.key,
             "name": mod.name,
             "scope": mod.scope,
             "status": mod.status,
-            "is_enabled": is_enabled
+            "is_enabled": is_enabled,
+            "plan_minimo": minimo.clave if minimo else None,
+            "permitido_por_plan": mod.key in permitidos,
         })
     return result
 
@@ -804,6 +811,7 @@ def get_upsell_recommendations(
             upgrade_prompt=meta.get("upgrade_prompt"),
             icon=meta.get("icon"),
             sort_hint=meta.get("sort_hint", 100),
+            plan_minimo=(minimo.clave if (minimo := plans.plan_minimo_para(mod.key)) else None),
         )
         recommendations.append(rec)
 
