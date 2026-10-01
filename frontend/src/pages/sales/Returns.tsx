@@ -211,7 +211,7 @@ function ReturnsAdminView() {
       {/* Modal detalle */}
       {selected && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setSelected(null)}>
-          <div className="dax-card dax-modal p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="dax-card dax-modal p-6 w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-black text-white">Detalle de Devolución</h3>
               <button onClick={() => setSelected(null)} className="text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>

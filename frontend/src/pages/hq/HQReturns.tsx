@@ -9,7 +9,6 @@ import { TablaDesplazable } from '../../components/ui/TablaDesplazable'
 import { Badge } from '../../components/ui/Badge'
 import { Spinner } from '../../components/ui/Spinner'
 import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
-import { BarraFiltros } from '../../components/ui/BarraFiltros'
 import { ListaTarjetas } from '../../components/ui/ListaTarjetas'
 import { TarjetaFila } from '../../components/ui/TarjetaFila'
 import { useEsTelefono } from '../../hooks/useIsMobile'
@@ -126,23 +125,21 @@ export function HQReturns() {
             <h1 className="text-2xl font-black text-white">Devoluciones</h1>
           </div>
         }
-        accionPrincipal={
-          <button onClick={() => loadData(branchId)} className="dax-btn-secondary text-xs">
-            <i className="fa-solid fa-rotate-right" /> Actualizar
-          </button>
+        acciones={
+          <>
+            <select
+              value={branchId}
+              onChange={(e) => { const v = e.target.value ? Number(e.target.value) : ''; setBranchId(v); loadData(v) }}
+              className="dax-input text-xs max-w-[160px]">
+              <option value="">Todas las sucursales</option>
+              {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+            <button onClick={() => loadData(branchId)} className="dax-btn-secondary text-xs">
+              <i className="fa-solid fa-rotate-right" /> Actualizar
+            </button>
+          </>
         }
       />
-
-      {/* Filtro de sucursal: a todo lo ancho en teléfono */}
-      <BarraFiltros>
-        <select
-          value={branchId}
-          onChange={(e) => { const v = e.target.value ? Number(e.target.value) : ''; setBranchId(v); loadData(v) }}
-          className="dax-input text-xs max-w-[160px]">
-          <option value="">Todas las sucursales</option>
-          {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-        </select>
-      </BarraFiltros>
 
       {/* Tabs */}
       <div className="flex gap-1 bg-slate-800/50 p-1 rounded-lg w-fit">
