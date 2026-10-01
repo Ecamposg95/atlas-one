@@ -12,6 +12,8 @@ import { KPICard } from '../../components/reports/KPICard'
 import { SalesHeatmap, type HeatmapCell } from '../../components/reports/Heatmap'
 import { Gauge } from '../../components/reports/Gauge'
 import { BranchLeaderboard } from '../../components/reports/Leaderboard'
+import { BarraFiltros, ParFechas } from '../../components/ui/BarraFiltros'
+import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
 import { Sparkline } from '../../components/reports/Sparkline'
 import { useTheme } from '../../context/ThemeContext'
 import {
@@ -293,32 +295,44 @@ export function HQReportsHub() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <i className="fa-solid fa-chart-line text-indigo-400 text-xl" />
-          <h1 className="text-2xl font-black text-white">Reportes</h1>
-          <span className="text-[10px] font-bold uppercase tracking-widest text-violet-400/80 bg-violet-500/10 px-2 py-0.5 rounded-full border border-violet-500/20">
-            Ultra
-          </span>
-        </div>
-        <button
-          onClick={handleExport}
-          disabled={exporting || loading}
-          className="text-xs font-bold text-violet-400 bg-violet-500/10 px-3 py-2 rounded-lg border border-violet-500/20 hover:bg-violet-500/20 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <i className={`fa-solid ${exporting ? 'fa-spinner fa-spin' : 'fa-file-arrow-down'}`} />
-          {exporting ? 'Exportando...' : 'Exportar CSV'}
-        </button>
-      </div>
+      {/* Cabecera: en telefono el botón de exportar pasa arriba a todo lo ancho */}
+      <CabeceraPagina
+        titulo={
+          <div className="flex items-center gap-3">
+            <i className="fa-solid fa-chart-line text-indigo-400 text-xl" />
+            <h1 className="text-2xl font-black text-white">Reportes</h1>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-violet-400/80 bg-violet-500/10 px-2 py-0.5 rounded-full border border-violet-500/20">
+              Ultra
+            </span>
+          </div>
+        }
+        accionPrincipal={
+          <button
+            onClick={handleExport}
+            disabled={exporting || loading}
+            className="text-xs font-bold text-violet-400 bg-violet-500/10 px-3 py-2 rounded-lg border border-violet-500/20 hover:bg-violet-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <i className={`fa-solid ${exporting ? 'fa-spinner fa-spin' : 'fa-file-arrow-down'}`} />
+            {exporting ? 'Exportando...' : 'Exportar CSV'}
+          </button>
+        }
+      />
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-2 items-center">
+      <BarraFiltros
+        className="items-center"
+        accion={
+          <button onClick={() => load(startDate, endDate, branchId)} className="dax-btn-primary text-xs">
+            <i className="fa-solid fa-search" /> Aplicar
+          </button>
+        }
+      >
         <div className="flex flex-wrap items-center gap-1 bg-slate-800/40 rounded-lg p-1 border border-slate-700/50">
           {PRESETS.map((p) => (
             <button
               key={p.label}
               onClick={() => applyPreset(p)}
-              className={`px-4 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider transition-colors ${
+              className={`px-4 py-1.5 max-sm:flex-1 max-sm:min-h-[44px] rounded-md text-xs font-bold uppercase tracking-wider transition-colors ${
                 isPresetActive(p)
                   ? 'bg-violet-600 text-white shadow'
                   : 'bg-transparent text-slate-400 hover:text-white'
@@ -336,12 +350,11 @@ export function HQReportsHub() {
           <option value="">Todas las sucursales</option>
           {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
         </select>
-        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="dax-input w-36 text-xs" />
-        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="dax-input w-36 text-xs" />
-        <button onClick={() => load(startDate, endDate, branchId)} className="dax-btn-primary text-xs">
-          <i className="fa-solid fa-search" /> Aplicar
-        </button>
-      </div>
+        <ParFechas>
+          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="dax-input w-36 text-xs" />
+          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="dax-input w-36 text-xs" />
+        </ParFechas>
+      </BarraFiltros>
 
       {loading ? <Spinner text="Cargando reportes..." /> : !data ? (
         <DaxCard><div className="p-12 text-center text-slate-600">Sin datos</div></DaxCard>

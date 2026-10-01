@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import { reportsApi, type DashboardData } from '../../api/reports'
 import { DaxCard } from '../../components/ui/DaxCard'
+import { BarraFiltros, ParFechas } from '../../components/ui/BarraFiltros'
+import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
 import { Spinner } from '../../components/ui/Spinner'
 import { useTheme } from '../../context/ThemeContext'
 import {
@@ -92,34 +94,45 @@ export function Reports() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <i className="fa-solid fa-chart-pie text-indigo-400 text-xl" />
-          <h1 className="text-2xl font-black text-white">Reportes</h1>
-        </div>
-      </div>
+      <CabeceraPagina
+        titulo={
+          <div className="flex items-center gap-3">
+            <i className="fa-solid fa-chart-pie text-indigo-400 text-xl" />
+            <h1 className="text-2xl font-black text-white">Reportes</h1>
+          </div>
+        }
+      />
 
       {/* Filtros */}
-      <div className="flex flex-wrap gap-2 items-center">
-        {PRESETS.map((p) => (
-          <button
-            key={p.label}
-            onClick={() => applyPreset(p)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-              startDate === p.start() && endDate === p.end()
-                ? 'bg-indigo-600 text-white'
-                : 'bg-slate-700/50 text-slate-400 hover:text-white'
-            }`}
-          >
-            {p.label}
+      <BarraFiltros
+        className="items-center"
+        accion={
+          <button onClick={() => load(startDate, endDate)} className="dax-btn-primary text-xs">
+            <i className="fa-solid fa-search" /> Filtrar
           </button>
-        ))}
-        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="dax-input w-36 text-xs" />
-        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="dax-input w-36 text-xs" />
-        <button onClick={() => load(startDate, endDate)} className="dax-btn-primary text-xs">
-          <i className="fa-solid fa-search" /> Filtrar
-        </button>
-      </div>
+        }
+      >
+        {/* Atajos de fecha: 4 en una fila en telefono; sm:contents los deja sueltos como hoy */}
+        <div className="grid grid-cols-4 gap-2 sm:contents">
+          {PRESETS.map((p) => (
+            <button
+              key={p.label}
+              onClick={() => applyPreset(p)}
+              className={`px-3 py-1.5 max-sm:min-h-[44px] rounded-lg text-xs font-semibold transition-colors ${
+                startDate === p.start() && endDate === p.end()
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-slate-700/50 text-slate-400 hover:text-white'
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+        <ParFechas>
+          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="dax-input w-36 text-xs" />
+          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="dax-input w-36 text-xs" />
+        </ParFechas>
+      </BarraFiltros>
 
       {loading ? <Spinner text="Cargando reportes..." /> : !data ? (
         <DaxCard>
