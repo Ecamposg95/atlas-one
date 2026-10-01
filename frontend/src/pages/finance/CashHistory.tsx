@@ -10,6 +10,10 @@ import { DaxCard } from '../../components/ui/DaxCard'
 import { Spinner } from '../../components/ui/Spinner'
 import { formatCurrency } from '../../utils/currency'
 import { toast } from '../../store/toastStore'
+import { useEsTelefono } from '../../hooks/useIsMobile'
+import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
+import { ListaTarjetas } from '../../components/ui/ListaTarjetas'
+import { TarjetaFila } from '../../components/ui/TarjetaFila'
 
 // Surface FastAPI `detail` so 409/422 messages reach the user.
 function serverDetail(err: unknown, fallback: string): string {
@@ -32,7 +36,7 @@ function MovementModal({ type, onClose, onConfirm }: { type: 'IN' | 'OUT'; onClo
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="dax-card p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+      <div className="dax-card dax-modal p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-black text-white mb-4">
           {type === 'IN' ? '💰 Entrada de Efectivo' : '💸 Salida / Gasto'}
         </h3>
@@ -46,7 +50,7 @@ function MovementModal({ type, onClose, onConfirm }: { type: 'IN' | 'OUT'; onClo
             <input type="text" value={concept} onChange={(e) => setConcept(e.target.value)} className="dax-input" placeholder="Ej: Fondo de cambio, Gasto operativo..." />
           </div>
         </div>
-        <div className="flex gap-2 mt-5">
+        <div className="dax-modal-footer -mx-6 px-6 flex gap-2 mt-5">
           <button onClick={onClose} className="dax-btn-secondary flex-1">Cancelar</button>
           <button onClick={submit} disabled={loading || !amount || !concept} className={`flex-1 ${type === 'IN' ? 'dax-btn-primary' : 'dax-btn-danger'} justify-center`}>
             {loading ? <i className="fa-solid fa-spinner fa-spin" /> : `Registrar ${type === 'IN' ? 'Entrada' : 'Salida'}`}
@@ -74,7 +78,7 @@ function CloseModal({ summary, onClose, onConfirm }: { summary: CashSummary; onC
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="dax-card p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+      <div className="dax-card dax-modal p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-black text-white mb-4">Finalizar Turno</h3>
         <div className="space-y-3 text-sm mb-4">
           <div className="flex justify-between"><span className="text-slate-500">Fondo inicial</span><span>{formatCurrency(summary.opening_amount)}</span></div>
@@ -103,7 +107,7 @@ function CloseModal({ summary, onClose, onConfirm }: { summary: CashSummary; onC
             </p>
           )}
         </div>
-        <div className="flex gap-2 mt-5">
+        <div className="dax-modal-footer -mx-6 px-6 flex gap-2 mt-5">
           <button onClick={onClose} className="dax-btn-secondary flex-1">Cancelar</button>
           <button onClick={submit} disabled={loading} className="dax-btn-danger flex-1 justify-center">
             {loading ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-lock" /> Cerrar Turno</>}
@@ -123,6 +127,7 @@ export function CashHistory() {
 // no puede convivir con hooks en el mismo componente.
 function CashHistoryHQView() {
   const printerName = usePOSStore(s => s.printerName)
+  const esTelefono = useEsTelefono()
   const [session, setSession] = useState<CashSession | null>(null)
   const [summary, setSummary] = useState<CashSummary | null>(null)
   const [history, setHistory] = useState<CashSession[]>([])
@@ -204,16 +209,16 @@ function CashHistoryHQView() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <i className="fa-solid fa-vault text-indigo-400 text-xl" />
-          <h1 className="text-2xl font-black text-white">Corte de caja</h1>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={load} className="dax-btn-secondary text-xs"><i className="fa-solid fa-rotate-right" /></button>
-          {session?.id && <button onClick={() => downloadPdf(session.id)} className="dax-btn-secondary text-xs"><i className="fa-solid fa-file-pdf" /> PDF</button>}
-        </div>
-      </div>
+      <CabeceraPagina
+        titulo={
+          <div className="flex items-center gap-3">
+            <i className="fa-solid fa-vault text-indigo-400 text-xl" />
+            <h1 className="text-2xl font-black text-white">Corte de caja</h1>
+          </div>
+        }
+        acciones={<button onClick={load} className="dax-btn-secondary text-xs" aria-label="Actualizar"><i className="fa-solid fa-rotate-right" /></button>}
+        accionPrincipal={session?.id ? <button onClick={() => downloadPdf(session.id)} className="dax-btn-secondary text-xs"><i className="fa-solid fa-file-pdf" /> PDF</button> : undefined}
+      />
 
       {noSession ? (
         <DaxCard>
@@ -263,23 +268,37 @@ function CashHistoryHQView() {
           {summary?.movements && summary.movements.length > 0 && (
             <DaxCard padding={false}>
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-4 py-3 border-b border-slate-700/50">Movimientos recientes</p>
-              <table className="dax-table w-full">
-                <thead><tr><th>Tipo</th><th>Concepto</th><th className="text-right">Monto</th><th>Hora</th></tr></thead>
-                <tbody>
+              {esTelefono ? (
+                <ListaTarjetas className="p-3">
                   {summary.movements.map((m) => (
-                    <tr key={m.id}>
-                      <td><span className={`dax-badge ${m.type === 'IN' ? 'dax-badge-green' : 'dax-badge-red'}`}>{m.type === 'IN' ? 'Entrada' : 'Salida'}</span></td>
-                      <td className="text-sm">{m.concept}</td>
-                      <td className={`text-right font-semibold ${m.type === 'IN' ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {m.type === 'IN' ? '+' : '-'}{formatCurrency(m.amount)}
-                      </td>
-                      <td className="text-xs text-slate-500">
-                        {new Date(m.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
-                      </td>
-                    </tr>
+                    <TarjetaFila
+                      key={m.id}
+                      titulo={m.concept}
+                      subtitulo={new Date(m.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                      estado={<span className={`dax-badge ${m.type === 'IN' ? 'dax-badge-green' : 'dax-badge-red'}`}>{m.type === 'IN' ? 'Entrada' : 'Salida'}</span>}
+                      importe={<span className={m.type === 'IN' ? 'text-emerald-400' : 'text-red-400'}>{m.type === 'IN' ? '+' : '-'}{formatCurrency(m.amount)}</span>}
+                    />
                   ))}
-                </tbody>
-              </table>
+                </ListaTarjetas>
+              ) : (
+                <table className="dax-table w-full">
+                  <thead><tr><th>Tipo</th><th>Concepto</th><th className="text-right">Monto</th><th>Hora</th></tr></thead>
+                  <tbody>
+                    {summary.movements.map((m) => (
+                      <tr key={m.id}>
+                        <td><span className={`dax-badge ${m.type === 'IN' ? 'dax-badge-green' : 'dax-badge-red'}`}>{m.type === 'IN' ? 'Entrada' : 'Salida'}</span></td>
+                        <td className="text-sm">{m.concept}</td>
+                        <td className={`text-right font-semibold ${m.type === 'IN' ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {m.type === 'IN' ? '+' : '-'}{formatCurrency(m.amount)}
+                        </td>
+                        <td className="text-xs text-slate-500">
+                          {new Date(m.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </DaxCard>
           )}
 
@@ -322,61 +341,87 @@ function CashHistoryHQView() {
           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-4 py-3 border-b border-slate-700/50">
             Historial de cortes
           </p>
-          <div className="overflow-x-auto">
-            <table className="dax-table w-full text-xs">
-              <thead>
-                <tr>
-                  <th>Apertura</th>
-                  <th>Cierre</th>
-                  <th>Cajero</th>
-                  <th className="text-right">Fondo</th>
-                  <th className="text-right">Cierre reportado</th>
-                  <th>Estado</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.map((h) => (
-                  <tr key={h.id}>
-                    <td className="text-slate-400">{fmtDate(h.opened_at)}</td>
-                    <td className="text-slate-400">{h.closed_at ? fmtDate(h.closed_at) : <span className="text-emerald-400">Activo</span>}</td>
-                    <td>{h.user_name ?? `#${h.user_id}`}</td>
-                    <td className="text-right tabular-nums">{formatCurrency(h.opening_balance)}</td>
-                    <td className="text-right tabular-nums">{h.closing_balance != null ? formatCurrency(h.closing_balance) : '—'}</td>
-                    <td>
-                      <span className={`dax-badge ${h.status === 'OPEN' ? 'dax-badge-green' : 'dax-badge-blue'}`}>
-                        {h.status === 'OPEN' ? 'Abierto' : 'Cerrado'}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="flex gap-1">
-                        <button
-                          onClick={() => downloadPdf(h.id)}
-                          className="text-slate-500 hover:text-indigo-400 transition-colors"
-                          title="Descargar PDF"
-                        >
-                          <i className="fa-solid fa-file-pdf" />
-                        </button>
-                        {printerName && (
-                          <button
-                            onClick={() => printCut(h.id)}
-                            disabled={printingId === h.id}
-                            className="text-slate-500 hover:text-white transition-colors disabled:opacity-40"
-                            title="Reimprimir corte"
-                          >
-                            {printingId === h.id
-                              ? <i className="fa-solid fa-spinner fa-spin" />
-                              : <i className="fa-solid fa-print" />
-                            }
-                          </button>
-                        )}
-                      </div>
-                    </td>
+          {esTelefono ? (
+            <ListaTarjetas className="p-3">
+              {history.map((h) => (
+                <TarjetaFila
+                  key={h.id}
+                  titulo={`Apertura ${fmtDate(h.opened_at)}`}
+                  subtitulo={h.user_name ?? `#${h.user_id}`}
+                  importe={h.closing_balance != null ? formatCurrency(h.closing_balance) : '—'}
+                  estado={<span className={`dax-badge ${h.status === 'OPEN' ? 'dax-badge-green' : 'dax-badge-blue'}`}>{h.status === 'OPEN' ? 'Abierto' : 'Cerrado'}</span>}
+                  datos={[
+                    { etiqueta: 'Fondo', valor: formatCurrency(h.opening_balance) },
+                    { etiqueta: 'Cierre', valor: h.closed_at ? fmtDate(h.closed_at) : <span className="text-emerald-400">Activo</span> },
+                  ]}
+                  acciones={<>
+                    <button onClick={() => downloadPdf(h.id)} className="dax-btn-secondary text-xs"><i className="fa-solid fa-file-pdf" /> PDF</button>
+                    {printerName && (
+                      <button onClick={() => printCut(h.id)} disabled={printingId === h.id} className="dax-btn-secondary text-xs disabled:opacity-40">
+                        {printingId === h.id ? <i className="fa-solid fa-spinner fa-spin" /> : <i className="fa-solid fa-print" />} Reimprimir
+                      </button>
+                    )}
+                  </>}
+                />
+              ))}
+            </ListaTarjetas>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="dax-table w-full text-xs">
+                <thead>
+                  <tr>
+                    <th>Apertura</th>
+                    <th>Cierre</th>
+                    <th>Cajero</th>
+                    <th className="text-right">Fondo</th>
+                    <th className="text-right">Cierre reportado</th>
+                    <th>Estado</th>
+                    <th></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {history.map((h) => (
+                    <tr key={h.id}>
+                      <td className="text-slate-400">{fmtDate(h.opened_at)}</td>
+                      <td className="text-slate-400">{h.closed_at ? fmtDate(h.closed_at) : <span className="text-emerald-400">Activo</span>}</td>
+                      <td>{h.user_name ?? `#${h.user_id}`}</td>
+                      <td className="text-right tabular-nums">{formatCurrency(h.opening_balance)}</td>
+                      <td className="text-right tabular-nums">{h.closing_balance != null ? formatCurrency(h.closing_balance) : '—'}</td>
+                      <td>
+                        <span className={`dax-badge ${h.status === 'OPEN' ? 'dax-badge-green' : 'dax-badge-blue'}`}>
+                          {h.status === 'OPEN' ? 'Abierto' : 'Cerrado'}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => downloadPdf(h.id)}
+                            className="text-slate-500 hover:text-indigo-400 transition-colors"
+                            title="Descargar PDF"
+                          >
+                            <i className="fa-solid fa-file-pdf" />
+                          </button>
+                          {printerName && (
+                            <button
+                              onClick={() => printCut(h.id)}
+                              disabled={printingId === h.id}
+                              className="text-slate-500 hover:text-white transition-colors disabled:opacity-40"
+                              title="Reimprimir corte"
+                            >
+                              {printingId === h.id
+                                ? <i className="fa-solid fa-spinner fa-spin" />
+                                : <i className="fa-solid fa-print" />
+                              }
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </DaxCard>
       )}
 
