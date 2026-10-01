@@ -51,6 +51,13 @@ describe('TarjetaFila', () => {
     expect(abrir).not.toHaveBeenCalled()
     expect(screen.getByText('E5')).toBeTruthy()
   })
+  it('acciones={false} no pinta la fila de acciones', () => {
+    const { container } = render(<TarjetaFila titulo="x" acciones={false} estado={false} />)
+    const raiz = container.firstElementChild as HTMLElement
+    // solo el cuerpo: ni fila de acciones ni hueco de estado
+    expect(raiz.children).toHaveLength(1)
+    expect(container.querySelector('.flex-wrap')).toBeNull()
+  })
   it('sin onClick no hay boton envolvente', () => {
     render(<TarjetaFila titulo="solo" />)
     expect(screen.queryByRole('button')).toBeNull()

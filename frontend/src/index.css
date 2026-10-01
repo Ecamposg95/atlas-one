@@ -750,12 +750,15 @@
    la fila `flex flex-wrap` de siempre y cada hijo conserva su `w-36`.
    Bajo `sm` cada hijo directo va a todo lo ancho (esta regla, fuera de
    @layer, gana a la utilidad `w-36`). `ParFechas` es el hijo `.grid`:
-   conserva sus 2 columnas y sus dos campos llenan cada una. La acción
-   (aplicar/exportar) queda a todo lo ancho y con 44 px de alto. */
+   bajo `sm` sigue siendo rejilla de 2 columnas (su `sm:contents` solo
+   aplica de 640 hacia arriba) y sus dos campos llenan cada una. Los
+   `.dax-input` se estiran solo como hijos directos de la barra o de
+   `ParFechas`: un campo anidado junto a un botón de icono no se aprieta.
+   La acción (aplicar/exportar) queda a todo lo ancho y con 44 px de alto. */
 @media (max-width: 639px) {
   .dax-filtros > * { width: 100%; max-width: none; }
-  .dax-filtros > .grid { display: grid; }          /* ParFechas conserva sus 2 columnas */
   .dax-filtros > .grid > * { width: 100%; max-width: none; min-width: 0; }
-  .dax-filtros .dax-input { width: 100%; }
+  .dax-filtros > .dax-input,
+  .dax-filtros > .grid > .dax-input { width: 100%; }
   .dax-filtros-accion > * { width: 100%; min-height: 44px; }
 }

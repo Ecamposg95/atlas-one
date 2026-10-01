@@ -74,9 +74,9 @@ export function TarjetaFila({
             </span>
           )}
         </span>
-        {(estado != null || importe != null) && (
+        {(estado || importe != null) && (
           <span className="flex items-center gap-2 shrink-0">
-            {estado}
+            {estado || null}
             {importe != null && (
               <span className="font-semibold text-sm tabular-nums" style={{ color: 'var(--dax-text)' }}>
                 {importe}
@@ -126,7 +126,7 @@ export function TarjetaFila({
         </button>
       )}
 
-      {acciones != null && (
+      {acciones && (
         <div
           className="flex flex-wrap gap-2 mt-2 pt-2 [&>button]:min-h-[44px] [&>a]:min-h-[44px]"
           style={{ borderTop: '1px solid var(--dax-border-dim)' }}
