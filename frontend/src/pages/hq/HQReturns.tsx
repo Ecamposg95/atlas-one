@@ -8,6 +8,10 @@ import { DaxCard } from '../../components/ui/DaxCard'
 import { TablaDesplazable } from '../../components/ui/TablaDesplazable'
 import { Badge } from '../../components/ui/Badge'
 import { Spinner } from '../../components/ui/Spinner'
+import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
+import { ListaTarjetas } from '../../components/ui/ListaTarjetas'
+import { TarjetaFila } from '../../components/ui/TarjetaFila'
+import { useEsTelefono } from '../../hooks/useIsMobile'
 import { formatCurrency } from '../../utils/currency'
 import { estadoDevolucion } from '../../utils/enumsEspanol'
 
@@ -26,6 +30,7 @@ const CAN_APPROVE = ['ADMINISTRADOR', 'DUEÑO', 'GERENTE']
 export function HQReturns() {
   const { user } = useAuthStore()
   const canApprove = CAN_APPROVE.includes(user?.role ?? '')
+  const esTelefono = useEsTelefono()
 
   const [tab, setTab] = useState<'pending' | 'history'>('pending')
   const [pending, setPending] = useState<ReturnDocument[]>([])
@@ -113,24 +118,28 @@ export function HQReturns() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <i className="fa-solid fa-undo text-indigo-400 text-xl" />
-          <h1 className="text-2xl font-black text-white">Devoluciones</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <select
-            value={branchId}
-            onChange={(e) => { const v = e.target.value ? Number(e.target.value) : ''; setBranchId(v); loadData(v) }}
-            className="dax-input text-xs max-w-[160px]">
-            <option value="">Todas las sucursales</option>
-            {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </select>
-          <button onClick={() => loadData(branchId)} className="dax-btn-secondary text-xs">
-            <i className="fa-solid fa-rotate-right" /> Actualizar
-          </button>
-        </div>
-      </div>
+      <CabeceraPagina
+        titulo={
+          <div className="flex items-center gap-3">
+            <i className="fa-solid fa-undo text-indigo-400 text-xl" />
+            <h1 className="text-2xl font-black text-white">Devoluciones</h1>
+          </div>
+        }
+        acciones={
+          <>
+            <select
+              value={branchId}
+              onChange={(e) => { const v = e.target.value ? Number(e.target.value) : ''; setBranchId(v); loadData(v) }}
+              className="dax-input text-xs max-w-[160px]">
+              <option value="">Todas las sucursales</option>
+              {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+            <button onClick={() => loadData(branchId)} className="dax-btn-secondary text-xs">
+              <i className="fa-solid fa-rotate-right" /> Actualizar
+            </button>
+          </>
+        }
+      />
 
       {/* Tabs */}
       <div className="flex gap-1 bg-slate-800/50 p-1 rounded-lg w-fit">
@@ -148,6 +157,30 @@ export function HQReturns() {
         ))}
       </div>
 
+      {esTelefono ? (
+        <ListaTarjetas
+          cargando={loading}
+          vacio={items.length === 0}
+          textoVacio={tab === 'pending' ? 'No hay devoluciones pendientes' : 'Sin historial'}
+        >
+          {items.map((r) => (
+            <TarjetaFila
+              key={r.id}
+              titulo={returnLabel(r)}
+              subtitulo={`${new Date(r.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })} · ${returnBranchName(r) ?? '—'} · ${returnRequestedBy(r)}`}
+              importe={<span className="text-red-400">{formatCurrency(r.total_refunded)}</span>}
+              estado={<Badge variant={statusVariant(r.status)}>{estadoDevolucion(r.status)}</Badge>}
+              datos={[{ etiqueta: 'Motivo', valor: r.reason }]}
+              onClick={() => setSelected(r)}
+              acciones={
+                <button onClick={() => setSelected(r)} className="dax-btn-secondary text-xs">
+                  <i className="fa-solid fa-eye" /> Ver detalle
+                </button>
+              }
+            />
+          ))}
+        </ListaTarjetas>
+      ) : (
       <DaxCard padding={false}>
         {loading ? <Spinner text="Cargando..." /> : items.length === 0 ? (
           <div className="p-12 text-center text-slate-600">
@@ -192,6 +225,7 @@ export function HQReturns() {
           </div>
         )}
       </DaxCard>
+      )}
 
       {/* Modal detalle */}
       {selected && (

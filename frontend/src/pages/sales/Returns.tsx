@@ -6,6 +6,10 @@ import { toast } from '../../store/toastStore'
 import { DaxCard } from '../../components/ui/DaxCard'
 import { Badge } from '../../components/ui/Badge'
 import { Spinner } from '../../components/ui/Spinner'
+import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
+import { ListaTarjetas } from '../../components/ui/ListaTarjetas'
+import { TarjetaFila } from '../../components/ui/TarjetaFila'
+import { useEsTelefono } from '../../hooks/useIsMobile'
 import { formatCurrency } from '../../utils/currency'
 
 // Surface FastAPI `detail` so 409/422 messages reach the user.
@@ -28,6 +32,7 @@ export function Returns() {
 function ReturnsAdminView() {
   const { user } = useAuthStore()
   const canApprove = CAN_APPROVE.includes(user?.role ?? '')
+  const esTelefono = useEsTelefono()
 
   const [tab, setTab] = useState<'pending' | 'history'>('pending')
   const [pending, setPending] = useState<ReturnDocument[]>([])
@@ -104,15 +109,19 @@ function ReturnsAdminView() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <i className="fa-solid fa-undo text-indigo-400 text-xl" />
-          <h1 className="text-2xl font-black text-white">Devoluciones</h1>
-        </div>
-        <button onClick={() => { loadPending(); loadHistory() }} className="dax-btn-secondary text-xs">
-          <i className="fa-solid fa-rotate-right" /> Actualizar
-        </button>
-      </div>
+      <CabeceraPagina
+        titulo={
+          <div className="flex items-center gap-3">
+            <i className="fa-solid fa-undo text-indigo-400 text-xl" />
+            <h1 className="text-2xl font-black text-white">Devoluciones</h1>
+          </div>
+        }
+        accionPrincipal={
+          <button onClick={() => { loadPending(); loadHistory() }} className="dax-btn-secondary text-xs">
+            <i className="fa-solid fa-rotate-right" /> Actualizar
+          </button>
+        }
+      />
 
       {/* Tabs */}
       <div className="flex gap-1 bg-slate-800/50 p-1 rounded-lg w-fit">
@@ -131,6 +140,30 @@ function ReturnsAdminView() {
         ))}
       </div>
 
+      {esTelefono ? (
+        <ListaTarjetas
+          cargando={loading}
+          vacio={items.length === 0}
+          textoVacio={tab === 'pending' ? 'No hay devoluciones pendientes' : 'Sin historial'}
+        >
+          {items.map((r) => (
+            <TarjetaFila
+              key={r.id}
+              titulo={returnLabel(r)}
+              subtitulo={`${new Date(r.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })} · ${returnRequestedBy(r)}`}
+              importe={<span className="text-red-400">{formatCurrency(r.total_refunded)}</span>}
+              estado={<Badge variant={statusVariant(r.status)}>{r.status}</Badge>}
+              datos={[{ etiqueta: 'Motivo', valor: r.reason }]}
+              onClick={() => setSelected(r)}
+              acciones={
+                <button onClick={() => setSelected(r)} className="dax-btn-secondary text-xs">
+                  <i className="fa-solid fa-eye" /> Ver detalle
+                </button>
+              }
+            />
+          ))}
+        </ListaTarjetas>
+      ) : (
       <DaxCard padding={false}>
         {loading ? <Spinner text="Cargando..." /> : items.length === 0 ? (
           <div className="p-12 text-center text-slate-600">
@@ -173,11 +206,12 @@ function ReturnsAdminView() {
           </div>
         )}
       </DaxCard>
+      )}
 
       {/* Modal detalle */}
       {selected && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setSelected(null)}>
-          <div className="dax-card p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="dax-card dax-modal p-6 w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-black text-white">Detalle de Devolución</h3>
               <button onClick={() => setSelected(null)} className="text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
@@ -215,7 +249,7 @@ function ReturnsAdminView() {
             </div>
 
             {canApprove && selected.status === 'PENDING' && (
-              <div className="flex gap-2 mt-4">
+              <div className="dax-modal-footer -mx-6 px-6 flex gap-2 mt-4">
                 <button onClick={() => handleApprove(selected.id)} disabled={actionLoading} className="dax-btn-primary flex-1 justify-center">
                   {actionLoading ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Aprobar</>}
                 </button>
@@ -231,7 +265,7 @@ function ReturnsAdminView() {
       {/* Modal de rechazo con motivo */}
       {rejectingId && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setRejectingId(null)}>
-          <div className="dax-card p-5 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+          <div className="dax-card dax-modal p-5 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-base font-black mb-3" style={{ color: 'var(--dax-text)' }}>
               <i className="fa-solid fa-circle-exclamation mr-2 text-red-500" />
               Rechazar devolución
@@ -247,7 +281,7 @@ function ReturnsAdminView() {
               placeholder="Ej: Producto fuera de plazo de devolución, ticket duplicado..."
               autoFocus
             />
-            <div className="flex gap-2 mt-4">
+            <div className="dax-modal-footer -mx-5 px-5 flex gap-2 mt-4">
               <button onClick={() => setRejectingId(null)} className="dax-btn-secondary flex-1" disabled={actionLoading}>
                 Cancelar
               </button>
