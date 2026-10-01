@@ -12,7 +12,7 @@ Suite de negocio multi-tenant, modular, API-first para negocios físicos en LatA
 **Backend** FastAPI + SQLAlchemy + PostgreSQL (`app/`). **Frontend** React + Vite + TS
 (SPA/PWA, `frontend/`), servido por el backend en prod. Una sola base de código sirve a
 todos los verticales; un **preset de industria** decide qué **módulos** se activan por
-organización (POS, inventario, CRM, citas, restaurante…).
+organización (POS, inventario, CRM, citas, restaurante…). Un **plan comercial** (`organization.plan`: FREE, START, PRO, BUSINESS, SCALE, ULTRA_PLUS; catálogo en `app/services/plans.py`) pone topes de usuarios activos y sucursales que venden y gobierna los módulos de crecimiento; nunca apaga lo ya encendido.
 
 Orientación rápida: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) ·
 [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md) · [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md) ·
@@ -117,6 +117,11 @@ tests/               # pytest (SQLite en memoria); conftest.py = fixtures + seed
 
 ### Habilitar un módulo en un preset
 Edita `scripts/init_presets_v2.py` (seed de `industry_presets`) y/o el fallback en `app/services/capabilities_service.py`. El módulo debe existir en el catálogo `modules` (`seed_global_modules`).
+
+### Cambiar el plan de una organización
+- Desde `/platform/organizations/{id}` (selector "Plan y uso") o `PUT /api/platform/organizations/{id}` con `{"plan": "PRO"}`. Claves válidas en `app/services/plans.py::claves_validas()`.
+- Cambiar de plan NO toca `organization_modules`: los módulos encendidos se heredan y la pantalla los marca "Fuera de plan". Los topes (usuarios activos, sucursales que venden) solo frenan altas nuevas con un 403 cuyo `detail` nombra el plan mínimo.
+- Módulos permitidos = base ∪ preset del giro ∪ crecimiento del plan. Para añadir un módulo a un plan, edita `_START/_PRO/_BUSINESS/_SCALE` en `plans.py` y corre `tests/test_planes.py`.
 
 ### Dar de alta una tienda que llega de rmazh (Data X POS)
 1. Exportar desde rmazh en **solo lectura** con `scripts/adhoc/2026-09-01/coqueta/export_coq2.py` (repo Atlas-Rmazh, por `railway ssh`; pasar la sucursal con existencias, no el HQ). Guarda el xlsx y el JSON de usuarios **fuera del repo** (trae hashes).

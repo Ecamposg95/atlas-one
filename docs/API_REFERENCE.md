@@ -192,7 +192,8 @@ CRUD `/stations`, `/routes` (dept→estación) · `POST /tickets` (fire) · `GET
 |---|---|---|
 | stats | /stats/* | KPIs cross-tenant (global, trends, top-tenants, cohort, heatmap…) — caché TTL |
 | control_tower | /control-tower/* | Dashboard tiempo-real (sales-now, active-sessions, deltas) |
-| organizations | /organizations | **CRUD de tenants** + módulos/preset por org; `apply-preset`, `modules/{key}` toggle, `industry`, `bootstrap`, `reset-preset`, delete `?force=` (cascade ~30 tablas) `[SUPERADMIN]` |
+| organizations | /organizations | **CRUD de tenants** + plan (cambio vía selector); módulos/preset por org; `apply-preset`, `modules/{key}` toggle, `industry`, `bootstrap`, `reset-preset`, `{id}/plan-uso`, delete `?force=` (cascade ~30 tablas) `[SUPERADMIN]` |
+| plans | /plans | Catálogo de planes (FREE, START, PRO, BUSINESS, SCALE, ULTRA_PLUS); topes y módulos por plan |
 | branches | /branches | Sucursales cross-tenant (CRUD, archive) |
 | users | /users | Usuarios cross-tenant (CRUD, reset-password, `role` `[SUPERADMIN]`) |
 | admins | /admins | Platform-admins (invite, manual, role, revoke) `[SUPERADMIN]` |
@@ -216,6 +217,8 @@ CRUD `/stations`, `/routes` (dept→estación) · `POST /tickets` (fire) · `GET
 ---
 
 ## Gotchas transversales (para quien consume la API)
+- **Códigos de error por plan** (2026-09-30): `PUT /api/platform/organizations/{id}` → 400 plan desconocido (el `detail` lista las claves válidas); `PATCH /api/platform/organizations/{id}/modules/{key}?enable=` → 403 módulo fuera de plan (el `detail` nombra el plan mínimo o "fuera del preset"); `POST /api/users/`, `PUT /api/users/{id}` (reactivar), `POST /api/branches/` (que vende), `PUT /api/branches/{id}` (pasar a vender) → 403 tope de plan.
+- **Campos nuevos** (2026-09-30): `GET /api/platform/organizations/{id}/modules` devuelve por módulo `plan_minimo` (clave del plan que lo incluye, o `null` si es base o del preset) y `permitido_por_plan` (bool: base ∪ preset ∪ plan actual); `GET /api/platform/organizations/{id}/upsell-recommendations` devuelve `plan_minimo` por recomendación.
 - **`convert-to-sale` de quotes NO dispara el evento outbox** (a diferencia de `create_sale`): no descuenta insumos ni libera mesa. Tampoco congela `usd_rate` ni comisión de tarjeta (ambos son exclusivos de `create_sale`).
 - **`GET /api/products/search` es inalcanzable** (preexistente, hallado 2026-09-21): `core.router` monta `/{product_id}` antes que `search.router` en `app/modules/products/router/__init__.py`, así que cualquier ruta declarada en `search.py` queda tapada por el match de `/{product_id}`.
 - **Las mutaciones de `/products/{id}/variants` y `/products/variants/{id}`** exigen `require_module("variants")`; los endpoints de `barcodes.py` no lo exigen (solo rol donde aplica). Recuerda que ADMIN/DUEÑO hacen bypass de `require_module` en general (RBAC.md §5): un admin de una org sin el módulo `variants` activo puede llamar el endpoint de variantes a mano aunque la UI no se lo muestre.
