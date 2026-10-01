@@ -6,7 +6,8 @@ from pathlib import Path
 import shutil
 import time
 from app.core.database import get_db
-from app.models.organization import Branch
+from app.models.organization import Branch, Organization
+from app.services import plans
 from app.schemas.branches import BranchCreate, BranchRead, BranchUpdate
 from app.core.security import get_current_user, require_admin_or_owner
 from app.models.users import User, Role
@@ -56,6 +57,14 @@ def create_branch(
         branch.is_headquarters = False
     else:
         branch.is_headquarters = False
+
+    # Tope del plan: solo las sucursales que venden cuentan.
+    if branch.can_sell:
+        org = db.query(Organization).filter(Organization.id == org_id).first()
+        try:
+            plans.verificar_alta_sucursal(db, org)
+        except plans.LimitePlanAlcanzado as e:
+            raise HTTPException(status_code=403, detail=str(e))
 
     # Force org_id; strip inherit_catalog (not a DB column)
     branch_data = branch.dict(exclude_unset=True)
@@ -173,6 +182,15 @@ def update_branch(
         db_branch.is_headquarters = True
     elif branch.branch_type is not None:
         db_branch.is_headquarters = False
+
+    # Pasar a vender una sucursal que no vendia es un alta para el tope del plan.
+    datos = branch.dict(exclude_unset=True)
+    if datos.get("can_sell") is True and not db_branch.can_sell:
+        org = db.query(Organization).filter(Organization.id == org_id).first()
+        try:
+            plans.verificar_alta_sucursal(db, org)
+        except plans.LimitePlanAlcanzado as e:
+            raise HTTPException(status_code=403, detail=str(e))
 
     for key, value in branch.dict(exclude_unset=True).items():
         setattr(db_branch, key, value)

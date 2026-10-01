@@ -11,6 +11,7 @@ from app.models.organization import Organization
 from app.models.users import User, UserOrganization, Role as AppRole
 from app.schemas.organization import OrganizationCreate, OrganizationRead, OrganizationUpdate
 from app.core.security import get_password_hash
+from app.services import plans
 from app.modules.platform.dependencies import require_platform_admin, require_superadmin
 
 from ._shared import (
@@ -93,6 +94,11 @@ def update_organization(org_id: int, org_in: OrganizationUpdate, db: Session = D
 
     update_data = org_in.model_dump(exclude_unset=True)
     applied = {k: v for k, v in update_data.items() if k in _ORG_UPDATE_FIELDS}
+    if "plan" in applied and not plans.es_plan_valido(applied["plan"]):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Plan desconocido {applied['plan']!r}. Válidos: {', '.join(plans.claves_validas())}",
+        )
     for field, value in applied.items():
         setattr(db_org, field, value)
 
@@ -727,6 +733,15 @@ def toggle_org_module(
 
     if module_key == "core" and not enable:
          raise HTTPException(400, "Cannot disable CORE module")
+
+    # Gating por plan: solo al encender; apagar siempre se permite.
+    if enable:
+        from app.models.modules import Module
+        mod = db.query(Module).filter(Module.key == module_key).first()
+        try:
+            plans.verificar_activar_modulo(db, org, module_key, mod.name if mod else None)
+        except plans.ModuloFueraDePlan as e:
+            raise HTTPException(status_code=403, detail=str(e))
 
     org_mod = db.query(OrganizationModule).filter(
         OrganizationModule.organization_id == org_id,
