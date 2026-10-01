@@ -17,8 +17,8 @@ import type { Brand, Department } from '../../types/products'
 import { errorDetailText } from '../../utils/errorDetail'
 import { sortByName } from '../../utils/sortByName'
 import {
-  MAX_COPIAS, construirLote, copiasIniciales, mensajeExceso, normalizarCopias, ponerN,
-  textoResumen, usarExistencia,
+  MAX_COPIAS, construirLote, copiasIniciales, inicioDelDiaISO, mensajeExceso, normalizarCopias,
+  ponerN, textoResumen, usarExistencia,
 } from './lote'
 
 /**
@@ -100,6 +100,7 @@ export function Labels() {
         brand_id: filtros.brand_id,
         gender: filtros.gender,
         only_with_stock: filtros.only_with_stock,
+        created_after: inicioDelDiaISO(filtros.created_after),
       })
       setItems(res.items)
       setCopias(copiasIniciales(res.items))
@@ -121,7 +122,7 @@ export function Labels() {
     } finally {
       setCargando(false)
     }
-  }, [busqueda, filtros.department_id, filtros.brand_id, filtros.gender, filtros.only_with_stock])
+  }, [busqueda, filtros.department_id, filtros.brand_id, filtros.gender, filtros.only_with_stock, filtros.created_after])
 
   useEffect(() => { void cargar() }, [cargar])
 

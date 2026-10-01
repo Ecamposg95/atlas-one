@@ -52,6 +52,8 @@ export interface LabelCandidatesFilters {
   gender?: string
   only_with_stock?: boolean
   product_id?: string
+  /** ISO 8601: solo tallas dadas de alta desde ese instante. */
+  created_after?: string
 }
 
 /** Texto del layout. `x,y` es la esquina superior izquierda, en dots. */
@@ -126,6 +128,7 @@ export const labelsApi = {
     if (filters.gender) params.gender = filters.gender
     if (filters.only_with_stock) params.only_with_stock = true
     if (filters.product_id) params.product_id = filters.product_id
+    if (filters.created_after) params.created_after = filters.created_after
     const { data } = await client.get<LabelCandidatesResponse>('/labels/candidates', { params })
     return { items: data?.items ?? [], total: data?.total ?? 0 }
   },

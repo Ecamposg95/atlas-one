@@ -9,6 +9,7 @@ Diseño: `docs/superpowers/specs/2026-09-22-etiquetas-en-atlas-one-design.md`.
 from __future__ import annotations
 
 import base64
+from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -80,11 +81,16 @@ def listar_candidatos(
     gender: Optional[str] = None,
     only_with_stock: bool = False,
     product_id: Optional[str] = None,
+    created_after: Optional[datetime] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization),
 ):
     """Variantes vivas que este usuario puede etiquetar.
+
+    `created_after` (ISO 8601) deja solo las tallas dadas de alta desde ese
+    momento: es como la tienda etiqueta el lote que acaba de capturar sin
+    pescar entre el catálogo viejo.
 
     Las que no se pueden imprimir vienen con `printable=false` y su `reason`:
     esconderlas dejaría a la tienda buscando una prenda que nunca aparece.
@@ -98,7 +104,7 @@ def listar_candidatos(
         db, current_user, org_id,
         search=(search or None), product_id=product_id,
         department_id=department_id, brand_id=brand_id, gender=genero,
-        only_with_stock=only_with_stock,
+        only_with_stock=only_with_stock, created_after=created_after,
     )
     return {"items": filas, "total": len(filas)}
 

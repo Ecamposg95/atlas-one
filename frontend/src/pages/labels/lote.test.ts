@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { LabelCandidate } from '../../api/labels'
 import {
+  inicioDelDiaISO,
   MAX_COPIAS,
   MAX_LOTE,
   alcance,
@@ -203,5 +204,21 @@ describe('textoResumen', () => {
     ]
     const texto = textoResumen(construirLote(items, { a: 3, b: 0, c: 1 }, SIN_SELECCION))
     expect(texto).toBe('3 etiquetas · 1 renglón · 1 sin código de barras · 1 en 0 copias')
+  })
+})
+
+describe('inicioDelDiaISO', () => {
+  it('convierte la fecha local del filtro al instante UTC de su medianoche', () => {
+    // Medianoche local de ese día, expresada en UTC: es lo que recibe el
+    // backend para que "altas desde el 1 de octubre" no pierda las de la
+    // madrugada por el huso horario.
+    const esperado = new Date(2026, 9, 1, 0, 0, 0, 0).toISOString()
+    expect(inicioDelDiaISO('2026-10-01')).toBe(esperado)
+  })
+
+  it('devuelve undefined cuando el filtro está vacío o mal escrito', () => {
+    expect(inicioDelDiaISO('')).toBeUndefined()
+    expect(inicioDelDiaISO('ayer')).toBeUndefined()
+    expect(inicioDelDiaISO('2026-13-40')).toBeUndefined()
   })
 })
