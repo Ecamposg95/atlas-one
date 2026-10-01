@@ -4,6 +4,7 @@ import { returnsApi } from '../../../api/returns'
 import type { SalesDocument } from '../../../types/sales'
 import { saleLabel } from '../../../types/sales'
 import { formatCurrency } from '../../../utils/currency'
+import { useEsTelefono } from '../../../hooks/useIsMobile'
 
 interface ReturnLine {
   variant_id: string
@@ -57,6 +58,7 @@ function buildLines(sale: SalesDocument): ReturnLine[] {
 
 export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }: Props) {
   const [folio, setFolio] = useState('')
+  const esTelefono = useEsTelefono()
   const [sale, setSale] = useState<SalesDocument | null>(initialSale ?? null)
   const [lines, setLines] = useState<ReturnLine[]>(initialSale ? buildLines(initialSale) : [])
   const [refundMethod, setRefundMethod] = useState<RefundMethod>(
@@ -180,10 +182,10 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
       style={{ background: 'var(--dax-modal-backdrop)' }}
       onClick={onClose}
     >
-      <div className="dax-card p-6 w-full max-w-lg max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+      <div className="dax-card dax-modal p-6 w-full max-w-lg max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-black text-white">Nueva Devolución</h3>
-          <button onClick={onClose} className="text-slate-500 hover:text-white">
+          <button onClick={onClose} className="dax-btn-icon text-slate-500 hover:text-white" aria-label="Cerrar">
             <i className="fa-solid fa-xmark text-lg" />
           </button>
         </div>
@@ -399,7 +401,12 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
               </div>
             )}
 
-            <div className="flex gap-2">
+            {/* Este modal es compartido con el POS de la cajera, que no debe cambiar en
+                escritorio: por eso `dax-modal-footer` (cuyo relleno movería el pie de hoy)
+                solo se aplica en teléfono, donde Cancelar/Registrar quedan pegados al pie
+                y visibles con el teclado abierto. Bajo 640 px el modal, también en el POS,
+                pasa a hoja inferior por `dax-modal`: mejora aceptada. */}
+            <div className={`flex gap-2 ${esTelefono ? 'dax-modal-footer -mx-6 px-6' : ''}`}>
               <button onClick={onClose} className="dax-btn-secondary flex-1">Cancelar</button>
               <button
                 onClick={submit}
