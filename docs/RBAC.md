@@ -86,7 +86,7 @@ Dependencia que exige que `key` esté habilitado (`OrganizationModule.is_enabled
 - Habilitación viva: tabla `organization_modules`. La lee `/api/users/me/context` → `enabled_modules = {"core", …módulos activos}` (`core` siempre habilitado). Es lo que consume el Sidebar del frontend.
 - Se siembra desde presets: `apply_industry_preset` toma de `industry_presets` (DB = fuente de verdad; fallback a dict hardcodeado `INDUSTRY_PRESETS`), filtra keys inexistentes contra el catálogo `modules`, y hace upsert.
 
-> **Nota (2026-09-30): Los 403 por tope de plan (`app/services/plans.py`) no son RBAC.** Dependen de la organización, no del rol. Un ADMINISTRADOR en una org FREE al tope de usuarios activos recibe 403 al crear el tercer usuario, igual que un CAJERO. El tope es plan + org, no rol + plan.
+> **Nota (2026-09-30): Los 403 por tope de plan (`app/services/plans.py`) no son RBAC:** dependen de la organización, no del rol. Un ADMINISTRADOR en una org FREE al tope recibe 403 al crear el tercer usuario.
 
 ---
 
