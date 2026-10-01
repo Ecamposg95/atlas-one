@@ -33,6 +33,7 @@ from . import (
     reports_money,
     control_tower,
     overview,
+    plans,
 )
 
 router = APIRouter(
@@ -58,3 +59,4 @@ router.include_router(reports.router)
 router.include_router(reports_money.router)
 router.include_router(control_tower.router)
 router.include_router(overview.router)
+router.include_router(plans.router)
