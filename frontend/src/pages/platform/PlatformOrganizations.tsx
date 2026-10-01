@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { platformApi, PlatformOrg, OrgDependencies, IndustryPreset } from '../../api/platform'
+import { platformApi, PlatformOrg, OrgDependencies, IndustryPreset, nombrePlan } from '../../api/platform'
 import { toast } from '../../store/toastStore'
 import { PlatformPageShell } from '../../components/platform/PlatformPageShell'
 import { KPICard } from '../../components/platform/KPICard'
@@ -46,6 +46,7 @@ function orgToForm(o: PlatformOrg): OrgFormState {
 }
 
 type StatusFilter = 'all' | 'active' | 'archived'
+const PLAN_ORDEN = ['FREE', 'START', 'PRO', 'BUSINESS', 'SCALE', 'ULTRA_PLUS']
 
 // ── Inline shared styles (tokens) ────────────────────────────────────────────
 const inputStyle: React.CSSProperties = {
@@ -236,6 +237,7 @@ export function PlatformOrganizations() {
   const [showArchived, setShowArchived] = useState(false)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [industryFilter, setIndustryFilter] = useState<string[]>([])
+  const [planFilter, setPlanFilter] = useState<string[]>([])
   const [dateStart, setDateStart] = useState('')
   const [dateEnd, setDateEnd] = useState('')
 
@@ -293,6 +295,12 @@ export function PlatformOrganizations() {
     return Array.from(set).sort()
   }, [orgs])
 
+  const planOptions = useMemo(() => {
+    const set = new Set<string>()
+    orgs.forEach(o => set.add(o.plan ?? 'FREE'))
+    return PLAN_ORDEN.filter(k => set.has(k))
+  }, [orgs])
+
   // ── Filtered rows ────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     return orgs.filter(o => {
@@ -302,6 +310,8 @@ export function PlatformOrganizations() {
 
       // Industry filter
       if (industryFilter.length > 0 && !industryFilter.includes(o.industry_type || '')) return false
+
+      if (planFilter.length > 0 && !planFilter.includes(o.plan ?? 'FREE')) return false
 
       // Date range
       if (dateStart || dateEnd) {
@@ -321,7 +331,7 @@ export function PlatformOrganizations() {
 
       return true
     })
-  }, [orgs, statusFilter, industryFilter, dateStart, dateEnd])
+  }, [orgs, statusFilter, industryFilter, planFilter, dateStart, dateEnd])
 
   // ── Drawer handlers ──────────────────────────────────────────────────────
   const openCreate = () => {
@@ -501,6 +511,17 @@ export function PlatformOrganizations() {
       ),
     },
     {
+      key: 'plan',
+      label: 'Plan',
+      sortable: true,
+      sortValue: o => PLAN_ORDEN.indexOf(o.plan ?? 'FREE'),
+      accessor: o => (
+        <span style={{ background: 'rgba(20,184,166,0.12)', color: 'var(--p-teal)', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>
+          {nombrePlan(o.plan)}
+        </span>
+      ),
+    },
+    {
       key: 'modules',
       label: 'Módulos',
       accessor: () => <span style={{ color: 'var(--p-muted)' }}>—</span>,
@@ -566,6 +587,12 @@ export function PlatformOrganizations() {
     )
   }
 
+  const togglePlan = (key: string) => {
+    setPlanFilter(prev =>
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+    )
+  }
+
   const toolbar = (
     <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
       {/* Status filter */}
@@ -594,6 +621,24 @@ export function PlatformOrganizations() {
               style={chipStyle(industryFilter.includes(ind))}
             >
               {ind}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Plan chips */}
+      {planOptions.length > 0 && (
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span style={{ fontSize: 11, color: 'var(--p-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            Plan:
+          </span>
+          {planOptions.map(pl => (
+            <button
+              key={pl}
+              onClick={() => togglePlan(pl)}
+              style={chipStyle(planFilter.includes(pl))}
+            >
+              {nombrePlan(pl)}
             </button>
           ))}
         </div>
