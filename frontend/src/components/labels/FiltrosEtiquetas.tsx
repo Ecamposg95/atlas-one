@@ -1,4 +1,5 @@
 import type { Brand, Department } from '../../types/products'
+import { haceMinutosLocal, inicioDeHoyLocal } from '../../pages/labels/lote'
 import { GENEROS } from '../products/ProductCommercialSection'
 
 /**
@@ -17,7 +18,7 @@ export interface EstadoFiltros {
   brand_id: string
   gender: string
   only_with_stock: boolean
-  /** `YYYY-MM-DD` local; vacío = sin filtro. */
+  /** `YYYY-MM-DDTHH:mm` (o solo fecha) local; vacío = sin filtro. */
   created_after: string
 }
 
@@ -38,13 +39,6 @@ interface Props {
   /** Se dispara al enviar el formulario (Enter en la búsqueda) o al tocar Buscar. */
   onBuscar: () => void
   cargando: boolean
-}
-
-/** Fecha de hoy en la zona del navegador, en el formato del `<input type="date">`. */
-function hoyLocal(): string {
-  const d = new Date()
-  const dos = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}`
 }
 
 export function FiltrosEtiquetas({ valor, onChange, departamentos, marcas, onBuscar, cargando }: Props) {
@@ -120,10 +114,10 @@ export function FiltrosEtiquetas({ valor, onChange, departamentos, marcas, onBus
                  className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
             Altas desde
           </label>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <input
               id="etiquetas-altas-desde"
-              type="date"
+              type="datetime-local"
               className="dax-input text-sm"
               value={valor.created_after}
               onChange={(e) => set('created_after', e.target.value)}
@@ -131,10 +125,18 @@ export function FiltrosEtiquetas({ valor, onChange, departamentos, marcas, onBus
             <button
               type="button"
               className="dax-btn-secondary px-3 text-sm whitespace-nowrap"
-              onClick={() => set('created_after', hoyLocal())}
-              title="Solo lo dado de alta hoy"
+              onClick={() => set('created_after', inicioDeHoyLocal())}
+              title="Lo dado de alta desde la medianoche"
             >
               Hoy
+            </button>
+            <button
+              type="button"
+              className="dax-btn-secondary px-3 text-sm whitespace-nowrap"
+              onClick={() => set('created_after', haceMinutosLocal(60))}
+              title="Lo dado de alta en los últimos 60 minutos"
+            >
+              Última hora
             </button>
             {valor.created_after && (
               <button

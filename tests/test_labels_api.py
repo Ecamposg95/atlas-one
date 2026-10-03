@@ -368,3 +368,15 @@ def test_altas_desde_combina_con_los_otros_filtros(client, db, org, branch_a, ti
 def test_altas_desde_invalida_es_422(client, tienda, auth_admin, org):
     r = client.get("/api/labels/candidates?created_after=ayer", headers=_h(auth_admin, org))
     assert r.status_code == 422
+
+
+def test_candidatos_traen_la_fecha_de_alta_de_la_talla(client, db, tienda, auth_admin, org):
+    """La pantalla ordena y muestra la hora de alta: la tienda imprime la tanda
+    que acaba de capturar, no todo el día."""
+    from datetime import datetime, timezone
+    _, variante = tienda["chamarra"]
+    variante.created_at = datetime(2026, 10, 3, 21, 15, tzinfo=timezone.utc)
+    db.commit()
+    r = client.get("/api/labels/candidates?search=Chamarra", headers=_h(auth_admin, org))
+    fila = _por_sku(r.json()["items"])["LV-CHAM-SLI-NEG-M"]
+    assert datetime.fromisoformat(fila["created_at"].replace("Z", "+00:00")) == variante.created_at.replace(tzinfo=timezone.utc)

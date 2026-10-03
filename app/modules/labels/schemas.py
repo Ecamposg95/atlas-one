@@ -6,6 +6,7 @@ que sale del rollo.
 """
 from __future__ import annotations
 
+from datetime import datetime
 from typing import List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field
@@ -37,6 +38,9 @@ class LabelCandidate(BaseModel):
     printable: bool = True
     # Por qué NO se puede imprimir. `None` cuando `printable` es True.
     reason: Optional[str] = None
+    # Alta de la TALLA (UTC). La pantalla ordena por esto y muestra la hora
+    # para que la tienda imprima la tanda que acaba de capturar.
+    created_at: Optional[datetime] = None
 
 
 class CandidatesResponse(BaseModel):

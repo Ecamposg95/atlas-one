@@ -37,6 +37,8 @@ export interface LabelCandidate {
   printable: boolean
   /** Por qué NO se puede imprimir. `null` cuando `printable` es true. */
   reason: string | null
+  /** Alta de la talla en ISO (UTC). Sirve para ordenar y mostrar la hora. */
+  created_at: string | null
 }
 
 export interface LabelCandidatesResponse {

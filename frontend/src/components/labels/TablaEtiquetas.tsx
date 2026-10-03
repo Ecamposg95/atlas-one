@@ -67,6 +67,14 @@ function BotonPrevia({ item, activa, onVerPrevia }: { item: LabelCandidate; acti
   )
 }
 
+/** "03/10 15:21" en la zona del navegador; la fecha viene en UTC. */
+function horaDeAlta(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const dos = (n: number) => String(n).padStart(2, '0')
+  return `${dos(d.getDate())}/${dos(d.getMonth() + 1)} ${dos(d.getHours())}:${dos(d.getMinutes())}`
+}
+
 export function TablaEtiquetas({
   items, copias, seleccion, activa, onAlternar, onAlternarTodo, onCopias, onVerPrevia, esTelefono,
 }: Props) {
@@ -187,6 +195,11 @@ export function TablaEtiquetas({
                 <td className="font-mono text-xs">
                   <span className="block">{it.sku}</span>
                   <span className="block text-slate-500">{it.barcode || '—'}</span>
+                  {it.created_at && (
+                    <span className="block text-[10px] text-slate-600" title="Fecha de alta">
+                      alta {horaDeAlta(it.created_at)}
+                    </span>
+                  )}
                 </td>
                 <td className="text-right whitespace-nowrap">
                   <span className="block">{formatCurrency(it.price)}</span>

@@ -17,8 +17,8 @@ import type { Brand, Department } from '../../types/products'
 import { errorDetailText } from '../../utils/errorDetail'
 import { sortByName } from '../../utils/sortByName'
 import {
-  MAX_COPIAS, construirLote, copiasIniciales, inicioDelDiaISO, mensajeExceso, normalizarCopias,
-  ponerN, textoResumen, usarExistencia,
+  MAX_COPIAS, construirLote, copiasIniciales, instanteLocalISO, masRecientesPrimero, mensajeExceso,
+  normalizarCopias, ponerN, textoResumen, usarExistencia,
 } from './lote'
 
 /**
@@ -100,9 +100,10 @@ export function Labels() {
         brand_id: filtros.brand_id,
         gender: filtros.gender,
         only_with_stock: filtros.only_with_stock,
-        created_after: inicioDelDiaISO(filtros.created_after),
+        created_after: instanteLocalISO(filtros.created_after),
       })
-      setItems(res.items)
+      // Con el filtro de fecha la tienda quiere ver primero la tanda recién capturada.
+      setItems(filtros.created_after ? masRecientesPrimero(res.items) : res.items)
       setCopias(copiasIniciales(res.items))
       // La selección y la vista previa se quedarían apuntando a variantes que
       // ya no están en pantalla: mandar a imprimir algo que no se ve es la
