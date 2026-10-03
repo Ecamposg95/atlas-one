@@ -166,17 +166,51 @@ export function textoResumen(resumen: ResumenLote): string {
 }
 
 /**
- * Fecha del filtro "Altas desde" (`YYYY-MM-DD`, en la zona de la tienda) al
- * instante ISO de su medianoche local. El backend compara en UTC, así que
- * mandar la fecha a secas perdería las altas de la madrugada en México.
- * Vacía o mal escrita -> `undefined` (no se filtra).
+ * Valor del filtro "Altas desde" (`YYYY-MM-DD` o `YYYY-MM-DDTHH:mm`, en la zona
+ * de la tienda) al instante ISO que entiende el backend. Solo la fecha = su
+ * medianoche local. Vacío o mal escrito -> `undefined` (no se filtra).
  */
-export function inicioDelDiaISO(fecha: string): string | undefined {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(fecha.trim())
+export function instanteLocalISO(valor: string): string | undefined {
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?$/.exec(valor.trim())
   if (!m) return undefined
   const [anio, mes, dia] = [Number(m[1]), Number(m[2]) - 1, Number(m[3])]
-  const d = new Date(anio, mes, dia, 0, 0, 0, 0)
+  const [hora, minuto] = [Number(m[4] ?? 0), Number(m[5] ?? 0)]
+  if (hora > 23 || minuto > 59) return undefined
+  const d = new Date(anio, mes, dia, hora, minuto, 0, 0)
   // `new Date` acepta 2026-13-40 y lo "corrige": si no coincide, era inválida.
   if (d.getFullYear() !== anio || d.getMonth() !== mes || d.getDate() !== dia) return undefined
   return d.toISOString()
+}
+
+/** Compatibilidad: solo fecha -> medianoche local. */
+export function inicioDelDiaISO(fecha: string): string | undefined {
+  return /^\d{4}-\d{2}-\d{2}$/.test(fecha.trim()) ? instanteLocalISO(fecha) : undefined
+}
+
+/**
+ * Hora local de hace `minutos`, en el formato del `<input type="datetime-local">`.
+ * Es lo que ponen los botones "Hoy" (minutos hasta la medianoche) y "Última hora".
+ */
+export function haceMinutosLocal(minutos: number, ahora: Date = new Date()): string {
+  const d = new Date(ahora.getTime() - minutos * 60_000)
+  const dos = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}T${dos(d.getHours())}:${dos(d.getMinutes())}`
+}
+
+/** Medianoche local de hoy, para el botón "Hoy". */
+export function inicioDeHoyLocal(ahora: Date = new Date()): string {
+  const dos = (n: number) => String(n).padStart(2, '0')
+  return `${ahora.getFullYear()}-${dos(ahora.getMonth() + 1)}-${dos(ahora.getDate())}T00:00`
+}
+
+/**
+ * Con el filtro de fecha activo la tienda quiere ver primero lo que acaba de
+ * capturar. Las filas sin fecha (no debería haber) van al final.
+ */
+export function masRecientesPrimero(items: LabelCandidate[]): LabelCandidate[] {
+  return [...items].sort((a, b) => {
+    const ta = a.created_at ? Date.parse(a.created_at) : Number.NEGATIVE_INFINITY
+    const tb = b.created_at ? Date.parse(b.created_at) : Number.NEGATIVE_INFINITY
+    return tb - ta
+  })
 }

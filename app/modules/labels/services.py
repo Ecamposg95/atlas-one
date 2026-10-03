@@ -144,6 +144,13 @@ def variantes_visibles(
     ]
 
 
+def _en_utc(valor: Optional[datetime]) -> Optional[datetime]:
+    """SQLite entrega `created_at` naive (y es UTC); Postgres lo trae con zona."""
+    if valor is None:
+        return None
+    return valor if valor.tzinfo else valor.replace(tzinfo=timezone.utc)
+
+
 def _alta_desde(variante: ProductVariant, desde: Optional[datetime]) -> bool:
     """SQLite devuelve `created_at` naive y Postgres con zona: se comparan
     ambos en UTC para que el corte sea el mismo en pruebas y en producción."""
@@ -200,6 +207,7 @@ def candidatos(
             "copies_default": copias_por_omision(existencia),
             "printable": motivo is None,
             "reason": motivo,
+            "created_at": _en_utc(variante.created_at),
         })
     return filas
 

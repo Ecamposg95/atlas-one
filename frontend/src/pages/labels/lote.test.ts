@@ -8,7 +8,10 @@ import { describe, expect, it } from 'vitest'
 
 import type { LabelCandidate } from '../../api/labels'
 import {
+  haceMinutosLocal,
   inicioDelDiaISO,
+  instanteLocalISO,
+  masRecientesPrimero,
   MAX_COPIAS,
   MAX_LOTE,
   alcance,
@@ -38,6 +41,7 @@ function fila(over: Partial<LabelCandidate> & { variant_id: string }): LabelCand
     copies_default: 3,
     printable: true,
     reason: null,
+    created_at: null,
     ...over,
   }
 }
@@ -220,5 +224,37 @@ describe('inicioDelDiaISO', () => {
     expect(inicioDelDiaISO('')).toBeUndefined()
     expect(inicioDelDiaISO('ayer')).toBeUndefined()
     expect(inicioDelDiaISO('2026-13-40')).toBeUndefined()
+  })
+})
+
+describe('instanteLocalISO', () => {
+  it('acepta fecha y hora locales y las convierte al instante ISO', () => {
+    expect(instanteLocalISO('2026-10-03T15:30')).toBe(new Date(2026, 9, 3, 15, 30, 0, 0).toISOString())
+  })
+  it('con solo la fecha toma la medianoche local, como antes', () => {
+    expect(instanteLocalISO('2026-10-03')).toBe(new Date(2026, 9, 3, 0, 0, 0, 0).toISOString())
+  })
+  it('vacío o inválido es undefined', () => {
+    expect(instanteLocalISO('')).toBeUndefined()
+    expect(instanteLocalISO('2026-10-03T25:99')).toBeUndefined()
+  })
+})
+
+describe('haceMinutosLocal', () => {
+  it('da la hora local de hace N minutos en el formato del input datetime-local', () => {
+    const base = new Date(2026, 9, 3, 15, 30, 0, 0)
+    expect(haceMinutosLocal(60, base)).toBe('2026-10-03T14:30')
+    expect(haceMinutosLocal(0, base)).toBe('2026-10-03T15:30')
+  })
+})
+
+describe('masRecientesPrimero', () => {
+  it('ordena por fecha de alta descendente y manda al final las que no la traen', () => {
+    const items = [
+      fila({ variant_id: 'b', created_at: '2026-10-03T20:00:00Z' }),
+      fila({ variant_id: 'sin', created_at: null }),
+      fila({ variant_id: 'a', created_at: '2026-10-03T21:00:00Z' }),
+    ]
+    expect(masRecientesPrimero(items).map((i) => i.sku)).toEqual(['A', 'B', 'SIN'])
   })
 })
