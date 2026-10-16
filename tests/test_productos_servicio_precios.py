@@ -39,6 +39,20 @@ class TestEmpaquesYEscalones:
         assert [p.name for p in v.packaging_units] == ["Pack"]
         assert [p.price_name for p in v.prices] == ["Pack"]
 
+    def test_reemplazar_borra_registros_legados_sin_organizacion(self, db, org, branch_a):
+        """Legado con `organization_id` NULL: debe salir (y desenlazarse antes)."""
+        _, v = _make_product(db, org, "Legado", "LEG-1", 10, [(branch_a.id, True)])
+        pkg = PackagingUnit(variant_id=v.id, name="Caja", units_per_package=12,
+                            package_price=100, organization_id=None)
+        db.add(pkg); db.flush()
+        db.add(ProductPrice(variant_id=v.id, price_name="Caja", min_quantity=12,
+                            unit_price=8, linked_package_id=pkg.id, organization_id=None))
+        db.flush()
+        armar_empaques(db, org.id, v, [], reemplazar=True)
+        armar_escalones(db, org.id, v, [], {}, reemplazar=True)
+        assert db.query(PackagingUnit).filter(PackagingUnit.variant_id == v.id).count() == 0
+        assert db.query(ProductPrice).filter(ProductPrice.variant_id == v.id).count() == 0
+
     def test_escalon_en_cero_es_422_antes_de_escribir(self, db, org, branch_a):
         _, v = _make_product(db, org, "Refresco", "REF-3", 10, [(branch_a.id, True)])
         with pytest.raises(HTTPException) as exc:

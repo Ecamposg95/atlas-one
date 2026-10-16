@@ -19,17 +19,18 @@ def armar_empaques(
     `temp_id -> id` (el formulario manda ids temporales) y `nombre -> id`.
 
     `reemplazar` (edición): primero se desenlazan los escalones que apuntan a
-    un empaque (FK) y luego se borran los empaques viejos.
+    un empaque (FK) y luego se borran los empaques viejos. Ambos pasos filtran
+    solo por `variant_id`: la variante ya se cargó acotada a la org, y los
+    registros viejos pueden tener `organization_id` NULL (TenantMixin lo
+    permite); filtrar por org los dejaría vivos y el borrado fallaría por FK.
     """
     if reemplazar:
         # Sesión sincronizada (default): no deja objetos viejos en memoria.
         db.query(ProductPrice).filter(
             ProductPrice.variant_id == variante.id,
-            ProductPrice.organization_id == org_id,
         ).update({ProductPrice.linked_package_id: None})
         db.query(PackagingUnit).filter(
             PackagingUnit.variant_id == variante.id,
-            PackagingUnit.organization_id == org_id,
         ).delete()
         db.flush()
         db.expire(variante, ["packaging_units", "prices"])
@@ -62,9 +63,10 @@ def armar_escalones(
     medio camino dejaría al producto sin escalones."""
     validar_escalones(escalones)
     if reemplazar:
+        # Solo por variante (ya acotada a la org): los escalones legados con
+        # `organization_id` NULL también deben salir, o se duplicarían en cada edición.
         db.query(ProductPrice).filter(
             ProductPrice.variant_id == variante.id,
-            ProductPrice.organization_id == org_id,
         ).delete()
         db.flush()
         db.expire(variante, ["prices"])

@@ -41,6 +41,15 @@ class TestSkuEnEdicion:
         db.refresh(v)
         assert v.sku == "mio-1"
 
+    def test_sku_vacio_es_422_y_no_cambia(self, client, db, org, branch_a, auth_admin):
+        p, v = _make_product(db, org, "Vacío", "VAC-1", 10, [(branch_a.id, True)])
+        db.flush()
+        r = client.put(f"/api/products/{p.id}", json={"sku": "   "}, headers=_h(auth_admin, org))
+        assert r.status_code == 422, r.text
+        assert r.json()["detail"] == "El SKU no puede quedar vacío"
+        db.refresh(v)
+        assert v.sku == "VAC-1"
+
 
 class TestSucursalesEnEdicion:
     def test_sucursal_ajena_en_target_branch_ids_es_422(self, client, db, org, branch_a, auth_admin):
