@@ -297,6 +297,9 @@ def importar_fila(db: Session, ctx: ContextoImportacion, fila: dict) -> Resultad
         return ResultadoFila("SKIP", "", nombre, None)
 
     precio = celda_decimal(fila.get("precio base", fila.get("precio", 0)))
+    # Antes de cualquier escritura: el mismo texto para filas nuevas y existentes.
+    if precio <= 0:
+        raise FilaInvalida(f"'{sku}': el precio debe ser mayor a cero.")
     costo = celda_decimal(fila.get("costo", 0))
     has_iva = celda_texto(fila.get("incluye iva", "no")).strip().lower() in ("si", "sí", "yes", "1", "true")
     tasa_celda = _tasa_iva(fila, sku)

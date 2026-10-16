@@ -236,3 +236,41 @@ class TestHandlerDelgado:
         from app.modules.products.services import importacion
         assert "print(" not in inspect.getsource(import_export)
         assert "print(" not in inspect.getsource(importacion)
+
+
+class TestPrecio:
+    def test_precio_cero_en_fila_nueva_y_en_existente_falla_sin_tocar_nada(self, client, db, org, branch_a, auth_admin):
+        p, v = _make_product(db, org, "Playera", "PLY-0", 100, [(branch_a.id, True)])
+        db.flush()
+        r = _subir(client, auth_admin, org, [
+            _fila("PLY-0", **{"Precio Base": "0"}),      # existente
+            _fila("NUEVO-0", **{"Precio Base": ""}),     # nueva, precio en blanco
+            _fila("NEG-1", **{"Precio Base": "-3"}),     # nueva, negativo
+        ])
+        assert r.status_code == 200, r.text
+        cuerpo = r.json()
+        assert (cuerpo["created"], cuerpo["updated"], cuerpo["failed"]) == (0, 0, 3)
+        assert all("mayor a cero" in d["error"] for d in cuerpo["details"])
+        db.refresh(v)
+        assert Decimal(str(v.price)) == Decimal("100"), "el precio anterior queda intacto"
+        assert db.query(ProductVariant).filter(ProductVariant.sku.in_(["NUEVO-0", "NEG-1"])).count() == 0
+
+
+class TestCommit:
+    def test_commit_fallido_es_500_y_no_reporta_exito(self, client, db, org, auth_admin, monkeypatch):
+        def _revienta():
+            raise RuntimeError("disco lleno")
+        monkeypatch.setattr(db, "commit", _revienta, raising=False)
+        r = _subir(client, auth_admin, org, [_fila("CM-1")])
+        assert r.status_code == 500, r.text
+        assert "No se pudieron guardar" in r.json()["detail"]
+        assert "created" not in r.json()
+
+    def test_commit_por_lote_fallido_tambien_es_500(self, client, db, org, auth_admin, monkeypatch):
+        """El commit cada 50 filas tampoco se traga: la fila 50 dispara el lote."""
+        def _revienta():
+            raise RuntimeError("conexión perdida")
+        monkeypatch.setattr(db, "commit", _revienta, raising=False)
+        r = _subir(client, auth_admin, org, [_fila(f"LOTE-{i}") for i in range(50)])
+        assert r.status_code == 500, r.text
+        assert "hasta la fila 51" in r.json()["detail"]
