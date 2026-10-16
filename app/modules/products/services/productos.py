@@ -14,17 +14,17 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.crud.products import _is_admin
-from app.models import Product, ProductVariant, User
+from app.models import PackagingUnit, Product, ProductPrice, ProductVariant, User
 from app.models.platform import PlatformAuditLog
 from app.modules.products.schemas import ProductCreate
 from app.modules.products.variant_label import variant_label
 from app.services.barcodes import AsignadorDeCodigos
 
-from .codigos import asignar_barcode_interno, validar_barcode_libre, validar_sku_unico
-from .comun import MANAGER_ROLES
+from .codigos import asignar_barcode_interno, sku_de_copia, validar_barcode_libre, validar_sku_unico
+from .comun import MANAGER_ROLES, variantes_vivas
 from .precios import armar_empaques, armar_escalones
 from .sucursales import (
-    armar_estado_por_sucursal, registrar_stock_inicial, resolver_sucursales_destino,
+    armar_estado_por_sucursal, copiar_estado_por_sucursal, registrar_stock_inicial, resolver_sucursales_destino,
     sucursal_de_existencia_inicial,
 )
 from .validaciones import (
@@ -176,3 +176,85 @@ def crear_producto(
                         stock_branch_id=destino_stock, user_id=user.id, asignador=asignador)
     db.flush()
     return producto
+
+
+def duplicar_producto(db: Session, org_id: int, user: User, product_id: str) -> Product:
+    """Copia producto + variantes VIVAS (SKU `-COPY-<n>`, código interno
+    nuevo, color/talla), empaques (sin barcode), escalones y estado por
+    sucursal. NO copia StockOnHand: la copia arranca sin existencias."""
+    origen = db.query(Product).filter(
+        Product.id == product_id, Product.organization_id == org_id,
+    ).first()
+    if origen is None:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+    vivas = variantes_vivas(origen)
+    if not vivas:
+        raise HTTPException(status_code=409, detail="El producto no tiene variantes vivas que duplicar.")
+
+    copia = Product(
+        name=f"{origen.name} (copia)",
+        description=origen.description,
+        unit=origen.unit,
+        image_url=origen.image_url,
+        department_id=origen.department_id,
+        brand_id=origen.brand_id,
+        # Ficha boutique: la copia es la misma prenda, con su género, modelo
+        # y material — si no, su nombre de venta sale distinto.
+        gender=origen.gender,
+        model=origen.model,
+        material=origen.material,
+        has_variants=origen.has_variants,
+        is_active=True,
+        approval_status="APPROVED",
+        created_by_user_id=user.id,
+        organization_id=org_id,
+    )
+    db.add(copia)
+    db.flush()
+
+    asignador = AsignadorDeCodigos(db, org_id)
+    for v in vivas:
+        nueva = ProductVariant(
+            product_id=copia.id,
+            sku=sku_de_copia(db, org_id, v.sku),
+            barcode=None,                  # único por org: se genera uno interno abajo
+            color=v.color,
+            size=v.size,
+            variant_name=v.variant_name,
+            price=v.price,
+            cost=v.cost,
+            has_iva=v.has_iva,
+            tax_rate=v.tax_rate,
+            organization_id=org_id,
+        )
+        db.add(nueva)
+        db.flush()
+        asignar_barcode_interno(db, org_id, nueva, asignador)
+
+        mapa_empaques: dict[str, str] = {}
+        for pkg in (v.packaging_units or []):
+            nuevo_pkg = PackagingUnit(
+                variant_id=nueva.id,
+                name=pkg.name,
+                barcode=None,
+                units_per_package=pkg.units_per_package,
+                package_price=pkg.package_price,
+                weight=pkg.weight,
+                dimensions=pkg.dimensions,
+                organization_id=org_id,
+            )
+            db.add(nuevo_pkg)
+            db.flush()
+            mapa_empaques[pkg.id] = nuevo_pkg.id
+        for pr in (v.prices or []):
+            db.add(ProductPrice(
+                variant_id=nueva.id,
+                price_name=pr.price_name,
+                min_quantity=pr.min_quantity,
+                unit_price=pr.unit_price,
+                linked_package_id=mapa_empaques.get(pr.linked_package_id) if pr.linked_package_id else None,
+                organization_id=org_id,
+            ))
+        copiar_estado_por_sucursal(db, org_id, v, nueva)
+    db.flush()
+    return copia

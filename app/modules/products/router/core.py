@@ -46,7 +46,7 @@ from app.modules.products.schemas import (
     ProductCreate, ProductRead, ProductUpdate, ProductListResponse,
 )
 from app.modules.products.sale_name import sku_sugerido
-from app.modules.products.services import crear_producto
+from app.modules.products.services import crear_producto, duplicar_producto
 from app.modules.products.variant_label import (
     COLOR_MAX, SIZE_MAX, clean_attr, variant_label,
 )
@@ -513,142 +513,30 @@ def restore_product(
     }
 
 
-@router.post("/{product_id}/duplicate", response_model=ProductRead)
+@router.post("/{product_id}/duplicate", response_model=ProductRead,
+             dependencies=[Depends(require_module("catalog"))])
 def duplicate_product(
     product_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization),
 ):
-    """
-    Duplica un producto existente. Copia:
-      - Product (nuevo id, mismo nombre + " (copia)")
-      - Variants (con SKU sufijo "-COPY-<n>" incremental hasta encontrar libre)
-      - PackagingUnits por variant
-      - ProductPrice (tiers) por variant
-      - ProductBranchStatus por variant (heredan la misma config multi-sucursal)
-    NO copia StockOnHand — el producto duplicado arranca sin existencias.
-    """
+    """Duplica un producto (ver `services.duplicar_producto`). Sin existencias."""
     # Track 3: cajero también puede duplicar productos visibles en su sucursal.
     if current_user.role not in _PRODUCT_ADVANCED_ROLES:
         raise HTTPException(status_code=403, detail="No autorizado")
-
-    source = db.query(Product).filter(
-        Product.id == product_id,
-        Product.organization_id == org_id,
-    ).first()
-    if not source:
-        raise HTTPException(status_code=404, detail="Producto no encontrado")
-
-    def _resolve_unique_sku(base_sku: str) -> str:
-        """Busca `<base>-COPY-<n>` que no exista en la org."""
-        if not base_sku:
-            base_sku = "SKU"
-        for n in range(1, 100):
-            candidate = f"{base_sku}-COPY-{n}"
-            exists = db.query(ProductVariant).join(Product).filter(
-                ProductVariant.sku == candidate,
-                Product.organization_id == org_id,
-                ProductVariant.deleted_at.is_(None) if hasattr(ProductVariant, 'deleted_at') else True,
-            ).first()
-            if not exists:
-                return candidate
-        # Fallback extremo
-        import uuid as _uuid
-        return f"{base_sku}-COPY-{_uuid.uuid4().hex[:6]}"
-
     try:
-        new_prod = Product(
-            name=f"{source.name} (copia)",
-            description=source.description,
-            unit=source.unit,
-            image_url=source.image_url,
-            department_id=source.department_id,
-            brand_id=source.brand_id,
-            # Ficha boutique: la copia es la misma prenda, con su genero,
-            # modelo y material -- si no, su nombre de venta sale distinto.
-            gender=source.gender,
-            model=source.model,
-            material=source.material,
-            has_variants=source.has_variants,
-            is_active=True,
-            approval_status='APPROVED',
-            created_by_user_id=current_user.id,
-            organization_id=org_id,
-        )
-        db.add(new_prod)
-        db.flush()
-
-        for src_var in source.variants:
-            new_sku = _resolve_unique_sku(src_var.sku)
-            new_var = ProductVariant(
-                product_id=new_prod.id,
-                sku=new_sku,
-                barcode=None,  # evita colisión de barcode único
-                variant_name=src_var.variant_name,
-                price=src_var.price,
-                cost=src_var.cost,
-                has_iva=src_var.has_iva,
-                tax_rate=src_var.tax_rate,
-                organization_id=org_id,
-            )
-            db.add(new_var)
-            db.flush()
-
-            # PackagingUnits
-            pkg_id_map: dict[str, str] = {}
-            for pkg in (src_var.packaging_units or []):
-                new_pkg = PackagingUnit(
-                    variant_id=new_var.id,
-                    name=pkg.name,
-                    barcode=None,
-                    units_per_package=pkg.units_per_package,
-                    package_price=pkg.package_price,
-                    weight=pkg.weight,
-                    dimensions=pkg.dimensions,
-                    organization_id=org_id,
-                )
-                db.add(new_pkg)
-                db.flush()
-                pkg_id_map[pkg.id] = new_pkg.id
-
-            # ProductPrice tiers
-            for pr in (src_var.prices or []):
-                db.add(ProductPrice(
-                    variant_id=new_var.id,
-                    price_name=pr.price_name,
-                    min_quantity=pr.min_quantity,
-                    unit_price=pr.unit_price,
-                    linked_package_id=pkg_id_map.get(pr.linked_package_id) if pr.linked_package_id else None,
-                    organization_id=org_id,
-                ))
-
-            # ProductBranchStatus (sin StockOnHand — arranca sin existencias)
-            src_pbs_rows = db.query(ProductBranchStatus).filter(
-                ProductBranchStatus.variant_id == src_var.id,
-                ProductBranchStatus.organization_id == org_id,
-            ).all()
-            for src_pbs in src_pbs_rows:
-                db.add(ProductBranchStatus(
-                    organization_id=org_id,
-                    variant_id=new_var.id,
-                    branch_id=src_pbs.branch_id,
-                    is_active_pos=src_pbs.is_active_pos,
-                    is_active_hq=src_pbs.is_active_hq,
-                    is_visible=src_pbs.is_visible,
-                    price_override=src_pbs.price_override,
-                    min_stock_alert=src_pbs.min_stock_alert,
-                    max_stock_limit=src_pbs.max_stock_limit,
-                ))
-
+        copia = duplicar_producto(db, org_id, current_user, product_id)
         db.commit()
-        db.refresh(new_prod)
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception:
         db.rollback()
         logger.exception("PRODUCT_DUPLICATE_FAILED product_id=%s org_id=%s", product_id, org_id)
         raise HTTPException(status_code=500, detail="Error al duplicar producto")
-
-    return _compute_product_read(new_prod, db, current_user, target_branch_id=current_user.branch_id)
+    db.refresh(copia)
+    return _compute_product_read(copia, db, current_user, target_branch_id=current_user.branch_id)
 
 
 # -----------------------------
