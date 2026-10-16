@@ -14,14 +14,14 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.crud.products import _is_admin
-from app.models import PackagingUnit, Product, ProductPrice, ProductVariant, User
+from app.models import PackagingUnit, Product, ProductBranchStatus, ProductPrice, ProductVariant, User
 from app.models.platform import PlatformAuditLog
-from app.modules.products.schemas import ProductCreate
+from app.modules.products.schemas import ProductCreate, ProductUpdate
 from app.modules.products.variant_label import variant_label
 from app.services.barcodes import AsignadorDeCodigos
 
 from .codigos import asignar_barcode_interno, sku_de_copia, validar_barcode_libre, validar_sku_unico
-from .comun import MANAGER_ROLES, variantes_vivas
+from .comun import MANAGER_ROLES, variante_principal, variantes_vivas
 from .precios import armar_empaques, armar_escalones
 from .sucursales import (
     armar_estado_por_sucursal, copiar_estado_por_sucursal, registrar_stock_inicial, resolver_sucursales_destino,
@@ -31,7 +31,7 @@ from .validaciones import (
     atributos_principal, exigir_campos_de_cajero, validar_departamento_y_marca,
     validar_escalones, validar_precio, validar_sucursales_de_la_org,
 )
-from .variantes import crear_variantes
+from .variantes import crear_variantes, pareja_repetida
 
 _AMBIGUO = "Indica en qué sucursal entra la existencia inicial: no se reparte sola entre varias sucursales."
 
@@ -174,6 +174,120 @@ def crear_producto(
     if datos.extra_variants:
         crear_variantes(db, org_id, producto, datos.extra_variants,
                         stock_branch_id=destino_stock, user_id=user.id, asignador=asignador)
+    db.flush()
+    return producto
+
+
+
+def _principal_editable_por_cajero(db: Session, user: User, producto: Product) -> None:
+    """CAJERO solo edita productos habilitados en su sucursal."""
+    if user.role != "CAJERO":
+        return
+    if not user.branch_id:
+        raise HTTPException(status_code=403, detail="CAJERO debe tener una sucursal asignada")
+    variante = producto.variants[0] if producto.variants else None
+    tiene_acceso = False
+    if variante is not None:
+        tiene_acceso = db.query(ProductBranchStatus).filter(
+            ProductBranchStatus.variant_id == variante.id,
+            ProductBranchStatus.branch_id == user.branch_id,
+        ).first() is not None
+    if not tiene_acceso:
+        raise HTTPException(status_code=403, detail="No tienes acceso para editar este producto en tu sucursal")
+
+
+def _editar_ficha(producto: Product, datos: ProductUpdate, enviados: set[str]) -> None:
+    """`is not None` no distingue "no lo mandes" de "bórralo": un null explícito
+    BORRA descripción/unidad/imagen/marca/departamento/género/modelo/material y
+    no mandar el campo lo deja como está (`model_fields_set`). `name` es la
+    excepción: un producto sin nombre no existe."""
+    if datos.name is not None and datos.name.strip():
+        producto.name = datos.name
+    if "description" in enviados:
+        producto.description = datos.description
+    if "unit" in enviados:
+        producto.unit = datos.unit
+    if "image_url" in enviados:
+        producto.image_url = (datos.image_url or "").strip() or None
+    if "department_id" in enviados:
+        producto.department_id = datos.department_id
+    if "brand_id" in enviados:
+        producto.brand_id = datos.brand_id
+    if "gender" in enviados:
+        producto.gender = datos.gender
+    if "model" in enviados:
+        producto.model = (datos.model or "").strip() or None
+    if "material" in enviados:
+        producto.material = (datos.material or "").strip() or None
+    if datos.is_active is not None:
+        producto.is_active = datos.is_active
+    if datos.approval_status is not None:
+        producto.approval_status = datos.approval_status
+
+
+def _editar_principal(db: Session, org_id: int, producto: Product, v: ProductVariant,
+                      datos: ProductUpdate, enviados: set[str]) -> None:
+    if datos.sku is not None and datos.sku.strip() != v.sku:
+        v.sku = validar_sku_unico(db, org_id, datos.sku, excepto_id=v.id)
+    if "barcode" in enviados:
+        # Tanto null como cadena vacía significan "quítalo".
+        v.barcode = validar_barcode_libre(db, org_id, datos.barcode, excepto_id=v.id)
+    if "color" in enviados or "size" in enviados:
+        color, size = atributos_principal(
+            datos.color if "color" in enviados else v.color,
+            datos.size if "size" in enviados else v.size,
+        )
+        if pareja_repetida(producto, color, size, excepto_id=v.id):
+            raise HTTPException(status_code=409, detail=f"Ya existe la variante {variant_label(color, size)}")
+        v.color, v.size = color, size
+        v.variant_name = variant_label(color, size)
+    if datos.price is not None:
+        v.price = datos.price
+        # La casilla del formulario baja el precio nuevo a todas las tallas
+        # vivas (las retiradas no).
+        if datos.precio_a_todas_las_tallas:
+            for hermana in variantes_vivas(producto):
+                hermana.price = datos.price
+    if datos.cost is not None:
+        v.cost = datos.cost
+    if datos.has_iva is not None:
+        v.has_iva = datos.has_iva
+    if datos.tax_rate is not None:
+        v.tax_rate = datos.tax_rate
+
+
+def actualizar_producto(db: Session, org_id: int, user: User, product_id: str, datos: ProductUpdate) -> Product:
+    """Edición de ficha + variante principal (la primera VIVA) + empaques y
+    escalones (reemplazo completo) + disponibilidad por sucursal (solo
+    ADMIN/DUEÑO, reescribe el PBS de todas las variantes vivas). Sin commit."""
+    validar_precio(datos.price, detalle="El precio debe ser mayor a cero.")
+    validar_escalones(datos.prices)
+    producto = db.query(Product).filter(
+        Product.id == product_id, Product.organization_id == org_id,
+    ).first()
+    if producto is None:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+    _principal_editable_por_cajero(db, user, producto)
+
+    enviados = datos.model_fields_set
+    _editar_ficha(producto, datos, enviados)
+
+    v = variante_principal(producto)
+    if v is not None:
+        _editar_principal(db, org_id, producto, v, datos, enviados)
+        mapa: dict[str, str] = {}
+        if datos.packaging_units is not None:
+            mapa = armar_empaques(db, org_id, v, datos.packaging_units, reemplazar=True)
+        if datos.prices is not None:
+            armar_escalones(db, org_id, v, datos.prices, mapa, reemplazar=True)
+        # Disponibilidad: CAJERO no la toca; lista vacía tampoco (borraría toda
+        # la visibilidad). Se valida ANTES de borrar nada.
+        if datos.target_branch_ids and user.role in ("ADMINISTRADOR", "DUEÑO"):
+            vivas = variantes_vivas(producto)
+            if vivas:
+                destinos = sorted(validar_sucursales_de_la_org(db, org_id, datos.target_branch_ids))
+                for variante in vivas:
+                    armar_estado_por_sucursal(db, org_id, variante, destinos, reemplazar=True)
     db.flush()
     return producto
 

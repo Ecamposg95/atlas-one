@@ -15,27 +15,18 @@ Sprint 5b split — extracted verbatim from the original ``products.py``.
 """
 from __future__ import annotations
 import logging
-import shutil
-import time
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from app.utils import image_storage
 from sqlalchemy.orm import Session, joinedload, selectinload
-from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
-from decimal import Decimal
 
 from app.core.database import get_db
 from app.core.permissions import require_module
 from app.core.tenant_context import get_current_active_organization
-from app.models import (
-    Product, ProductVariant, StockOnHand, User,
-    InventoryMovement, MovementType, Department, ProductPrice,
-    PackagingUnit, Brand, ProductBranchStatus,
-)
-from app.models.organization import Branch
+from app.models import Product, ProductBranchStatus, ProductVariant, StockOnHand, User
 from app.core.security import get_current_user
 from app.crud.products import (
     query_visible_products,
@@ -46,36 +37,13 @@ from app.modules.products.schemas import (
     ProductCreate, ProductRead, ProductUpdate, ProductListResponse,
 )
 from app.modules.products.sale_name import sku_sugerido
-from app.modules.products.services import crear_producto, duplicar_producto
-from app.modules.products.variant_label import (
-    COLOR_MAX, SIZE_MAX, clean_attr, variant_label,
-)
-from app.services.barcodes import barcode_en_uso, siguiente_codigo_interno
+from app.modules.products.services import actualizar_producto, crear_producto, duplicar_producto
 
-from ._shared import (
-    _MANAGER_ROLES, _PRODUCT_ADVANCED_ROLES, _compute_product_read,
-    variante_principal, variantes_vivas,
-)
+from ._shared import _PRODUCT_ADVANCED_ROLES, _compute_product_read
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-
-def _atributos_principal(color, size):
-    """Limpia color/talla de la variante principal o 422 nombrando el campo.
-
-    `clean_attr` levanta ValueError cuando el texto excede el limite; sin este
-    envoltorio Postgres truncaria (o reventaria) y el formulario no sabria cual
-    de los dos campos corregir.
-    """
-    salida = []
-    for valor, tope, campo in ((color, COLOR_MAX, "color"), (size, SIZE_MAX, "talla")):
-        try:
-            salida.append(clean_attr(valor, tope))
-        except ValueError as e:
-            raise HTTPException(status_code=422, detail=f"{campo}: {e}")
-    return salida[0], salida[1]
 
 
 @router.get("/", response_model=ProductListResponse)
@@ -543,7 +511,8 @@ def duplicate_product(
 # 3. MDM Operations (Update / Delete / Approve)
 # -----------------------------
 
-@router.put("/{product_id}", response_model=ProductRead)
+@router.put("/{product_id}", response_model=ProductRead,
+            dependencies=[Depends(require_module("catalog"))])
 def update_product(
     product_id: str,
     prod_in: ProductUpdate,
@@ -551,239 +520,13 @@ def update_product(
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization),
 ):
-    if current_user.role not in ["ADMINISTRADOR", "GERENTE", "DUEÑO", "CAJERO"]:
+    """Edición de producto (ver `services.actualizar_producto`)."""
+    if current_user.role not in _PRODUCT_ADVANCED_ROLES:
         raise HTTPException(status_code=403, detail="No autorizado")
-
-    # Price validation
-    if prod_in.price is not None and prod_in.price <= 0:
-        raise HTTPException(status_code=422, detail="El precio debe ser mayor a cero.")
-
-    # Los ESCALONES también. El esquema los deja pasar (`Decimal >= 0`) y nadie
-    # los validaba: vaciar el campo de un escalón en la UI produce
-    # `Number('') === 0` y ese cero llegaba a la base, dejando el producto a
-    # $0.00 en mayoreo o en caja — el POS elige el escalón más barato aplicable,
-    # así que se regalaría. El guard vive aquí y no en la pantalla porque es la
-    # última línea antes de la base.
-    for _tier in (prod_in.prices or []):
-        if _tier.unit_price is not None and _tier.unit_price <= 0:
-            raise HTTPException(
-                status_code=422,
-                detail=f"El precio del escalón '{_tier.price_name}' debe ser mayor a cero.",
-            )
-
-    product = db.query(Product).filter(Product.id == product_id, Product.organization_id == org_id).first()
-    if not product:
-        raise HTTPException(status_code=404, detail="Producto no encontrado")
-
-    # CAJERO: solo puede editar productos habilitados en su sucursal
-    if current_user.role == "CAJERO":
-        if not current_user.branch_id:
-            raise HTTPException(status_code=403, detail="CAJERO debe tener una sucursal asignada")
-        variant = product.variants[0] if product.variants else None
-        has_branch_access = False
-        if variant:
-            branch_status = db.query(ProductBranchStatus).filter(
-                ProductBranchStatus.variant_id == variant.id,
-                ProductBranchStatus.branch_id == current_user.branch_id
-            ).first()
-            has_branch_access = branch_status is not None
-        if not has_branch_access:
-            raise HTTPException(status_code=403, detail="No tienes acceso para editar este producto en tu sucursal")
-
-        # Track 3: CAJERO ahora tiene control avanzado, incluyendo
-        # is_active y approval_status. Sigue limitado a productos visibles
-        # en su sucursal (validado arriba) y no puede modificar productos
-        # de otras sucursales.
-
-    # `is not None` no distingue "no lo mandes" de "bórralo": un null explícito
-    # se descartaba en silencio y la pantalla decía "guardado" sin cambiar nada.
-    # No podía quitarse una marca ni un departamento desde ninguna pantalla.
-    # `model_fields_set` es lo que Pydantic expone justo para esta diferencia.
-    _campos_enviados = prod_in.model_fields_set
-
-    # Update basic fields — mismo criterio de `model_fields_set` que abajo:
-    # un null explícito BORRA descripción/unidad/imagen, y no mandar el campo
-    # lo deja como está (auditoría A-5). `name` es la excepción: un producto
-    # sin nombre no existe, así que un null/vacío se ignora en vez de
-    # vaciar la ficha.
-    if prod_in.name is not None and prod_in.name.strip():
-        product.name = prod_in.name
-    if "description" in _campos_enviados:
-        product.description = prod_in.description
-    if "unit" in _campos_enviados:
-        product.unit = prod_in.unit
-    if "image_url" in _campos_enviados:
-        product.image_url = (prod_in.image_url or "").strip() or None
-    if "department_id" in _campos_enviados:
-        product.department_id = prod_in.department_id
-    if "brand_id" in _campos_enviados:
-        product.brand_id = prod_in.brand_id
-    # Ficha boutique: mismo criterio que marca/departamento — un null explícito
-    # BORRA el campo, y no mandarlo lo deja como está.
-    if "gender" in _campos_enviados:
-        product.gender = prod_in.gender
-    if "model" in _campos_enviados:
-        product.model = (prod_in.model or "").strip() or None
-    if "material" in _campos_enviados:
-        product.material = (prod_in.material or "").strip() or None
-    if prod_in.uses_inventory is not None:
-        pass # Not stored directly on Product currently, useful for logic if needed
-    if prod_in.is_active is not None:
-        product.is_active = prod_in.is_active
-    if prod_in.approval_status is not None:
-        product.approval_status = prod_in.approval_status
-
-    # Recalculate approval if needed ? No, explicit status update handles it
-
-    # Update Main Variant. La "principal" es la primera VIVA: `variants[0]`
-    # puede ser una talla retirada y el precio/SKU se escribiria en algo que
-    # ya no se vende.
-    v = variante_principal(product)
-    if v is not None:
-        if prod_in.sku is not None:
-             # Check Uniqueness if changed
-             if prod_in.sku != v.sku:
-                 exists = db.query(ProductVariant).join(Product).filter(
-                     ProductVariant.sku == prod_in.sku,
-                     Product.organization_id == org_id,
-                     ProductVariant.deleted_at == None
-                 ).first()
-                 if exists:
-                     raise HTTPException(400, f"SKU {prod_in.sku} ya existe")
-                 v.sku = prod_in.sku
-
-        if "barcode" in _campos_enviados:
-            # Tanto null como cadena vacía significan "quítalo".
-            _bc = (prod_in.barcode or "").strip()
-            if _bc and barcode_en_uso(db, org_id, _bc, excepto_id=v.id):
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"El código de barras '{_bc}' ya lo tiene otra variante.",
-                )
-            v.barcode = _bc or None
-
-        # Color/talla de la principal: mismo trato que en `PUT /variants/{id}`
-        # (limpieza, pareja única dentro del producto y etiqueta recalculada).
-        if "color" in _campos_enviados or "size" in _campos_enviados:
-            from .variants import _pareja_repetida
-            _color_pal, _size_pal = _atributos_principal(
-                prod_in.color if "color" in _campos_enviados else v.color,
-                prod_in.size if "size" in _campos_enviados else v.size,
-            )
-            if _pareja_repetida(product, _color_pal, _size_pal, excepto_id=v.id):
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"Ya existe la variante {variant_label(_color_pal, _size_pal)}",
-                )
-            v.color, v.size = _color_pal, _size_pal
-            v.variant_name = variant_label(_color_pal, _size_pal)
-        if prod_in.price is not None:
-            v.price = prod_in.price
-            # La ficha edita la talla principal; con la casilla del formulario
-            # el precio nuevo baja a todas las tallas vivas (las retiradas no).
-            if prod_in.precio_a_todas_las_tallas:
-                for hermana in variantes_vivas(product):
-                    hermana.price = prod_in.price
-        if prod_in.cost is not None:
-            v.cost = prod_in.cost
-        if prod_in.has_iva is not None:
-            v.has_iva = prod_in.has_iva
-        if prod_in.tax_rate is not None:
-            v.tax_rate = prod_in.tax_rate
-
-        # Update Packaging FIRST (so we can map IDs for price linking)
-        pkg_name_to_id = {}
-        if prod_in.packaging_units is not None:
-            # Unlink prices from packages before deleting
-            db.query(ProductPrice).filter(ProductPrice.variant_id == v.id).update(
-                {ProductPrice.linked_package_id: None}, synchronize_session=False
-            )
-            for pkg in v.packaging_units:
-                db.delete(pkg)
-            db.flush()
-
-            for pkg_in in prod_in.packaging_units:
-                new_pkg = PackagingUnit(
-                    variant_id=v.id,
-                    name=pkg_in.name,
-                    barcode=pkg_in.barcode,
-                    units_per_package=pkg_in.units_per_package,
-                    package_price=pkg_in.package_price,
-                    weight=getattr(pkg_in, 'weight', None),
-                    dimensions=getattr(pkg_in, 'dimensions', None),
-                    organization_id=org_id
-                )
-                db.add(new_pkg)
-                db.flush()
-                pkg_name_to_id[new_pkg.name.lower()] = new_pkg.id
-
-        # Update Prices (Complete Replacement) with package linking
-        if prod_in.prices is not None:
-            for p in v.prices:
-                db.delete(p)
-            db.flush()
-            for p_in in prod_in.prices:
-                # Resolve package link by name if ID not available
-                linked_id = p_in.linked_package_id
-                if not linked_id and p_in.price_name:
-                    linked_id = pkg_name_to_id.get(p_in.price_name.lower())
-                new_p = ProductPrice(
-                    variant_id=v.id,
-                    price_name=p_in.price_name,
-                    min_quantity=p_in.min_quantity,
-                    unit_price=p_in.unit_price,
-                    linked_package_id=linked_id,
-                    organization_id=org_id
-                )
-                db.add(new_p)
-
-        # [NEW] Update branch availability if provided
-        # SECURITY: CAJERO cannot modify branch availability — skip entirely
-        # Also skip if target_branch_ids is empty (would delete all visibility)
-        if (prod_in.target_branch_ids is not None
-            and len(prod_in.target_branch_ids) > 0
-            and current_user.role in ["ADMINISTRADOR", "DUEÑO"]):
-            # La disponibilidad es del PRODUCTO: se reescribe el PBS de TODAS
-            # las variantes vivas. Tocando solo `variants[0]`, las demas tallas
-            # quedaban vendibles en sucursales que el usuario acaba de quitar.
-            vivas = variantes_vivas(product)
-            if vivas:
-                # Verify branches exist in org (security) antes de borrar nada.
-                for branch_id in prod_in.target_branch_ids:
-                    branch = db.query(Branch).filter(
-                        Branch.id == branch_id,
-                        Branch.organization_id == org_id
-                    ).first()
-
-                    if not branch:
-                        raise HTTPException(
-                            status_code=400,
-                            detail=f"Sucursal {branch_id} no encontrada"
-                        )
-
-                for variante in vivas:
-                    # Delete existing ProductBranchStatus records
-                    db.query(ProductBranchStatus).filter(
-                        ProductBranchStatus.variant_id == variante.id,
-                        ProductBranchStatus.organization_id == org_id,
-                    ).delete()
-
-                    # Create new ones for target branches
-                    for branch_id in prod_in.target_branch_ids:
-                        db.add(ProductBranchStatus(
-                            variant_id=variante.id,
-                            branch_id=branch_id,
-                            is_active_pos=True,
-                            is_active_hq=False,
-                            is_visible=True,
-                            organization_id=org_id
-                        ))
-
+    producto = actualizar_producto(db, org_id, current_user, product_id, prod_in)
     db.commit()
-    db.refresh(product)
-
-    # Return enriched read
-    return _compute_product_read(product, db, current_user)
+    db.refresh(producto)
+    return _compute_product_read(producto, db, current_user)
 
 # NOTE: previously a second `@router.delete("/{product_id}")` lived here without
 # RBAC; consolidated into the single DELETE endpoint earlier in the file.
