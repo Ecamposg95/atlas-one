@@ -12,7 +12,7 @@ from app.core.database import engine
 from app.models import Base
 from app.routers import (
     auth, users, branches, products,
-    inventory, sales, cash, customers, reports,
+    inventory, sales, cash, customers, reports, reports_valuacion,
     printer, returns, quotes, organization, hr, portal, logistics,
     platform, transfers, purchases, expenses, branch,
     announcements,
@@ -209,6 +209,7 @@ app.include_router(customers.router,        prefix="/api/customers",        tags
 # via app/modules/customers/router.py (GET /{customer_id}/pdf-statement) →
 # app/modules/customers/statement_pdf.generate_account_statement_pdf (fpdf2).
 app.include_router(reports.router,          prefix="/api/reports",          tags=["Reportes"])
+app.include_router(reports_valuacion.router, prefix="/api/reports", tags=["Reportes"])
 app.include_router(printer.router,          prefix="/api/printer",          tags=["Impresora"])
 app.include_router(hr.router,               prefix="/api/hr",               tags=["RRHH"])
 app.include_router(portal.router,           prefix="/api/portal",           tags=["Portal"])
