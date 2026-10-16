@@ -5,7 +5,7 @@ import {
 } from 'chart.js'
 import { Line } from 'react-chartjs-2'
 import { formatCurrency } from '../../../utils/currency'
-import { conAlpha, token } from '../../../utils/cssToken'
+import { conAlpha, token, useTemaActual } from '../../../utils/cssToken'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip)
 
@@ -52,6 +52,7 @@ export function TrendChart({
   signupsSeries,
   showSeriesToggles = false,
 }: Props) {
+  const tema = useTemaActual()
   const [revOn, setRevOn] = useState(true)
   const [salesOn, setSalesOn] = useState(false)
   const [signupsOn, setSignupsOn] = useState(false)
@@ -103,7 +104,7 @@ export function TrendChart({
       })
     }
     return { labels: merged.map((p) => p.label), datasets }
-  }, [merged, revOn, salesOn, signupsOn, hasSales, hasSignups])
+  }, [merged, revOn, salesOn, signupsOn, hasSales, hasSignups, tema])
 
   const options = useMemo<ChartOptions<'line'>>(() => {
     const hint = token('--p-hint', '#64748b')
@@ -150,7 +151,7 @@ export function TrendChart({
         },
       },
     }
-  }, [showGrid, ejeDerecho])
+  }, [showGrid, ejeDerecho, tema])
 
   if (!data || data.length === 0) {
     return (

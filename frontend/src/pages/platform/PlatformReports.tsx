@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Tooltip } from 'chart.js'
 import { Bar } from 'react-chartjs-2'
-import { token } from '../../utils/cssToken'
+import { token, useTemaActual } from '../../utils/cssToken'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip)
 import { reportApi } from '../../api/platform'
@@ -540,6 +540,7 @@ function TopChart({
   labelFormatter?: (v: number) => string
 }) {
   const fmt = labelFormatter ?? ((v) => v.toLocaleString('es-MX'))
+  useTemaActual() // re-renderiza al cambiar el tema: los colores del canvas se resuelven al pintar
   const hint = token('--p-hint', 'rgb(100, 116, 139)')
   return (
     <div style={{

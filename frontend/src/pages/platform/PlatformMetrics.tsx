@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, lazy, Suspense } from 'react
 import { useNavigate } from 'react-router-dom'
 import { Chart as ChartJS, ArcElement, Tooltip } from 'chart.js'
 import { Doughnut } from 'react-chartjs-2'
-import { token } from '../../utils/cssToken'
+import { token, useTemaActual } from '../../utils/cssToken'
 
 ChartJS.register(ArcElement, Tooltip)
 import {
@@ -185,6 +185,7 @@ function colorMetodo(i: number): string {
 // ── component ────────────────────────────────────────────────────────────────
 
 export function PlatformMetrics() {
+  useTemaActual() // re-renderiza al cambiar el tema: los colores del canvas se resuelven al pintar
   const navigate = useNavigate()
   const [range, setRange] = useState<StatsRange>('30d')
 
