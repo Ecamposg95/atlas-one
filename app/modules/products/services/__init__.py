@@ -23,3 +23,4 @@ from .sucursales import (  # noqa: F401
     registrar_stock_inicial, resolver_sucursales_destino,
     sucursal_de_existencia_inicial, sucursales_que_venden,
 )
+from .precios import armar_empaques, armar_escalones  # noqa: F401
