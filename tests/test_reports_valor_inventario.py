@@ -257,3 +257,54 @@ def test_agrupar_con_filtro_de_sucursal(client, auth_admin, branch_a, tienda):
 def test_agrupar_invalido_es_422(client, auth_admin, tienda):
     r = client.get(URL, params={"agrupar": "color"}, headers=auth_admin)
     assert r.status_code == 422, r.text
+
+
+# ---------------------------------------------------------------- roles
+
+def test_gerente_ve_su_sucursal_sin_costos(client, auth_gerente_a, branch_a, tienda):
+    body = client.get(URL, params={"agrupar": "departamento"}, headers=auth_gerente_a).json()
+    assert body["ve_costo"] is False
+    assert body["branch_id"] == branch_a.id
+    t = body["totales"]
+    assert (t["piezas"], t["skus"], t["valor_venta"]) == (7.0, 2, 6200.0)
+    assert t["valor_costo"] is None
+    # El hueco de costos si lo ve: es "que falta capturar", no dinero.
+    assert t["piezas_sin_costo"] == 4.0
+    assert all(g["valor_costo"] is None for g in body["grupos"])
+    assert [g["nombre"] for g in body["grupos"]] == ["Zapatos", "Bolsas"]
+
+
+def test_gerente_no_puede_mirar_otra_sucursal(client, auth_gerente_a, branch_a, branch_b, tienda):
+    body = client.get(URL, params={"branch_id": branch_b.id}, headers=auth_gerente_a).json()
+    assert body["branch_id"] == branch_a.id
+    assert body["totales"]["valor_venta"] == 6200.0
+
+
+def test_gerente_sin_sucursal_403(client, db, org, tienda):
+    gerente = _make_user(db, org, None, "gerente_sin_sucursal", Role.GERENTE)
+    r = client.get(URL, headers=_auth_header(gerente))
+    assert r.status_code == 403, r.text
+    assert "sucursal" in r.json()["detail"].lower()
+
+
+def test_cajero_403(client, auth_cajero_a, tienda):
+    r = client.get(URL, headers=auth_cajero_a)
+    assert r.status_code == 403, r.text
+
+
+def test_vendedor_sin_sucursal_403(client, auth_vendedor_sin_sucursal, tienda):
+    r = client.get(URL, headers=auth_vendedor_sin_sucursal)
+    assert r.status_code == 403, r.text
+
+
+def test_dueno_ve_costos(client, db, org, hq_branch, tienda):
+    dueno = _make_user(db, org, hq_branch, "dueno_test", Role.DUEÑO)
+    body = client.get(URL, headers=_auth_header(dueno)).json()
+    assert body["ve_costo"] is True
+    assert body["totales"]["valor_costo"] == 2000.0
+
+
+def test_superadmin_ve_costos_con_header_de_org(client, auth_superadmin, org, tienda):
+    r = client.get(URL, headers={**auth_superadmin, "X-Organization-ID": str(org.id)})
+    assert r.status_code == 200, r.text
+    assert r.json()["totales"]["valor_costo"] == 2000.0
