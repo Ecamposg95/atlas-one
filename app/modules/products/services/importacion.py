@@ -8,6 +8,11 @@ Cada fila es un "upsert" por SKU dentro de un SAVEPOINT que abre el router:
 Después, para las tres ramas: habilitación por sucursal, existencia absoluta
 ("Stock" es lo que HAY, no lo que entra), empaques y escalones por columnas.
 
+Cambios deliberados respecto al upload anterior: SKU sin distinguir mayúsculas,
+filas nuevas con precio <= 0 se rechazan (misma regla que el alta manual),
+fila nueva = alta manual (código interno, existencia 0 en cada sucursal
+habilitada) y `Tasa IVA` opcional.
+
 Cualquier `HTTPException` del servicio o `FilaInvalida` revierte la fila
 completa (ROLLBACK TO SAVEPOINT) y el router la reporta con su `detail`.
 """
@@ -86,29 +91,37 @@ def _variante_viva_por_sku(db: Session, org_id: int, sku: str) -> Optional[Produ
             Product.organization_id == org_id,
             ProductVariant.deleted_at.is_(None),
         )
+        .order_by((ProductVariant.sku == sku).desc())   # la de mayúsculas exactas primero
         .first()
     )
 
 
-def _id_de_catalogo(db: Session, ctx: ContextoImportacion, modelo, mapa: dict[str, str], nombre: str) -> Optional[str]:
+def _id_de_catalogo(db: Session, ctx: ContextoImportacion, modelo, mapa: dict[str, str],
+                    nuevos: dict[str, str], nombre: str) -> Optional[str]:
     """Departamento/marca por nombre; se crea en la org si no existe (el
-    upload siempre lo hizo así: el archivo ES el catálogo)."""
+    upload siempre lo hizo así: el archivo ES el catálogo).
+
+    Lo creado va a `nuevos`, no a `mapa`: si la fila falla, su SAVEPOINT
+    revierte el registro y el mapa no debe quedarse con un id fantasma.
+    """
     if not nombre:
         return None
     clave = nombre.lower()
-    if clave not in mapa:
+    if clave in mapa:
+        return mapa[clave]
+    if clave not in nuevos:
         nuevo = modelo(name=nombre, organization_id=ctx.org_id)
         db.add(nuevo)
         db.flush()
-        mapa[clave] = nuevo.id
-    return mapa[clave]
+        nuevos[clave] = nuevo.id
+    return nuevos[clave]
 
 
-def _tasa_iva(fila: dict, sku: str) -> Decimal:
-    """Columna opcional `Tasa IVA` (0–100). Ausente o vacía = 16."""
+def _tasa_iva(fila: dict, sku: str) -> Optional[Decimal]:
+    """Columna opcional `Tasa IVA` (0–100). None = celda ausente o vacía."""
     cruda = fila.get("tasa iva")
     if celda_vacia(cruda) or celda_texto(cruda) == "":
-        return TASA_IVA_DEFAULT
+        return None
     tasa = celda_decimal(cruda, Decimal(-1))
     if tasa < 0 or tasa > 100:
         raise FilaInvalida(f"'{sku}': la tasa de IVA debe estar entre 0 y 100.")
@@ -166,8 +179,8 @@ def _crear_desde_fila(db: Session, ctx: ContextoImportacion, fila: dict, sku: st
 
 def _actualizar_desde_fila(db: Session, ctx: ContextoImportacion, variante: ProductVariant, fila: dict,
                            nombre: str, dept_id: Optional[str], brand_id: Optional[str],
-                           precio: Decimal, costo: Decimal, has_iva: bool, barcode: Optional[str],
-                           color: Optional[str], talla: Optional[str]) -> ProductVariant:
+                           precio: Decimal, costo: Decimal, has_iva: bool, tasa_iva: Optional[Decimal],
+                           barcode: Optional[str], color: Optional[str], talla: Optional[str]) -> ProductVariant:
     """Celda vacía NO borra (descripción, unidad, código, color/talla): un
     archivo que viene del export trae las columnas pero no siempre el dato."""
     producto = variante.product
@@ -185,6 +198,8 @@ def _actualizar_desde_fila(db: Session, ctx: ContextoImportacion, variante: Prod
     variante.has_iva = has_iva
     variante.price = precio
     variante.cost = costo
+    if tasa_iva is not None:   # sin la columna no se pisa un 0 % ya guardado
+        variante.tax_rate = tasa_iva
     if barcode and barcode != (variante.barcode or ""):
         # Un código nunca se sobrescribe con uno que ya tiene otra talla: el
         # escáner cobraría la equivocada.
@@ -284,9 +299,13 @@ def importar_fila(db: Session, ctx: ContextoImportacion, fila: dict) -> Resultad
     precio = celda_decimal(fila.get("precio base", fila.get("precio", 0)))
     costo = celda_decimal(fila.get("costo", 0))
     has_iva = celda_texto(fila.get("incluye iva", "no")).strip().lower() in ("si", "sí", "yes", "1", "true")
-    tasa_iva = _tasa_iva(fila, sku)
-    dept_id = _id_de_catalogo(db, ctx, Department, ctx.dept_map, celda_texto(fila.get("departamento", "General")))
-    brand_id = _id_de_catalogo(db, ctx, Brand, ctx.brand_map, celda_texto(fila.get("marca", "")))
+    tasa_celda = _tasa_iva(fila, sku)
+    tasa_iva = TASA_IVA_DEFAULT if tasa_celda is None else tasa_celda
+    nuevos_dept: dict[str, str] = {}
+    nuevos_brand: dict[str, str] = {}
+    dept_id = _id_de_catalogo(db, ctx, Department, ctx.dept_map, nuevos_dept,
+                              celda_texto(fila.get("departamento", "General")))
+    brand_id = _id_de_catalogo(db, ctx, Brand, ctx.brand_map, nuevos_brand, celda_texto(fila.get("marca", "")))
     color, talla = _atributos(fila, sku)
     con_variante = bool(color or talla)
     clave_padre = (nombre.lower(), dept_id)
@@ -297,7 +316,7 @@ def importar_fila(db: Session, ctx: ContextoImportacion, fila: dict) -> Resultad
     if existente is not None:
         producto = existente.product
         variante = _actualizar_desde_fila(db, ctx, existente, fila, nombre, dept_id, brand_id,
-                                          precio, costo, has_iva, barcode, color, talla)
+                                          precio, costo, has_iva, tasa_celda, barcode, color, talla)
         accion, es_nueva = "UPDATE", False
     elif con_variante and clave_padre in ctx.productos_cargados:
         producto, principal_id = ctx.productos_cargados[clave_padre]
@@ -325,6 +344,9 @@ def importar_fila(db: Session, ctx: ContextoImportacion, fila: dict) -> Resultad
 
     _habilitar_y_surtir(db, ctx, variante, fila, es_nueva)
     _empaques_y_escalones(db, ctx, variante, fila)
+    # Recién ahora (fila sin excepciones) el catálogo creado pasa a los mapas.
+    ctx.dept_map.update(nuevos_dept)
+    ctx.brand_map.update(nuevos_brand)
     if registrar_grupo:
         # Recién ahora: la fila entera terminó sin excepciones.
         ctx.productos_cargados[clave_padre] = (producto, variante.id)

@@ -21,7 +21,7 @@ from app.core.tenant_context import get_current_active_organization
 from app.crud.products import _is_admin, query_visible_products
 from app.models import Brand, Department, Product, ProductVariant, StockOnHand, User
 from app.models.organization import Branch, BranchType
-from app.modules.products.services.importacion import ContextoImportacion, importar_fila
+from app.modules.products.services.importacion import ContextoImportacion, FilaInvalida, importar_fila
 from app.modules.products.services.validaciones import validar_sucursales_de_la_org
 from app.services.barcodes import AsignadorDeCodigos
 
@@ -340,31 +340,47 @@ def _contexto_de_carga(db: Session, org_id: int, user: User, branch_id: Optional
     )
 
 
-def _confirmar(db: Session, hasta_fila: int) -> None:
+def _confirmar(db: Session, hasta_fila: int, confirmada_hasta: int = 0) -> None:
     """Commit por lote. Si falla, se dice: antes se tragaba y el cliente
-    recibía "created: 50" con la transacción caída."""
+    recibía "created: 50" con la transacción caída. `confirmada_hasta` es la
+    última fila del archivo que un lote anterior ya dejó guardada."""
     try:
         db.commit()
-    except Exception as e:
+    except Exception:
         db.rollback()
         logger.exception("upload: no se pudo guardar el lote (hasta la fila %s)", hasta_fila)
+        previo = (f"Las filas hasta la {confirmada_hasta} ya se habían guardado en lotes anteriores; "
+                  if confirmada_hasta else "Ninguna fila se había guardado antes; ")
         raise HTTPException(
             status_code=500,
-            detail=f"No se pudieron guardar las filas procesadas (hasta la fila {hasta_fila}): {e}",
+            detail=f"No se pudieron guardar las filas procesadas (hasta la fila {hasta_fila}). "
+                   f"{previo}el resto no se guardó. Revise el archivo e inténtelo de nuevo.",
         )
+
+
+def _exigir_puede_importar(user: User) -> None:
+    if user.role not in _PRODUCT_ADVANCED_ROLES:
+        raise HTTPException(status_code=403, detail="No autorizado para importar productos")
+    if not _is_admin(user) and not user.branch_id:
+        # Mismo texto que `crear_producto`: sin esto todas las filas fallarían una por una.
+        raise HTTPException(status_code=403, detail="Solo usuarios con sucursal asignada pueden crear productos.")
 
 
 def _procesar_filas(db: Session, org_id: int, ctx: ContextoImportacion, filas: list[dict], dry_run: bool) -> dict:
     creadas = actualizadas = fallidas = 0
     detalles: list[dict] = []
     preview: list[dict] = []
+    confirmada_hasta = 0
     for idx, fila in enumerate(filas):
         try:
             with db.begin_nested():
                 res = importar_fila(db, ctx, fila)
         except Exception as e:   # noqa: BLE001 — cada fila se aísla y se reporta
             detalle = e.detail if isinstance(e, HTTPException) else str(e)
-            logger.warning("upload org=%s fila %s: %s", org_id, idx + 2, detalle)
+            if isinstance(e, (FilaInvalida, HTTPException)):
+                logger.warning("upload org=%s fila %s: %s", org_id, idx + 2, detalle)
+            else:
+                logger.exception("upload org=%s fila %s: error inesperado", org_id, idx + 2)
             fallidas += 1
             detalles.append({"row": idx + 2, "sku": str(fila.get("sku", "N/A")), "error": detalle})
             if len(preview) < 20:
@@ -380,9 +396,10 @@ def _procesar_filas(db: Session, org_id: int, ctx: ContextoImportacion, filas: l
                                 "price": res.precio, "error_message": None})
         # Commit por lotes para no sostener el lock; en dry_run no se confirma nada.
         if not dry_run and (creadas + actualizadas + fallidas) % 50 == 0:
-            _confirmar(db, hasta_fila=idx + 2)
+            _confirmar(db, hasta_fila=idx + 2, confirmada_hasta=confirmada_hasta)
+            confirmada_hasta = idx + 2
     return {"creadas": creadas, "actualizadas": actualizadas, "fallidas": fallidas,
-            "detalles": detalles, "preview": preview}
+            "detalles": detalles, "preview": preview, "confirmada_hasta": confirmada_hasta}
 
 
 @router.post("/upload", dependencies=[Depends(require_module("catalog"))])
@@ -398,8 +415,7 @@ async def upload_products(
 ):
     """Carga masiva. Parseo y sucursales en helpers de este módulo; cada fila
     en `services.importacion.importar_fila` dentro de su SAVEPOINT."""
-    if current_user.role not in _PRODUCT_ADVANCED_ROLES:
-        raise HTTPException(status_code=403, detail="No autorizado para importar productos")
+    _exigir_puede_importar(current_user)
     filas = await _leer_filas(file)
     ctx = _contexto_de_carga(db, org_id, current_user, branch_id, target_branch_ids, scope, filas)
     r = _procesar_filas(db, org_id, ctx, filas, dry_run)
@@ -408,6 +424,6 @@ async def upload_products(
         return {"total_rows": r["creadas"] + r["actualizadas"] + r["fallidas"], "to_create": r["creadas"],
                 "to_update": r["actualizadas"], "errors": r["fallidas"], "preview": r["preview"],
                 "error_details": r["detalles"]}
-    _confirmar(db, hasta_fila=len(filas) + 1)
+    _confirmar(db, hasta_fila=len(filas) + 1, confirmada_hasta=r["confirmada_hasta"])
     return {"created": r["creadas"], "updated": r["actualizadas"], "failed": r["fallidas"],
             "pending": 0, "details": r["detalles"]}
