@@ -98,7 +98,7 @@ def _consulta(db: Session, org_id: int, branch_id: Optional[int], columnas_grupo
     Sin productos ni variantes borrados (soft delete = `deleted_at`). Una
     existencia negativa (venta sin stock) es un error de inventario, no valor
     negativo: se excluye. Si no se pide sucursal, solo cuentan las que venden
-    (`can_sell`): la bodega de una org multi-sucursal no es "la tienda"; con
+    y siguen activas (`can_sell` e `is_active`): la bodega de una org multi-sucursal no es "la tienda"; con
     `branch_id` explicito se puede mirar cualquiera.
     """
     q = (
@@ -118,7 +118,7 @@ def _consulta(db: Session, org_id: int, branch_id: Optional[int], columnas_grupo
     )
     if branch_id is not None:
         return q.filter(Branch.id == branch_id)
-    return q.filter(Branch.can_sell == True)  # noqa: E712
+    return q.filter(Branch.can_sell == True, Branch.is_active.is_(True))  # noqa: E712
 
 
 def _fila_a_dict(fila, ve_costo: bool) -> dict:

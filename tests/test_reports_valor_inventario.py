@@ -129,6 +129,43 @@ def test_sucursal_que_no_vende_queda_fuera_salvo_que_se_pida(client, auth_admin,
     assert solo_bodega["totales"]["valor_costo"] == 40000.0
 
 
+def test_sucursal_desactivada_queda_fuera_salvo_que_se_pida(client, auth_admin, db, org, tienda):
+    cerrada = Branch(name="Cerrada", branch_type=BranchType.STORE,
+                     can_sell=True, is_active=False, organization_id=org.id)
+    db.add(cerrada)
+    db.flush()
+    _, v = tienda["bolsa"]
+    db.add(StockOnHand(variant_id=v.id, branch_id=cerrada.id, organization_id=org.id,
+                       qty_on_hand=Decimal("100"), is_active=True))
+    db.flush()
+
+    body = client.get(URL, headers=auth_admin).json()
+    assert body["totales"]["valor_venta"] == 10200.0
+    assert body["totales"]["piezas"] == 19.0
+    assert str(cerrada.id) not in [g["clave"] for g in body["grupos"]]
+
+    solo = client.get(URL, params={"branch_id": cerrada.id}, headers=auth_admin).json()
+    assert solo["totales"]["piezas"] == 100.0
+    assert solo["totales"]["valor_venta"] == 100000.0
+
+
+def test_producto_con_variante_con_costo_y_otra_sin_costo(client, auth_admin, db, org, branch_a):
+    p, _ = _producto(db, org, "Tenis", "TEN-1", 500, 200, {branch_a.id: 2})
+    v2 = ProductVariant(product_id=p.id, sku="TEN-2", organization_id=org.id,
+                        price=Decimal("300"), cost=None)
+    db.add(v2)
+    db.flush()
+    db.add(StockOnHand(variant_id=v2.id, branch_id=branch_a.id, organization_id=org.id,
+                       qty_on_hand=Decimal("3"), is_active=True))
+    db.flush()
+    t = client.get(URL, headers=auth_admin).json()["totales"]
+    assert t["valor_venta"] == 1900.0   # 2*500 + 3*300
+    assert t["valor_costo"] == 400.0    # solo la variante con costo
+    assert t["piezas_sin_costo"] == 3.0
+    assert t["skus_sin_costo"] == 1
+    assert t["skus"] == 2
+
+
 def test_filtro_por_sucursal(client, auth_admin, branch_a, tienda):
     t = client.get(URL, params={"branch_id": branch_a.id}, headers=auth_admin).json()["totales"]
     assert t == {

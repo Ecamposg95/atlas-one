@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { reportsApi, type AgruparValuacion, type ValuacionInventario } from '../../api/reports'
 import { organizationApi, type Branch } from '../../api/organization'
 import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
@@ -41,22 +41,26 @@ export function HQValorInventario() {
     organizationApi.getBranches().then(setBranches).catch(() => {})
   }, [esGerente])
 
+  const reqId = useRef(0)
   const load = useCallback(async () => {
+    const mio = ++reqId.current
     setLoading(true)
     try {
       const res = await reportsApi.valorInventario({
         agrupar,
         ...(branchId !== '' ? { branch_id: branchId } : {}),
       })
+      if (mio !== reqId.current) return // respuesta vieja: ya hay otra en camino
       setData(res)
       setError(null)
     } catch (e: any) {
+      if (mio !== reqId.current) return
       setError(errorDetailText(
         e?.response?.data?.detail,
         'No se pudo calcular el valor de la tienda. Vuelve a intentar en unos segundos.',
       ))
     } finally {
-      setLoading(false)
+      if (mio === reqId.current) setLoading(false)
     }
   }, [agrupar, branchId])
 
@@ -65,7 +69,7 @@ export function HQValorInventario() {
   const exportar = () => {
     if (!data) { toast.warning('Todavía no hay datos que exportar.'); return }
     const fecha = new Date().toISOString().slice(0, 10)
-    descargarCsv(csvValuacion(data), `valor-tienda-${agrupar}-${fecha}.csv`)
+    descargarCsv(csvValuacion(data), `valor-tienda-${data.agrupar}-${fecha}.csv`)
   }
 
   const veCosto = data?.ve_costo ?? false
@@ -172,7 +176,7 @@ export function HQValorInventario() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-xs uppercase tracking-wider" style={{ color: 'var(--dax-text-muted)' }}>
-                  <th className="p-3">{ETIQUETA_GRUPO[agrupar]}</th>
+                  <th className="p-3">{ETIQUETA_GRUPO[data?.agrupar ?? agrupar]}</th>
                   <th className="p-3 text-right">Piezas</th>
                   <th className="p-3 text-right">SKUs</th>
                   <th className="p-3 text-right">Valor a venta</th>
