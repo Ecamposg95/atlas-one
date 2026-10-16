@@ -1,4 +1,4 @@
-# Mega plan 2026-10: altas de producto, interfaz agéntica, versión ligera FREE, responsivo y docs — diseño maestro
+# Mega plan 2026-10: altas, asistente IA, versión ligera FREE, valor de la tienda, vista del dueño, responsivo y docs — diseño maestro
 
 Fecha: 2026-10-14 (ampliado 2026-10-15 con la versión ligera y el alcance B del agente) ·
 Estado: **borrador aprobado para planear**; cada sub-proyecto lleva su propio
@@ -19,6 +19,10 @@ decir "agrega el siguiente producto…".
 6. (2026-10-15) Una **versión más esbelta para las cuentas FREE** (Kaory, Novedades, Coqueta):
    que vean solo lo que usan y que la app cargue rápido en sus equipos. Precisado con el
    usuario: **menú corto + carga rápida, misma base de código**; no es un producto aparte.
+7. (2026-10-15) Que el dueño sepa **cuánto vale su tienda** a partir de su existencia. Caso
+   guía Eleven: "¿cuánto vale mi inventario?" con desglose por sucursal, departamento y marca.
+8. (2026-10-15) **Mejorar toda la vista de nivel administrador de organización** (el grupo HQ:
+   inicio, reportes, control, sucursales, inventario, ventas, devoluciones, empresa).
 
 ## 2. Hallazgos del levantamiento (2026-10-14, solo lectura)
 
@@ -134,6 +138,27 @@ ninguna referencia salvo `docs/infra/deployment-map.md`.
   módulos; el POS, corte, devoluciones e impresión que Kaory y Coqueta usan a diario deben quedar
   intactos.
 
+### 2.7 Valor de la tienda y vista del dueño: punto de partida (2026-10-15)
+
+- **No existe ninguna valuación de inventario** en backend ni frontend (ni `valor_inventario`,
+  ni `stock_value`). `reports.py` tiene `/dashboard` (KPIs, tendencias, alertas de ventas),
+  `/aging-report` (antigüedad de saldos de clientes, no de inventario), `/command-center/stats`
+  y `/product/{id}`. `HQInventory` lista SKU, producto, precio y stock: **sin costo ni importe**.
+- **El costo no es confiable para valuar:** los zapatos de Eleven se cargaron con costo 0 (las
+  cajas no lo traen), el importador de rmazh deja `cost` NULL (trampa documentada en Imaltzin) y
+  el catálogo histórico de Eleven tampoco lo trae completo. Una valuación "a costo" hoy daría
+  cero o menos de lo real; la valuación "a precio de venta" sí es completa.
+- **Vista de administrador (grupo HQ):** 8 páginas, 2,854 líneas (`HQOperations` 757,
+  `HQReportsHub` 628, `HQSalesLog` 335, `HQReturns` 324, `HQInventory` 259, `HQBranchDetail`
+  224, `HQControl` 206, `HQBranches`). `HQControl` es solo una rejilla de 6 accesos (usuarios,
+  organización, catálogo, departamentos, marcas, RR.HH.). `HQOperations` mezcla estilos inline
+  (`textShadow`, "glow"), clases crudas y lógica de carga en el mismo archivo; es el lugar donde
+  aterriza el dueño. 36 entradas de nav en el grupo `hq`. Nada de esto está en la ola 1 ni 2 de
+  responsivo (§2.3) ni usa el kit `atlas-one/` de forma consistente.
+- No hay una definición escrita de **qué necesita ver el dueño** al entrar (hoy: tickets, ventas
+  del periodo, ranking de sucursales); el valor de la tienda, las existencias sin costo, los
+  productos sin movimiento y el corte del día no están juntos en ninguna pantalla.
+
 ## 3. Decisiones de diseño
 
 1. **Orden por dependencias:** altas → agente → responsivo → docs. El agente llama al servicio
@@ -163,6 +188,18 @@ ninguna referencia salvo `docs/infra/deployment-map.md`.
    crítica (login → POS) con medición en CI. Nunca se desactiva un módulo ni se quita una pantalla
    que la org ya usa: solo se esconde lo que no aplica al plan o al preset, y la URL directa sigue
    funcionando (el gating real sigue siendo `require_module`).
+8. **Valor de la tienda = un reporte, dos cifras.** `GET /api/reports/valor-inventario` devuelve
+   para la org (y por sucursal, departamento y marca) **valor a precio de venta** (Σ stock ×
+   precio, siempre completo) y **valor a costo** (Σ stock × costo, solo de los SKUs con costo > 0)
+   junto con el conteo de piezas y SKUs **sin costo**, para que el dueño sepa cuánto le falta
+   capturar y nunca confunda un cero con "no vale nada". Sin margen inventado: si falta costo,
+   se dice. Es parte de `reports` (módulo base, lo ven FREE y ULTRA+); solo ADMIN/DUEÑO.
+9. **La vista del dueño se rediseña a partir de preguntas, no de pantallas:** antes de tocar
+   código se escribe con el usuario la lista de preguntas que el dueño hace al entrar ("¿cuánto
+   vendí hoy y ayer?", "¿cuánto vale mi tienda?", "¿qué no se mueve?", "¿cómo va cada
+   sucursal?", "¿qué falta capturar?") y cada pantalla del grupo HQ responde a una. Se construye
+   sobre el kit ganador de SP3 (`atlas-one/`), con `ProductForm`/tablas ya unificadas; por eso va
+   **después** de SP3. Lo que no responda a una pregunta del dueño se quita del menú HQ.
 
 ## 4. Sub-proyectos
 
@@ -271,6 +308,47 @@ Entregables:
 
 Fuera de alcance: un frontend aparte, service worker/PWA offline, cambios de precio o topes.
 
+### SP6 · Valor de la tienda (reporte de valuación de inventario)
+
+**Objetivo:** que el dueño de Eleven (y de cualquier org) vea cuánto vale su existencia hoy, a
+precio de venta y a costo, con desglose y con el hueco de costos visible.
+
+Entregables:
+- Backend: `app/routers/reports.py` (o `app/modules/reports/` si SP1 ya movió reportes) con
+  `GET /api/reports/valor-inventario?branch_id=&agrupar=sucursal|departamento|marca`. Una sola
+  consulta agregada sobre `branch_stock` × `product_variants` × `products` (filtrada por org,
+  sin productos borrados), que devuelve: `piezas`, `skus`, `valor_venta`, `valor_costo`,
+  `piezas_sin_costo`, `skus_sin_costo`, y filas por grupo. Guard: ADMIN/DUEÑO (el cajero no ve
+  costos). Pruebas con costo 0, costo NULL, variantes y varias sucursales.
+- Frontend: tarjeta "Valor de la tienda" en el inicio del dueño (`HQOperations`, luego en la
+  vista nueva de SP7) con las dos cifras y el aviso "N piezas sin costo"; página
+  `/hq/valor-inventario` con el desglose, filtro por sucursal y exportación CSV. Entra al menú
+  HQ con `module: 'reports'`.
+- Opcional, decisión abierta: instantánea diaria (`inventory_valuation_snapshots`) para ver
+  cómo cambia el valor en el tiempo; v1 solo calcula en vivo.
+- Fuera de alcance: costo promedio ponderado, capas de inventario (PEPS), valuación de
+  insumos de gastro.
+
+### SP7 · Vista de administrador de organización (grupo HQ)
+
+**Objetivo:** que el dueño entre y en una pantalla responda sus preguntas del día, y que cada
+pantalla HQ tenga un propósito claro, el mismo kit visual y funcione en teléfono.
+
+Entregables:
+- **Spec corto propio** con la lista de preguntas del dueño validada con el usuario (y con
+  Eleven como caso guía), el mapa pantalla → pregunta y qué se quita del menú HQ.
+- **Inicio del dueño** (`HQOperations` rehecho): ventas de hoy y ayer, corte del día por
+  sucursal, valor de la tienda (SP6), alertas (existencias bajas, piezas sin costo, productos
+  sin movimiento en N días), ranking de sucursales si hay más de una. Sin estilos inline ni
+  "glow": kit `atlas-one/`.
+- **Control, Empresa y Sucursales** fusionadas donde se dupliquen (hoy `HQControl` es una
+  rejilla de 6 enlaces); `HQReportsHub` dividido en reportes con nombre y pregunta.
+- **Inventario HQ** con costo e importe por fila y totales (el dato de SP6), filtro "sin costo".
+- Responsivo: las pantallas HQ entran a la verificación en dispositivo real con la regla de
+  SP3; cero overlays fuera de `ui/Modal`.
+- Pruebas: componentes con vitest; `rutaInicio.ts` sigue mandando al dueño a la vista nueva.
+- Fuera de alcance: plataforma superadmin (`/platform/*`), vistas de cajera y gastro.
+
 ### SP4 · Documentación
 
 Una pasada al final, en un solo PR `docs:`:
@@ -284,6 +362,7 @@ Una pasada al final, en un solo PR `docs:`:
 - ONTOLOGY: códigos de barras, boutique, etiquetas, planes, asistente.
 - presets/README: permitido = base ∪ preset ∪ plan; BOUTIQUE §4 con "Altas desde".
 - `CLAUDE.md` §5: receta "Añadir una herramienta al asistente" y "Esconder una pantalla por plan".
+- API_REFERENCE §Reportes: `valor-inventario`; FRONTEND_VIEWS: grupo HQ rehecho.
 - presets/README y planes: qué ve una org FREE (perfil ligero) y el presupuesto de bundle.
 
 ## 5. Orden, tamaño y criterio de salida
@@ -292,12 +371,15 @@ Una pasada al final, en un solo PR `docs:`:
 |---|---|---|---|---|
 | 1 | SP1 altas | — | 2 planes (backend, frontend) | suite verde, 4 bugs cerrados con prueba, un solo formulario |
 | 2 | SP5 ligera | — (independiente; puede ir en paralelo con SP1) | 1 plan | Kaory/Coqueta ven el menú corto; presupuesto de bundle en CI; −30 % en la ruta login → POS medido en tienda |
-| 3 | SP2 agente | SP1 backend | 1 spec + 1 plan | Eleven da de alta un lote real por chat, con confirmación, y queda en auditoría; responde consultas de existencias y ventas |
-| 4 | SP3 responsivo | SP1 frontend | 1 plan (cierre ola 1 + ola 2 + congruencia) | T7-T9 cerrados; 0 overlays fuera de `ui/Modal`; ola 2 verificada en móvil |
-| 5 | SP4 docs | 1-4 | 1 PR | conteos y claims verificados con un script `scripts/verificar_docs.py` que compare contra el código |
+| 3 | SP6 valor de la tienda | — (independiente) | 1 plan | Eleven ve su valor a venta y a costo con el conteo de piezas sin costo; pruebas con costo 0/NULL |
+| 4 | SP2 agente | SP1 backend | 1 spec + 1 plan | Eleven da de alta un lote real por chat, con confirmación, y queda en auditoría; responde consultas de existencias y ventas |
+| 5 | SP3 responsivo | SP1 frontend | 1 plan (cierre ola 1 + ola 2 + congruencia) | T7-T9 cerrados; 0 overlays fuera de `ui/Modal`; ola 2 verificada en móvil |
+| 6 | SP7 vista del dueño | SP3 (kit), SP6 (dato) | 1 spec + 1 plan | el dueño de Eleven responde sus preguntas desde el inicio; HQ sin estilos inline; verificado en teléfono |
+| 7 | SP4 docs | 1-6 | 1 PR | conteos y claims verificados con un script `scripts/verificar_docs.py` que compare contra el código |
 
-SP5 va segundo porque es pequeño, no depende de SP1 y beneficia a tres tiendas vivas de inmediato;
-si SP1 backend tarda, SP5 puede arrancar antes.
+SP5 y SP6 van antes del agente porque son pequeños, no dependen de SP1 y dan resultado visible a
+las tiendas vivas de inmediato; si SP1 backend tarda, pueden arrancar antes. SP7 va al final del
+trabajo de interfaz porque hereda el kit y las tablas unificadas de SP3.
 
 Cada sub-proyecto: rama `feat/*` o `docs/*`, spec corto en `specs/`, plan en `plans/`, fusión a
 `main` solo con permiso explícito (regla de oro #1).
@@ -316,6 +398,12 @@ Cada sub-proyecto: rama `feat/*` o `docs/*`, spec corto en `specs/`, plan en `pl
    Recomendación: **sí** (ninguna de las tres tiendas las usa; verificar en logs antes).
 7. Librería de gráficas única: chart.js (ya en reportes de las orgs) o recharts (solo plataforma).
    Recomendación: **chart.js**, migrando los 3 archivos de plataforma.
+8. Valor de la tienda: ¿guardar una instantánea diaria para ver la tendencia? Recomendación:
+   **no en v1**; agregar cuando el dueño la pida, con un job nocturno.
+9. ¿Quién ve el valor a costo? Recomendación: solo **ADMIN/DUEÑO**; el gerente de sucursal ve
+   piezas y valor a venta de su sucursal.
+10. Preguntas del dueño para SP7: la lista se escribe con el usuario antes del spec de SP7; no
+    se asume.
 
 ## 7. Riesgos
 
@@ -329,3 +417,8 @@ Cada sub-proyecto: rama `feat/*` o `docs/*`, spec corto en `specs/`, plan en `pl
   rompe su día; por eso el perfil solo quita lo que no aplica al plan, se verifica contra logs y
   se revisa con una cajera antes de desplegar. El presupuesto de bundle puede volverse un
   estorbo si se fija demasiado bajo: se calibra con la primera medición, no con una meta ideal.
+- Valor de la tienda: con costos en cero, el dueño puede leer "mi tienda vale $0" y perder
+  confianza; por eso las dos cifras y el conteo de piezas sin costo van siempre juntos, y la
+  tarjeta prioriza el valor a venta cuando el costo está incompleto.
+- Vista del dueño: rehacer `HQOperations` sin la lista de preguntas acordada produce otro
+  dashboard bonito que nadie usa; el spec de SP7 no arranca sin esa lista.
