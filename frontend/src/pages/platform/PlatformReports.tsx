@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import {
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-} from 'recharts'
+import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Tooltip } from 'chart.js'
+import { Bar } from 'react-chartjs-2'
+import { token } from '../../utils/cssToken'
+
+ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip)
 import { reportApi } from '../../api/platform'
 import { reportsMoneyApi } from '../../api/reportsMoney'
 import { toast } from '../../store/toastStore'
@@ -531,15 +533,14 @@ function Pagination({
 function TopChart({
   title,
   data,
-  dataKey,
   labelFormatter,
 }: {
   title: string
   data: { label: string; value: number }[]
-  dataKey: string
   labelFormatter?: (v: number) => string
 }) {
   const fmt = labelFormatter ?? ((v) => v.toLocaleString('es-MX'))
+  const hint = token('--p-hint', 'rgb(100, 116, 139)')
   return (
     <div style={{
       background: 'var(--p-surface)',
@@ -557,39 +558,39 @@ function TopChart({
       }}>
         {title}
       </h3>
-      <ResponsiveContainer width="100%" height={260}>
-        <BarChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-          <CartesianGrid stroke="var(--p-border)" strokeDasharray="2 4" vertical={false} />
-          <XAxis
-            dataKey="label"
-            tick={{ fill: 'var(--p-hint)', fontSize: 10 }}
-            axisLine={false}
-            tickLine={false}
-            interval={0}
-            angle={-25}
-            textAnchor="end"
-            height={70}
-          />
-          <YAxis
-            tick={{ fill: 'var(--p-hint)', fontSize: 10 }}
-            axisLine={false}
-            tickLine={false}
-            width={64}
-            tickFormatter={fmt}
-          />
-          <Tooltip
-            contentStyle={{
-              background: 'var(--p-sidebar)',
-              border: '1px solid var(--p-border)',
-              borderRadius: 8,
-              color: 'var(--p-text)',
-              fontSize: 12,
-            }}
-            formatter={(v: any) => fmt(typeof v === 'number' ? v : Number(v) || 0)}
-          />
-          <Bar dataKey={dataKey} fill="var(--p-accent)" radius={[4, 4, 0, 0]} />
-        </BarChart>
-      </ResponsiveContainer>
+      <div style={{ height: 260 }}>
+        <Bar
+          data={{
+            labels: data.map((d) => d.label),
+            datasets: [{ data: data.map((d) => d.value), backgroundColor: token('--p-accent', 'rgb(99, 102, 241)'), borderRadius: 4 }],
+          }}
+          options={{
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                backgroundColor: token('--p-sidebar', 'rgb(15, 23, 42)'),
+                borderColor: token('--p-border', 'rgb(31, 41, 55)'), borderWidth: 1,
+                titleColor: token('--p-text', 'rgb(226, 232, 240)'), bodyColor: token('--p-text', 'rgb(226, 232, 240)'),
+                callbacks: { label: (ctx) => fmt(typeof ctx.parsed.y === 'number' ? ctx.parsed.y : 0) },
+              },
+            },
+            scales: {
+              x: {
+                grid: { display: false },
+                ticks: { color: hint, font: { size: 10 }, autoSkip: false, maxRotation: 25, minRotation: 25 },
+              },
+              y: {
+                grid: { color: token('--p-border', 'rgb(31, 41, 55)'), tickBorderDash: [2, 4] },
+                border: { display: false },
+                ticks: { color: hint, font: { size: 10 }, callback: (v) => fmt(Number(v)) },
+              },
+            },
+          }}
+        />
+      </div>
     </div>
   )
 }
@@ -699,7 +700,7 @@ function ProductsReport({ filters, sort, page, compare, onPageChange, onSortChan
 
   return (
     <ReportShell loading={loading} error={error} onReload={reload}>
-      <TopChart title="Top 10 productos por revenue" data={chartData} dataKey="value" labelFormatter={(v) => fmtMoney(String(v))} />
+      <TopChart title="Top 10 productos por revenue" data={chartData} labelFormatter={(v) => fmtMoney(String(v))} />
       <div style={{ height: 16 }} />
       <div style={{ background: 'var(--p-surface)', border: '1px solid var(--p-border)', borderRadius: 14, overflow: 'hidden' }}>
         <TablaDesplazable>
@@ -771,7 +772,7 @@ function BranchesReport({ filters, sort, page, compare, onPageChange, onSortChan
 
   return (
     <ReportShell loading={loading} error={error} onReload={reload}>
-      <TopChart title="Top 10 sucursales por revenue" data={chartData} dataKey="value" labelFormatter={(v) => fmtMoney(String(v))} />
+      <TopChart title="Top 10 sucursales por revenue" data={chartData} labelFormatter={(v) => fmtMoney(String(v))} />
       <div style={{ height: 16 }} />
       <div style={{ background: 'var(--p-surface)', border: '1px solid var(--p-border)', borderRadius: 14, overflow: 'hidden' }}>
         <TablaDesplazable>
@@ -841,7 +842,7 @@ function SellersReport({ filters, sort, page, compare, onPageChange, onSortChang
 
   return (
     <ReportShell loading={loading} error={error} onReload={reload}>
-      <TopChart title="Top 10 vendedores por revenue" data={chartData} dataKey="value" labelFormatter={(v) => fmtMoney(String(v))} />
+      <TopChart title="Top 10 vendedores por revenue" data={chartData} labelFormatter={(v) => fmtMoney(String(v))} />
       <div style={{ height: 16 }} />
       <div style={{ background: 'var(--p-surface)', border: '1px solid var(--p-border)', borderRadius: 14, overflow: 'hidden' }}>
         <TablaDesplazable>
@@ -911,7 +912,7 @@ function CustomersReport({ filters, sort, page, compare, onPageChange, onSortCha
 
   return (
     <ReportShell loading={loading} error={error} onReload={reload}>
-      <TopChart title="Top 10 clientes por revenue" data={chartData} dataKey="value" labelFormatter={(v) => fmtMoney(String(v))} />
+      <TopChart title="Top 10 clientes por revenue" data={chartData} labelFormatter={(v) => fmtMoney(String(v))} />
       <div style={{ height: 16 }} />
       <div style={{ background: 'var(--p-surface)', border: '1px solid var(--p-border)', borderRadius: 14, overflow: 'hidden' }}>
         <TablaDesplazable>

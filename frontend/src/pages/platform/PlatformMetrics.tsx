@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState, lazy, Suspense } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  ResponsiveContainer, PieChart, Pie, Cell, Tooltip,
-} from 'recharts'
+import { Chart as ChartJS, ArcElement, Tooltip } from 'chart.js'
+import { Doughnut } from 'react-chartjs-2'
+import { token } from '../../utils/cssToken'
+
+ChartJS.register(ArcElement, Tooltip)
 import {
   platformApi,
   TopTenant,
@@ -173,6 +175,12 @@ const METHOD_COLORS = [
   '#c084fc',
   '#f87171',
 ]
+
+/** `var(--p-accent)` sirve como CSS en la leyenda, pero no en canvas: aquí se resuelve. */
+function colorMetodo(i: number): string {
+  const c = METHOD_COLORS[i % METHOD_COLORS.length]
+  return c.startsWith('var(') ? token(c.slice(4, -1), '#6366f1') : c
+}
 
 // ── component ────────────────────────────────────────────────────────────────
 
@@ -500,33 +508,32 @@ export function PlatformMetrics() {
               }}
             >
               <div style={{ width: '100%', height: 280 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={paymentMethods.items}
-                      dataKey="revenue"
-                      nameKey="label"
-                      innerRadius={70}
-                      outerRadius={120}
-                      paddingAngle={2}
-                      stroke="var(--p-bg)"
-                    >
-                      {paymentMethods.items.map((_, i) => (
-                        <Cell key={i} fill={METHOD_COLORS[i % METHOD_COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      contentStyle={{
-                        background: 'var(--p-sidebar)',
-                        border: '1px solid var(--p-border)',
-                        borderRadius: 8,
-                        color: 'var(--p-text)',
-                        fontSize: 12,
-                      }}
-                      formatter={(v: any) => formatCurrency(typeof v === 'number' ? v : 0)}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
+                <Doughnut
+                  data={{
+                    labels: paymentMethods.items.map((m) => m.label),
+                    datasets: [{
+                      data: paymentMethods.items.map((m) => m.revenue),
+                      backgroundColor: paymentMethods.items.map((_, i) => colorMetodo(i)),
+                      borderColor: token('--p-bg', '#0b0f14'),
+                      borderWidth: 2,
+                    }],
+                  }}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '58%',
+                    animation: false,
+                    plugins: {
+                      legend: { display: false },
+                      tooltip: {
+                        backgroundColor: token('--p-sidebar', '#0f172a'),
+                        borderColor: token('--p-border', '#1f2937'), borderWidth: 1,
+                        titleColor: token('--p-text', '#e2e8f0'), bodyColor: token('--p-text', '#e2e8f0'),
+                        callbacks: { label: (ctx) => `${ctx.label}: ${formatCurrency(typeof ctx.parsed === 'number' ? ctx.parsed : 0)}` },
+                      },
+                    },
+                  }}
+                />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13 }}>
                 {paymentMethods.items.map((m, i) => (
