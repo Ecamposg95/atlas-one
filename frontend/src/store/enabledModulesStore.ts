@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import client from '../api/client'
 import { puede } from '../utils/capacidades'
+import type { PlanOrg } from '../types/auth'
 
 /**
  * Apply or clear the `data-preset` attribute on <html>.
@@ -20,13 +21,22 @@ interface ContextResponse {
   enabled_modules?: string[]
   preset?: string | null
   capacidades?: string[]
+  plan?: { clave?: unknown; nombre?: unknown } | null
   // (other fields present in /me/context but not needed here)
+}
+
+/** Solo acepta un plan completo; cualquier otra cosa es "no sé" (null = sin recorte). */
+function leerPlan(crudo: ContextResponse['plan']): PlanOrg | null {
+  if (!crudo || typeof crudo.clave !== 'string' || typeof crudo.nombre !== 'string') return null
+  return { clave: crudo.clave, nombre: crudo.nombre }
 }
 
 interface EnabledModulesStore {
   enabledModules: string[]
   preset: string | null
   capacidades: string[]
+  /** Plan comercial; null mientras no carga, si falló o si el servidor no lo manda. */
+  plan: PlanOrg | null
   loaded: boolean
   loading: boolean
   load: () => Promise<void>
@@ -44,6 +54,7 @@ export const useEnabledModulesStore = create<EnabledModulesStore>((set, get) => 
   enabledModules: [],
   preset: null,
   capacidades: [],
+  plan: null,
   loaded: false,
   loading: false,
 
@@ -55,10 +66,12 @@ export const useEnabledModulesStore = create<EnabledModulesStore>((set, get) => 
       const mods = Array.isArray(r.data?.enabled_modules) ? r.data!.enabled_modules! : []
       const preset = r.data?.preset ?? null
       const capacidades = Array.isArray(r.data?.capacidades) ? r.data!.capacidades! : []
+      const plan = leerPlan(r.data?.plan)
       set({
         enabledModules: mods,
         preset,
         capacidades,
+        plan,
         loaded: true,
         loading: false,
       })
@@ -69,13 +82,13 @@ export const useEnabledModulesStore = create<EnabledModulesStore>((set, get) => 
       // Las capacidades NO siguen esta política: fallan cerradas (lista
       // vacía), igual que cuando el servidor sí responde pero la tienda no
       // tiene ninguna encendida.
-      set({ enabledModules: [], preset: null, capacidades: [], loaded: true, loading: false })
+      set({ enabledModules: [], preset: null, capacidades: [], plan: null, loaded: true, loading: false })
       applyPresetAttribute(null)
     }
   },
 
   reset: () => {
-    set({ enabledModules: [], preset: null, capacidades: [], loaded: false, loading: false })
+    set({ enabledModules: [], preset: null, capacidades: [], plan: null, loaded: false, loading: false })
     applyPresetAttribute(null)
   },
 }))
