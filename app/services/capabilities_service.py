@@ -177,3 +177,17 @@ def seed_global_modules(db: Session):
             mod.status = item["status"]
             
     db.commit()
+
+
+def resumen_plan(org) -> dict:
+    """Clave y nombre visible del plan de la organización, para que la interfaz
+    recorte el menú (perfil por plan). NULL, vacío o desconocido → FREE, igual
+    que `plans.obtener_plan`: una fila vieja no deja a nadie sin menú.
+
+    Import local: `plans` importa `INDUSTRY_PRESETS` de este módulo al cargar y
+    un import en cabecera sería circular.
+    """
+    from app.services.plans import obtener_plan
+
+    p = obtener_plan(getattr(org, "plan", None))
+    return {"clave": p.clave, "nombre": p.nombre}

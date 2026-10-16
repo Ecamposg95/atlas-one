@@ -316,7 +316,10 @@ def delete_org_logo(
 # actual. main.py lo monta en /api/org/capabilities (URL histórica).
 # ═════════════════════════════════════════════════════════════════════════════
 from fastapi import Request as _CapabilitiesRequest
-from app.services.capabilities_service import get_organization_capabilities as _get_org_caps
+from app.services.capabilities_service import (
+    get_organization_capabilities as _get_org_caps,
+    resumen_plan as _resumen_plan,
+)
 from app.ui.nav_registry import get_nav_for_context as _get_nav
 from app.schemas.capabilities import OrgCapabilities as _OrgCapabilities
 from app.models.organization import IndustryType as _IndustryType
@@ -359,4 +362,5 @@ async def get_org_caps(
             "warehouse": "/warehouse/dashboard",
         },
         "nav_items": nav,
+        "plan": _resumen_plan(org),
     }

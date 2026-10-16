@@ -10,6 +10,10 @@ class NavItem(BaseModel):
     required_module: Optional[str] = None
     roles_allowed: List[str] = []
 
+class PlanResumen(BaseModel):
+    clave: str
+    nombre: str
+
 class OrgCapabilities(BaseModel):
     organization_id: int
     industry_type: str
@@ -17,3 +21,4 @@ class OrgCapabilities(BaseModel):
     ui_profile: str
     default_routes: Dict[str, str]
     nav_items: List[NavItem]
+    plan: PlanResumen

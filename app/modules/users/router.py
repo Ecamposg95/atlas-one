@@ -53,7 +53,8 @@ def read_user_context(
         "branch": None,
         "preset": None,
         "context_type": "HQ",  # Default
-        "allowed_templates": []
+        "allowed_templates": [],
+        "plan": None,
     }
 
     # 1. Resolve Organization
@@ -65,6 +66,11 @@ def read_user_context(
                 "name": org.name,
                 "logo_url": org.logo_url
             }
+
+            # Plan comercial: la interfaz recorta el menú con la clave y muestra
+            # el nombre en la tarjeta de inicio. Sin org activa queda None.
+            from app.services.capabilities_service import resumen_plan
+            ctx["plan"] = resumen_plan(org)
 
             # Preset info
             if org.industry_type:
