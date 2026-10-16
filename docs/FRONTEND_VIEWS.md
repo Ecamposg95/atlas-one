@@ -59,6 +59,7 @@ Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.l
 | `/hq/sales` | `hq/HQSalesLog` | Admin, Dueño | pos |
 | `/hq/returns` | `hq/HQReturns` | Admin, Dueño | returns |
 | `/hq/inventory` | `hq/HQInventory` | Admin | inventory |
+| `/hq/valor-inventario` | `hq/HQValorInventario` | Admin, Dueño, Gerente | reports |
 | `/hq/branches`, `/:id` | `hq/HQBranches`, `HQBranchDetail` | Admin (detail: +Dueño) | inventory/pos |
 | `/labels` | `labels/Labels` | Admin, Dueño, Gerente, Cajero | labels |
 | `/products`, `/new`, `/:id/edit` | `inventory/Products`, `products/ProductForm` | Admin, Dueño, Gerente, Cajero | catalog |
@@ -237,7 +238,7 @@ Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.l
 - **Archivo:** `pages/hq/HQOperations.tsx` (664 líneas)
 - **Propósito:** "War room" en vivo: revenue/tickets/métodos, velocidad por hora, estado de cada sucursal, top productos, feed de alertas. Auto-refresh 60s.
 - **Quién la ve:** Admin, Dueño — módulo `pos`.
-- **Datos/API:** `reportsApi.commandCenterStats/exportCsv`. Alertas leídas en `localStorage`.
+- **Datos/API:** `reportsApi.commandCenterStats/exportCsv`, `reportsApi.valorInventario` (tarjeta "Valor de la tienda"). Alertas leídas en `localStorage`.
 - **Componentes clave:** `KPICard`, `Bar`/`Doughnut` (chart.js), `useKeyboardShortcuts` (1/2/3/r).
 - **Notas:** Auto-refresh se pausa con `document.hidden`. Errores solo a consola. Tema oscuro fijo. **Diferenciador:** es el "live monitor".
 
@@ -275,6 +276,13 @@ Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.l
 - **Quién la ve:** **Solo Admin** — módulo `inventory`.
 - **Datos/API:** `productsApi.search`, `inventoryApi.getKardex/createAdjustment`, `organizationApi.getBranches`.
 - **Notas:** Errores con `alert()`. Búsqueda sin debounce. Casi idéntica a `inventory/Inventory.tsx`.
+
+### `/hq/valor-inventario` — Valor de la tienda
+- **Archivo:** `pages/hq/HQValorInventario.tsx`
+- **Propósito:** ¿Cuánto vale la existencia de hoy? Valor a precio de venta y a costo con el conteo de piezas/SKUs sin costo, desglosado por sucursal, departamento o marca; filtro por sucursal; CSV generado en el cliente (`utils/valuacionCsv.ts`).
+- **Quién la ve:** Admin, Dueño y Gerente — módulo `reports` (base). El gerente llega limitado a su sucursal por el backend (`ve_costo=false`): la página no le ofrece selector de sucursal ni columna de costo.
+- **Datos/API:** `reportsApi.valorInventario`, `organizationApi.getBranches`.
+- **Notas:** La tarjeta `components/reports/ValorTiendaCard.tsx` en `HQOperations` muestra el mismo dato; cuando hay piezas sin costo la cifra grande es la de venta y el costo baja a secundaria con el aviso "N piezas sin costo" (riesgo documentado en el mega plan 2026-10: un catálogo importado sin costos no debe leerse como "mi tienda vale $0"). Kit `ui/` (`CabeceraPagina`, `BarraFiltros`, `TarjetaFila`, `ListaTarjetas`); tabla en escritorio, tarjetas bajo `md`.
 
 ### `/hq/branches` — Sucursales (grid)
 - **Archivo:** `pages/hq/HQBranches.tsx` (121 líneas)
