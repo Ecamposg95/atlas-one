@@ -17,3 +17,9 @@ from .validaciones import (  # noqa: F401
     atributos_principal, exigir_campos_de_cajero, validar_departamento_y_marca,
     validar_escalones, validar_precio, validar_sucursales_de_la_org,
 )
+
+from .sucursales import (  # noqa: F401
+    armar_estado_por_sucursal, copiar_estado_por_sucursal, fijar_existencia,
+    registrar_stock_inicial, resolver_sucursales_destino,
+    sucursal_de_existencia_inicial, sucursales_que_venden,
+)
