@@ -1,6 +1,6 @@
 {
   "_comentario": "Bytes sin comprimir de la ruta crítica login → POS: entrada + <link rel=modulepreload> + assets/POS-*.js. Lo mide scripts/presupuesto_bundle.py (CI, job frontend-build). Tope inicial = medición × 0.95; se baja al cerrar cada tarea de carga del plan SP2. Si una función nueva lo rebasa, primero se discute qué entra a la ruta crítica, no se sube el número.",
-  "tope_bytes": 596914,
-  "prohibidos_en_precarga": [],
+  "tope_bytes": 419514,
+  "prohibidos_en_precarga": ["charts-"],
   "medicion_base": { "fecha": "2026-10-15", "bytes": 628331, "commit": "109aad0" }
 }

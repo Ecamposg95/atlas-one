@@ -11,14 +11,16 @@ import { rutaInicioPorRol } from './utils/rutaInicio'
 const _savedTheme = localStorage.getItem('atlas_theme') ?? 'dark'
 document.documentElement.classList.add(_savedTheme)
 import { Layout } from './components/layout/Layout'
-import { MobileLayout } from './components/layout/MobileLayout'
 import { RequireRole, RutaPorRol } from './components/layout/RequireRole'
 import { LoginPage } from './pages/Login'
-import { NotFoundPage } from './pages/NotFound'
 
 // Lazy imports — cada grupo de páginas se carga bajo demanda
 import { lazy, Suspense } from 'react'
 import { Spinner } from './components/ui/Spinner'
+
+// Armazón móvil y 404: no son parte de login → POS.
+const MobileLayout = lazy(() => import('./components/layout/MobileLayout').then(m => ({ default: m.MobileLayout })))
+const NotFoundPage = lazy(() => import('./pages/NotFound').then(m => ({ default: m.NotFoundPage })))
 
 // HQ / Admin
 const HQOperations    = lazy(() => import('./pages/hq/HQOperations').then(m => ({ default: m.HQOperations })))
@@ -384,7 +386,7 @@ export default function App() {
           <Route path="pos"             element={<RutaPorRol url="/pos"><Suspense fallback={<PageLoader />}><POS /></Suspense></RutaPorRol>} />
           <Route path="printer-settings" element={<RutaPorRol url="/printer-settings"><Suspense fallback={<PageLoader />}><PrinterSettings /></Suspense></RutaPorRol>} />
 
-          <Route path="*" element={<NotFoundPage />} />
+          <Route path="*" element={<Suspense fallback={<PageLoader />}><NotFoundPage /></Suspense>} />
         </Route>
 
         {/* Mobile + Portal — shell móvil propio (bottom-nav, sin sidebar) */}
@@ -392,7 +394,7 @@ export default function App() {
           path="/mobile"
           element={
             <PrivateRoute>
-              <MobileLayout />
+              <Suspense fallback={<PageLoader />}><MobileLayout /></Suspense>
             </PrivateRoute>
           }
         >
@@ -414,7 +416,7 @@ export default function App() {
           path="/portal"
           element={
             <PrivateRoute>
-              <MobileLayout />
+              <Suspense fallback={<PageLoader />}><MobileLayout /></Suspense>
             </PrivateRoute>
           }
         >
