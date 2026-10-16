@@ -197,3 +197,63 @@ def test_otra_organizacion_no_se_mezcla(client, auth_admin, db, tienda):
 
     r = client.get(URL, params={"branch_id": suc.id}, headers=auth_admin)
     assert r.status_code == 404, r.text
+
+
+# ---------------------------------------------------------------- agrupacion
+
+def _grupo(body, nombre):
+    return next(g for g in body["grupos"] if g["nombre"] == nombre)
+
+
+def test_agrupar_por_sucursal_es_el_default_y_ordena_por_valor_venta(client, auth_admin, branch_a, branch_b, tienda):
+    body = client.get(URL, headers=auth_admin).json()
+    assert body["agrupar"] == "sucursal"
+    assert [g["nombre"] for g in body["grupos"]] == ["Sucursal A", "Sucursal B"]
+    a = _grupo(body, "Sucursal A")
+    assert a["clave"] == str(branch_a.id)
+    assert a == {
+        "clave": str(branch_a.id), "nombre": "Sucursal A",
+        "piezas": 7.0, "skus": 2, "valor_venta": 6200.0, "valor_costo": 1200.0,
+        "piezas_sin_costo": 4.0,
+    }
+    b = _grupo(body, "Sucursal B")
+    assert b["clave"] == str(branch_b.id)
+    assert (b["piezas"], b["valor_venta"], b["valor_costo"], b["piezas_sin_costo"]) == (12.0, 4000.0, 800.0, 10.0)
+
+
+def test_agrupar_departamento_incluye_sin_departamento(client, auth_admin, tienda):
+    body = client.get(URL, params={"agrupar": "departamento"}, headers=auth_admin).json()
+    assert body["agrupar"] == "departamento"
+    assert [g["nombre"] for g in body["grupos"]] == ["Bolsas", "Zapatos", "Sin departamento"]
+    assert _grupo(body, "Bolsas")["clave"] == tienda["dept_bolsas"].id
+    assert _grupo(body, "Bolsas")["valor_venta"] == 5000.0
+    assert _grupo(body, "Bolsas")["valor_costo"] == 2000.0
+    assert _grupo(body, "Zapatos")["piezas_sin_costo"] == 4.0
+    sin = _grupo(body, "Sin departamento")
+    assert sin["clave"] == ""
+    assert sin["piezas"] == 10.0
+    assert sin["valor_venta"] == 2000.0
+    # La suma de los grupos cuadra con los totales: nada se pierde por faltar el dato.
+    assert sum(g["valor_venta"] for g in body["grupos"]) == body["totales"]["valor_venta"]
+
+
+def test_agrupar_marca_incluye_sin_marca(client, auth_admin, tienda):
+    body = client.get(URL, params={"agrupar": "marca"}, headers=auth_admin).json()
+    assert [g["nombre"] for g in body["grupos"]] == ["Sin marca", "Gucci"]
+    gucci = _grupo(body, "Gucci")
+    assert gucci["clave"] == tienda["marca_gucci"].id
+    assert (gucci["piezas"], gucci["valor_venta"]) == (5.0, 5000.0)
+    sin = _grupo(body, "Sin marca")
+    assert sin["clave"] == ""
+    assert (sin["piezas"], sin["valor_venta"], sin["piezas_sin_costo"]) == (14.0, 5200.0, 14.0)
+
+
+def test_agrupar_con_filtro_de_sucursal(client, auth_admin, branch_a, tienda):
+    body = client.get(URL, params={"agrupar": "departamento", "branch_id": branch_a.id}, headers=auth_admin).json()
+    assert [g["nombre"] for g in body["grupos"]] == ["Zapatos", "Bolsas"]
+    assert _grupo(body, "Bolsas")["piezas"] == 3.0
+
+
+def test_agrupar_invalido_es_422(client, auth_admin, tienda):
+    r = client.get(URL, params={"agrupar": "color"}, headers=auth_admin)
+    assert r.status_code == 422, r.text

@@ -24,7 +24,6 @@ class AgingReportResponse(BaseModel):
         from_attributes = True
 
 
-
 # --- Valor de la tienda (valuacion de inventario) ---------------------------
 # Dinero y piezas viajan como float (JSON numerico, como /dashboard); Decimal se
 # serializaria como cadena en Pydantic v2 y la tarjeta tendria que parsear.

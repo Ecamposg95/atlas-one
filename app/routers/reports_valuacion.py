@@ -163,7 +163,7 @@ def valor_inventario(
     q = _consulta(db, org_id, branch_id, (col_id, col_nombre))
     if union is not None:
         q = q.outerjoin(*union)
-    filas = q.group_by(col_id, col_nombre).order_by(desc("valor_venta")).all()
+    filas = q.group_by(col_id, col_nombre).order_by(desc("valor_venta"), col_nombre).all()
     grupos = [
         ValuacionGrupo(
             clave="" if f[0] is None else str(f[0]),
