@@ -152,3 +152,6 @@ app/static/product_images/*
 !app/static/product_images/.gitkeep
 app/static/branch_logos/*
 !app/static/branch_logos/.gitkeep
+
+# Worktrees locales de git (uno por plan en ejecución)
+.worktrees/
