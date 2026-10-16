@@ -100,6 +100,39 @@ export interface AuditDiscrepancy {
   closed_at: string
 }
 
+// --- Valor de la tienda (GET /reports/valor-inventario) ---------------------
+export type AgruparValuacion = 'sucursal' | 'departamento' | 'marca'
+
+export interface ValuacionTotales {
+  piezas: number
+  skus: number
+  valor_venta: number
+  /** null cuando el rol no ve costos (gerente). */
+  valor_costo: number | null
+  piezas_sin_costo: number
+  skus_sin_costo: number
+}
+
+export interface ValuacionGrupo {
+  /** id de sucursal/departamento/marca como texto; '' = sin asignar. */
+  clave: string
+  nombre: string
+  piezas: number
+  skus: number
+  valor_venta: number
+  valor_costo: number | null
+  piezas_sin_costo: number
+}
+
+export interface ValuacionInventario {
+  agrupar: AgruparValuacion
+  /** Sucursal consultada; null = todas las que venden. El gerente siempre recibe la suya. */
+  branch_id: number | null
+  ve_costo: boolean
+  totales: ValuacionTotales
+  grupos: ValuacionGrupo[]
+}
+
 export const reportsApi = {
   dashboard: async (params: { start_date: string; end_date: string; branch_id?: number }): Promise<DashboardData> => {
     const { data } = await client.get<DashboardData>('/reports/dashboard', { params })
@@ -160,5 +193,12 @@ export const reportsApi = {
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
+  },
+
+  valorInventario: async (
+    params: { agrupar?: AgruparValuacion; branch_id?: number } = {},
+  ): Promise<ValuacionInventario> => {
+    const { data } = await client.get<ValuacionInventario>('/reports/valor-inventario', { params })
+    return data
   },
 }
