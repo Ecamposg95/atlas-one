@@ -62,8 +62,6 @@ def read_products(
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization),
 ):
-    from app.modules.products.models import Brand
-
     # include_inactive solo aplica a admins (helper lo ignora para no-admins)
     is_admin = _is_admin(current_user)
 

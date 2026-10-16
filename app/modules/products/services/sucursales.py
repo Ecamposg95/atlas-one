@@ -81,7 +81,9 @@ def armar_estado_por_sucursal(
         existentes = {
             pbs.branch_id: pbs for pbs in db.query(ProductBranchStatus).filter(
                 ProductBranchStatus.variant_id == variante.id,
-                ProductBranchStatus.organization_id == org_id,
+                # Sin filtrar org: la variante ya es de la org y las filas
+                # legadas con organization_id NULL chocarían con el único
+                # (variant_id, branch_id) al insertar un duplicado.
             ).all()
         }
     for bid in branch_ids:
@@ -161,7 +163,8 @@ def fijar_existencia(
     registro = db.query(StockOnHand).filter(
         StockOnHand.variant_id == variante.id,
         StockOnHand.branch_id == branch_id,
-        StockOnHand.organization_id == org_id,
+        # Sin filtrar org (la variante ya es de la org): las filas legadas con
+        # organization_id NULL deben reutilizarse, no duplicarse.
     ).first()
     if registro is None:
         registro = StockOnHand(

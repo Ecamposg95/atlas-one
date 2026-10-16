@@ -142,6 +142,27 @@ class TestExistenciaYCatalogo:
         tier = db.query(ProductPrice).filter(ProductPrice.variant_id == v.id).one()
         assert tier.linked_package_id == pkg.id
 
+    def test_escalon_en_cero_falla_la_fila_y_no_crea_nada(self, client, db, org, hq_branch, auth_admin):
+        cab = CABECERAS + ["P1 Nombre", "P1 Min", "P1 Precio"]
+        r = _subir(client, auth_admin, org, [_fila("Z-1", **{"P1 Nombre": "Mayoreo", "P1 Min": "12", "P1 Precio": "0"})],
+                   cabeceras=cab)
+        assert (r.json()["created"], r.json()["failed"]) == (0, 1), r.text
+        assert "el precio del escalón 'Mayoreo' debe ser mayor a cero." in r.text
+        assert db.query(ProductVariant).filter(ProductVariant.sku == "Z-1").count() == 0
+        assert db.query(ProductPrice).count() == 0
+
+    def test_escalon_en_cero_en_actualizacion_conserva_los_previos(self, client, db, org, hq_branch, auth_admin):
+        cab = CABECERAS + ["P1 Nombre", "P1 Min", "P1 Precio"]
+        ok = _subir(client, auth_admin, org, [_fila("Z-2", **{"P1 Nombre": "Mayoreo", "P1 Min": "12", "P1 Precio": "9"})],
+                    cabeceras=cab)
+        assert ok.json()["created"] == 1, ok.text
+        r = _subir(client, auth_admin, org, [_fila("Z-2", **{"P1 Nombre": "Mayoreo", "P1 Min": "12", "P1 Precio": "0"})],
+                   cabeceras=cab)
+        assert r.json()["failed"] == 1, r.text
+        v = db.query(ProductVariant).filter(ProductVariant.sku == "Z-2").one()
+        tier = db.query(ProductPrice).filter(ProductPrice.variant_id == v.id).one()
+        assert tier.unit_price == Decimal("9")
+
 
 class TestTasaIva:
     def _existente(self, db, org, hq_branch, sku, tasa):

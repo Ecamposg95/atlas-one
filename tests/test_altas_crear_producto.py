@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from conftest import _make_product
 from app.models.inventory import StockOnHand
-from app.models.products import ProductBranchStatus, ProductPrice, ProductVariant
+from app.models.products import PackagingUnit, ProductBranchStatus, ProductPrice, ProductVariant
 
 
 def _h(auth, org):
@@ -85,6 +85,18 @@ class TestValidacionesNuevas:
         assert "Caja" in r.json()["detail"]
         assert db.query(ProductVariant).filter(ProductVariant.sku == "ESC-1").count() == 0
         assert db.query(ProductPrice).count() == 0
+
+    def test_escalon_se_enlaza_al_empaque_por_nombre(self, client, db, org, branch_a, auth_admin):
+        r = client.post("/api/products/", json=_cuerpo(
+            "LNK-1", target_branch_ids=[branch_a.id],
+            packaging_units=[{"name": "Caja", "units_per_package": 12, "package_price": 100}],
+            prices=[{"price_name": "Caja", "min_quantity": 12, "unit_price": 9}],
+        ), headers=_h(auth_admin, org))
+        assert r.status_code in (200, 201), r.text
+        v = db.query(ProductVariant).filter(ProductVariant.sku == "LNK-1").one()
+        pkg = db.query(PackagingUnit).filter(PackagingUnit.variant_id == v.id).one()
+        tier = db.query(ProductPrice).filter(ProductPrice.variant_id == v.id).one()
+        assert tier.linked_package_id == pkg.id
 
 
 class TestModuloCatalogo:

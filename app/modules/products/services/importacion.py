@@ -233,6 +233,16 @@ def _habilitar_y_surtir(db: Session, ctx: ContextoImportacion, variante: Product
 def _empaques_y_escalones(db: Session, ctx: ContextoImportacion, variante: ProductVariant, fila: dict) -> None:
     """Columnas E1..E3 (empaques) y P1..P5 (escalones): reemplazo completo de
     lo que haya, respetando la FK escalón -> empaque."""
+    if ctx.has_tier_cols:
+        # Validar antes de borrar nada: un escalón a $0 lo elegiría el POS
+        # como el más barato (create/update ya lo rechazan igual).
+        for i in range(1, 6):
+            p_nombre = fila.get(f"p{i} nombre")
+            p_val = fila.get(f"p{i} precio")
+            if p_nombre and not celda_vacia(p_nombre) and p_val and not celda_vacia(p_val):
+                if celda_decimal(p_val, Decimal(0)) <= 0:
+                    raise FilaInvalida(
+                        f"'{variante.sku}': el precio del escalón '{p_nombre}' debe ser mayor a cero.")
     if ctx.has_pkg_cols:
         if ctx.has_tier_cols:
             db.query(ProductPrice).filter(ProductPrice.variant_id == variante.id).delete(synchronize_session=False)

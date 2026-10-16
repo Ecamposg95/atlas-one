@@ -53,6 +53,23 @@ class TestEstadoPorSucursal:
         assert filas[branch_a.id].is_visible is True and filas[branch_a.id].is_active_pos is False
         assert filas[branch_b.id].is_active_hq is True and filas[branch_b.id].is_active_pos is True
 
+    def test_reutiliza_pbs_legado_sin_organizacion(self, db, org, branch_a):
+        _, v = _make_product(db, org, "P", "PBS-LEG", 10, [(branch_a.id, False)])
+        db.query(ProductBranchStatus).filter(ProductBranchStatus.variant_id == v.id).update(
+            {ProductBranchStatus.organization_id: None})
+        db.flush()
+        armar_estado_por_sucursal(db, org.id, v, [branch_a.id], is_active_hq=True)
+        filas = db.query(ProductBranchStatus).filter(ProductBranchStatus.variant_id == v.id).all()
+        assert len(filas) == 1 and filas[0].is_visible is True
+
+    def test_fijar_existencia_reutiliza_stock_legado_sin_organizacion(self, db, org, branch_a, admin_user):
+        _, v = _make_product(db, org, "F", "SOH-LEG", 10, [(branch_a.id, True)])
+        db.query(StockOnHand).filter(StockOnHand.variant_id == v.id).update({StockOnHand.organization_id: None})
+        db.flush()
+        fijar_existencia(db, org.id, v, branch_a.id, Decimal("5"), admin_user.id, notas="legado")
+        filas = db.query(StockOnHand).filter(StockOnHand.variant_id == v.id).all()
+        assert len(filas) == 1 and filas[0].qty_on_hand == Decimal("5")
+
     def test_reemplazar_borra_las_viejas(self, db, org, branch_a, branch_b):
         _, v = _make_product(db, org, "P", "PBS-2", 10, [(branch_a.id, True)])
         armar_estado_por_sucursal(db, org.id, v, [branch_b.id], reemplazar=True)

@@ -21,7 +21,7 @@ from app.models.sales import SalesLineItem
 from app.modules.products.schemas import (
     ProductRead, ProductVariantUpdate, VariantBatchCreate,
 )
-from app.modules.products.services.codigos import sku_en_uso as _sku_en_uso, validar_barcode_libre
+from app.modules.products.services.codigos import sku_en_uso as _sku_en_uso, validar_barcode_libre, validar_sku_unico
 from app.modules.products.services.variantes import (  # noqa: F401  (re-export para core/import_export)
     atributos as _atributos,
     crear_variantes,
@@ -126,8 +126,11 @@ def editar_variante(
         sku = (body.sku or "").strip()
         if not sku:
             raise HTTPException(status_code=422, detail="El SKU no puede quedar vacío")
-        if _sku_en_uso(db, org_id, sku, excepto_id=v.id):
-            raise HTTPException(status_code=409, detail=f"El SKU '{sku}' ya existe en esta organización.")
+        # Solo se valida si el SKU cambia: el editor manda siempre el SKU y uno
+        # sin cambios no debe chocar con un gemelo archivado (misma regla que
+        # `actualizar_producto`). `validar_sku_unico` trae la pista de "archivado".
+        if sku != v.sku:
+            sku = validar_sku_unico(db, org_id, sku, excepto_id=v.id)
         v.sku = sku
     if "barcode" in enviados:
         v.barcode = validar_barcode_libre(db, org_id, body.barcode, excepto_id=v.id)
