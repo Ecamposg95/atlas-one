@@ -23,10 +23,12 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from app.utils import image_storage
 from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from decimal import Decimal
 
 from app.core.database import get_db
+from app.core.permissions import require_module
 from app.core.tenant_context import get_current_active_organization
 from app.models import (
     Product, ProductVariant, StockOnHand, User,
@@ -44,6 +46,7 @@ from app.modules.products.schemas import (
     ProductCreate, ProductRead, ProductUpdate, ProductListResponse,
 )
 from app.modules.products.sale_name import sku_sugerido
+from app.modules.products.services import crear_producto
 from app.modules.products.variant_label import (
     COLOR_MAX, SIZE_MAX, clean_attr, variant_label,
 )
@@ -187,362 +190,34 @@ def read_products(
 # -----------------------------
 # 2. Crear producto
 # -----------------------------
-@router.post("/", response_model=ProductRead)
+@router.post("/", response_model=ProductRead,
+             dependencies=[Depends(require_module("catalog"))])
 def create_product(
     prod_in: ProductCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization),
 ):
-    # D4 — Non-admin (CAJERO/GERENTE/VENDEDOR) path: product is created
-    # strictly for the user's own branch.
-    # - Without a branch_id: forbidden (no sensible default for a branch-
-    #   scoped writer).
-    # - Required fields enforced at 422: name, sku, price, cost — los mismos
-    #   que para ADMIN. Marca y departamento NO son obligatorios: una tienda
-    #   recién dada de alta no los tiene y el cajero no puede crearlos
-    #   (pantallas de admin), así que exigirlos lo dejaba sin forma de
-    #   registrar productos (Novedades Imaltzin, 2026-09-19).
-    is_caller_admin = _is_admin(current_user)
-    if not is_caller_admin:
-        if not current_user.branch_id:
-            raise HTTPException(
-                status_code=403,
-                detail="Solo usuarios con sucursal asignada pueden crear productos."
-            )
-        _required = {
-            "name": prod_in.name,
-            "sku": prod_in.sku,
-            "price": prod_in.price,
-            "cost": prod_in.cost,
-        }
-        missing = [
-            k for k, v in _required.items()
-            if v is None or (isinstance(v, str) and not v.strip())
-        ]
-        if missing:
-            raise HTTPException(
-                status_code=422,
-                detail=f"Campos requeridos para CAJERO/GERENTE: {', '.join(missing)}"
-            )
-
-    # ATS-25: Validate price > 0 so CAJERO can't create unsellable product
-    if prod_in.price <= 0:
-        raise HTTPException(
-            status_code=422,
-            detail="El precio del producto debe ser mayor a cero."
-        )
-
-    # Validar SKU único en la organización (incluyendo soft-deleted)
-    existing_variant = db.query(ProductVariant).join(Product).filter(
-        ProductVariant.sku == prod_in.sku,
-        Product.organization_id == org_id,
-        ProductVariant.deleted_at == None  # Only check active variants
-    ).first()
-
-    if existing_variant:
-        raise HTTPException(
-            status_code=409,
-            detail=f"El SKU '{prod_in.sku}' ya existe en esta organización."
-        )
-
+    """Alta de producto. La lógica vive en `services.crear_producto`; aquí
+    solo se confirma la transacción y se serializa la respuesta."""
     try:
-        # [NEW] RBAC: Only ADMIN roles can specify multiple branches
-        if prod_in.target_branch_ids and len(prod_in.target_branch_ids) > 1:
-            if current_user.role not in ["ADMINISTRADOR", "GERENTE", "DUEÑO"]:
-                raise HTTPException(
-                    status_code=403,
-                    detail="Solo administradores pueden habilitar productos en múltiples sucursales"
-                )
-
-        # [SECURITY] Branch-scoped (non-admin) users can ONLY create for their
-        # own branch. Admins (ADMINISTRADOR/DUEÑO) are exempt: even when they
-        # carry an HQ branch_id they may target any branch in the org — this is
-        # the multi-branch capability already granted a few lines above.
-        if not is_caller_admin and current_user.branch_id and prod_in.target_branch_ids:
-            for bid in prod_in.target_branch_ids:
-                if bid != current_user.branch_id:
-                    raise HTTPException(
-                        status_code=403,
-                        detail="Solo puedes crear productos para tu sucursal asignada."
-                    )
-
-        # [SECURITY] Cross-tenant guard — every target branch must belong to
-        # this org. Without this, target_branch_ids could inject StockOnHand /
-        # ProductBranchStatus rows into another tenant's branch.
-        if prod_in.target_branch_ids:
-            distinct_targets = set(prod_in.target_branch_ids)
-            valid_count = db.query(Branch).filter(
-                Branch.id.in_(distinct_targets),
-                Branch.organization_id == org_id,
-            ).count()
-            if valid_count != len(distinct_targets):
-                raise HTTPException(
-                    status_code=422,
-                    detail="Una o más sucursales objetivo no pertenecen a tu organización."
-                )
-
-        # [SEMANTICS] La existencia inicial entra en UNA sucursal. Con varias
-        # objetivo y sin `branch_id` no hay forma de saber cual, asi que se
-        # rechaza en vez de repartir a ciegas. Cuenta tambien la de las
-        # hermanas: con `initial_stock` 0 en la principal el guard no se
-        # disparaba y las piezas de la talla M aterrizaban en una sucursal
-        # arbitraria (el orden de un `set`), sin avisar.
-        _stock_hermanas = sum(
-            (v.initial_stock or Decimal(0)) for v in (prod_in.extra_variants or [])
-        )
-        _stock_inicial_total = (prod_in.initial_stock or Decimal(0)) + _stock_hermanas
-        _destino_explicito = (
-            prod_in.branch_id is not None
-            and prod_in.branch_id in set(prod_in.target_branch_ids or [])
-        )
-        if (_stock_inicial_total > 0
-                and prod_in.target_branch_ids
-                and len(set(prod_in.target_branch_ids)) > 1
-                and not _destino_explicito):
-            raise HTTPException(
-                status_code=422,
-                detail="Indica en qué sucursal entra la existencia inicial: no se reparte sola entre varias sucursales."
-            )
-
-        # [MODIFIED] Branch Assignment Logic
-        # Determine strict effective branches
-        effective_branch_ids = set()
-
-        # 1. If explicit target branches provided, use them
-        if prod_in.target_branch_ids and len(prod_in.target_branch_ids) > 0:
-            effective_branch_ids.update(prod_in.target_branch_ids)
-
-        # 2. If User has a Branch (Manager/Cashier), enforce their branch
-        if current_user.branch_id:
-             effective_branch_ids.add(current_user.branch_id)
-
-        # 3. HQ users without target_branch_ids create a global catalog product.
-        # No ProductBranchStatus records → product is visible to all branches by default (ATS-11 OUTER JOIN).
-        # Branch users (CAJERO/GERENTE) always have their branch in effective_branch_ids (line 975).
-
-        # Validate department_id and brand_id belong to this org
-        if prod_in.department_id:
-            dept = db.query(Department).filter(
-                Department.id == prod_in.department_id,
-                Department.organization_id == org_id
-            ).first()
-            if not dept:
-                raise HTTPException(status_code=422, detail="Departamento no encontrado en tu organización.")
-        if prod_in.brand_id:
-            brand = db.query(Brand).filter(
-                Brand.id == prod_in.brand_id,
-                Brand.organization_id == org_id
-            ).first()
-            if not brand:
-                raise HTTPException(status_code=422, detail="Marca no encontrada en tu organización.")
-
-        # Código de barras: único DENTRO de la organización (dos tiendas sí
-        # pueden vender el mismo EAN de fábrica). Mismo mensaje que el alta de
-        # tallas para que la pantalla lo muestre igual.
-        _barcode_in = (prod_in.barcode or "").strip() or None
-        if _barcode_in and barcode_en_uso(db, org_id, _barcode_in):
-            raise HTTPException(
-                status_code=409,
-                detail=f"El código de barras '{_barcode_in}' ya lo tiene otra variante.",
-            )
-
-        # Crear producto padre — defaults explícitos (no depender del ORM default).
-        # approval_status: siempre APPROVED. CAJERO/GERENTE pueden crear y ver
-        # su producto al instante sin bloqueo de aprobación. El workflow de
-        # aprobación está fuera de alcance hoy (se puede reintroducir con una
-        # columna `needs_admin_review` si se requiere auditoría estricta).
-        new_prod = Product(
-            name=prod_in.name,
-            description=prod_in.description,
-            unit=prod_in.unit or "pza",
-            image_url=prod_in.image_url or None,
-            department_id=prod_in.department_id,
-            brand_id=prod_in.brand_id,
-            # Ficha boutique. `gender` ya viene normalizado por el schema.
-            gender=prod_in.gender,
-            model=(prod_in.model or "").strip() or None,
-            material=(prod_in.material or "").strip() or None,
-            has_variants=True,   # CONSISTENCIA: ya que se crea una variante estándar
-            is_active=True,
-            approval_status='APPROVED',
-            created_by_user_id=current_user.id,
-            organization_id=org_id,
-        )
-        db.add(new_prod)
-        db.flush()
-
-        # Crear la variante principal. Con `color`/`size` (matriz boutique) la
-        # principal ES la primera combinación — nada de una "Estándar" extra
-        # sin talla, que en el POS salía como una celda "—" invendible.
-        _color_pal, _size_pal = _atributos_principal(prod_in.color, prod_in.size)
-        new_variant = ProductVariant(
-            product_id=new_prod.id,
-            sku=prod_in.sku,
-            barcode=_barcode_in,
-            color=_color_pal,
-            size=_size_pal,
-            variant_name=variant_label(_color_pal, _size_pal),
-            price=prod_in.price,
-            cost=prod_in.cost,
-            has_iva=prod_in.has_iva,    # [FIX]
-            tax_rate=prod_in.tax_rate,  # [FIX]
-            organization_id=org_id
-        )
-        db.add(new_variant)
-        db.flush()
-
-        # Sin código de fábrica se genera uno interno (EAN-13 de la org): toda
-        # variante tiene que poder escanearse e imprimirse en etiqueta. Va
-        # después del flush para que las hermanas de `extra_variants` (abajo)
-        # lo vean y no repitan la secuencia.
-        if not new_variant.barcode:
-            new_variant.barcode = siguiente_codigo_interno(db, org_id)
-            db.flush()
-
-        # [NEW] Create StockOnHand + Kardex de apertura por sucursal efectiva
-        # El stock inicial va a la sucursal del cajero (o a la primera objetivo si es HQ).
-        initial_stock = prod_in.initial_stock or Decimal(0)
-        _ordered_branches = list(effective_branch_ids)
-
-        # Sucursal destino del stock inicial (una sola, ver [SEMANTICS] arriba):
-        # la que eligio el formulario (`branch_id`), si no la del usuario, si no
-        # la primera objetivo. Antes se ignoraba `branch_id` y un admin con
-        # sucursal HQ veia su existencia inicial aterrizar en HQ en vez de en la
-        # tienda que acababa de elegir en pantalla.
-        _stock_branch_id = None
-        if prod_in.branch_id and prod_in.branch_id in effective_branch_ids:
-            _stock_branch_id = prod_in.branch_id
-        elif current_user.branch_id and current_user.branch_id in effective_branch_ids:
-            _stock_branch_id = current_user.branch_id
-        elif _ordered_branches:
-            _stock_branch_id = _ordered_branches[0]
-
-        for bid in _ordered_branches:
-            qty = initial_stock if bid == _stock_branch_id else Decimal(0)
-
-            stock_record = StockOnHand(
-                branch_id=bid,
-                variant_id=new_variant.id,
-                qty_on_hand=qty,
-                is_active=True,
-                organization_id=org_id
-            )
-            db.add(stock_record)
-
-            # [FIX] Registrar movimiento de Kardex (estaba en código muerto inaccesible)
-            if qty > 0:
-                db.add(InventoryMovement(
-                    branch_id=bid,
-                    variant_id=new_variant.id,
-                    user_id=current_user.id,
-                    movement_type=MovementType.ADJUSTMENT_IN,
-                    qty_change=qty,
-                    qty_before=Decimal(0),
-                    qty_after=qty,
-                    reference="Alta Inicial",
-                    notes="Creación de producto",
-                    organization_id=org_id
-                ))
-
-        # [NEW] Create ProductBranchStatus for Commercial Enablement
-        # This separates "where can we sell" from "how much stock do we have"
-        from app.modules.products.models import ProductBranchStatus
-        for bid in effective_branch_ids:
-            branch_status = ProductBranchStatus(
-                variant_id=new_variant.id,
-                branch_id=bid,
-                is_active_pos=True,  # Enable for POS by default
-                is_active_hq=False,  # HQ quotation disabled by default
-                is_visible=True,     # Visible in catalogs
-                organization_id=org_id
-            )
-            db.add(branch_status)
-
-        # Empaques (Handle first for mapping)
-        pkg_map = {}
-        for p_pkg in (prod_in.packaging_units or []):
-            new_pkg = PackagingUnit(
-                variant_id=new_variant.id,
-                name=p_pkg.name,
-                barcode=p_pkg.barcode,
-                units_per_package=p_pkg.units_per_package,
-                package_price=p_pkg.package_price,
-                weight=p_pkg.weight,
-                dimensions=p_pkg.dimensions,
-                organization_id=org_id
-            )
-            db.add(new_pkg)
-            db.flush()
-            if p_pkg.temp_id:
-                pkg_map[p_pkg.temp_id] = new_pkg.id
-            pkg_map[p_pkg.name.lower()] = new_pkg.id
-
-        # Precios escalonados
-        for p_price in (prod_in.prices or []):
-            linked_id = p_price.linked_package_id
-            if linked_id in pkg_map:
-                linked_id = pkg_map[linked_id]
-
-            db.add(ProductPrice(
-                variant_id=new_variant.id,
-                price_name=p_price.price_name,
-                min_quantity=p_price.min_quantity,
-                unit_price=p_price.unit_price,
-                linked_package_id=linked_id,
-                organization_id=org_id
-            ))
-
-        # D4 — Audit: CAJERO/GERENTE created product for their own branch.
-        if not is_caller_admin:
-            import json as _json
-            from app.models.platform import PlatformAuditLog
-            db.add(PlatformAuditLog(
-                actor_user_id=current_user.id,
-                action="PRODUCT_CREATE_CAJERO",
-                entity_type="Product",
-                entity_id=str(new_prod.id),
-                payload=_json.dumps({
-                    "branch_id": current_user.branch_id,
-                    "sku": prod_in.sku,
-                    "name": prod_in.name,
-                    "variant_id": str(new_variant.id),
-                }),
-            ))
-
-        # Variantes hermanas (boutique). Heredan precio/costo/IVA y se
-        # habilitan donde quedo la principal. Solo llega con el modulo
-        # `variants`; el formulario de las demas tiendas no manda la lista.
-        # [FIX] flush obligatorio: la sesion es autoflush=False y el PBS/SOH
-        # de la principal (arriba) todavia esta solo `add()`-eado. Sin este
-        # flush, `crear_variantes` consulta ProductBranchStatus y no ve nada
-        # -> las variantes hermanas nacen sin PBS ni stock (invisibles en POS).
-        if prod_in.extra_variants:
-            db.flush()
-            from .variants import crear_variantes
-            # Cada hermana trae su propia existencia inicial y aterriza en la
-            # misma sucursal que la principal (hallazgo #2: antes todo el stock
-            # se quedaba en la talla de la primera fila).
-            crear_variantes(db, org_id, new_prod, prod_in.extra_variants,
-                            stock_branch_id=_stock_branch_id, user_id=current_user.id)
-
-        db.commit() # Ensure Commit at the end of success path
-        # Re-fetch to return (though we return Pydantic model manually constructed often, or reload)
-        db.refresh(new_prod)
-        return _compute_product_read(new_prod, db, current_user, target_branch_id=current_user.branch_id)
-
-    except HTTPException as he:
-        # Re-raise HTTP Exceptions explicitly
-        raise he
-    except Exception as e:
+        producto = crear_producto(db, org_id, current_user, prod_in)
+        db.commit()
+    except HTTPException:
+        raise
+    except IntegrityError as e:
         db.rollback()
-        from sqlalchemy.exc import IntegrityError
-        if isinstance(e, IntegrityError) and 'product_variants' in str(e) and 'sku' in str(e):
+        if "product_variants" in str(e) and "sku" in str(e):
             raise HTTPException(
                 status_code=409,
-                detail=f"El SKU '{prod_in.sku}' ya existe en esta organización."
+                detail=f"El SKU '{prod_in.sku}' ya existe en esta organización.",
             )
         raise
+    except Exception:
+        db.rollback()
+        raise
+    db.refresh(producto)
+    return _compute_product_read(producto, db, current_user, target_branch_id=current_user.branch_id)
 
 
 @router.get("/sku-suggest")

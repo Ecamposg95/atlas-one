@@ -22,23 +22,11 @@ from app.models.products import (
     Product, ProductVariant, ProductBranchStatus, PackagingUnit,
 )
 from app.models.inventory import StockOnHand
-from app.models.modules import Module, OrganizationModule
 from app.models.platform import PlatformAuditLog
 from app.core.security import get_password_hash, create_access_token
 
 
 # ── Extra fixtures ────────────────────────────────────────────────────────────
-@pytest.fixture()
-def catalog_module_enabled(db, org):
-    mod = db.query(Module).filter(Module.key == "catalog").first()
-    if not mod:
-        mod = Module(key="catalog", name="Catalog")
-        db.add(mod); db.flush()
-    db.add(OrganizationModule(
-        organization_id=org.id, module_key="catalog", is_enabled=True,
-    ))
-    db.flush()
-
 
 def _auth(user):
     return {"Authorization": f"Bearer {create_access_token({'sub': user.username})}"}
