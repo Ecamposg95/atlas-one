@@ -62,7 +62,6 @@ class TestEstadoPorSucursal:
         _, v = _make_product(db, org, "P", "PBS-5", 10, [(branch_a.id, True)])
         assert [p.branch_id for p in v.branch_statuses] == [branch_a.id]   # precarga la relación
         armar_estado_por_sucursal(db, org.id, v, [branch_b.id], reemplazar=True)
-        db.refresh(v)
         assert [p.branch_id for p in v.branch_statuses] == [branch_b.id]
 
     def test_copiar_conserva_banderas_y_overrides(self, db, org, branch_a):

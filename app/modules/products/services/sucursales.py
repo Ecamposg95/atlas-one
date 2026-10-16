@@ -74,6 +74,8 @@ def armar_estado_por_sucursal(
             ProductBranchStatus.variant_id == variante.id,
             ProductBranchStatus.organization_id == org_id,
         ).delete()  # sincroniza la sesión, como el handler de edición
+        # La colección ya cargada (backref de ProductVariant) quedaría vieja.
+        db.expire(variante, ["branch_statuses"])
         existentes: dict[int, ProductBranchStatus] = {}
     else:
         existentes = {
