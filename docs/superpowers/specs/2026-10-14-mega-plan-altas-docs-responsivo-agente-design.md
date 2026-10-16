@@ -1,6 +1,7 @@
-# Mega plan 2026-10: altas de producto, interfaz agéntica, responsivo y docs — diseño maestro
+# Mega plan 2026-10: altas de producto, interfaz agéntica, versión ligera FREE, responsivo y docs — diseño maestro
 
-Fecha: 2026-10-14 · Estado: **borrador aprobado para planear**; cada sub-proyecto lleva su propio
+Fecha: 2026-10-14 (ampliado 2026-10-15 con la versión ligera y el alcance B del agente) ·
+Estado: **borrador aprobado para planear**; cada sub-proyecto lleva su propio
 spec corto y su plan en `docs/superpowers/plans/`. Caso guía: Eleven Fashion (org 17, ULTRA+),
 que captura lotes de decenas de productos con variantes color × talla y es quien pide poder
 decir "agrega el siguiente producto…".
@@ -15,6 +16,9 @@ decir "agrega el siguiente producto…".
    codificada en `app/services/plans.py`. **No se rediseña**: se usa como está.
 5. Una **interfaz agéntica** donde el usuario pida en lenguaje natural "agrega el siguiente
    producto …" y el sistema lo dé de alta.
+6. (2026-10-15) Una **versión más esbelta para las cuentas FREE** (Kaory, Novedades, Coqueta):
+   que vean solo lo que usan y que la app cargue rápido en sus equipos. Precisado con el
+   usuario: **menú corto + carga rápida, misma base de código**; no es un producto aparte.
 
 ## 2. Hallazgos del levantamiento (2026-10-14, solo lectura)
 
@@ -109,6 +113,27 @@ ninguna referencia salvo `docs/infra/deployment-map.md`.
 - La búsqueda semántica del POS (`specs/2026-04-28-pos-semantic-search-design.md`) nunca se hizo;
   el POS busca con `ILIKE` palabra por palabra (`router/search.py:322-445`).
 
+### 2.6 Versión ligera: punto de partida (2026-10-15)
+
+- Las tres orgs FREE usan el preset `ATLAS_POS` (9 módulos: core, pos, cash_management, catalog,
+  inventory, returns, pricing, payments, reports) más los 15 de `MODULOS_BASE`; en FREE no hay
+  módulos de crecimiento. El frontend **no conoce el plan** de la org (ningún `plan` en
+  `store/` ni `types/`); solo conoce módulos activos vía `/api/org/capabilities`.
+- `navConfig.ts` tiene 51 entradas; 30 llevan `module:` y **20 no** (se muestran a todos):
+  Inicio/Reportes/Control/Empresa/Sucursales/Usuarios de HQ, Mi día, Cobrar, Mis ventas, Corte,
+  Devoluciones, Productos, Reportes, Impresora, **Mi expediente** (`/hr/me`, aunque `hr` es
+  BUSINESS) y las **5 vistas móviles** (`/mobile/*`). `visibleNavItems` (`navVisibility.ts`) es
+  una función pura y testeada: el lugar natural para un recorte por plan.
+- Carga: las 79 páginas ya son `lazy()` en `App.tsx`; el costo fijo es el chunk `index`
+  (443 KB JS + 116 KB CSS) + `vendor` 160 KB + `store` 40 KB. Conviven **dos librerías de
+  gráficas**: chart.js (180 KB, reportes y HQ) y recharts (333 KB, solo plataforma superadmin);
+  `manualChunks` las separa, pero `charts` baja en cuanto se abre Reportes. Total `dist/`: 2.9 MB
+  de JS.
+- No hay presupuesto de tamaño ni medición de carga en CI (`vite build` no falla por peso).
+- "Nada se apaga" (`plans.py`): la versión ligera **esconde** lo que no aplica, no desactiva
+  módulos; el POS, corte, devoluciones e impresión que Kaory y Coqueta usan a diario deben quedar
+  intactos.
+
 ## 3. Decisiones de diseño
 
 1. **Orden por dependencias:** altas → agente → responsivo → docs. El agente llama al servicio
@@ -118,11 +143,13 @@ ninguna referencia salvo `docs/infra/deployment-map.md`.
 2. **Planes: no se rediseñan.** Se consumen tal cual: el agente es parte del módulo `ai` (SCALE+),
    y el alta de productos pasa a usar `require_module("catalog")`. Un tope de productos por plan
    queda como decisión abierta (ver §6); no está en el papel de precios y hoy nadie lo pide.
-3. **Alcance del agente, primera versión = "Asistente de altas" (opción A, pendiente de
-   confirmación del usuario):** solo crea y edita productos y variantes; siempre muestra la ficha
-   propuesta y pide confirmación antes de guardar; nunca ejecuta altas sin un "sí" explícito.
-   Consultas (ventas, inventario) y captura por foto o voz quedan para versiones posteriores sobre
-   el mismo esqueleto.
+3. **Alcance del agente, primera versión = opción B "altas + consultas" (decidido por el
+   usuario el 2026-10-15):** crea y edita productos y variantes, y responde preguntas de solo
+   lectura sobre catálogo, existencias y ventas ("¿cuántos Zegna 42 quedan?", "¿qué vendimos
+   ayer?"). Siempre muestra la ficha propuesta y pide confirmación antes de guardar; nunca ejecuta
+   altas sin un "sí" explícito. Las consultas usan herramientas de lectura con los mismos filtros
+   de org y sucursal que las pantallas. Captura por foto o voz y mutaciones de inventario o precio
+   (opción C) quedan para versiones posteriores sobre el mismo esqueleto.
 4. **El agente no inventa datos de dinero:** si falta precio o costo, pregunta; no asume.
 5. **Proveedor LLM:** API de Claude con tool use (modelo por defecto `claude-sonnet-5-5` por
    costo/latencia, escalable a `claude-opus-5-5`). Clave en `ANTHROPIC_API_KEY` del `.env` del
@@ -130,6 +157,12 @@ ninguna referencia salvo `docs/infra/deployment-map.md`.
    organización y día en una tabla nueva. Antes de escribir código leer la skill `claude-api`.
 6. **Una sola fuente de verdad para campos por giro:** un `catalogo_de_campos` por preset
    (backend) que consumen el formulario, el importador y el agente. Hoy esa lógica no existe.
+7. **Versión ligera = misma app, decidida por plan + módulos, en dos capas:** (a) el backend
+   expone el plan en `/api/org/capabilities` y el frontend recorta el menú y los accesos directos
+   con una lista "perfil FREE" en `navVisibility.ts`; (b) presupuesto de descarga para la ruta
+   crítica (login → POS) con medición en CI. Nunca se desactiva un módulo ni se quita una pantalla
+   que la org ya usa: solo se esconde lo que no aplica al plan o al preset, y la URL directa sigue
+   funcionando (el gating real sigue siendo `require_module`).
 
 ## 4. Sub-proyectos
 
@@ -175,7 +208,10 @@ Entregables:
   tool use con la API de Claude), `tools.py` (herramientas: `buscar_producto`, `listar_departamentos`,
   `listar_marcas`, `sugerir_sku`, `proponer_producto` — devuelve la ficha, no guarda —,
   `crear_producto` — solo se ejecuta tras confirmación del usuario, llama a SP1 —,
-  `actualizar_existencias`), `models.py` (conversación, mensaje, uso de tokens por org/día).
+  `actualizar_existencias`; y las de **consulta, solo lectura**: `consultar_existencias`
+  (por producto/SKU/marca/talla, por sucursal), `resumen_ventas` (periodo, sucursal, top
+  productos; reusa los servicios de `reports`) y `buscar_ventas` (folio, cliente, fecha)),
+  `models.py` (conversación, mensaje, uso de tokens por org/día).
 - Gating: `require_module("ai")` (SCALE y ULTRA+ por plan; la plataforma puede encenderlo a mano
   en otros, como con cualquier módulo). Sin módulo → 403 con el plan mínimo en el `detail`.
 - Guardarraíles: el agente opera con el rol del usuario (misma org, mismas sucursales); toda alta
@@ -188,8 +224,9 @@ Entregables:
 - Pruebas: servicio con un cliente LLM falso (fixture que devuelve tool calls deterministas);
   nunca se llama a la API real en la suite.
 
-Decisión de alcance pendiente: **A** (solo altas, recomendada) vs **B** (también consultas) vs
-**C** (foto/voz). El esqueleto anterior sirve para las tres.
+Alcance decidido: **B** (altas + consultas). Las herramientas de consulta se agregan después
+de que el flujo de altas funcione con un lote real de Eleven, en el mismo plan pero como tareas
+separadas; **C** (foto/voz, ajustes de inventario y precio) queda fuera.
 
 ### SP3 · Responsivo y congruencia (olas 1-cierre y 2)
 
@@ -206,6 +243,34 @@ Decisión de alcance pendiente: **A** (solo altas, recomendada) vs **B** (tambi�
 - Ola 3 (resto + gastro + PrinterSettings 1,356 líneas + StoreScanner 818) queda fuera de este
   mega plan salvo que sobre tiempo.
 
+### SP5 · Versión ligera para cuentas FREE (Kaory, Novedades, Coqueta)
+
+**Objetivo:** que una org FREE con preset `ATLAS_POS` abra la app y vea solo su operación
+(cobrar, corte, ventas, devoluciones, productos, inventario, reportes básicos, impresora,
+usuarios, sucursal) y que la ruta login → POS cargue rápido en PCs viejas y celulares.
+
+Entregables:
+- **Backend:** `plan` (clave y nombre) en la respuesta de `/api/org/capabilities`; nada más.
+- **Menú corto:** `navVisibility.ts` recibe `plan` y aplica un **perfil por plan** (lista de
+  URLs que FREE no ve: HQ Control, Empresa avanzada, `/hr/me`, `/mobile/*`, `/ai`, cotizaciones,
+  promociones, CRM, etiquetas si el preset no las trae). Los 20 ítems sin `module:` reciben uno
+  o entran al perfil. `PresetHome` oculta los widgets de módulos "fuera de plan" para FREE (el
+  upsell se concentra en una sola tarjeta, no en cada widget). Pruebas unitarias del perfil.
+- **Carga rápida:** (1) una sola librería de gráficas; recharts solo lo usa la plataforma
+  superadmin, así que sale del bundle de las orgs (chart.js se queda o se migra la plataforma
+  a chart.js; decidir al medir). (2) Auditar qué entra al chunk `index` (443 KB) y mover a
+  lazy lo que no sea login/shell/POS. (3) Presupuesto en CI: script `scripts/presupuesto_bundle.py`
+  (o `size-limit`) que falla si `index`+`vendor`+`store`+`POS` superan el tope fijado tras la
+  primera medición (meta: −30 % en la ruta crítica). (4) Medir en un equipo real de Kaory o
+  Coqueta antes y después (tiempo a POS usable, red del local).
+- **Sin apagar nada:** no se toca `organization_modules`, `require_module` ni `plans.py`. Lo
+  escondido sigue accesible por URL si el módulo está activo. Antes de esconder algo que no
+  tenga `module:`, verificar en `PlatformAuditLog`/logs que ninguna de las tres orgs lo usa.
+- Pruebas: `navVisibility` por plan (FREE vs ULTRA+ con los mismos módulos), build con el
+  presupuesto, y una revisión manual con la cajera de una de las tres tiendas.
+
+Fuera de alcance: un frontend aparte, service worker/PWA offline, cambios de precio o topes.
+
 ### SP4 · Documentación
 
 Una pasada al final, en un solo PR `docs:`:
@@ -218,23 +283,28 @@ Una pasada al final, en un solo PR `docs:`:
 - MODULE_GUIDE: paso "añadir a un plan en `plans.py`", `navConfig.ts` en vez de Sidebar.
 - ONTOLOGY: códigos de barras, boutique, etiquetas, planes, asistente.
 - presets/README: permitido = base ∪ preset ∪ plan; BOUTIQUE §4 con "Altas desde".
-- `CLAUDE.md` §5: receta "Añadir una herramienta al asistente".
+- `CLAUDE.md` §5: receta "Añadir una herramienta al asistente" y "Esconder una pantalla por plan".
+- presets/README y planes: qué ve una org FREE (perfil ligero) y el presupuesto de bundle.
 
 ## 5. Orden, tamaño y criterio de salida
 
 | # | Sub-proyecto | Depende de | Tamaño estimado | Sale cuando |
 |---|---|---|---|---|
 | 1 | SP1 altas | — | 2 planes (backend, frontend) | suite verde, 4 bugs cerrados con prueba, un solo formulario |
-| 2 | SP2 agente | SP1 backend | 1 spec + 1 plan | Eleven da de alta un lote real por chat, con confirmación, y queda en auditoría |
-| 3 | SP3 responsivo | SP1 frontend | 1 plan (cierre ola 1 + ola 2 + congruencia) | T7-T9 cerrados; 0 overlays fuera de `ui/Modal`; ola 2 verificada en móvil |
-| 4 | SP4 docs | 1-3 | 1 PR | conteos y claims verificados con un script `scripts/verificar_docs.py` que compare contra el código |
+| 2 | SP5 ligera | — (independiente; puede ir en paralelo con SP1) | 1 plan | Kaory/Coqueta ven el menú corto; presupuesto de bundle en CI; −30 % en la ruta login → POS medido en tienda |
+| 3 | SP2 agente | SP1 backend | 1 spec + 1 plan | Eleven da de alta un lote real por chat, con confirmación, y queda en auditoría; responde consultas de existencias y ventas |
+| 4 | SP3 responsivo | SP1 frontend | 1 plan (cierre ola 1 + ola 2 + congruencia) | T7-T9 cerrados; 0 overlays fuera de `ui/Modal`; ola 2 verificada en móvil |
+| 5 | SP4 docs | 1-4 | 1 PR | conteos y claims verificados con un script `scripts/verificar_docs.py` que compare contra el código |
+
+SP5 va segundo porque es pequeño, no depende de SP1 y beneficia a tres tiendas vivas de inmediato;
+si SP1 backend tarda, SP5 puede arrancar antes.
 
 Cada sub-proyecto: rama `feat/*` o `docs/*`, spec corto en `specs/`, plan en `plans/`, fusión a
 `main` solo con permiso explícito (regla de oro #1).
 
 ## 6. Decisiones abiertas (el usuario decide)
 
-1. Alcance del agente v1: A / B / C (§3.3). Recomendación: **A**.
+1. ~~Alcance del agente v1~~ — resuelto 2026-10-15: **B** (§3.3).
 2. ¿Tope de productos por plan? No está en el papel de precios. Recomendación: **no** por ahora.
 3. Unicidad de SKU: ¿incluir productos borrados (soft-delete)? Recomendación: **sí**, para que
    restaurar nunca choque.
@@ -242,6 +312,10 @@ Cada sub-proyecto: rama `feat/*` o `docs/*`, spec corto en `specs/`, plan en `pl
    todas las que venden.
 5. Kit de componentes ganador: `ui/` (más usado) o `atlas-one/` (más completo, diseñado en la
    spec del design system). Recomendación: **`atlas-one/`** como destino, migrando `ui/` hacia él.
+6. Perfil FREE: ¿se esconden también las vistas móviles (`/mobile/*`) y "Mi expediente"?
+   Recomendación: **sí** (ninguna de las tres tiendas las usa; verificar en logs antes).
+7. Librería de gráficas única: chart.js (ya en reportes de las orgs) o recharts (solo plataforma).
+   Recomendación: **chart.js**, migrando los 3 archivos de plataforma.
 
 ## 7. Riesgos
 
@@ -251,3 +325,7 @@ Cada sub-proyecto: rama `feat/*` o `docs/*`, spec corto en `specs/`, plan en `pl
   obligatoria y "no inventar dinero" son el candado; se prueba con un lote real de Eleven antes de
   abrirlo a otras orgs.
 - Responsivo sin dispositivo real: T7 exige verificación en teléfono, no solo en el emulador.
+- Versión ligera: esconder una pantalla que una tienda sí usa (p. ej. Impresora o Devoluciones)
+  rompe su día; por eso el perfil solo quita lo que no aplica al plan, se verifica contra logs y
+  se revisa con una cajera antes de desplegar. El presupuesto de bundle puede volverse un
+  estorbo si se fija demasiado bajo: se calibra con la primera medición, no con una meta ideal.
