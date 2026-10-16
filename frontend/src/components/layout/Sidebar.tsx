@@ -604,7 +604,7 @@ export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
 
   // Module gating: items with `module` declared only appear when the org has
   // that module enabled. Items without `module` are always shown.
-  const { enabledModules, preset, loaded, load } = useEnabledModulesStore()
+  const { enabledModules, preset, loaded, load, plan } = useEnabledModulesStore()
   useEffect(() => {
     if (isAuthenticated && !loaded) load()
   }, [isAuthenticated, loaded, load])
@@ -618,7 +618,7 @@ export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
   // El gating por módulo (y el fail-open mientras carga) vive en
   // `visibleNavItems`, que es pura y tiene pruebas.
   const isGastro = !!preset && GASTRO_PRESETS.has(preset)
-  const items = visibleNavItems(ALL_NAV, { role, allowed, enabledModules, isGastro })
+  const items = visibleNavItems(ALL_NAV, { role, allowed, enabledModules, isGastro, plan })
 
   const handleLogout = async () => {
     const ok = await confirm({

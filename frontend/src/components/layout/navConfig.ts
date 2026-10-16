@@ -79,8 +79,8 @@ for (const _g of [...HQ_NAV_GROUPS, ...BRANCH_NAV_GROUPS]) {
 // mismo lugar, y para una cadena el selector de sucursal ya dice dónde estás.
 export const ALL_NAV: NavItem[] = [
   { label: 'Inicio',            short: 'OPS', icon: 'fa-gauge-high',          url: '/hq/operations',    group: 'hq',   sort: 0  },
-  { label: 'Reportes',          short: 'REP', icon: 'fa-chart-line',          url: '/hq/reports-hub',   group: 'hq',   sort: 1  },
-  { label: 'Control',           short: 'CTL', icon: 'fa-sliders',             url: '/hq/control',       group: 'hq',   sort: 2  },
+  { label: 'Reportes',          short: 'REP', icon: 'fa-chart-line',          url: '/hq/reports-hub',   group: 'hq',   sort: 1, module: 'reports' },
+  { label: 'Control',           short: 'CTL', icon: 'fa-sliders',             url: '/hq/control',       group: 'hq',   sort: 2, module: 'reports' },
   { label: 'Catálogo',          short: 'CAT', icon: 'fa-book',                url: '/admin/catalog',    group: 'hq',   sort: 3,  module: 'catalog' },
   { label: 'Departamentos',     short: 'DEP', icon: 'fa-layer-group',         url: '/departments',      group: 'hq',   sort: 4,  module: 'catalog', hideForGastro: true },
   { label: 'Marcas',            short: 'MRC', icon: 'fa-tags',                url: '/brands',           group: 'hq',   sort: 5,  module: 'catalog', hideForGastro: true },
@@ -125,14 +125,16 @@ export const ALL_NAV: NavItem[] = [
   { label: 'Productos',         short: 'PRD', icon: 'fa-barcode',             url: '/products',         group: 'pos',  sort: 5  },
   { label: 'Reportes',          short: 'REP', icon: 'fa-chart-pie',           url: '/reports',          group: 'pos',  sort: 6  },
   { label: 'Impresora',         short: 'IMP', icon: 'fa-print',               url: '/printer-settings', group: 'pos',  sort: 7  },
-  { label: 'Mi expediente',     short: 'YO',  icon: 'fa-id-card',             url: '/hr/me',            group: 'pos',  sort: 8  },
+  // `hr` es de BUSINESS en adelante: sin el módulo, el expediente no existe.
+  { label: 'Mi expediente',     short: 'YO',  icon: 'fa-id-card',             url: '/hr/me',            group: 'pos',  sort: 8, module: 'hr' },
   // Vuelta al armazón móvil para dueño/admin. Sin este enlace, quien entra
   // al escritorio desde la pestaña «Más» del móvil se queda sin camino de
   // regreso salvo escribiendo la URL (admin-findings I-10).
-  { label: 'Resumen móvil',     short: 'RSM', icon: 'fa-mobile-screen-button', url: '/mobile/owner',    group: 'mob',  sort: -1 },
-  { label: 'Dashboard móvil',   short: 'DSH', icon: 'fa-mobile-screen',       url: '/mobile/dashboard', group: 'mob',  sort: 0  },
-  { label: 'Consulta móvil',    short: 'QRY', icon: 'fa-mobile-alt',          url: '/mobile/query',     group: 'mob',  sort: 1  },
-  { label: 'Cotización móvil',  short: 'COT', icon: 'fa-file-invoice',        url: '/mobile/sales',     group: 'mob',  sort: 2  },
+  { label: 'Resumen móvil',     short: 'RSM', icon: 'fa-mobile-screen-button', url: '/mobile/owner',    group: 'mob',  sort: -1, module: 'reports' },
+  { label: 'Dashboard móvil',   short: 'DSH', icon: 'fa-mobile-screen',       url: '/mobile/dashboard', group: 'mob',  sort: 0, module: 'reports' },
+  { label: 'Consulta móvil',    short: 'QRY', icon: 'fa-mobile-alt',          url: '/mobile/query',     group: 'mob',  sort: 1, module: 'catalog' },
+  // La "cotización móvil" crea cotizaciones (POST /api/quotes): es el módulo quotes.
+  { label: 'Cotización móvil',  short: 'COT', icon: 'fa-file-invoice',        url: '/mobile/sales',     group: 'mob',  sort: 2, module: 'quotes' },
   { label: 'Perfil móvil',      short: 'PRF', icon: 'fa-user-circle',         url: '/mobile/profile',   group: 'mob',  sort: 3  },
 ]
 
