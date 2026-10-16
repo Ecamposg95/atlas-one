@@ -385,8 +385,8 @@ function MatrixSidebar({ items, logout, isBranchRole }: { items: NavItem[]; logo
           </div>
         </div>
 
-        {/* Mi expediente — solo roles de sucursal */}
-        {isBranchRole && (
+        {/* Mi expediente — solo roles de sucursal, y solo si el menú (módulo + perfil del plan) lo muestra */}
+        {isBranchRole && items.some((n) => n.url === '/hr/me') && (
           <button
             onClick={() => navigate('/hr/me')}
             style={{

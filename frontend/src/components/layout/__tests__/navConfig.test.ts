@@ -166,9 +166,9 @@ describe('los ítems que recibieron `module:` en SP2', () => {
     expect(conModulo['/mobile/query']).toBe('catalog')
   })
 
-  it('Reportes HQ, Control y los paneles móviles exigen reports (todo preset lo trae)', () => {
+  it('Reportes HQ, Control y los paneles móviles NO exigen módulo (nada se apaga)', () => {
     for (const u of ['/hq/reports-hub', '/hq/control', '/mobile/owner', '/mobile/dashboard']) {
-      expect(conModulo[u], u).toBe('reports')
+      expect(conModulo[u], u).toBeUndefined()
     }
   })
 

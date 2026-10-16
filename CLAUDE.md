@@ -59,7 +59,7 @@ npm run build                             # tsc && vite build  (esto corre el CI
 docker compose up -d                      # DATABASE_URL=postgresql://postgres:toor@db:5432/railway
 ```
 
-**CI/CD** (`.github/workflows/ci.yml`): Python 3.11, Node 20 — `pytest` + `vitest` + `tsc` + `vite build`. Corre en push y en PR a `main`. **En push a `main`, si todo pasa, un job adicional (`deploy-ionos`) despliega automáticamente a producción** (VPS IONOS, `app.atlasone.com.mx`) por SSH: construye la imagen (`Dockerfile` de la raíz), la levanta con `docker compose`, y verifica el commit desplegado + `/health`. Detalle completo en [`docs/DEPLOY.md`](docs/DEPLOY.md).
+**CI/CD** (`.github/workflows/ci.yml`): Python 3.11, Node 20 — `pytest` + `vitest` + `tsc` + `vite build` (+ presupuesto de la ruta crítica: `frontend/presupuesto_bundle.json`, ver `docs/DEPLOY.md`). Corre en push y en PR a `main`. **En push a `main`, si todo pasa, un job adicional (`deploy-ionos`) despliega automáticamente a producción** (VPS IONOS, `app.atlasone.com.mx`) por SSH: construye la imagen (`Dockerfile` de la raíz), la levanta con `docker compose`, y verifica el commit desplegado + `/health`. Detalle completo en [`docs/DEPLOY.md`](docs/DEPLOY.md).
 
 ---
 

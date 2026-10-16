@@ -192,7 +192,7 @@ function TarjetaPlan({ plan, ocultos }: { plan: PlanOrg; ocultos: string[] }) {
     >
       <strong style={{ fontSize: 13 }}>Tu plan: {plan.nombre}</strong>
       <p style={{ margin: 0, fontSize: 12, color: 'var(--p-muted)', lineHeight: 1.5 }}>
-        Disponibles en planes superiores: {ocultos.join(', ')}.
+        No incluidos en tu configuración actual: {ocultos.join(', ')}. Pregunta por los planes de Atlas One.
       </p>
       <p style={{ margin: 0, fontSize: 12, color: 'var(--p-muted)' }}>
         Pídelos a tu asesor de Atlas Tech; el cambio de plan lo hace la plataforma.

@@ -9,7 +9,25 @@ export function token(nombre: string, respaldo: string, el?: Element | null): st
   if (typeof document === 'undefined') return respaldo
   // /platform redefine los --p-* bajo `.pv2` (alias de --dax-*): ahí manda el tema.
   const base = el ?? document.querySelector('.pv2') ?? document.documentElement
-  return getComputedStyle(base).getPropertyValue(nombre).trim() || respaldo
+  const valor = getComputedStyle(base).getPropertyValue(nombre).trim()
+  if (!valor) return respaldo
+  return resolverColor(valor)
+}
+
+/**
+ * `color-mix(...)` (tema oscuro) y otras funciones CSS no las entiende conAlpha
+ * ni siempre el canvas: un elemento sonda hace que el navegador las calcule a
+ * `rgb(...)`. Sin DOM o si falla, devuelve el valor tal cual.
+ */
+function resolverColor(valor: string): string {
+  if (typeof document === 'undefined' || !document.body) return valor
+  if (/^#[0-9a-f]{6}$/i.test(valor)) return valor
+  const sonda = document.createElement('span')
+  sonda.style.color = valor
+  document.body.appendChild(sonda)
+  const c = getComputedStyle(sonda).color
+  sonda.remove()
+  return c || valor
 }
 
 /**
@@ -31,8 +49,10 @@ export function useTemaActual(): string {
   return tema
 }
 
-/** `#rrggbb` → `rgba(r, g, b, alpha)`; cualquier otro formato se devuelve tal cual. */
+/** `#rrggbb`, `rgb(r, g, b)` o `rgba(r, g, b, a)` → `rgba(r, g, b, alpha)`; otro formato se devuelve tal cual. */
 export function conAlpha(color: string, alpha: number): string {
+  const rgb = /^rgba?\(\s*(\d+(?:\.\d+)?)[,\s]+(\d+(?:\.\d+)?)[,\s]+(\d+(?:\.\d+)?)\s*(?:[,/]\s*[\d.]+%?\s*)?\)$/i.exec(color)
+  if (rgb) return `rgba(${rgb[1]}, ${rgb[2]}, ${rgb[3]}, ${alpha})`
   const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color)
   if (!m) return color
   const [r, g, b] = [m[1], m[2], m[3]].map((h) => parseInt(h, 16))

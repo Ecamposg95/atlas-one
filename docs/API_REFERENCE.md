@@ -21,7 +21,7 @@ Catálogo de endpoints por dominio. Todos bajo `/api`. Swagger vivo en `/docs`. 
 ## Users · `/api/users`
 | Método | Ruta | Qué hace | Gating |
 |---|---|---|---|
-| GET | /me/context | **Contexto del frontend**: user, org, branch, preset, `enabled_modules`, templates | auth |
+| GET | /me/context | **Contexto del frontend**: user, org, branch, preset, `enabled_modules`, `plan: {clave, nombre}` (null sin org activa), templates | auth |
 | GET | / · GET /me · GET /{id} | Lista / actual / detalle (`UserRead.has_reprint_pin`, derivado, nunca el hash) | auth+org |
 | POST | / · PUT /{id} · DELETE /{id} | Crear / editar / soft-delete; acepta `reprint_pin` (4-8 dígitos, `""` borra, 422 fuera de formato) | [admin/dueño] **(2026-09-19)** — antes sin check de rol admin, cualquier cajero podía tocar `/api/users`; corregido junto con el PIN |
 
@@ -30,7 +30,7 @@ Catálogo de endpoints por dominio. Todos bajo `/api`. Swagger vivo en `/docs`. 
 |---|---|---|---|
 | GET/PUT | /organization/ | Org activa / update (no-admin solo campos de impresora, ticket y comisión — misma whitelist) | auth (admin p/ resto) |
 | POST/DELETE | /organization/logo | Logo | [admin] |
-| GET | /org/capabilities/ | enabled_modules + nav + default_routes por industria | auth |
+| GET | /org/capabilities/ | enabled_modules + `plan: {clave, nombre}` + nav + default_routes por industria | auth |
 | GET | /organization/exchange-rate **(2026-09-17)** | `{mode, rate, source, fix_rate, fix_date, margin, manual_rate}` — tipo de cambio USD resuelto; `rate: null` si `mode='off'` o no se puede resolver | auth (cualquier usuario de la org, lo consume la cajera) |
 | POST | /organization/exchange-rate/refresh **(2026-09-17)** | Baja el FIX de Banxico bajo demanda (`{ok, rate_date, rate, source}` o 503 si falta `BANXICO_TOKEN`/falla Banxico) | [admin/dueño] |
 | GET | /organization/card-surcharge **(2026-09-17)** | `{"pct": 3.50}` — % de comisión por pago con tarjeta configurado, `SELECT` barato sin red | auth |

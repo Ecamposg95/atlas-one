@@ -33,28 +33,42 @@ describe('perfil FREE', () => {
     expect(menu('ADMINISTRADOR', FREE)).toEqual(expect.arrayContaining(DIARIO_ADMIN))
   })
 
-  it('la administradora no ve Control, IA, cotizaciones, Clientes ni el armazón móvil', () => {
+  it('la administradora no ve Control, IA, cotizaciones ni el armazón móvil de vendedor', () => {
     const urls = menu('ADMINISTRADOR', FREE)
-    for (const u of ['/hq/control', '/ai', '/quotes', '/quotes/new', '/seguimiento', '/customers', '/mobile/owner']) {
+    for (const u of ['/hq/control', '/ai', '/quotes', '/quotes/new', '/seguimiento']) {
       expect(urls).not.toContain(u)
     }
+  })
+
+  it('la administradora conserva Clientes y Resumen móvil (su vuelta en teléfono)', () => {
+    const urls = menu('ADMINISTRADOR', FREE)
+    expect(urls).toContain('/customers')
+    expect(urls).toContain('/mobile/owner')
+  })
+
+  it('las cuatro URLs móviles de vendedor/soporte quedan ocultas en FREE', () => {
+    for (const u of ['/mobile/dashboard', '/mobile/query', '/mobile/sales', '/mobile/profile']) {
+      expect(urlsOcultasPorPlan(FREE)).toContain(u)
+      expect(menu('VENDEDOR', FREE)).not.toContain(u)
+    }
+    expect(menu('VENDEDOR', ULTRA)).toContain('/mobile/dashboard')
   })
 
   it('la cajera conserva Cobrar, Corte, Devoluciones, Productos e Impresora', () => {
     expect(menu('CAJERO', FREE)).toEqual(expect.arrayContaining(DIARIO_CAJERA))
   })
 
-  it('la cajera no ve Mi expediente ni Clientes', () => {
+  it('la cajera no ve Mi expediente, pero sí Clientes', () => {
     const urls = menu('CAJERO', FREE)
     expect(urls).not.toContain('/hr/me')
-    expect(urls).not.toContain('/customers')
+    expect(urls).toContain('/customers')
   })
 
   it('ULTRA+ con los mismos módulos ve todo lo de FREE y además lo recortado', () => {
     const free = menu('ADMINISTRADOR', FREE)
     const ultra = menu('ADMINISTRADOR', ULTRA)
     for (const u of free) expect(ultra).toContain(u)
-    expect(ultra).toEqual(expect.arrayContaining(['/hq/control', '/customers', '/mobile/owner']))
+    expect(ultra).toEqual(expect.arrayContaining(['/hq/control']))
     // IA y cotizaciones dependen del módulo, no del plan: sin módulo tampoco en ULTRA+
     expect(ultra).not.toContain('/ai')
     expect(ultra).not.toContain('/quotes')
@@ -89,6 +103,7 @@ describe('coincideUrl', () => {
     expect(coincideUrl('/mobile/owner', '/mobile/*')).toBe(true)
     expect(coincideUrl('/mobile', '/mobile/*')).toBe(false)
     expect(coincideUrl('/mobiles/x', '/mobile/*')).toBe(false)
+    expect(coincideUrl('/mobile/owner', '/mobile/dashboard')).toBe(false)
   })
 })
 

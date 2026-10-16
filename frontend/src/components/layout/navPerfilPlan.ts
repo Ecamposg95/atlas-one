@@ -11,17 +11,18 @@ import type { NavItem } from './navVisibility'
  * sucursal. Lo demás estorba en una PC vieja. Qué se puede esconder se verificó
  * contra producción (plan SP2, Tarea 3) antes de entrar aquí.
  *
- * Un patrón que termina en `/*` esconde por prefijo (`/mobile/*`). Planes que
+ * Un patrón que termina en `/*` esconde por prefijo. Planes que
  * no aparecen = sin recorte.
  */
 export const PERFIL_POR_PLAN: Record<string, readonly string[]> = {
   FREE: [
     '/hq/control',
     '/hr/me',
-    '/mobile/*',
+    // Armazón móvil de VENDEDOR/SOPORTE; /mobile/owner (Resumen móvil) se queda: es
+    // la vuelta del dueño en teléfono (rutaInicioPorRol).
+    '/mobile/dashboard', '/mobile/query', '/mobile/sales', '/mobile/profile',
     '/ai',
     '/quotes', '/quotes/new', '/seguimiento',
-    '/customers',
   ],
 }
 
