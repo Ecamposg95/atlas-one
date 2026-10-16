@@ -31,6 +31,7 @@ from .validaciones import (
     atributos_principal, exigir_campos_de_cajero, validar_departamento_y_marca,
     validar_escalones, validar_precio, validar_sucursales_de_la_org,
 )
+from .variantes import crear_variantes
 
 _AMBIGUO = "Indica en qué sucursal entra la existencia inicial: no se reparte sola entre varias sucursales."
 
@@ -171,9 +172,6 @@ def crear_producto(
         _auditar_alta_de_cajero(db, user, producto, principal)
 
     if datos.extra_variants:
-        # Import perezoso: hasta la Task 6 `crear_variantes` vive en el router
-        # (router importa services; al revés cerraría el ciclo al cargar).
-        from app.modules.products.router.variants import crear_variantes
         crear_variantes(db, org_id, producto, datos.extra_variants,
                         stock_branch_id=destino_stock, user_id=user.id, asignador=asignador)
     db.flush()

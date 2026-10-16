@@ -25,3 +25,4 @@ from .sucursales import (  # noqa: F401
 )
 from .precios import armar_empaques, armar_escalones  # noqa: F401
 from .productos import crear_producto  # noqa: F401
+from .variantes import atributos, crear_variantes, pareja_repetida, sku_generado  # noqa: F401

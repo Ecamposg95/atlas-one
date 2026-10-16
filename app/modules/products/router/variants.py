@@ -7,29 +7,27 @@ llaman estos endpoints. Aqui vive todo lo que crea, edita o retira variantes;
 from __future__ import annotations
 
 import logging
-import unicodedata
 from datetime import datetime, timezone
-from decimal import Decimal
-from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.permissions import require_module
 from app.core.security import get_current_user
 from app.core.tenant_context import get_current_active_organization
-from app.models import (
-    InventoryMovement, MovementType, Product, ProductBranchStatus, ProductVariant,
-    StockOnHand, User,
-)
+from app.models import Product, ProductBranchStatus, ProductVariant, StockOnHand, User
 from app.models.sales import SalesLineItem
 from app.modules.products.schemas import (
-    ProductRead, ProductVariantCreate, ProductVariantUpdate, VariantBatchCreate,
+    ProductRead, ProductVariantUpdate, VariantBatchCreate,
 )
-from app.modules.products.variant_label import COLOR_MAX, SIZE_MAX, clean_attr, variant_label
-from app.services.barcodes import AsignadorDeCodigos, barcode_en_uso, siguiente_codigo_interno
+from app.modules.products.services.codigos import sku_en_uso as _sku_en_uso, validar_barcode_libre
+from app.modules.products.services.variantes import (  # noqa: F401  (re-export para core/import_export)
+    atributos as _atributos,
+    crear_variantes,
+    pareja_repetida as _pareja_repetida,
+)
+from app.modules.products.variant_label import variant_label
 
 from ._shared import _PRODUCT_ADVANCED_ROLES, _compute_product_read
 
@@ -44,16 +42,6 @@ def _exigir_rol_avanzado(current_user: User, accion: str) -> None:
     el mismo rol que `delete_product` (ADMINISTRADOR/GERENTE/DUENO/CAJERO)."""
     if current_user.role not in _PRODUCT_ADVANCED_ROLES:
         raise HTTPException(status_code=403, detail=f"No autorizado para {accion}")
-
-
-def _slug(texto: str) -> str:
-    sin_acentos = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode()
-    return "".join(c for c in sin_acentos.upper() if c.isalnum())
-
-
-def _sku_generado(base: str, color: Optional[str], size: Optional[str]) -> str:
-    partes = [base] + [_slug(x) for x in (color, size) if x]
-    return "-".join(partes)
 
 
 def _producto_de_la_org(db: Session, org_id: int, product_id: str) -> Product:
@@ -78,170 +66,6 @@ def _variante_de_la_org(db: Session, org_id: int, variant_id: str) -> ProductVar
     if v is None:
         raise HTTPException(status_code=404, detail="Variante no encontrada")
     return v
-
-
-def _sku_en_uso(db: Session, org_id: int, sku: str, excepto_id: Optional[str] = None) -> bool:
-    q = db.query(ProductVariant).filter(
-        ProductVariant.organization_id == org_id,
-        func.lower(ProductVariant.sku) == sku.lower(),
-        ProductVariant.deleted_at.is_(None),
-    )
-    if excepto_id:
-        q = q.filter(ProductVariant.id != excepto_id)
-    return db.query(q.exists()).scalar()
-
-
-# El chequeo de duplicados vive en `app/services/barcodes.py` (lo comparten el
-# alta de productos, la edición y la asignación masiva). Se mantiene el alias
-# privado para no tocar los tres llamados de este módulo.
-_barcode_en_uso = barcode_en_uso
-
-
-def _atributos(color: Optional[str], size: Optional[str], contexto: str) -> tuple[Optional[str], Optional[str]]:
-    """Limpia/valida color+talla o levanta 422 con `contexto` en el detalle
-    (p. ej. "variants[0]" en el alta, "variante <id>" en la edición)."""
-    try:
-        return clean_attr(color, COLOR_MAX), clean_attr(size, SIZE_MAX)
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=f"{contexto}: color/talla {e}")
-
-
-def _pareja_repetida(producto: Product, color: Optional[str], size: Optional[str], excepto_id: Optional[str] = None) -> bool:
-    clave = ((color or "").lower(), (size or "").lower())
-    for v in producto.variants:
-        if v.deleted_at is not None or v.id == excepto_id:
-            continue
-        if ((v.color or "").lower(), (v.size or "").lower()) == clave:
-            return True
-    return False
-
-
-def crear_variantes(
-    db: Session, org_id: int, producto: Product, entradas: List[ProductVariantCreate],
-    principal_id: Optional[str] = None,
-    stock_branch_id: Optional[int] = None,
-    user_id: Optional[int] = None,
-    asignador: Optional[AsignadorDeCodigos] = None,
-) -> List[ProductVariant]:
-    """Crea variantes hermanas de la principal. Sin commit: lo hace el caller.
-
-    Cada variante nueva hereda precio/costo/IVA de la principal si no los trae,
-    y se habilita (PBS) con existencia 0 en las mismas sucursales donde ya esta
-    la principal, para que aparezca en el POS de inmediato.
-
-    `principal_id`: fija cual variante es la principal en vez de tomar la
-    primera de `producto.variants` (orden no garantizado una vez que el
-    producto ya tiene mas de una variante — p. ej. cuando el caller invoca
-    esta funcion varias veces para el mismo producto, como en la carga
-    masiva por fila).
-
-    `initial_stock` de cada entrada aterriza en `stock_branch_id` (o en la
-    unica sucursal habilitada, si solo hay una) con su movimiento de apertura,
-    igual que hace `create_product` con la principal. Sin `initial_stock` todo
-    sigue como antes: existencia 0 y sin kardex.
-    """
-    if principal_id is not None:
-        principal = next(v for v in producto.variants if v.id == principal_id and v.deleted_at is None)
-    else:
-        principal = next(v for v in producto.variants if v.deleted_at is None)
-    pbs_base = db.query(ProductBranchStatus).filter(ProductBranchStatus.variant_id == principal.id).all()
-    if not pbs_base:
-        # No es un caso fatal (p. ej. un producto HQ sin PBS explicito vive
-        # "visible en todas las sucursales" por el OUTER JOIN de ATS-11), pero
-        # si ocurre dentro de `create_product` es casi siempre porque el PBS
-        # de la principal todavia no se aplico (falta un flush aguas arriba).
-        logger.warning(
-            "crear_variantes: la variante principal %s no tiene ProductBranchStatus; "
-            "las variantes hermanas nacen sin PBS/stock por sucursal.",
-            principal.id,
-        )
-    # Sucursal destino de la existencia inicial: la pedida, o la unica
-    # habilitada. Con varias sucursales y sin `branch_id` no se adivina
-    # (mismo criterio que `create_product`, que rechaza el stock ambiguo).
-    sucursales = [pbs.branch_id for pbs in pbs_base]
-    destino_stock: Optional[int] = None
-    if stock_branch_id is not None and stock_branch_id in sucursales:
-        destino_stock = stock_branch_id
-    elif stock_branch_id is None and len(sucursales) == 1:
-        destino_stock = sucursales[0]
-
-    nuevas: List[ProductVariant] = []
-    vistos: set[tuple[str, str]] = set()
-    for i, e in enumerate(entradas):
-        color, size = _atributos(e.color, e.size, f"variants[{i}]")
-        if not color and not size:
-            raise HTTPException(status_code=422, detail=f"variants[{i}]: indica color o talla")
-        clave = ((color or "").lower(), (size or "").lower())
-        if clave in vistos or _pareja_repetida(producto, color, size):
-            raise HTTPException(status_code=409, detail=f"Ya existe la variante {variant_label(color, size)}")
-        vistos.add(clave)
-
-        if e.price is not None and e.price <= 0:
-            raise HTTPException(status_code=422, detail=f"variants[{i}]: el precio debe ser mayor a cero.")
-
-        qty_inicial = Decimal(e.initial_stock or 0)
-        if qty_inicial < 0:
-            raise HTTPException(status_code=422, detail=f"variants[{i}]: la existencia inicial no puede ser negativa.")
-        if qty_inicial > 0 and destino_stock is None:
-            raise HTTPException(
-                status_code=422,
-                detail="Indica en qué sucursal entra la existencia inicial de las variantes.",
-            )
-
-        sku = (e.sku or "").strip() or _sku_generado(principal.sku, color, size)
-        if _sku_en_uso(db, org_id, sku):
-            raise HTTPException(status_code=409, detail=f"El SKU '{sku}' ya existe en esta organización.")
-        barcode = (e.barcode or "").strip() or None
-        if barcode and _barcode_en_uso(db, org_id, barcode):
-            raise HTTPException(status_code=409, detail=f"El código de barras '{barcode}' ya lo tiene otra variante.")
-        if not barcode:
-            # Cada talla necesita su propio código o la etiquetadora no puede
-            # distinguirlas en el anaquel. Se genera uno interno (EAN-13) aquí
-            # mismo: el `db.flush()` de abajo lo deja visible para la siguiente
-            # vuelta del bucle, así que no se repiten entre hermanas.
-            # `asignador`: la importación pasa el suyo (uno por request) para
-            # no releer el MAX del catálogo en cada fila del archivo.
-            barcode = (asignador.siguiente() if asignador is not None
-                       else siguiente_codigo_interno(db, org_id))
-
-        v = ProductVariant(
-            product_id=producto.id,
-            sku=sku,
-            barcode=barcode,
-            color=color,
-            size=size,
-            variant_name=variant_label(color, size),
-            price=e.price if e.price is not None else principal.price,
-            cost=e.cost if e.cost is not None else principal.cost,
-            has_iva=principal.has_iva,
-            tax_rate=principal.tax_rate,
-            organization_id=org_id,
-        )
-        db.add(v)
-        db.flush()
-        for pbs in pbs_base:
-            db.add(ProductBranchStatus(
-                variant_id=v.id, branch_id=pbs.branch_id, organization_id=org_id,
-                is_active_pos=pbs.is_active_pos, is_active_hq=pbs.is_active_hq, is_visible=pbs.is_visible,
-            ))
-            qty = qty_inicial if pbs.branch_id == destino_stock else Decimal(0)
-            db.add(StockOnHand(variant_id=v.id, branch_id=pbs.branch_id, organization_id=org_id,
-                               qty_on_hand=qty, is_active=True))
-            # Kardex de apertura, igual que la principal en `create_product`:
-            # sin movimiento, el inventario arranca con una existencia que no
-            # aparece en ningun reporte.
-            if qty > 0:
-                db.add(InventoryMovement(
-                    branch_id=pbs.branch_id, variant_id=v.id, user_id=user_id,
-                    movement_type=MovementType.ADJUSTMENT_IN,
-                    qty_change=qty, qty_before=Decimal(0), qty_after=qty,
-                    reference="Alta Inicial", notes="Creación de variante",
-                    organization_id=org_id,
-                ))
-        nuevas.append(v)
-    producto.has_variants = True
-    db.flush()
-    return nuevas
 
 
 def _leer(db: Session, current_user: User, org_id: int, producto_id: str) -> ProductRead:
@@ -306,10 +130,7 @@ def editar_variante(
             raise HTTPException(status_code=409, detail=f"El SKU '{sku}' ya existe en esta organización.")
         v.sku = sku
     if "barcode" in enviados:
-        barcode = (body.barcode or "").strip() or None
-        if barcode and _barcode_en_uso(db, org_id, barcode, excepto_id=v.id):
-            raise HTTPException(status_code=409, detail=f"El código de barras '{barcode}' ya lo tiene otra variante.")
-        v.barcode = barcode
+        v.barcode = validar_barcode_libre(db, org_id, body.barcode, excepto_id=v.id)
     if body.price is not None:
         if body.price <= 0:
             raise HTTPException(status_code=422, detail="El precio debe ser mayor a cero.")
