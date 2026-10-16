@@ -58,6 +58,13 @@ class TestEstadoPorSucursal:
         armar_estado_por_sucursal(db, org.id, v, [branch_b.id], reemplazar=True)
         assert [p.branch_id for p in db.query(ProductBranchStatus).filter(ProductBranchStatus.variant_id == v.id).all()] == [branch_b.id]
 
+    def test_reemplazar_sincroniza_la_relacion_ya_cargada(self, db, org, branch_a, branch_b):
+        _, v = _make_product(db, org, "P", "PBS-5", 10, [(branch_a.id, True)])
+        assert [p.branch_id for p in v.branch_statuses] == [branch_a.id]   # precarga la relación
+        armar_estado_por_sucursal(db, org.id, v, [branch_b.id], reemplazar=True)
+        db.refresh(v)
+        assert [p.branch_id for p in v.branch_statuses] == [branch_b.id]
+
     def test_copiar_conserva_banderas_y_overrides(self, db, org, branch_a):
         _, origen = _make_product(db, org, "O", "PBS-3", 10, [(branch_a.id, True)])
         pbs = db.query(ProductBranchStatus).filter(ProductBranchStatus.variant_id == origen.id).one()

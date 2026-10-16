@@ -73,7 +73,7 @@ def armar_estado_por_sucursal(
         db.query(ProductBranchStatus).filter(
             ProductBranchStatus.variant_id == variante.id,
             ProductBranchStatus.organization_id == org_id,
-        ).delete(synchronize_session=False)
+        ).delete()  # sincroniza la sesión, como el handler de edición
         existentes: dict[int, ProductBranchStatus] = {}
     else:
         existentes = {
@@ -99,7 +99,13 @@ def armar_estado_por_sucursal(
 
 
 def copiar_estado_por_sucursal(db: Session, org_id: int, origen: ProductVariant, destino: ProductVariant) -> None:
-    """La copia hereda la misma configuración multi-sucursal (sin StockOnHand)."""
+    """La copia hereda la misma configuración multi-sucursal (sin StockOnHand).
+
+    Es para DUPLICAR un producto: copia también las políticas por sucursal
+    (`price_override`, `min_stock_alert`, `max_stock_limit`). Las variantes
+    hermanas NO deben usarla: ellas copian solo `is_active_pos`, `is_active_hq`
+    e `is_visible`.
+    """
     for src in db.query(ProductBranchStatus).filter(
         ProductBranchStatus.variant_id == origen.id,
         ProductBranchStatus.organization_id == org_id,
