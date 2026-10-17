@@ -104,10 +104,12 @@ describe('FormularioProducto', () => {
     expect(patch.packaging_units).toEqual([{ name: 'Caja', barcode: null, units_per_package: 12, package_price: 40000 }])
     expect(patch.sku).toBe('NK-TENIS-NEG-40')
     expect(patch.gender).toBe('MUJER')
+    expect(patch.precio_a_todas_las_tallas).toBe(true)
     expect(api.updateVariant).not.toHaveBeenCalled()
   })
 
   it('edición de una talla no principal: el SKU va a la talla', async () => {
+    useEnabledModulesStore.setState({ enabledModules: ['core', 'variants'], loaded: true, camposProducto: { visibles: [], ocultos: [] } } as never)
     api.getById.mockResolvedValue(producto)
     api.update.mockResolvedValue(producto)
     api.updateVariant.mockResolvedValue(producto)
@@ -118,6 +120,18 @@ describe('FormularioProducto', () => {
     fireEvent.click(screen.getByText('Guardar cambios'))
     await waitFor(() => expect(api.updateVariant).toHaveBeenCalledWith('v2', { sku: 'NK-TENIS-NEG-41B' }))
     expect(api.update.mock.calls[0][1].sku).toBeUndefined()
+    expect(api.update.mock.calls[0][1].precio_a_todas_las_tallas).toBe(false)
+  })
+
+  // Sin módulo variants no hay casilla visible: se manda false (no se aplanan precios).
+  it('sin módulo variants no se aplanan precios', async () => {
+    api.getById.mockResolvedValue(producto)
+    api.update.mockResolvedValue(producto)
+    render(<MemoryRouter><FormularioProducto mode="edit" productId="p1" presentacion="pagina" onDone={() => {}} onCancel={() => {}} /></MemoryRouter>)
+    await screen.findByText('Guardar cambios')
+    fireEvent.click(screen.getByText('Guardar cambios'))
+    await waitFor(() => expect(api.update).toHaveBeenCalled())
+    expect(api.update.mock.calls[0][1].precio_a_todas_las_tallas).toBe(false)
   })
 
   it('si el producto no carga, avisa y cancela', async () => {

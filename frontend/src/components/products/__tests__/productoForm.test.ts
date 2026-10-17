@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  armarPayloadAlta, armarPayloadEdicion, erroresDeApi, formDesdeProducto, totalInicial, validarProducto,
+  armarPayloadAlta, armarPayloadEdicion, erroresDeApi, formDesdeProducto, principalCambio, totalInicial, validarProducto,
   type EntradaFormulario,
 } from '../productoForm'
 import { EMPTY_PRODUCT_FORM } from '../types'
@@ -165,5 +165,19 @@ describe('erroresDeApi', () => {
     const r = erroresDeApi({ response: { status: 409, data: { detail: "El SKU 'A-41' ya existe en esta organización." } } }, rows, 'create')
     expect(r.errors['variants.0.sku'] ?? r.errors['variants.1.sku']).toBeTruthy()
     expect(r.mensaje).toBe('Revisa la variante marcada.')
+  })
+})
+
+describe('principalCambio', () => {
+  const prod = (ids: string[]) => ({ id: 'p', variants: ids.map((id) => ({ id })) }) as unknown as Product
+  it('misma principal y talla viva: no cambió', () => {
+    expect(principalCambio(prod(['v1', 'v2']), prod(['v1', 'v2']), 'v2')).toBe(false)
+    expect(principalCambio(prod(['v1', 'v2']), prod(['v1']))).toBe(false)
+  })
+  it('retirar la principal cambia', () => {
+    expect(principalCambio(prod(['v1', 'v2']), prod(['v2']))).toBe(true)
+  })
+  it('variantId que desaparece cambia', () => {
+    expect(principalCambio(prod(['v1', 'v2']), prod(['v1']), 'v2')).toBe(true)
   })
 })

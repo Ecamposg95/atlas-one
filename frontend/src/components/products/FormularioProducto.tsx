@@ -26,7 +26,7 @@ import { esFilaPrincipal } from '../branch/variantEdit'
 import { variantLabel } from './variantWords'
 import { argsSugerencia, mensajeSugerencia } from './skuSuggest'
 import {
-  armarPayloadAlta, armarPayloadEdicion, erroresDeApi, formDesdeProducto, totalInicial, validarProducto,
+  armarPayloadAlta, armarPayloadEdicion, erroresDeApi, formDesdeProducto, principalCambio, totalInicial, validarProducto,
   type EntradaFormulario,
 } from './productoForm'
 import type { Product } from '../../types/products'
@@ -101,8 +101,10 @@ export function FormularioProducto({ mode, productId, variantId, presentacion, o
         if (cancelled) return
         setLoaded(p)
         const estado = formDesdeProducto(p, variantId)
-        // Al editar una talla que no es la principal no se aplana el precio de todas.
-        setPrecioATodas(esFilaPrincipal(p, variantId))
+        // Solo se aplana el precio de todas las tallas con el módulo variants (es
+        // el único que muestra la casilla) y editando la principal: al editar una
+        // talla no principal no se aplana.
+        setPrecioATodas(hasVariantsModule && esFilaPrincipal(p, variantId))
         setForm(estado.form); setPrices(estado.prices); setPackagings(estado.packagings)
       }).catch(() => {
         if (cancelled) return
@@ -141,6 +143,20 @@ export function FormularioProducto({ mode, productId, variantId, presentacion, o
     } finally {
       setSugiriendoSku(false)
     }
+  }
+
+  /** El editor de tallas devuelve el producto; si cambió la principal se re-sincroniza su identidad. */
+  const alCambiarTallas = (p: Product) => {
+    if (principalCambio(loaded, p, variantId)) {
+      const { form: nuevo } = formDesdeProducto(p, variantId)
+      // Solo la identidad/precio de la talla: nombre y descripción pueden estar editados.
+      setForm((f) => ({
+        ...f, sku: nuevo.sku, barcode: nuevo.barcode, price: nuevo.price, cost: nuevo.cost,
+        has_iva: nuevo.has_iva, tax_rate: nuevo.tax_rate,
+      }))
+      setPrecioATodas(hasVariantsModule && esFilaPrincipal(p, variantId))
+    }
+    setLoaded(p)
   }
 
   const toggleBranch = (branchId: number, patch: Partial<BranchActivation>) => {
@@ -228,7 +244,7 @@ export function FormularioProducto({ mode, productId, variantId, presentacion, o
           perVariantTotal={hasVariantsModule && variantRows.length > 0 ? total : null}
           footer={isAdmin ? 'Para existencia en varias sucursales, usa Inventario después de crear.' : 'La existencia se aplica a tu sucursal.'} />
       )}
-      {mode === 'edit' && hasVariantsModule && loaded && <ProductVariantsEditor product={loaded} onChanged={setLoaded} />}
+      {mode === 'edit' && hasVariantsModule && loaded && <ProductVariantsEditor product={loaded} onChanged={alCambiarTallas} />}
       <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center sm:justify-end gap-2 pt-2 border-t border-slate-800/60">
         <button type="button" className="dax-btn-secondary text-xs min-h-[44px] sm:min-h-0 justify-center" onClick={onCancel} disabled={submitting}>
           Cancelar

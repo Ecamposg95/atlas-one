@@ -221,6 +221,15 @@ export function formDesdeProducto(p: Product, variantId?: string): EstadoDesdePr
   }
 }
 
+/**
+ * ¿Cambió la talla que da identidad al formulario tras editar tallas? Es así si
+ * la principal ya no es la misma o si `variantId` dejó de existir.
+ */
+export function principalCambio(antes: Product | null, despues: Product, variantId?: string): boolean {
+  if (antes?.variants?.[0]?.id !== despues.variants?.[0]?.id) return true
+  return Boolean(variantId) && !(despues.variants ?? []).some((v) => v.id === variantId)
+}
+
 export interface ErroresDeApi { errors: ProductErrors; mensaje: string }
 
 /** Traduce la respuesta de error de la API a errores por campo y un aviso. */
