@@ -64,7 +64,7 @@ Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.l
 | `/products`, `/new`, `/:id/edit` | `inventory/Products`, `products/ProductForm` | Admin, Dueño, Gerente, Cajero | catalog |
 | `/inventory` | `inventory/Inventory` | — | inventory |
 | `/logistics`, `/boxes` | `inventory/Logistics`, `Boxes` | — | logistics |
-| `/admin/catalog`, `/admin/products/new` | `core/AdminCatalog`, `admin/AdminProductCreate` | Admin | catalog |
+| `/admin/catalog` | `core/AdminCatalog` | Admin | catalog |
 | `/departments`, `/brands` | `core/Departments`, `Brands` | Admin | catalog (hideForGastro) |
 | `/cash-history` | `finance/CashHistory` | Gerente, Cajero | cash_management |
 | `/expenses`, `/purchases` | `finance/Expenses`, `Purchases` | Admin, Dueño | payments |
@@ -294,7 +294,7 @@ Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.l
 
 ## 5. Inventario, Productos & Catálogo
 
-> **4 superficies para crear/editar producto, migración a medias.** `ProductForm` = fuente de verdad canónica (create/edit por rol). `AdminProductCreate` = variante admin-create. `ProductModal` embebido en `Products.tsx` = editor completo legacy (empaques + precios escalonados) que aún usan admins. `AdminCatalog` no edita campos: delega a `/products?edit=:id`. Comentarios "A3+ migrará…" confirman consolidación futura.
+> **Formulario de producto unificado (SP1).** `components/products/FormularioProducto.tsx` es el único formulario de alta/edición; la página `ProductForm` lo monta como página y `AdminProductCreate` ya no existe. Quedan por migrar `ProductModal` (`Products.tsx`) y `ProductFormModal` (`ProductsBranchView.tsx`).
 
 ### `/products` — Catálogo / consulta de productos
 - **Archivo:** `pages/inventory/Products.tsx` (1500 líneas)
@@ -326,7 +326,7 @@ Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.l
 - **Notas:** 2 tabs; solo crear + listar. Contenedores `inner_*`, cajas `outer_*`.
 
 ### `/products/new`, `/products/:id/edit` — Formulario de producto
-- **Archivo:** `pages/products/ProductForm.tsx` (447 líneas)
+- **Archivo:** `pages/products/ProductForm.tsx` → `components/products/FormularioProducto.tsx` (alta/edición para los 4 roles; API `POST /products/`, `PUT /products/{id}`, `PUT /products/variants/{id}`). `?volver=/ruta` interna (ver `pages/products/volver.ts`) decide a dónde regresa al guardar o cancelar; sin él vuelve a `/products`.
 - **Propósito:** Formulario de página completa para crear/editar. Destino de Gerente/Cajero desde `/products`.
 - **Quién la ve:** `RequireRole(Admin, Dueño, Gerente, Cajero)`.
 - **Datos/API:** `productsApi.getById/create/update/getDepartments/getBrands`, `organizationApi.getBranches` (admin).
@@ -339,17 +339,11 @@ Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.l
 - **Quién la ve:** Admin — módulo `catalog`.
 - **Datos/API:** `productsApi.list/catalogKpis/duplicate/approve/reject/restore/getDepartments/getBrands`, `client.delete('/products/:id')`.
 - **Componentes clave:** `CatalogKpis`, `ProductBranchMatrix`, `ProductAuditDrawer`.
-- **Notas:** **No edita campos aquí:** "Nuevo"→AdminProductCreate, "Editar"→`/products?edit=:id`.
+- **Notas:** **No edita campos aquí:** "Nuevo"→`/products/new?volver=/admin/catalog`, "Editar"→`/products/:id/edit?volver=/admin/catalog`.
 
-### `/admin/products/new` — Nuevo producto (administración)
-- **Archivo:** `pages/admin/AdminProductCreate.tsx` (290 líneas)
-- **Propósito:** Creación de producto del flujo administrativo (siempre matriz completa, exige ≥1 sucursal). Vuelve a `/admin/catalog`.
-- **Quién la ve:** `RequireRole(Admin, Dueño, Gerente, Cajero)`.
-- **Datos/API:** `productsApi.getDepartments/getBrands/create`, `organizationApi.getBranches`.
-- **Notas:** Subconjunto "create + admin" de `ProductForm` (mismas secciones). Fix
-  2026-09-22: el payload ya manda `gender`/`model`/`material` (antes se capturaban en
-  el formulario y se perdían al enviar — auditoría #9). Sigue **sin** botón "Sugerir
-  SKU" a diferencia de `ProductForm` (auditoría #25, abierto).
+### `/admin/products/new` — redirección
+- **Archivo:** `App.tsx` (sin página propia).
+- **Notas:** redirige a `/products/new?volver=/admin/catalog`; `pages/admin/AdminProductCreate.tsx` se eliminó.
 
 ### `/departments` — Departamentos
 - **Archivo:** `pages/core/Departments.tsx` (112 líneas)
@@ -638,7 +632,7 @@ Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.l
 
 1. **Dashboards HQ duplicados.** HQOperations / HQReportsHub / HQControl repiten KPIs-del-día, doughnut de métodos, ranking de sucursales y top productos desde `commandCenterStats`, con `PAYMENT_COLORS`/rangos reimplementados en cada archivo (y colores divergentes: CARD `#0ea5e9` vs `#6366f1`). Además el concepto "sucursal online" difiere (`status==='ONLINE'` vs `pending_cuts>0`).
 
-2. **4 superficies de producto, migración a medias.** `ProductForm` (canónico) · `AdminProductCreate` (admin-create) · `ProductModal` en `Products.tsx` (editor legacy completo) · `AdminCatalog` (delega a `/products?edit=`). Comentarios "A3+ migrará…" apuntan a consolidar en AdminCatalog.
+2. **Superficies de producto, migración a medias.** `FormularioProducto` es el formulario único; `ProductForm` (página) ya lo usa y `AdminProductCreate` se eliminó. Pendientes: `ProductModal` en `Products.tsx` y `ProductFormModal` en `ProductsBranchView`.
 
 3. **Dos generaciones de UI en Platform.** v2 "Editorial" (Metrics/Health, `KPICardV2`, `SkeletonState`) vs v1 "PageShell" (el resto). Las Mobile* de platform son un tercer mundo (Tailwind + axios directo).
 
