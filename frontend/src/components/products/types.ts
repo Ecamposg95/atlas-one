@@ -19,7 +19,6 @@ export interface ProductFormValue {
   cost: string
   has_iva: boolean
   tax_rate: string
-  /** false = servicio o producto sin existencias (no descuenta inventario). */
   initial_stock: string
   initial_stock_branch_id: string
 }
