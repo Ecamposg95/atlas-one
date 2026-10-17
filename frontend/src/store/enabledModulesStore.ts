@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import client from '../api/client'
 import { puede } from '../utils/capacidades'
+import { leerCamposProducto, TODO_VISIBLE, type CamposProducto } from '../components/products/camposProducto'
 
 /**
  * Apply or clear the `data-preset` attribute on <html>.
@@ -20,6 +21,7 @@ interface ContextResponse {
   enabled_modules?: string[]
   preset?: string | null
   capacidades?: string[]
+  campos_producto?: unknown
   // (other fields present in /me/context but not needed here)
 }
 
@@ -27,6 +29,8 @@ interface EnabledModulesStore {
   enabledModules: string[]
   preset: string | null
   capacidades: string[]
+  /** Campos del formulario de producto según el giro; falla abierto. */
+  camposProducto: CamposProducto
   loaded: boolean
   loading: boolean
   load: () => Promise<void>
@@ -44,6 +48,7 @@ export const useEnabledModulesStore = create<EnabledModulesStore>((set, get) => 
   enabledModules: [],
   preset: null,
   capacidades: [],
+  camposProducto: TODO_VISIBLE,
   loaded: false,
   loading: false,
 
@@ -59,6 +64,7 @@ export const useEnabledModulesStore = create<EnabledModulesStore>((set, get) => 
         enabledModules: mods,
         preset,
         capacidades,
+        camposProducto: leerCamposProducto(r.data?.campos_producto),
         loaded: true,
         loading: false,
       })
@@ -69,13 +75,13 @@ export const useEnabledModulesStore = create<EnabledModulesStore>((set, get) => 
       // Las capacidades NO siguen esta política: fallan cerradas (lista
       // vacía), igual que cuando el servidor sí responde pero la tienda no
       // tiene ninguna encendida.
-      set({ enabledModules: [], preset: null, capacidades: [], loaded: true, loading: false })
+      set({ enabledModules: [], preset: null, capacidades: [], camposProducto: TODO_VISIBLE, loaded: true, loading: false })
       applyPresetAttribute(null)
     }
   },
 
   reset: () => {
-    set({ enabledModules: [], preset: null, capacidades: [], loaded: false, loading: false })
+    set({ enabledModules: [], preset: null, capacidades: [], camposProducto: TODO_VISIBLE, loaded: false, loading: false })
     applyPresetAttribute(null)
   },
 }))
@@ -83,3 +89,7 @@ export const useEnabledModulesStore = create<EnabledModulesStore>((set, get) => 
 /** `useCapacidad('propina')` — true si la tienda tiene esa función. */
 export const useCapacidad = (clave: string): boolean =>
   useEnabledModulesStore((s) => puede(s.capacidades, clave))
+
+/** Campos del formulario de producto que ve este giro. */
+export const useCamposProducto = (): CamposProducto =>
+  useEnabledModulesStore((s) => s.camposProducto)
