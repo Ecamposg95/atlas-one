@@ -91,7 +91,7 @@ describe('armarPayloadAlta', () => {
 
 const producto = (extra: Partial<Product> = {}): Product => ({
   id: 'p1', name: 'Tenis', sku: 'NK-TENIS-NEG-40', price: 4000, cost: 1500, unit: 'pza',
-  is_active: true, uses_inventory: true,
+  is_active: true,
   variants: [
     { id: 'v1', sku: 'NK-TENIS-NEG-40', color: 'Negro', size: '40', price: 4000, cost: 1500, barcode: '111' },
     { id: 'v2', sku: 'NK-TENIS-NEG-41', color: 'Negro', size: '41', price: 4000, cost: 1500, barcode: '222' },
@@ -105,7 +105,6 @@ describe('formDesdeProducto', () => {
   it('lee precio y código de la principal, y carga escalones y empaques', () => {
     const s = formDesdeProducto(producto())
     expect(s.form.sku).toBe('NK-TENIS-NEG-40'); expect(s.form.barcode).toBe('111'); expect(s.form.price).toBe('4000')
-    expect(s.form.uses_inventory).toBe(true)
     expect(s.prices).toEqual([{ id: 'pr1', price_name: 'Mayoreo', min_quantity: 6, unit_price: 3500 }])
     expect(s.packagings).toEqual([{ id: 'pk1', name: 'Caja', barcode: '', units_per_package: 12, package_price: 40000 }])
   })
@@ -127,7 +126,6 @@ describe('armarPayloadEdicion', () => {
     expect(plan.productPatch.barcode).toBe('111')
     expect(plan.productPatch.packaging_units).toEqual([{ name: 'Caja', barcode: null, units_per_package: 12, package_price: 40000 }])
     expect(plan.productPatch.precio_a_todas_las_tallas).toBe(true)
-    expect(plan.productPatch.uses_inventory).toBe(true)
     expect(plan.variantPatch).toBeNull()
   })
   it('talla no principal: SKU y código cambiados van a la talla, nunca al producto', () => {

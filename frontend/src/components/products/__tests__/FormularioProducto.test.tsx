@@ -27,7 +27,7 @@ const cajera = { id: 2, username: 'caja', role: 'CAJERO', branch_id: 20, branch_
 
 const producto = {
   id: 'p1', name: 'Tenis', sku: 'NK-TENIS-NEG-40', price: 4000, cost: 1500, unit: 'pza', is_active: true,
-  uses_inventory: true, gender: 'MUJER',
+  gender: 'MUJER',
   variants: [
     { id: 'v1', sku: 'NK-TENIS-NEG-40', color: 'Negro', size: '40', price: 4000, cost: 1500, barcode: '111' },
     { id: 'v2', sku: 'NK-TENIS-NEG-41', color: 'Negro', size: '41', price: 4000, cost: 1500, barcode: '222' },
@@ -59,7 +59,6 @@ describe('FormularioProducto', () => {
     const payload = api.create.mock.calls[0][0]
     expect(payload.sku).toBe('NK-TENIS')
     expect(payload.target_branch_ids).toEqual([20])
-    expect(payload.uses_inventory).toBe(true)
     expect(payload.color).toBeUndefined()
     expect(onDone).toHaveBeenCalledWith(expect.objectContaining({ id: 'nuevo' }))
   })

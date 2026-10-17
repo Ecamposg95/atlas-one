@@ -20,7 +20,6 @@ export interface ProductFormValue {
   has_iva: boolean
   tax_rate: string
   /** false = servicio o producto sin existencias (no descuenta inventario). */
-  uses_inventory: boolean
   initial_stock: string
   initial_stock_branch_id: string
 }
@@ -48,7 +47,6 @@ export const EMPTY_PRODUCT_FORM: ProductFormValue = {
   cost: '',
   has_iva: false,
   tax_rate: '16',
-  uses_inventory: true,
   initial_stock: '0',
   initial_stock_branch_id: '',
 }

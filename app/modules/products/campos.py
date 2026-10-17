@@ -11,7 +11,7 @@ from typing import Iterable, Optional
 CAMPOS_BASE = (
     "name", "sku", "barcode", "unit", "description", "image_url",
     "department_id", "brand_id", "price", "cost", "has_iva", "tax_rate",
-    "initial_stock", "prices", "packaging_units", "uses_inventory",
+    "initial_stock", "prices", "packaging_units",
 )
 # Ficha boutique: nombre de venta y etiqueta de ropa/calzado.
 CAMPOS_FICHA = ("gender", "model", "material")

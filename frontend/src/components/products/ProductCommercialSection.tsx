@@ -103,11 +103,6 @@ export function ProductCommercialSection({ value, onChange, errors, departments,
               onChange={(e) => onChange('tax_rate', e.target.value)} />
           </label>
         )}
-        <label className="text-xs text-slate-400 flex items-center gap-2">
-          <input type="checkbox" checked={value.uses_inventory}
-            onChange={(e) => onChange('uses_inventory', e.target.checked)} />
-          Lleva inventario
-        </label>
       </div>
     </section>
   )

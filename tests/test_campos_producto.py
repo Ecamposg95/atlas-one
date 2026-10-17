@@ -16,7 +16,7 @@ def test_pos_normal_esconde_la_ficha_y_sin_modulo_no_hay_variantes():
     assert not (set(CAMPOS_FICHA) & set(r["visibles"]))
     assert "variants" not in r["visibles"]
     # Lo básico siempre va.
-    for clave in ("name", "sku", "price", "cost", "packaging_units", "prices", "uses_inventory"):
+    for clave in ("name", "sku", "price", "cost", "packaging_units", "prices"):
         assert clave in r["visibles"]
 
 

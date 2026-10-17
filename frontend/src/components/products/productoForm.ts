@@ -117,7 +117,6 @@ function camposComunes(form: ProductFormValue) {
     cost: Number(form.cost),
     has_iva: form.has_iva,
     tax_rate: form.has_iva ? Number(form.tax_rate) : 0,
-    uses_inventory: form.uses_inventory,
   }
 }
 
@@ -207,7 +206,6 @@ export function formDesdeProducto(p: Product, variantId?: string): EstadoDesdePr
       cost: String(principal?.cost ?? p.cost ?? ''),
       has_iva: Boolean(principal?.has_iva ?? p.has_iva ?? false),
       tax_rate: String(principal?.tax_rate ?? p.tax_rate ?? '16'),
-      uses_inventory: p.uses_inventory ?? true,
       initial_stock: '0',
       initial_stock_branch_id: '',
     },

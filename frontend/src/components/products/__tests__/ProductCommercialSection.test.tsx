@@ -26,8 +26,4 @@ describe('ProductCommercialSection: campos por giro', () => {
     expect(screen.getByText('Género')).toBeTruthy()
     expect(screen.queryByText('Modelo')).toBeNull()
   })
-  it('tiene la casilla de inventario', () => {
-    render(<ProductCommercialSection {...props} value={EMPTY_PRODUCT_FORM} />)
-    expect(screen.getByLabelText('Lleva inventario')).toBeTruthy()
-  })
 })
