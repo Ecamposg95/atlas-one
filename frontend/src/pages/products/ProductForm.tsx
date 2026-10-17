@@ -104,6 +104,7 @@ export function ProductForm() {
           cost: String(v?.cost ?? p.cost ?? ''),
           has_iva: Boolean(v?.has_iva ?? p.has_iva ?? false),
           tax_rate: String(v?.tax_rate ?? p.tax_rate ?? '16'),
+          uses_inventory: p.uses_inventory ?? true,
           initial_stock: '0',
           initial_stock_branch_id: '',
         })

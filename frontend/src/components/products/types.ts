@@ -19,6 +19,8 @@ export interface ProductFormValue {
   cost: string
   has_iva: boolean
   tax_rate: string
+  /** false = servicio o producto sin existencias (no descuenta inventario). */
+  uses_inventory: boolean
   initial_stock: string
   initial_stock_branch_id: string
 }
@@ -46,6 +48,7 @@ export const EMPTY_PRODUCT_FORM: ProductFormValue = {
   cost: '',
   has_iva: false,
   tax_rate: '16',
+  uses_inventory: true,
   initial_stock: '0',
   initial_stock_branch_id: '',
 }
@@ -63,5 +66,16 @@ export interface PriceRow {
 }
 
 export const emptyPriceRow = (): PriceRow => ({ price_name: '', min_quantity: 1, unit_price: 0 })
+
+/** Fila editable de empaque (caja, master…). */
+export interface PackagingRow {
+  id?: string
+  name: string
+  barcode: string
+  units_per_package: number
+  package_price: number
+}
+
+export const emptyPackagingRow = (): PackagingRow => ({ name: 'Caja', barcode: '', units_per_package: 1, package_price: 0 })
 
 export type { Brand, Department, Branch }
