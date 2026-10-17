@@ -1,3 +1,4 @@
+import { campoVisible, TODO_VISIBLE, type CamposProducto } from './camposProducto'
 import type { Brand, Department, ProductErrors, ProductFormValue, SetField } from './types'
 
 interface Props {
@@ -6,6 +7,8 @@ interface Props {
   errors: ProductErrors
   departments: Department[]
   brands: Brand[]
+  /** Qué campos ve este giro; sin la prop se ve todo. */
+  campos?: CamposProducto
 }
 
 /** Los cuatro géneros que acepta el backend (`products.gender`). */
@@ -16,7 +19,7 @@ export const GENEROS = [
   { value: 'NINO', label: 'Niño' },
 ]
 
-export function ProductCommercialSection({ value, onChange, errors, departments, brands }: Props) {
+export function ProductCommercialSection({ value, onChange, errors, departments, brands, campos = TODO_VISIBLE }: Props) {
   // Vista previa del nombre de venta: la marca primero, el modelo pegado al
   // nombre. Es exactamente lo que va a leer el cajero en el POS y el ticket.
   const marca = brands.find((b) => b.id === value.brand_id)?.name ?? ''
@@ -46,27 +49,33 @@ export function ProductCommercialSection({ value, onChange, errors, departments,
             {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
         </label>
-        <label className="text-xs text-slate-400 space-y-1">
-          Género
-          <select className="dax-input w-full" value={value.gender}
-            onChange={(e) => onChange('gender', e.target.value)}>
-            <option value="">—</option>
-            {GENEROS.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
-          </select>
-        </label>
-        <label className="text-xs text-slate-400 space-y-1">
-          Modelo
-          <input className="dax-input w-full" value={value.model} placeholder="mezclilla, cargo, slim…"
-            onChange={(e) => onChange('model', e.target.value)} />
-          <span className="text-slate-600 text-[11px] block">
-            Va pegado al nombre: «{nombreDeVenta}».
-          </span>
-        </label>
-        <label className="text-xs text-slate-400 space-y-1">
-          Material
-          <input className="dax-input w-full" value={value.material} placeholder="Algodón, piel, lana…"
-            onChange={(e) => onChange('material', e.target.value)} />
-        </label>
+        {campoVisible(campos, 'gender', value.gender) && (
+          <label className="text-xs text-slate-400 space-y-1">
+            Género
+            <select className="dax-input w-full" value={value.gender}
+              onChange={(e) => onChange('gender', e.target.value)}>
+              <option value="">—</option>
+              {GENEROS.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
+            </select>
+          </label>
+        )}
+        {campoVisible(campos, 'model', value.model) && (
+          <label className="text-xs text-slate-400 space-y-1">
+            Modelo
+            <input className="dax-input w-full" value={value.model} placeholder="mezclilla, cargo, slim…"
+              onChange={(e) => onChange('model', e.target.value)} />
+            <span className="text-slate-600 text-[11px] block">
+              Va pegado al nombre: «{nombreDeVenta}».
+            </span>
+          </label>
+        )}
+        {campoVisible(campos, 'material', value.material) && (
+          <label className="text-xs text-slate-400 space-y-1">
+            Material
+            <input className="dax-input w-full" value={value.material} placeholder="Algodón, piel, lana…"
+              onChange={(e) => onChange('material', e.target.value)} />
+          </label>
+        )}
         <label className="text-xs text-slate-400 space-y-1">
           Precio *
           <input type="number" step="0.01" min="0" className="dax-input w-full" value={value.price}
@@ -94,6 +103,11 @@ export function ProductCommercialSection({ value, onChange, errors, departments,
               onChange={(e) => onChange('tax_rate', e.target.value)} />
           </label>
         )}
+        <label className="text-xs text-slate-400 flex items-center gap-2">
+          <input type="checkbox" checked={value.uses_inventory}
+            onChange={(e) => onChange('uses_inventory', e.target.checked)} />
+          Lleva inventario
+        </label>
       </div>
     </section>
   )

@@ -9,6 +9,8 @@ interface Props {
   suggestingSku?: boolean
 }
 
+const UNIDADES = ['pza', 'kg', 'lt', 'mt', 'caja', 'par', 'srv']
+
 export function ProductBasicsSection({ value, onChange, errors, onSuggestSku, suggestingSku }: Props) {
   return (
     <section className="space-y-3">
@@ -47,11 +49,9 @@ export function ProductBasicsSection({ value, onChange, errors, onSuggestSku, su
           Unidad
           <select className="dax-input w-full" value={value.unit}
             onChange={(e) => onChange('unit', e.target.value)}>
-            <option value="pza">pza</option>
-            <option value="kg">kg</option>
-            <option value="lt">lt</option>
-            <option value="mt">mt</option>
-            <option value="caja">caja</option>
+            {UNIDADES.map((u) => <option key={u} value={u}>{u}</option>)}
+            {/* Un producto viejo con una unidad fuera de la lista no se queda sin opción. */}
+            {value.unit && !UNIDADES.includes(value.unit) && <option value={value.unit}>{value.unit}</option>}
           </select>
         </label>
         <label className="text-xs text-slate-400 space-y-1 md:col-span-2">
