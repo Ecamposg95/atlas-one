@@ -16,7 +16,7 @@ import { FormularioProducto } from '../products/FormularioProducto'
 // Un renglón por variante — con varias tallas, cada renglón lleva su propio
 // variant_id para que "Ajustar stock" no siempre pegue a la primera variante.
 // `label` es la etiqueta a mostrar (con variante si aplica); `name` se deja
-// intacto como el nombre real del producto (lo usa el prefill del editor).
+// intacto como el nombre real del producto.
 interface ProductRow extends Product {
   variant_id?: string
   label: string
@@ -159,7 +159,7 @@ export function ProductsBranchView() {
     return items
   }, [items, filter])
 
-  // ── Edit: cargar producto completo (con prices + packaging_units) ─────────
+  // ── Edit: FormularioProducto carga el producto completo por su cuenta ─────
   function openEdit(p: ProductRow) {
     setEditing({ productId: p.id, variantId: p.variant_id })
   }

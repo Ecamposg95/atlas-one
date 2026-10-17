@@ -294,15 +294,15 @@ Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.l
 
 ## 5. Inventario, Productos & Catálogo
 
-> **Formulario de producto unificado (SP1).** `components/products/FormularioProducto.tsx` es el único formulario de alta/edición; la página `ProductForm` lo monta como página y `AdminProductCreate` ya no existe. Quedan por migrar `ProductModal` (`Products.tsx`) y `ProductFormModal` (`ProductsBranchView.tsx`).
+> **Formulario de producto unificado (SP1).** `components/products/FormularioProducto.tsx` es el único formulario de alta/edición; la página `ProductForm` lo monta como página, las listas de HQ (`Products.tsx`) y de sucursal (`ProductsBranchView.tsx`) lo abren dentro de un `Modal` (sin cerrar con Escape ni con el fondo), y `AdminProductCreate`, `ProductModal` y `ProductFormModal` ya no existen. Excepciones anotadas: `components/pos/modals/ProductDetailModal.tsx` (ficha del POS) y `pages/scanner/StoreScanner.tsx` (ediciones parciales).
 
 ### `/products` — Catálogo / consulta de productos
-- **Archivo:** `pages/inventory/Products.tsx` (1500 líneas)
+- **Archivo:** `pages/inventory/Products.tsx` (~720 líneas)
 - **Propósito:** Vista central del catálogo: buscar/filtrar, lista o grid, crear/editar, importar Excel/CSV, y (roles sucursal) ajustar precio/stock/flags por sucursal.
 - **Quién la ve:** Admin, Dueño, Gerente, Cajero — módulo `catalog`. UI bifurca por rol (HQ ve matriz global; sucursal ve `ProductsBranchView`).
 - **Datos/API:** `productsApi.list/search/getById/create/update/getDepartments/getBrands/uploadProducts/downloadTemplate/updateBranchStatus`.
-- **Componentes clave:** `ImportModal`, `ProductModal`, `BranchStatusEditor`, `ProductImageUploader`.
-- **Notas:** **Dos rutas de edición por rol:** Gerente/Cajero → `/products/:id/edit` (ProductForm); Admin/Dueño → ProductModal inline. Refetch por `location.key`.
+- **Componentes clave:** `ImportModal`, `FormularioProducto` (en `Modal`), `BranchStatusEditor`, `ProductImageUploader`.
+- **Notas:** Todos los roles editan con `FormularioProducto` en un `Modal`: Admin/Dueño desde la lista HQ; Gerente/Cajero desde `ProductsBranchView` (pasa `variant_id` del renglón). Cerrar el importador tras una carga parcial recarga la lista (`cerrarImportacion`). Refetch por `location.key`.
 
 ### `/inventory` — Inventario (kardex y ajustes)
 - **Archivo:** `pages/inventory/Inventory.tsx` (193 líneas)
@@ -329,8 +329,8 @@ Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.l
 - **Archivo:** `pages/products/ProductForm.tsx` → `components/products/FormularioProducto.tsx` (alta/edición para los 4 roles; API `POST /products/`, `PUT /products/{id}`, `PUT /products/variants/{id}`). `?volver=/ruta` interna (ver `pages/products/volver.ts`) decide a dónde regresa al guardar o cancelar; sin él vuelve a `/products`.
 - **Propósito:** Formulario de página completa para crear/editar. Destino de Gerente/Cajero desde `/products`.
 - **Quién la ve:** `RequireRole(Admin, Dueño, Gerente, Cajero)`.
-- **Datos/API:** `productsApi.getById/create/update/getDepartments/getBrands`, `organizationApi.getBranches` (admin).
-- **Componentes clave:** secciones `ProductBasicsSection`, `ProductCommercialSection`, `ProductTieredPricesSection`, `ProductBranchMatrixSection`, `ProductInitialStockSection`.
+- **Datos/API:** `FormularioProducto` llama `productsApi.getById/create/update/updateVariant/getDepartments/getBrands/skuSuggest`, `organizationApi.getBranches` (admin); campos por giro desde `useCamposProducto` (`/me/context`).
+- **Componentes clave:** `FormularioProducto` con las secciones `ProductBasicsSection`, `ProductCommercialSection`, `ProductTieredPricesSection`, `ProductPackagingSection`, `ProductVariantsSection`/`ProductVariantsEditor`, `ProductBranchMatrixSection`, `ProductInitialStockSection`; lógica pura en `productoForm.ts`.
 - **Notas:** Admin en create ve matriz + stock inicial; cajero tiene sucursal bloqueada. En edit no toca matriz/stock. Maneja 409/SKU duplicado. **`products/new` monta `<ProductForm key="new" />` y `products/:id/edit` monta un wrapper `ProductFormEditRoute` con `<ProductForm key={id} />`** (`App.tsx:44-50`) — fix 2026-09-22: sin el `key`, React Router reutilizaba la instancia y "Nuevo producto" heredaba los datos del producto que se estaba editando (auditoría #3, `docs/AUDITORIA-2026-09-22.md`).
 
 ### `/admin/catalog` — Catálogo (administración)
@@ -632,7 +632,7 @@ Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.l
 
 1. **Dashboards HQ duplicados.** HQOperations / HQReportsHub / HQControl repiten KPIs-del-día, doughnut de métodos, ranking de sucursales y top productos desde `commandCenterStats`, con `PAYMENT_COLORS`/rangos reimplementados en cada archivo (y colores divergentes: CARD `#0ea5e9` vs `#6366f1`). Además el concepto "sucursal online" difiere (`status==='ONLINE'` vs `pending_cuts>0`).
 
-2. **Superficies de producto, migración a medias.** `FormularioProducto` es el formulario único; `ProductForm` (página) ya lo usa y `AdminProductCreate` se eliminó. Pendientes: `ProductModal` en `Products.tsx` y `ProductFormModal` en `ProductsBranchView`.
+2. **Superficies de producto.** `FormularioProducto` es el formulario único fuera del POS; queda `ProductDetailModal` (ficha del POS) como excepción por ruling.
 
 3. **Dos generaciones de UI en Platform.** v2 "Editorial" (Metrics/Health, `KPICardV2`, `SkeletonState`) vs v1 "PageShell" (el resto). Las Mobile* de platform son un tercer mundo (Tailwind + axios directo).
 

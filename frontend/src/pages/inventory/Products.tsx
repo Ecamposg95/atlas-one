@@ -15,7 +15,7 @@ import { toast } from '../../store/toastStore'
 import { Modal } from '../../components/ui/Modal'
 import { FormularioProducto } from '../../components/products/FormularioProducto'
 import { expandVariantRows, grupoDeVariantes, nombreDeVariante, priceRange, sumStock } from './variantRows'
-import { debeCerrarSolo } from './importacion'
+import { cerrarImportacion, debeCerrarSolo } from './importacion'
 
 const SINGULAR_GRUPO = { tallas: 'talla', colores: 'color', variantes: 'variante' } as const
 
@@ -47,12 +47,15 @@ function ImportModal({ onClose, onDone, isHQ }: { onClose: () => void; onDone: (
     }
   }
 
+  // Fondo y X: si ya entró algo, recargar la lista; si no, solo cerrar.
+  const cerrar = () => (cerrarImportacion(result) === 'recargar' ? onDone() : onClose())
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={cerrar}>
       <div className="dax-card dax-modal p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-black text-white">Importar productos</h3>
-          <button onClick={onClose} className="text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
+          <button onClick={cerrar} className="text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
         </div>
 
         {!result ? (
@@ -186,8 +189,8 @@ function ImportModal({ onClose, onDone, isHQ }: { onClose: () => void; onDone: (
 // ─── Main Products Page ─────────────────────────────────────────────────────────
 
 export function Products() {
-  // Roles de sucursal (CAJERO/GERENTE) ven la vista simplificada con modales
-  // y acciones por fila; HQ conserva la matriz multi-sucursal completa.
+  // Roles de sucursal (CAJERO/GERENTE) ven la vista simplificada por renglón;
+  // HQ conserva la matriz multi-sucursal. Ambas editan con FormularioProducto en un Modal.
   if (useIsBranchUser()) return <ProductsBranchView />
   return <ProductsHQView />
 }
@@ -228,9 +231,8 @@ function ProductsHQView() {
     try {
       const params: Record<string, unknown> = { search: q, skip: pg * LIMIT, limit: LIMIT }
       if (dept) params.department_id = dept
-      // CAJERO/GERENTE: NO enviamos branch_id ni active_in_branch — el backend
-      // los deriva del JWT (defense in depth). Admins podrán usar un selector
-      // de sucursal más adelante; por ahora ningún rol los envía desde aquí.
+      // No enviamos branch_id ni active_in_branch: el backend los deriva del JWT
+      // (defense in depth). Esta vista es la de HQ; ningún rol los envía desde aquí.
       const res = await productsApi.list(params)
       setProducts(res.items ?? [])
       setTotal(res.total ?? 0)
@@ -265,7 +267,7 @@ function ProductsHQView() {
   }, [search, deptId, load])
 
   // Refetch list whenever we navigate back to this page (e.g., after saving
-  // a product in ProductForm). location.key changes on every navigation event,
+  // a product in the page form /products/:id/edit). location.key changes on every navigation event,
   // so this fires on mount and on any return from a child route.
   const isFirstRender = useRef(true)
   useEffect(() => {
