@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  armarPayloadAlta, armarPayloadEdicion, erroresDeApi, formDesdeProducto, principalCambio, totalInicial, validarProducto,
+  armarPayloadAlta, armarPayloadEdicion, erroresDeApi, formDesdeProducto, precioATodasPorDefecto, principalCambio, totalInicial, validarProducto,
   type EntradaFormulario,
 } from '../productoForm'
 import { EMPTY_PRODUCT_FORM } from '../types'
@@ -59,7 +59,6 @@ describe('armarPayloadAlta', () => {
   it('sin módulo de variantes no viajan color, talla ni extra_variants', () => {
     const p = armarPayloadAlta(base({ variantRows: [fila({ size: '40', sku: 'X-40' })], hasVariantsModule: false }))
     expect(p.color).toBeUndefined(); expect(p.size).toBeUndefined(); expect(p.extra_variants).toBeUndefined()
-    expect(p.uses_inventory).toBe(true)
     expect(p.branch_id).toBeNull()
     expect(p.target_branch_ids).toEqual([20])
   })
@@ -125,8 +124,18 @@ describe('armarPayloadEdicion', () => {
     expect(plan.productPatch.sku).toBe('NK-TENIS-NEG-40')
     expect(plan.productPatch.barcode).toBe('111')
     expect(plan.productPatch.packaging_units).toEqual([{ name: 'Caja', barcode: null, units_per_package: 12, package_price: 40000 }])
-    expect(plan.productPatch.precio_a_todas_las_tallas).toBe(true)
+    expect(plan.productPatch.precio_a_todas_las_tallas).toBeUndefined()   // el precio no cambió
     expect(plan.variantPatch).toBeNull()
+  })
+  it('con la casilla marcada y el precio cambiado manda la bandera', () => {
+    const e = entrada()
+    const plan = armarPayloadEdicion({ ...e, form: { ...e.form, price: '4500' } })
+    expect(plan.productPatch.precio_a_todas_las_tallas).toBe(true)
+  })
+  it('con el precio cambiado pero la casilla desmarcada no manda la bandera', () => {
+    const e = entrada()
+    const plan = armarPayloadEdicion({ ...e, form: { ...e.form, price: '4500' }, precioATodas: false })
+    expect(plan.productPatch.precio_a_todas_las_tallas).toBeUndefined()
   })
   it('talla no principal: SKU y código cambiados van a la talla, nunca al producto', () => {
     const e = entrada('v2')
@@ -191,5 +200,26 @@ describe('principalCambio', () => {
   })
   it('variantId=v2 con su sku cambiado cambia', () => {
     expect(principalCambio(conDatos({}), conDatos({}, { sku: 'B2' }), 'v2')).toBe(true)
+  })
+})
+
+describe('precioATodasPorDefecto', () => {
+  const conPrecios = (a: number, b: number) => producto({
+    variants: [
+      { id: 'v1', sku: 'A', color: 'Negro', size: '40', price: a, cost: 1, barcode: '1' },
+      { id: 'v2', sku: 'B', color: 'Negro', size: '41', price: b, cost: 1, barcode: '2' },
+    ] as Product['variants'],
+  })
+  it('tallas con el mismo precio: marcada', () => {
+    expect(precioATodasPorDefecto(conPrecios(4000, 4000), undefined, true)).toBe(true)
+  })
+  it('tallas con precios distintos: desmarcada', () => {
+    expect(precioATodasPorDefecto(conPrecios(4000, 4500), undefined, true)).toBe(false)
+  })
+  it('sin módulo variants: desmarcada', () => {
+    expect(precioATodasPorDefecto(conPrecios(4000, 4000), undefined, false)).toBe(false)
+  })
+  it('fila no principal: desmarcada', () => {
+    expect(precioATodasPorDefecto(conPrecios(4000, 4000), 'v2', true)).toBe(false)
   })
 })

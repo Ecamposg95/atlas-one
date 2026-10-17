@@ -26,7 +26,7 @@ import { esFilaPrincipal } from '../branch/variantEdit'
 import { variantLabel } from './variantWords'
 import { argsSugerencia, mensajeSugerencia } from './skuSuggest'
 import {
-  armarPayloadAlta, armarPayloadEdicion, erroresDeApi, formDesdeProducto, principalCambio, totalInicial, validarProducto,
+  armarPayloadAlta, armarPayloadEdicion, erroresDeApi, formDesdeProducto, precioATodasPorDefecto, principalCambio, totalInicial, validarProducto,
   type EntradaFormulario,
 } from './productoForm'
 import type { Product } from '../../types/products'
@@ -68,8 +68,8 @@ export function FormularioProducto({ mode, productId, variantId, presentacion, o
   const [prices, setPrices] = useState<PriceRow[]>([])
   const [packagings, setPackagings] = useState<PackagingRow[]>([])
   const [errors, setErrors] = useState<ProductErrors>({})
-  // El precio de la ficha es el de la talla principal; con la casilla baja a todas.
-  const [precioATodas, setPrecioATodas] = useState(true)
+  // El precio de la ficha es el de la talla principal; con la casilla (y si el precio cambió) baja a todas.
+  const [precioATodas, setPrecioATodas] = useState(false)
   const [variantRows, setVariantRows] = useState<VariantRow[]>([])
   const [loaded, setLoaded] = useState<Product | null>(null)
   const [sugiriendoSku, setSugiriendoSku] = useState(false)
@@ -101,10 +101,9 @@ export function FormularioProducto({ mode, productId, variantId, presentacion, o
         if (cancelled) return
         setLoaded(p)
         const estado = formDesdeProducto(p, variantId)
-        // Solo se aplana el precio de todas las tallas con el módulo variants (es
-        // el único que muestra la casilla) y editando la principal: al editar una
-        // talla no principal no se aplana.
-        setPrecioATodas(hasVariantsModule && esFilaPrincipal(p, variantId))
+        // La casilla arranca marcada solo si todas las tallas ya comparten el
+        // precio de la principal (ver precioATodasPorDefecto).
+        setPrecioATodas(precioATodasPorDefecto(p, variantId, hasVariantsModule))
         setForm(estado.form); setPrices(estado.prices); setPackagings(estado.packagings)
       }).catch(() => {
         if (cancelled) return
@@ -154,7 +153,7 @@ export function FormularioProducto({ mode, productId, variantId, presentacion, o
         ...f, sku: nuevo.sku, barcode: nuevo.barcode, price: nuevo.price, cost: nuevo.cost,
         has_iva: nuevo.has_iva, tax_rate: nuevo.tax_rate,
       }))
-      setPrecioATodas(hasVariantsModule && esFilaPrincipal(p, variantId))
+      setPrecioATodas(precioATodasPorDefecto(p, variantId, hasVariantsModule))
     }
     setLoaded(p)
   }
@@ -207,6 +206,8 @@ export function FormularioProducto({ mode, productId, variantId, presentacion, o
 
   // Estos campos son los de la PRIMERA talla, no los del producto entero.
   const principalCargada = mode === 'edit' && hasVariantsModule && loaded && (loaded.variants?.length ?? 0) > 1 ? loaded.variants![0] : null
+  const filaTalla = principalCargada && loaded && !esFilaPrincipal(loaded, variantId)
+    ? loaded.variants!.find((v) => v.id === variantId) ?? null : null
   const cta = mode === 'create' ? 'Crear producto' : 'Guardar cambios'
 
   const contenido = (
@@ -214,7 +215,9 @@ export function FormularioProducto({ mode, productId, variantId, presentacion, o
       {principalCargada && (
         <>
           <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
-            {`Nombre, precio y código de aquí son los de la talla ${variantLabel(principalCargada, loaded?.name ?? '')}. Las demás tallas, abajo.`}
+            {filaTalla
+              ? `SKU y código de aquí son los de la talla ${variantLabel(filaTalla, loaded?.name ?? '')}; el precio, el costo y los escalones son del producto (talla principal ${variantLabel(principalCargada, loaded?.name ?? '')}).`
+              : `Nombre, precio y código de aquí son los de la talla ${variantLabel(principalCargada, loaded?.name ?? '')}. Las demás tallas, abajo.`}
           </p>
           <label className="flex items-center gap-2 text-sm text-slate-300">
             <input type="checkbox" checked={precioATodas} onChange={(e) => setPrecioATodas(e.target.checked)} />

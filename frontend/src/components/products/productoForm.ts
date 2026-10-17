@@ -65,8 +65,8 @@ export function validarProducto(e: EntradaFormulario): ProductErrors {
     if (!p.price_name.trim()) errores[`prices.${i}.price_name`] = 'Requerido'
     if (!Number.isFinite(Number(p.min_quantity)) || Number(p.min_quantity) <= 0)
       errores[`prices.${i}.min_quantity`] = 'Cantidad mínima mayor a 0'
-    if (!Number.isFinite(Number(p.unit_price)) || Number(p.unit_price) < 0)
-      errores[`prices.${i}.unit_price`] = 'Número ≥ 0'
+    if (!Number.isFinite(Number(p.unit_price)) || Number(p.unit_price) <= 0)
+      errores[`prices.${i}.unit_price`] = 'Precio mayor a 0'
   })
   packagings.forEach((u, i) => {
     if (!u.name.trim()) errores[`packaging.${i}.name`] = 'Requerido'
@@ -75,7 +75,7 @@ export function validarProducto(e: EntradaFormulario): ProductErrors {
     if (!Number.isFinite(Number(u.package_price)) || Number(u.package_price) < 0)
       errores[`packaging.${i}.package_price`] = 'Número ≥ 0'
   })
-  if (form.has_iva && !Number.isFinite(Number(form.tax_rate))) errores.tax_rate = 'Escribe un número'
+  if (form.has_iva && (!form.tax_rate.trim() || !Number.isFinite(Number(form.tax_rate)))) errores.tax_rate = 'Escribe un número'
   if (mode === 'create' && hasVariantsModule) {
     // La primera fila es la principal: su SKU es el base, no se valida aparte.
     const skus = new Set<string>([form.sku.trim().toLowerCase()])
@@ -157,6 +157,19 @@ export interface EntradaEdicion extends EntradaFormulario {
   precioATodas: boolean
 }
 
+/**
+ * ¿La casilla "Aplicar el precio a todas las tallas" arranca marcada? Solo con
+ * el módulo variants, en la fila principal y si todas las tallas vivas ya
+ * comparten el precio de la principal: así guardar sin tocar el precio no
+ * aplana tallas que hoy cuestan distinto.
+ */
+export function precioATodasPorDefecto(p: Product, variantId: string | undefined, hasVariantsModule: boolean): boolean {
+  if (!hasVariantsModule || !esFilaPrincipal(p, variantId)) return false
+  const vivas = p.variants ?? []
+  if (vivas.length === 0) return true
+  return vivas.every((v) => Number(v.price) === Number(vivas[0].price))
+}
+
 export interface PlanEdicion {
   productPatch: ProductUpdate
   variantPatch: { variantId: string; patch: { sku?: string; barcode?: string | null } } | null
@@ -168,12 +181,14 @@ export function armarPayloadEdicion(e: EntradaEdicion): PlanEdicion {
   // ahí sobrescribiría los de la principal (ver components/branch/variantEdit.ts).
   const identidad = planIdentidadDeFila(loaded, variantId, { sku: form.sku.trim(), barcode: form.barcode.trim() || null })
   const varias = (loaded.variants?.length ?? 0) > 1
+  // La bandera viaja solo si la casilla está marcada Y el precio cambió respecto
+  // a la principal cargada; si no, guardar el nombre no toca el precio de las tallas.
+  const precioCambio = varias && Number(form.price) !== Number(loaded.variants![0].price)
   return {
     productPatch: {
       ...camposComunes(form),
       ...identidad.productPatch,
-      // Solo tiene sentido con varias tallas; sin ellas no se manda.
-      ...(varias ? { precio_a_todas_las_tallas: precioATodas } : {}),
+      ...(precioATodas && precioCambio ? { precio_a_todas_las_tallas: true } : {}),
       // Cargados desde GET /products/{id}: mandarlos completos conserva lo que había.
       prices: escalones(prices),
       packaging_units: empaques(packagings),
@@ -250,7 +265,7 @@ export function erroresDeApi(err: unknown, variantRows: VariantRow[], mode: 'cre
   const detail = e?.response?.data?.detail
   // Un 409 de la matriz (SKU o código repetido de una talla) cita la fila
   // culpable: marcarla ahí en vez de acusar al SKU base del producto.
-  const porFila = variantDetailErrors(detail as string | undefined, splitPrincipal(variantRows).extras)
+  const porFila = variantDetailErrors(detail, splitPrincipal(variantRows).extras)
   if (Object.keys(porFila).length > 0) return { errors: porFila, mensaje: 'Revisa la variante marcada.' }
   const errors: ProductErrors = {}
   if (status === 409 || (typeof detail === 'string' && detail.toLowerCase().includes('sku'))) {
