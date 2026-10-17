@@ -2,7 +2,7 @@
  * Lógica pura del formulario de producto: la única validación y el único
  * armado de payload para alta y edición. `FormularioProducto.tsx` solo pinta.
  *
- * Sale de fusionar lo que tenían copiado AdminProductCreate, ProductForm,
+ * Sale de fusionar lo que tenían copiado la antigua página de alta, ProductForm,
  * ProductModal (HQ) y ProductFormModal (sucursal). Reglas que el backend
  * exige y aquí se repiten para avisar antes de mandar: precio > 0, SKU
  * requerido, escalones y empaques bien formados.

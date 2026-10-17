@@ -1,7 +1,7 @@
 import type { Brand, Department } from '../../types/products'
 import type { Branch } from '../../types/auth'
 
-/** Form state compartido entre AdminProductCreate y ProductForm (cajero). */
+/** Form state compartido entre la antigua página de alta y ProductForm (cajero). */
 export interface ProductFormValue {
   name: string
   sku: string
