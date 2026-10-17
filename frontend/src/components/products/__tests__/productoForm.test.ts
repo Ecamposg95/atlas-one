@@ -180,4 +180,18 @@ describe('principalCambio', () => {
   it('variantId que desaparece cambia', () => {
     expect(principalCambio(prod(['v1', 'v2']), prod(['v1']), 'v2')).toBe(true)
   })
+  const conDatos = (v1: object, v2: object = {}) =>
+    ({ id: 'p', variants: [{ id: 'v1', sku: 'A', price: 10, ...v1 }, { id: 'v2', sku: 'B', price: 10, ...v2 }] }) as unknown as Product
+  it('misma principal con precio distinto cambia', () => {
+    expect(principalCambio(conDatos({}), conDatos({ price: 20 }))).toBe(true)
+  })
+  it('misma principal con sku distinto cambia', () => {
+    expect(principalCambio(conDatos({}), conDatos({ sku: 'A2' }))).toBe(true)
+  })
+  it('sin cambios no cambia', () => {
+    expect(principalCambio(conDatos({}), conDatos({}), 'v2')).toBe(false)
+  })
+  it('variantId=v2 con su sku cambiado cambia', () => {
+    expect(principalCambio(conDatos({}), conDatos({}, { sku: 'B2' }), 'v2')).toBe(true)
+  })
 })

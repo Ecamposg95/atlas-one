@@ -221,13 +221,26 @@ export function formDesdeProducto(p: Product, variantId?: string): EstadoDesdePr
   }
 }
 
+const CAMPOS_IDENTIDAD = ['sku', 'barcode', 'price', 'cost', 'has_iva', 'tax_rate'] as const
+
 /**
- * ¿Cambió la talla que da identidad al formulario tras editar tallas? Es así si
- * la principal ya no es la misma o si `variantId` dejó de existir.
+ * ¿Cambió la identidad del formulario tras editar tallas? Sí si la principal ya
+ * no es la misma, si `variantId` dejó de existir, o si la talla de identidad
+ * (la de `variantId` si sigue viva; si no, la principal) o la principal (de ahí
+ * salen precio y costo) cambió en línea de sku, código, precio, costo o IVA.
  */
 export function principalCambio(antes: Product | null, despues: Product, variantId?: string): boolean {
   if (antes?.variants?.[0]?.id !== despues.variants?.[0]?.id) return true
-  return Boolean(variantId) && !(despues.variants ?? []).some((v) => v.id === variantId)
+  const vivas = despues.variants ?? []
+  if (variantId && !vivas.some((v) => v.id === variantId)) return true
+  const viejas = antes?.variants ?? []
+  const distinta = (id: string | undefined) => {
+    const v0 = viejas.find((v) => v.id === id) as Record<string, unknown> | undefined
+    const v1 = vivas.find((v) => v.id === id) as Record<string, unknown> | undefined
+    if (!v0 || !v1) return false
+    return CAMPOS_IDENTIDAD.some((c) => (v0[c] ?? null) !== (v1[c] ?? null))
+  }
+  return distinta(vivas[0]?.id) || distinta(variantId)
 }
 
 export interface ErroresDeApi { errors: ProductErrors; mensaje: string }
