@@ -15,6 +15,7 @@ import { toast } from '../../store/toastStore'
 import { Modal } from '../../components/ui/Modal'
 import { FormularioProducto } from '../../components/products/FormularioProducto'
 import { expandVariantRows, grupoDeVariantes, nombreDeVariante, priceRange, sumStock } from './variantRows'
+import { debeCerrarSolo } from './importacion'
 
 const SINGULAR_GRUPO = { tallas: 'talla', colores: 'color', variantes: 'variante' } as const
 
@@ -38,7 +39,7 @@ function ImportModal({ onClose, onDone, isHQ }: { onClose: () => void; onDone: (
       const uploadScope = isHQ ? scope : 'branch'
       const res = await productsApi.uploadProducts(file, uploadScope)
       setResult(res)
-      if (res.created > 0 || res.updated > 0) onDone()
+      if (debeCerrarSolo(res)) onDone()
     } catch (e: any) {
       setError(e?.response?.data?.detail ?? 'Error al importar. Revisa el archivo.')
     } finally {
@@ -172,7 +173,7 @@ function ImportModal({ onClose, onDone, isHQ }: { onClose: () => void; onDone: (
               </div>
             )}
 
-            <button onClick={onClose} className="w-full dax-btn-primary justify-center">
+            <button onClick={onDone} className="w-full dax-btn-primary justify-center">
               <i className="fa-solid fa-check" /> Cerrar
             </button>
           </div>
