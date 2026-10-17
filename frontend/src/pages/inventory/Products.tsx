@@ -706,7 +706,7 @@ function ProductsHQView() {
         />
       )}
       {editor && (
-        <Modal open onClose={() => setEditor(null)} size="xl" closeOnBackdrop={false}
+        <Modal open onClose={() => setEditor(null)} size="xl" closeOnBackdrop={false} closeOnEscape={false}
           title={editor.mode === 'create' ? 'Nuevo producto' : 'Editar producto'}>
           <FormularioProducto
             mode={editor.mode}

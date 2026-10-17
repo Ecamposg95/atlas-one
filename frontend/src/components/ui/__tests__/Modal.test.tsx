@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach, beforeEach } from 'vitest'
-import { render, screen, cleanup, act } from '@testing-library/react'
+import { render, screen, cleanup, act, fireEvent } from '@testing-library/react'
 import { useEffect } from 'react'
 import { Modal } from '../Modal'
 
@@ -62,5 +62,15 @@ describe('Modal', () => {
     })
     expect(montajes).toBe(1)
     expect(screen.getByTestId('contenido')).toBe(antes)
+  })
+
+  it('Escape cierra por defecto y no cierra con closeOnEscape={false}', () => {
+    const cierres: string[] = []
+    const { rerender } = render(<Modal open onClose={() => cierres.push('x')} title="T"><p>c</p></Modal>)
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(cierres).toHaveLength(1)
+    rerender(<Modal open onClose={() => cierres.push('x')} title="T" closeOnEscape={false}><p>c</p></Modal>)
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(cierres).toHaveLength(1)
   })
 })

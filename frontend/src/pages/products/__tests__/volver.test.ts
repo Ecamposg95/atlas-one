@@ -13,4 +13,11 @@ describe('destinoDeRegreso', () => {
     expect(destinoDeRegreso('?volver=https://evil', '/products')).toBe('/products')
     expect(destinoDeRegreso('?volver=//evil', '/products')).toBe('/products')
   })
+  it('rechaza la barra invertida (redirect abierto)', () => {
+    expect(destinoDeRegreso('?volver=/%5Cevil.com', '/products')).toBe('/products')
+    expect(destinoDeRegreso('?volver=/\\evil.com', '/products')).toBe('/products')
+  })
+  it('acepta una ruta con query', () => {
+    expect(destinoDeRegreso('?volver=/products?x=1', '/products')).toBe('/products?x=1')
+  })
 })

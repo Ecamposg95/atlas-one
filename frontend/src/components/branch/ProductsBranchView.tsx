@@ -309,14 +309,14 @@ export function ProductsBranchView() {
 
       {/* Modals */}
       {creating && (
-        <ModalFormulario open onClose={() => setCreating(false)} size="xl" closeOnBackdrop={false} title="Nuevo producto">
+        <ModalFormulario open onClose={() => setCreating(false)} size="xl" closeOnBackdrop={false} closeOnEscape={false} title="Nuevo producto">
           <FormularioProducto mode="create" presentacion="modal"
             onDone={() => { setCreating(false); load(search); loadKpis() }}
             onCancel={() => setCreating(false)} />
         </ModalFormulario>
       )}
       {editing && (
-        <ModalFormulario open onClose={() => setEditing(null)} size="xl" closeOnBackdrop={false} title="Editar producto">
+        <ModalFormulario open onClose={() => setEditing(null)} size="xl" closeOnBackdrop={false} closeOnEscape={false} title="Editar producto">
           <FormularioProducto mode="edit" productId={editing.productId} variantId={editing.variantId} presentacion="modal"
             onDone={() => { setEditing(null); load(search); loadKpis() }}
             onCancel={() => setEditing(null)} />
