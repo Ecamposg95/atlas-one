@@ -3,6 +3,11 @@ import { customersApi, type Customer, type CustomerStats, type LedgerEntry } fro
 import { DaxCard } from '../../components/ui/DaxCard'
 import { Spinner } from '../../components/ui/Spinner'
 import { Badge } from '../../components/ui/Badge'
+import { Modal } from '../../components/ui/Modal'
+import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
+import { ListaTarjetas } from '../../components/ui/ListaTarjetas'
+import { TarjetaFila } from '../../components/ui/TarjetaFila'
+import { useEsTelefono } from '../../hooks/useIsMobile'
 import { formatCurrency } from '../../utils/currency'
 import { toWaPhone } from '../../utils/phone'
 import { CustomerFormModal } from './CustomerFormModal'
@@ -24,6 +29,7 @@ export function Customers() {
   // endpoints (app/modules/customers/router.py), así que esconder los botones
   // evita ofrecer algo que va a fallar — no es el candado.
   const user = useAuthStore((s) => s.user)
+  const esTelefono = useEsTelefono()
   // Borrar un cliente es de administración; recibir un abono es cobrar en el
   // mostrador y lo hace quien tiene el turno de caja abierto.
   const puedeBorrar = user?.role === 'ADMINISTRADOR' || user?.role === 'DUEÑO'
@@ -131,10 +137,9 @@ export function Customers() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center gap-3">
-        <i className="fa-solid fa-address-book text-indigo-400 text-xl" />
-        <h1 className="text-2xl font-black text-white">Clientes</h1>
-      </div>
+      <CabeceraPagina
+        titulo={<div className="flex items-center gap-3"><i className="fa-solid fa-address-book text-indigo-400 text-xl" /><h1 className="text-2xl font-black text-white">Clientes</h1></div>}
+      />
 
       {/* KPI Cards */}
       {stats && (
@@ -157,58 +162,82 @@ export function Customers() {
       )}
 
       {/* Búsqueda */}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <input
           type="text" placeholder="Buscar por nombre, teléfono, RFC..."
           value={search} onChange={(e) => onSearch(e.target.value)}
           className="dax-input flex-1 text-sm" />
-        <button onClick={() => setFormModal({ open: true, customer: null })} className="dax-btn-primary text-sm whitespace-nowrap">
+        <button onClick={() => setFormModal({ open: true, customer: null })} className="dax-btn-primary text-sm whitespace-nowrap max-md:w-full max-md:min-h-[44px] justify-center">
           <i className="fa-solid fa-user-plus" /> Nuevo cliente
         </button>
       </div>
 
       {/* Tabla */}
       <DaxCard padding={false}>
-        {loading ? <Spinner text="Cargando clientes..." /> : loadError ? (
-          <ErrorState onRetry={() => load(search, page)} />
-        ) : customers.length === 0 ? (
-          <div className="p-12 text-center text-slate-600">Sin clientes encontrados</div>
+        {esTelefono ? (
+          loadError ? (
+            <ErrorState onRetry={() => load(search, page)} />
+          ) : (
+            <ListaTarjetas vacio={!loading && customers.length === 0} textoVacio="Sin clientes encontrados" cargando={loading} className="p-3">
+              {customers.map((c) => (
+              <TarjetaFila key={c.id}
+                titulo={c.name}
+                subtitulo={[c.phone, c.tax_id].filter(Boolean).join(' · ') || '—'}
+                importe={<span className={balanceColor(c.current_balance)}>{formatCurrency(c.current_balance)}</span>}
+                datos={[{ etiqueta: 'Crédito', valor: c.credit_limit != null ? formatCurrency(c.credit_limit) : '—' }]}
+                onClick={() => openDetail(c)}
+                acciones={<>
+                  <button onClick={() => openDetail(c)} className="dax-btn-secondary text-xs"><i className="fa-solid fa-eye" /> Ver</button>
+                  {c.current_balance > 0 && <button onClick={() => setPayModal({ id: c.id, name: c.name })} className="dax-btn-primary text-xs"><i className="fa-solid fa-money-bill-wave" /> Pagar</button>}
+                </>}
+              />
+              ))}
+            </ListaTarjetas>
+          )
         ) : (
-          <div className="overflow-x-auto">
-            <table className="dax-table w-full">
-              <thead>
-                <tr>
-                  <th>Nombre</th>
-                  <th>Teléfono</th>
-                  <th>RFC</th>
-                  <th className="text-right">Saldo</th>
-                  <th className="text-right">Crédito</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {customers.map((c) => (
-                  <tr key={c.id}>
-                    <td className="font-semibold text-white">{c.name}</td>
-                    <td className="text-slate-400 text-sm">{c.phone ?? '—'}</td>
-                    <td className="text-slate-400 text-xs font-mono">{c.tax_id ?? '—'}</td>
-                    <td className={`text-right font-semibold tabular-nums ${balanceColor(c.current_balance)}`}>{formatCurrency(c.current_balance)}</td>
-                    <td className="text-right text-slate-500 text-sm tabular-nums">{c.credit_limit != null ? formatCurrency(c.credit_limit) : '—'}</td>
-                    <td>
-                      <button onClick={() => openDetail(c)} className="dax-btn-icon text-slate-500 hover:text-white text-xs mr-2">
-                        <i className="fa-solid fa-eye" />
-                      </button>
-                      {c.current_balance > 0 && (
-                        <button onClick={() => setPayModal({ id: c.id, name: c.name })} className="text-emerald-500 hover:text-emerald-400 text-xs">
-                          <i className="fa-solid fa-money-bill-wave" />
-                        </button>
-                      )}
-                    </td>
+          <>
+            {loading ? <Spinner text="Cargando clientes..." /> : loadError ? (
+            <ErrorState onRetry={() => load(search, page)} />
+          ) : customers.length === 0 ? (
+            <div className="p-12 text-center text-slate-600">Sin clientes encontrados</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="dax-table w-full">
+                <thead>
+                  <tr>
+                    <th>Nombre</th>
+                    <th>Teléfono</th>
+                    <th>RFC</th>
+                    <th className="text-right">Saldo</th>
+                    <th className="text-right">Crédito</th>
+                    <th></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {customers.map((c) => (
+                    <tr key={c.id}>
+                      <td className="font-semibold text-white">{c.name}</td>
+                      <td className="text-slate-400 text-sm">{c.phone ?? '—'}</td>
+                      <td className="text-slate-400 text-xs font-mono">{c.tax_id ?? '—'}</td>
+                      <td className={`text-right font-semibold tabular-nums ${balanceColor(c.current_balance)}`}>{formatCurrency(c.current_balance)}</td>
+                      <td className="text-right text-slate-500 text-sm tabular-nums">{c.credit_limit != null ? formatCurrency(c.credit_limit) : '—'}</td>
+                      <td>
+                        <button onClick={() => openDetail(c)} className="dax-btn-icon text-slate-500 hover:text-white text-xs mr-2">
+                          <i className="fa-solid fa-eye" />
+                        </button>
+                        {c.current_balance > 0 && (
+                          <button onClick={() => setPayModal({ id: c.id, name: c.name })} className="text-emerald-500 hover:text-emerald-400 text-xs">
+                            <i className="fa-solid fa-money-bill-wave" />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          </>
         )}
 
         {pages > 1 && (
@@ -223,7 +252,7 @@ export function Customers() {
       {/* Modal estado de cuenta */}
       {selected && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setSelected(null)}>
-          <div className="dax-card p-6 w-full max-w-lg max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="dax-card dax-modal p-6 w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <div>
                 <p className="text-[10px] text-slate-500 uppercase tracking-widest">Cliente</p>
@@ -231,7 +260,7 @@ export function Customers() {
               </div>
               <div className="flex items-center gap-3">
                 <button onClick={() => setFormModal({ open: true, customer: selected })}
-                  className="text-slate-500 hover:text-white" title="Editar">
+                  className="dax-btn-icon text-slate-500 hover:text-white" title="Editar">
                   <i className="fa-solid fa-pen" />
                 </button>
                 {puedeBorrar && <button
@@ -253,14 +282,14 @@ export function Customers() {
                       toast.error(apiErrorMessage(e, 'No se pudo eliminar el cliente'))
                     } finally { setDeleting(false) }
                   }}
-                  className="text-slate-500 hover:text-red-400 disabled:opacity-40" title="Eliminar" disabled={deleting}>
+                  className="dax-btn-icon text-slate-500 hover:text-red-400 disabled:opacity-40" title="Eliminar" disabled={deleting}>
                   <i className="fa-solid fa-trash" />
                 </button>}
                 <button onClick={() => setSelected(null)} className="dax-btn-icon text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 mb-4">
+            <div className="grid grid-cols-3 gap-2 mb-4"> {/* rejilla fija: 3 KPIs cortos caben a 390 */}
               <div className="dax-card p-3 text-center">
                 <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-0.5">Saldo</p>
                 <p className={`font-black text-lg tabular-nums ${balanceColor(selected.current_balance)}`}>{formatCurrency(selected.current_balance)}</p>
@@ -318,25 +347,22 @@ export function Customers() {
 
       {/* Modal pago */}
       {payModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => { setPayModal(null); setPayAmount('') }}>
-          <div className="dax-card p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-black text-white mb-4">Registrar Pago</h3>
-            <p className="text-slate-400 text-sm mb-4">{payModal.name}</p>
-            <div className="space-y-3">
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Monto</label>
-                <input type="number" step="0.01" value={payAmount} onChange={(e) => setPayAmount(e.target.value)}
-                  placeholder="0.00" className="dax-input w-full text-lg font-bold" autoFocus />
-              </div>
-            </div>
-            <div className="flex gap-2 mt-4">
-              <button onClick={() => { setPayModal(null); setPayAmount('') }} className="dax-btn-secondary flex-1">Cancelar</button>
-              <button onClick={handlePay} disabled={!payAmount || payLoading} className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
-                {payLoading ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Confirmar</>}
-              </button>
+        <Modal open onClose={() => { setPayModal(null); setPayAmount('') }} size="sm" title="Registrar Pago"
+          footer={<>
+            <button onClick={() => { setPayModal(null); setPayAmount('') }} className="dax-btn-secondary flex-1">Cancelar</button>
+            <button onClick={handlePay} disabled={!payAmount || payLoading} className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
+              {payLoading ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Confirmar</>}
+            </button>
+          </>}>
+          <p className="text-slate-400 text-sm mb-4">{payModal.name}</p>
+          <div className="space-y-3">
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Monto</label>
+              <input type="number" step="0.01" value={payAmount} onChange={(e) => setPayAmount(e.target.value)}
+                placeholder="0.00" className="dax-input w-full text-lg font-bold" autoFocus />
             </div>
           </div>
-        </div>
+        </Modal>
       )}
 
       {formModal.open && (

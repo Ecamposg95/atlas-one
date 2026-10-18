@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Modal } from '../../components/ui/Modal'
 import { customersApi, type Customer, type CustomerPayload } from '../../api/customers'
 
 interface Props {
@@ -60,65 +61,58 @@ export function CustomerFormModal({ customer, onClose, onSaved }: Props) {
   )
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="dax-card p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-lg font-black text-white mb-4">
-          <i className={`fa-solid ${isEdit ? 'fa-pen' : 'fa-user-plus'} mr-2 text-indigo-400`} />
-          {isEdit ? 'Editar cliente' : 'Nuevo cliente'}
-        </h3>
+    <Modal open onClose={onClose} size="lg" closeOnEscape={false} closeOnBackdrop={false}
+      title={<><i className={`fa-solid ${isEdit ? 'fa-pen' : 'fa-user-plus'} mr-2 text-indigo-400`} />{isEdit ? 'Editar cliente' : 'Nuevo cliente'}</>}
+      footer={<>
+        <button onClick={onClose} className="dax-btn-secondary flex-1">Cancelar</button>
+        <button onClick={submit} disabled={saving || !form.name.trim()}
+          className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
+          {saving ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Guardar</>}
+        </button>
+      </>}>
+      <div className="space-y-3">
+        {field('Nombre *', 'name', 'text', 'Nombre o razón social')}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {field('Teléfono', 'phone', 'tel', '10 dígitos')}
+          {field('Email', 'email', 'email')}
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {field('RFC', 'tax_id', 'text', 'XAXX010101000')}
+          {field('C.P.', 'zip_code')}
+        </div>
+        {field('Dirección', 'address')}
+        {field('Notas', 'notes')}
 
-        <div className="space-y-3">
-          {field('Nombre *', 'name', 'text', 'Nombre o razón social')}
-          <div className="grid grid-cols-2 gap-3">
-            {field('Teléfono', 'phone', 'tel', '10 dígitos')}
-            {field('Email', 'email', 'email')}
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            {field('RFC', 'tax_id', 'text', 'XAXX010101000')}
-            {field('C.P.', 'zip_code')}
-          </div>
-          {field('Dirección', 'address')}
-          {field('Notas', 'notes')}
-
-          <div className="dax-card p-3 space-y-3">
-            <label className="flex items-center gap-2 text-sm text-slate-300">
-              <input type="checkbox" checked={!!form.has_credit}
-                onChange={(e) => set('has_credit', e.target.checked)} />
-              Venta a crédito habilitada
-            </label>
-            {form.has_credit && (
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Límite de crédito</label>
-                  <input type="number" step="0.01" min="0" value={form.credit_limit ?? 0}
-                    onChange={(e) => set('credit_limit', parseFloat(e.target.value) || 0)}
-                    className="dax-input w-full text-sm" />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Días de crédito</label>
-                  <input type="number" min="0" value={form.credit_days ?? 0}
-                    onChange={(e) => set('credit_days', parseInt(e.target.value) || 0)}
-                    className="dax-input w-full text-sm" />
-                </div>
+        <div className="dax-card p-3 space-y-3">
+          <label className="flex items-center gap-2 text-sm text-slate-300">
+            <input type="checkbox" checked={!!form.has_credit}
+              onChange={(e) => set('has_credit', e.target.checked)} />
+            Venta a crédito habilitada
+          </label>
+          {form.has_credit && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Límite de crédito</label>
+                <input type="number" step="0.01" min="0" value={form.credit_limit ?? 0}
+                  onChange={(e) => set('credit_limit', parseFloat(e.target.value) || 0)}
+                  className="dax-input w-full text-sm" />
               </div>
-            )}
-          </div>
-
-          {error && (
-            <p className="text-red-400 text-sm bg-red-500/10 border border-red-500/30 rounded px-3 py-2">
-              <i className="fa-solid fa-circle-exclamation mr-1" /> {error}
-            </p>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Días de crédito</label>
+                <input type="number" min="0" value={form.credit_days ?? 0}
+                  onChange={(e) => set('credit_days', parseInt(e.target.value) || 0)}
+                  className="dax-input w-full text-sm" />
+              </div>
+            </div>
           )}
         </div>
 
-        <div className="flex gap-2 mt-5">
-          <button onClick={onClose} className="dax-btn-secondary flex-1">Cancelar</button>
-          <button onClick={submit} disabled={saving || !form.name.trim()}
-            className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
-            {saving ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Guardar</>}
-          </button>
-        </div>
+        {error && (
+          <p className="text-red-400 text-sm bg-red-500/10 border border-red-500/30 rounded px-3 py-2">
+            <i className="fa-solid fa-circle-exclamation mr-1" /> {error}
+          </p>
+        )}
       </div>
-    </div>
+    </Modal>
   )
 }

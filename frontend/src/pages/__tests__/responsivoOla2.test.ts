@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 /** Pantallas de la ola 2 del responsivo (catálogo y personas). Cada tarea añade la suya. */
-export const PAGINAS = ['core/Brands.tsx', 'core/Departments.tsx', 'core/Users.tsx']
+export const PAGINAS = ['core/Brands.tsx', 'core/Departments.tsx', 'core/Users.tsx', 'crm/Customers.tsx']
 /** Tienen tarjetas propias y no usan TarjetaFila. */
 export const SIN_TARJETA_FILA: string[] = []
 
@@ -24,5 +24,12 @@ describe('ola 2 responsiva: catálogo y personas', () => {
     const s = fuente(p)
     expect(sinExcepciones(s)).not.toMatch(REJILLA_SIN_PREFIJO)
     expect(s).not.toMatch(/hidden md:block|md:hidden/)
+  })
+  it('Customers conserva la paginación fuera del condicional y usa Modal del kit para pago y formulario', () => {
+    const s = fuente('crm/Customers.tsx')
+    expect(s.indexOf('pages > 1')).toBeGreaterThan(s.indexOf('esTelefono ?'))
+    expect(s).toMatch(/import \{ Modal \} from '\.\.\/\.\.\/components\/ui\/Modal'/)
+    expect((s.match(/fixed inset-0/g) ?? []).length).toBe(1) // solo el estado de cuenta (cabecera propia)
+    expect(fuente('crm/CustomerFormModal.tsx')).not.toMatch(/fixed inset-0/)
   })
 })
