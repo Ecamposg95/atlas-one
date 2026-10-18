@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react'
 
 /**
  * Cómo se posiciona el sidebar según el ancho. En escritorio no se toca: sigue
- * siendo un hermano en el flujo con sus 244px. Por debajo de 768px se sale de
+ * siendo un hermano en el flujo con sus 244px. Por debajo de 1024px (`useIsMobile`) se sale de
  * la pantalla y vuelve al abrirse.
  */
 export function estiloCajon(esMovil: boolean, abierto: boolean): CSSProperties {

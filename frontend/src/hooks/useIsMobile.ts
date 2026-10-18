@@ -20,12 +20,11 @@ import { useMediaQuery } from './useMediaQuery'
 const SHELL_BREAKPOINT = 1024 // Tailwind lg
 
 /**
- * Ancho de teléfono. Se mantiene en `md` (768) porque decide **rutas**, no
- * maquetación: `rutaInicioPorRol(rol, esMovil, preset)` manda al dueño al
- * panel `/mobile/owner` cuando `esMovil`. Subirlo a 1024 mandaría al armazón
- * móvil a quien abre el navegador a 900 px en una laptop, que no es lo que se
- * pidió. Una tablet sigue entrando al armazón de escritorio (ahora con cajón)
- * y llega al panel móvil por el ítem «Resumen móvil» del menú.
+ * Ancho de teléfono. Se mantiene en `md` (768) porque decide el render
+ * condicional tabla/tarjetas (`useEsTelefono`) y los cortes de maquetación del
+ * kit, no el armazón. Desde la ola 1 del responsivo el dueño y el admin ya no
+ * se desvían a `/mobile/owner` en teléfono: entran al escritorio adaptado y al
+ * panel móvil llegan por el ítem «Resumen móvil» del menú.
  */
 const PHONE_BREAKPOINT = 768 // Tailwind md
 
