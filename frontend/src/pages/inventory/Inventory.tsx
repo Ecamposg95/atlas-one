@@ -156,12 +156,12 @@ export function Inventory() {
 
       {selected && (
         <div className="space-y-3">
-          <div className="flex flex-wrap items-center max-md:items-start justify-between gap-2">
+          <div className="flex max-md:flex-wrap items-center max-md:items-start justify-between gap-2">
             <div>
               <p className="text-[10px] text-slate-500 uppercase tracking-widest">Kardex</p>
               <p className="text-lg font-black text-white">{selected.label} <span className="font-mono text-indigo-400 text-sm">{selected.sku}</span></p>
             </div>
-            <div className="flex flex-wrap gap-2 max-md:[&>button]:min-h-[44px]">
+            <div className="flex max-md:flex-wrap gap-2 max-md:[&>button]:min-h-[44px]">
               <button onClick={() => setModal(true)} className="dax-btn-secondary text-xs">
                 <i className="fa-solid fa-sliders" /> Ajustar inventario
               </button>

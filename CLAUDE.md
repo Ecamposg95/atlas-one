@@ -136,7 +136,7 @@ Edita `scripts/init_presets_v2.py` (seed de `industry_presets`) y/o el fallback 
 3. La `<table>` no se toca: `esTelefono ? <ListaTarjetas><TarjetaFila…/></ListaTarjetas> : <table…>`, nunca `hidden md:block`.
 4. Rejillas: `grid-cols-N` siempre con prefijo (`grid-cols-1 sm:grid-cols-2`).
 5. Modales: `ui/Modal`, o `dax-modal` + `dax-modal-footer` si tienen cabecera propia; nunca un `fixed inset-0` nuevo (lo frena `overlaysFueraDelKit.test.ts`).
-6. Verificar con `capturas.mjs` a 390/768/1024 y `diff1440.mjs` contra baseline (herramienta en el scratchpad; receta en `docs/superpowers/plans/2026-10-18-sp5-responsivo-admin-ola-2.md`).
+6. Verificar con capturas a 390/768/1024 y diff pixel a pixel a 1440 contra un baseline tomado antes de tocar código; la herramienta (Playwright, `capturas.mjs` + `diff1440.mjs`) se reconstruye según la Tarea 0 de `docs/superpowers/plans/2026-10-18-sp5-responsivo-admin-ola-2.md`.
 
 ---
 

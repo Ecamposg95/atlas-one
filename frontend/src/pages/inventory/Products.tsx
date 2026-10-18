@@ -78,7 +78,7 @@ function ImportModal({ onClose, onDone, isHQ }: { onClose: () => void; onDone: (
                   <button
                     type="button"
                     onClick={() => setScope('all')}
-                    className={`py-2 rounded-xl text-xs font-semibold border transition-colors ${
+                    className={`py-2 max-md:min-h-[44px] rounded-xl text-xs font-semibold border transition-colors ${
                       scope === 'all'
                         ? 'border-indigo-500 bg-indigo-600/20 text-white'
                         : 'border-slate-700/50 text-slate-400 hover:border-slate-600 hover:text-white'
@@ -90,7 +90,7 @@ function ImportModal({ onClose, onDone, isHQ }: { onClose: () => void; onDone: (
                   <button
                     type="button"
                     onClick={() => setScope('branch')}
-                    className={`py-2 rounded-xl text-xs font-semibold border transition-colors ${
+                    className={`py-2 max-md:min-h-[44px] rounded-xl text-xs font-semibold border transition-colors ${
                       scope === 'branch'
                         ? 'border-indigo-500 bg-indigo-600/20 text-white'
                         : 'border-slate-700/50 text-slate-400 hover:border-slate-600 hover:text-white'
@@ -111,7 +111,7 @@ function ImportModal({ onClose, onDone, isHQ }: { onClose: () => void; onDone: (
                   toast.error('No se pudo descargar la plantilla. Reintenta en unos segundos.')
                 }
               }}
-              className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold border border-slate-700 text-slate-400 hover:text-white hover:border-slate-500 transition-colors"
+              className="w-full flex items-center justify-center gap-2 py-2 max-md:min-h-[44px] rounded-xl text-xs font-semibold border border-slate-700 text-slate-400 hover:text-white hover:border-slate-500 transition-colors"
             >
               <i className="fa-solid fa-file-excel text-emerald-400" /> Descargar plantilla con productos actuales
             </button>
@@ -144,7 +144,7 @@ function ImportModal({ onClose, onDone, isHQ }: { onClose: () => void; onDone: (
 
             {error && <p className="text-red-400 text-xs bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</p>}
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 max-md:[&>button]:min-h-[44px]">
               <button onClick={onClose} className="dax-btn-secondary flex-1">Cancelar</button>
               <button
                 onClick={handleUpload}
@@ -182,7 +182,7 @@ function ImportModal({ onClose, onDone, isHQ }: { onClose: () => void; onDone: (
               </div>
             )}
 
-            <button onClick={onDone} className="w-full dax-btn-primary justify-center">
+            <button onClick={onDone} className="w-full dax-btn-primary justify-center max-md:min-h-[44px]">
               <i className="fa-solid fa-check" /> Cerrar
             </button>
           </div>

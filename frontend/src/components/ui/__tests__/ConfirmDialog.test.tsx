@@ -15,7 +15,7 @@ describe('ConfirmDialog', () => {
     expect(tarjeta).not.toBeNull()
     expect(tarjeta!.querySelector('.dax-modal-footer')).not.toBeNull()
     expect(screen.getByRole('button', { name: 'Cancelar' }).className).toContain('dax-btn-secondary')
-    expect(screen.getByRole('button', { name: 'Confirmar' }).className).toContain('dax-btn-danger')
+    expect(screen.getByRole('button', { name: 'Confirmar' }).className).toContain('bg-red-600')
     fireEvent.keyDown(document, { key: 'Escape' })
     await expect(resultado!).resolves.toBe(false)
   })

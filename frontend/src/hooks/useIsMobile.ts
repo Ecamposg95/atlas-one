@@ -33,7 +33,7 @@ export function useIsMobile(): boolean {
   return useMediaQuery(`(max-width: ${SHELL_BREAKPOINT - 1}px)`)
 }
 
-/** `true` en anchos de teléfono (< 768 px). Para decisiones de ruta. */
+/** `true` en anchos de teléfono (< 768 px). Para el render tabla/tarjetas y los cortes del kit (< 768). */
 export function useEsTelefono(): boolean {
   return useMediaQuery(`(max-width: ${PHONE_BREAKPOINT - 1}px)`)
 }

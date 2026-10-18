@@ -290,7 +290,7 @@ export function Customers() {
                   className="dax-btn-icon text-slate-500 hover:text-red-400 disabled:opacity-40" title="Eliminar" disabled={deleting}>
                   <i className="fa-solid fa-trash" />
                 </button>}
-                <button onClick={() => setSelected(null)} className="dax-btn-icon text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
+                <button onClick={() => setSelected(null)} aria-label="Cerrar" className="dax-btn-icon text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
               </div>
             </div>
 
