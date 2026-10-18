@@ -52,21 +52,18 @@ export function useConfirm(): OpenFn {
   return confirm
 }
 
-const VARIANT_STYLES: Record<ConfirmVariant, { icon: string; accent: string; btn: string }> = {
+const VARIANT_STYLES: Record<ConfirmVariant, { icon: string; accent: string }> = {
   danger: {
     icon: 'fa-circle-exclamation text-red-400',
     accent: 'border-red-500/30',
-    btn: 'bg-red-600 hover:bg-red-500 text-white',
   },
   warning: {
     icon: 'fa-triangle-exclamation text-amber-400',
     accent: 'border-amber-500/30',
-    btn: 'bg-amber-600 hover:bg-amber-500 text-white',
   },
   info: {
     icon: 'fa-circle-info text-blue-400',
     accent: 'border-blue-500/30',
-    btn: 'bg-blue-600 hover:bg-blue-500 text-white',
   },
 }
 
@@ -122,47 +119,28 @@ function DialogView({ options, onConfirm, onCancel }: DialogViewProps) {
 
   return (
     <div
-      className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="confirm-dialog-title"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onCancel()
-      }}
+      className="fixed inset-0 z-[1000] flex items-center justify-center p-4 backdrop-blur-sm transition-opacity"
+      style={{ background: 'var(--dax-modal-backdrop)' }}
+      role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title"
+      onClick={(e) => { if (e.target === e.currentTarget) onCancel() }}
     >
-      <div
-        className={`w-full max-w-md rounded-xl bg-slate-900/95 border ${styles.accent} backdrop-blur p-5 shadow-2xl transition-transform`}
-        style={{ color: '#ffffff' }}
-      >
+      {/* `.dax-modal`: tope de alto y hoja inferior bajo `sm` (index.css §2). Colores del tema, no fijos. */}
+      <div className={`dax-card dax-modal w-full max-w-md p-5 border ${styles.accent} shadow-2xl`}>
         <div className="flex items-start gap-3 mb-3">
-          <i className={`fa-solid ${styles.icon} text-xl mt-0.5`} />
-          <h2 id="confirm-dialog-title" className="font-bold text-base leading-snug" style={{ color: '#ffffff' }}>
+          <i className={`fa-solid ${styles.icon} text-xl mt-0.5`} aria-hidden="true" />
+          <h2 id="confirm-dialog-title" className="font-bold text-base leading-snug" style={{ color: 'var(--dax-text)' }}>
             {options.title}
           </h2>
         </div>
-
         {options.message && (
-          <div className="text-sm leading-relaxed mb-5 ml-8" style={{ color: 'rgba(255,255,255,0.85)' }}>
-            {options.message}
-          </div>
+          <div className="text-sm leading-relaxed mb-5 ml-8" style={{ color: 'var(--dax-text-muted)' }}>{options.message}</div>
         )}
-
-        <div className="flex items-center justify-end gap-2">
-          <button
-            ref={cancelBtnRef}
-            type="button"
-            onClick={onCancel}
-            className="px-4 py-2 rounded-lg text-sm font-semibold hover:bg-slate-800/50 transition-colors"
-            style={{ color: 'rgba(255,255,255,0.85)' }}
-          >
+        <div className="dax-modal-footer -mx-5 px-5 flex items-center justify-end gap-2">
+          <button ref={cancelBtnRef} type="button" onClick={onCancel} className="dax-btn-secondary text-sm">
             {options.cancelText ?? 'Cancelar'}
           </button>
-          <button
-            ref={confirmBtnRef}
-            type="button"
-            onClick={onConfirm}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${styles.btn}`}
-          >
+          <button ref={confirmBtnRef} type="button" onClick={onConfirm}
+            className={`text-sm ${options.variant === 'danger' ? 'dax-btn-danger' : 'dax-btn-primary'}`}>
             {options.confirmText ?? 'Confirmar'}
           </button>
         </div>
