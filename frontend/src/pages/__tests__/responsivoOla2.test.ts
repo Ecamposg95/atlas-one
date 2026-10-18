@@ -3,9 +3,9 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 /** Pantallas de la ola 2 del responsivo (catálogo y personas). Cada tarea añade la suya. */
-export const PAGINAS = ['core/Brands.tsx', 'core/Departments.tsx', 'core/Users.tsx', 'crm/Customers.tsx', 'inventory/Inventory.tsx', 'hq/HQInventory.tsx']
+export const PAGINAS = ['core/Brands.tsx', 'core/Departments.tsx', 'core/Users.tsx', 'crm/Customers.tsx', 'inventory/Inventory.tsx', 'hq/HQInventory.tsx', 'inventory/Products.tsx', 'core/AdminCatalog.tsx']
 /** Tienen tarjetas propias y no usan TarjetaFila. */
-export const SIN_TARJETA_FILA: string[] = []
+export const SIN_TARJETA_FILA: string[] = ['core/AdminCatalog.tsx']
 
 const fuente = (p: string) => readFileSync(resolve(__dirname, '..', p), 'utf8')
 // `grid-cols-3` o más sin prefijo sm:/md:/lg:/max-*: (1 y 2 columnas sí caben en 390 px).

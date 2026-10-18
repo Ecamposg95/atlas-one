@@ -8,6 +8,11 @@ import { ProductsBranchView } from '../../components/branch/ProductsBranchView'
 import { DaxCard } from '../../components/ui/DaxCard'
 import { Spinner } from '../../components/ui/Spinner'
 import { Badge } from '../../components/ui/Badge'
+import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
+import { BarraFiltros } from '../../components/ui/BarraFiltros'
+import { ListaTarjetas } from '../../components/ui/ListaTarjetas'
+import { TarjetaFila } from '../../components/ui/TarjetaFila'
+import { useEsTelefono } from '../../hooks/useIsMobile'
 import type { Product, Department } from '../../types/products'
 import { formatCurrency } from '../../utils/currency'
 import { sortByName } from '../../utils/sortByName'
@@ -152,17 +157,18 @@ function ImportModal({ onClose, onDone, isHQ }: { onClose: () => void; onDone: (
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="grid grid-cols-3 gap-3 text-center">
+            {/* rejilla fija: 3 contadores cortos caben a 390 */}
+            <div className="grid grid-cols-3 gap-2 sm:gap-3 text-center">{/* rejilla fija: 3 contadores cortos caben a 390 */}
               <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3">
-                <p className="text-2xl font-black text-emerald-400">{result.created}</p>
+                <p className="text-xl sm:text-2xl font-black text-emerald-400">{result.created}</p>
                 <p className="text-[10px] text-slate-500 uppercase tracking-wider mt-0.5">Nuevos</p>
               </div>
               <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-3">
-                <p className="text-2xl font-black text-indigo-400">{result.updated}</p>
+                <p className="text-xl sm:text-2xl font-black text-indigo-400">{result.updated}</p>
                 <p className="text-[10px] text-slate-500 uppercase tracking-wider mt-0.5">Actualizados</p>
               </div>
               <div className={`${result.failed > 0 ? 'bg-red-500/10 border-red-500/20' : 'bg-slate-800 border-slate-700/50'} border rounded-xl p-3`}>
-                <p className={`text-2xl font-black ${result.failed > 0 ? 'text-red-400' : 'text-slate-500'}`}>{result.failed}</p>
+                <p className={`text-xl sm:text-2xl font-black ${result.failed > 0 ? 'text-red-400' : 'text-slate-500'}`}>{result.failed}</p>
                 <p className="text-[10px] text-slate-500 uppercase tracking-wider mt-0.5">Fallidos</p>
               </div>
             </div>
@@ -186,6 +192,131 @@ function ImportModal({ onClose, onDone, isHQ }: { onClose: () => void; onDone: (
   )
 }
 
+// ─── Cuerpos de celda de la lista ──────────────────────────────────────────────
+// La tabla (escritorio) y la tarjeta (teléfono) pintan lo mismo: cada cuerpo de
+// celda vive aquí una sola vez para que ningún formateo se duplique.
+
+/** Color de la existencia de una talla (sub-renglón y su tarjeta). */
+const colorExistencia = (qty: number) => (qty > 0 ? 'text-emerald-400' : 'text-red-400')
+
+/** Celda Precio: precio efectivo, override de sucursal o rango por talla. */
+function PrecioDeFila({ p }: { p: Product }) {
+  const { user } = useAuthStore()
+  const override = user?.branch_id
+    ? p.branch_statuses?.find(s => s.branch_id === user.branch_id)?.price_override
+    : null
+  const effective = override != null ? override : (p.price ?? 0)
+  // Con varias tallas a distinto precio, un solo número miente:
+  // el de la fila era el de la principal. Se muestra el rango.
+  const rango = priceRange(p.variants ?? [])
+  const mostrarRango = override == null && rango != null && !rango.uniforme
+  return (
+    <div className="flex flex-col items-end leading-tight">
+      <span>
+        {mostrarRango
+          ? `${formatCurrency(rango!.min)} – ${formatCurrency(rango!.max)}`
+          : formatCurrency(effective)}
+      </span>
+      {override != null && (
+        <span className="text-[9px] text-indigo-400 font-normal">
+          override (base {formatCurrency(p.price ?? 0)})
+        </span>
+      )}
+      {mostrarRango && (
+        <span className="text-[9px] text-slate-500 font-normal">
+          según la {SINGULAR_GRUPO[grupoDeVariantes(p.variants ?? [])]}
+        </span>
+      )}
+    </div>
+  )
+}
+
+/** Celda Stock: existencia (suma de tallas) y el botón que abre el desglose. */
+function ExistenciaDeFila({ p, abierto, onToggle }: { p: Product; abierto: boolean; onToggle: () => void }) {
+  const { user } = useAuthStore()
+  const isHQ = HQ_ROLES.includes(user?.role ?? '')
+  const variantCount = p.variants?.length ?? 0
+  // Con varias tallas la existencia del renglón es la SUMA:
+  // antes se veía solo la de la principal (3 de 12).
+  const qty = variantCount > 1
+    ? sumStock(p)
+    : (!isHQ && user?.branch_id && p.stock_levels?.length)
+      ? (p.stock_levels.find(s => s.branch_id === user.branch_id)?.qty_on_hand ?? p.stock ?? 0)
+      : (p.stock_total ?? p.stock ?? 0)
+  if (variantCount <= 1) {
+    return (
+      <span className={`dax-badge ${qty > 0 ? 'dax-badge-green' : 'dax-badge-red'}`}>
+        {qty}
+      </span>
+    )
+  }
+  const grupo = grupoDeVariantes(p.variants ?? [])
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={abierto}
+      title={abierto ? 'Ocultar el desglose' : `Ver la existencia por ${SINGULAR_GRUPO[grupo]}`}
+      className="flex flex-col items-end leading-tight ml-auto group/tallas"
+    >
+      <span className={`dax-badge ${qty > 0 ? 'dax-badge-green' : 'dax-badge-red'}`}>
+        {qty}
+      </span>
+      <span className="text-slate-400 text-[10px] mt-0.5 group-hover/tallas:text-indigo-400">
+        de {variantCount} {grupo}
+        <i className={`fa-solid ${abierto ? 'fa-chevron-up' : 'fa-chevron-down'} ml-1 text-[8px]`} />
+      </span>
+    </button>
+  )
+}
+
+/** Celda Estado: sucursales activas (HQ) o POS activo/inactivo (sucursal). */
+function EstadoDeFila({ p }: { p: Product }) {
+  const { user } = useAuthStore()
+  const isHQ = HQ_ROLES.includes(user?.role ?? '')
+  return isHQ ? (
+    <span className="text-xs text-slate-400">
+      {p.branch_statuses?.filter(s => s.is_active_pos).length ?? 0}
+      <span className="text-slate-600 ml-0.5">sucursales</span>
+    </span>
+  ) : user?.branch_id ? (
+    (() => {
+      const status = p.branch_statuses?.find(s => s.branch_id === user.branch_id)
+      if (!status) return <span className="text-[10px] text-slate-600 italic">Global</span>
+      return status.is_active_pos
+        ? <Badge variant="green">POS activo</Badge>
+        : <Badge variant="red">POS inactivo</Badge>
+    })()
+  ) : null
+}
+
+/**
+ * Última columna: Editar. En la tabla es solo icono (como siempre); en la
+ * tarjeta (`conTexto`) es un botón con texto visible, hijo directo de las
+ * acciones de `TarjetaFila` para que reciba sus 44 px.
+ */
+function AccionesDeFila({ p, onEditar, conTexto = false }: { p: Product; onEditar: (p: Product) => void; conTexto?: boolean }) {
+  if (conTexto) {
+    return (
+      <button onClick={() => onEditar(p)} className="dax-btn-secondary text-xs" aria-label="Editar producto">
+        <i className="fa-solid fa-pencil" /> Editar
+      </button>
+    )
+  }
+  return (
+    <div className="inline-flex items-center gap-1">
+      <button
+        onClick={() => onEditar(p)}
+        className="dax-btn-icon transition-colors p-1 text-slate-500 hover:text-indigo-400"
+        title="Editar producto"
+        aria-label="Editar producto"
+      >
+        <i className="fa-solid fa-pencil text-xs" />
+      </button>
+    </div>
+  )
+}
+
 // ─── Main Products Page ─────────────────────────────────────────────────────────
 
 export function Products() {
@@ -203,6 +334,7 @@ function ProductsHQView() {
   const isHQ = HQ_ROLES.includes(user?.role ?? '')
   const unaSolaSucursal = esTiendaUnica(useBranchCountStore((s) => s.count))
   const canEdit = CAN_EDIT_ROLES.includes(user?.role ?? '')
+  const esTelefono = useEsTelefono()
 
   const [products, setProducts] = useState<Product[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
@@ -320,89 +452,97 @@ function ProductsHQView() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <i className="fa-solid fa-barcode text-indigo-400 text-xl" />
-          <h1 className="text-2xl font-black text-white">
-            {isHQ ? 'Productos' : 'Consulta de productos'}
-          </h1>
-          {/* Con una sola tienda, "HQ Global" no nombra nada que la dueña
-              reconozca: el alcance ya es "toda la tienda". El chip solo
-              aparece cuando de verdad hay varias sucursales. */}
-          {isHQ && !unaSolaSucursal && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-violet-600/20 text-violet-400 border border-violet-500/30 rounded text-[9px] font-black uppercase tracking-widest">
-              <i className="fa-solid fa-building-shield text-[8px]" /> Todas las sucursales
-            </span>
-          )}
-        </div>
-        {/* Un solo ítem flex sin `flex-wrap` sumaba ~420 px de mínimo y
-            desbordaba la página a 390 px: ahora envuelve y bajo `sm` los
-            botones son solo icono (el texto vive en el `aria-label`). */}
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
-          <span className="text-slate-500 text-sm">{total.toLocaleString()} productos</span>
-          {canEdit && (
-            <>
-              <button
-                onClick={() => setShowImport(true)}
-                aria-label="Importar productos"
-                className="dax-btn-secondary dax-btn-icon text-xs flex items-center gap-1.5 whitespace-nowrap"
-              >
-                <i className="fa-solid fa-file-import" /> <span className="hidden sm:inline">Importar</span>
-              </button>
-              <button
-                onClick={descargarEtiquetas}
-                disabled={descargandoEtiquetas}
-                className="dax-btn-secondary dax-btn-icon text-xs flex items-center gap-1.5 disabled:opacity-50 whitespace-nowrap"
-                title="CSV con una fila por talla para la etiquetadora"
-                aria-label="Descargar etiquetas CSV"
-              >
-                <i className={`fa-solid ${descargandoEtiquetas ? 'fa-spinner fa-spin' : 'fa-tags'}`} />{' '}
-                <span className="hidden sm:inline">Etiquetas CSV</span>
-              </button>
-              {isHQ && codigosFaltantes > 0 && (
-                <button
-                  onClick={generarCodigos}
-                  disabled={generandoCodigos}
-                  className="dax-btn-secondary dax-btn-icon text-xs flex items-center gap-1.5 disabled:opacity-50 whitespace-nowrap"
-                  title="Genera un código de barras propio para cada talla que no tenga"
-                  aria-label={`Generar códigos de barras faltantes (${codigosFaltantes})`}
-                >
-                  <i className={`fa-solid ${generandoCodigos ? 'fa-spinner fa-spin' : 'fa-barcode'}`} />{' '}
-                  <span className="hidden sm:inline">Generar códigos </span>({codigosFaltantes})
-                </button>
-              )}
-              <button
-                onClick={handleNewProductClick}
-                aria-label="Nuevo producto"
-                className="dax-btn dax-btn-icon text-xs flex items-center gap-1.5 whitespace-nowrap"
-              >
-                <i className="fa-solid fa-plus" /> <span className="hidden sm:inline">Nuevo producto</span>
-              </button>
-            </>
-          )}
-          <div className="flex items-center bg-slate-800 rounded-lg border border-slate-700/50 p-0.5">
-            <button
-              onClick={() => setViewMode('list')}
-              className={`dax-btn-icon p-1.5 rounded-md transition-colors ${viewMode === 'list' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}
-              title="Vista lista"
-              aria-label="Vista lista"
-            >
-              <i className="fa-solid fa-list w-4 text-xs" />
-            </button>
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`dax-btn-icon p-1.5 rounded-md transition-colors ${viewMode === 'grid' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}
-              title="Vista cuadrícula"
-              aria-label="Vista cuadrícula"
-            >
-              <i className="fa-solid fa-grip w-4 text-xs" />
-            </button>
+      {/* Sin `accionPrincipal`: el kit la pasaría al frente y cambiaría el
+          orden de escritorio. Todo el bloque de botones va en `acciones`. */}
+      <CabeceraPagina
+        titulo={
+          <div className="flex items-center gap-3">
+            <i className="fa-solid fa-barcode text-indigo-400 text-xl" />
+            <h1 className="text-2xl font-black text-white">
+              {isHQ ? 'Productos' : 'Consulta de productos'}
+            </h1>
+            {/* Con una sola tienda, "HQ Global" no nombra nada que la dueña
+                reconozca: el alcance ya es "toda la tienda". El chip solo
+                aparece cuando de verdad hay varias sucursales. */}
+            {isHQ && !unaSolaSucursal && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-violet-600/20 text-violet-400 border border-violet-500/30 rounded text-[9px] font-black uppercase tracking-widest">
+                <i className="fa-solid fa-building-shield text-[8px]" /> Todas las sucursales
+              </span>
+            )}
           </div>
-        </div>
-      </div>
+        }
+        acciones={
+          <>
+            {/* Un solo ítem flex sin `flex-wrap` sumaba ~420 px de mínimo y
+                desbordaba la página a 390 px: ahora envuelve y bajo `sm` los
+                botones son solo icono (el texto vive en el `aria-label`). */}
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
+              <span className="text-slate-500 text-sm">{total.toLocaleString()} productos</span>
+              {canEdit && (
+                <>
+                  <button
+                    onClick={() => setShowImport(true)}
+                    aria-label="Importar productos"
+                    className="dax-btn-secondary dax-btn-icon text-xs flex items-center gap-1.5 whitespace-nowrap"
+                  >
+                    <i className="fa-solid fa-file-import" /> <span className="hidden sm:inline">Importar</span>
+                  </button>
+                  <button
+                    onClick={descargarEtiquetas}
+                    disabled={descargandoEtiquetas}
+                    className="dax-btn-secondary dax-btn-icon text-xs flex items-center gap-1.5 disabled:opacity-50 whitespace-nowrap"
+                    title="CSV con una fila por talla para la etiquetadora"
+                    aria-label="Descargar etiquetas CSV"
+                  >
+                    <i className={`fa-solid ${descargandoEtiquetas ? 'fa-spinner fa-spin' : 'fa-tags'}`} />{' '}
+                    <span className="hidden sm:inline">Etiquetas CSV</span>
+                  </button>
+                  {isHQ && codigosFaltantes > 0 && (
+                    <button
+                      onClick={generarCodigos}
+                      disabled={generandoCodigos}
+                      className="dax-btn-secondary dax-btn-icon text-xs flex items-center gap-1.5 disabled:opacity-50 whitespace-nowrap"
+                      title="Genera un código de barras propio para cada talla que no tenga"
+                      aria-label={`Generar códigos de barras faltantes (${codigosFaltantes})`}
+                    >
+                      <i className={`fa-solid ${generandoCodigos ? 'fa-spinner fa-spin' : 'fa-barcode'}`} />{' '}
+                      <span className="hidden sm:inline">Generar códigos </span>({codigosFaltantes})
+                    </button>
+                  )}
+                  <button
+                    onClick={handleNewProductClick}
+                    aria-label="Nuevo producto"
+                    className="dax-btn dax-btn-icon text-xs flex items-center gap-1.5 whitespace-nowrap"
+                  >
+                    <i className="fa-solid fa-plus" /> <span className="hidden sm:inline">Nuevo producto</span>
+                  </button>
+                </>
+              )}
+              <div className="flex items-center bg-slate-800 rounded-lg border border-slate-700/50 p-0.5">
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`dax-btn-icon p-1.5 rounded-md transition-colors ${viewMode === 'list' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}
+                  title="Vista lista"
+                  aria-label="Vista lista"
+                >
+                  <i className="fa-solid fa-list w-4 text-xs" />
+                </button>
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`dax-btn-icon p-1.5 rounded-md transition-colors ${viewMode === 'grid' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}
+                  title="Vista cuadrícula"
+                  aria-label="Vista cuadrícula"
+                >
+                  <i className="fa-solid fa-grip w-4 text-xs" />
+                </button>
+              </div>
+            </div>
+          </>
+        }
+      />
 
       {/* Filtros */}
-      <div className="flex gap-3 flex-wrap">
+      <BarraFiltros className="gap-3">
         <input
           type="text"
           placeholder="Buscar por nombre o SKU..."
@@ -420,11 +560,48 @@ function ProductsHQView() {
             <option key={d.id} value={d.id}>{d.name}</option>
           ))}
         </select>
-      </div>
+      </BarraFiltros>
 
       {/* Tabla */}
       <DaxCard padding={false}>
-        {loading ? (
+        {esTelefono && viewMode === 'list' ? (
+          // Teléfono: la lista pasa a tarjetas (la cuadrícula no cambia).
+          <ListaTarjetas cargando={loading} vacio={products.length === 0} textoVacio="Sin resultados" className="p-3">
+            {products.map((p) => {
+              const tallasAbiertas = expandedVariantsId === p.id && (p.variants?.length ?? 0) > 1
+              return (
+                <Fragment key={p.id}>
+                  <TarjetaFila
+                    titulo={p.sale_name ?? p.name}
+                    subtitulo={<span className="font-mono text-slate-400">{p.sku}</span>}
+                    importe={<PrecioDeFila p={p} />}
+                    estado={<EstadoDeFila p={p} />}
+                    datos={[
+                      { etiqueta: 'Departamento', valor: p.department_name ?? '—' },
+                      { etiqueta: 'Existencia', valor: <ExistenciaDeFila p={p} abierto={tallasAbiertas} onToggle={() => setExpandedVariantsId(tallasAbiertas ? null : p.id)} /> },
+                    ]}
+                    acciones={canEdit ? <AccionesDeFila p={p} onEditar={openEdit} conTexto /> : undefined}
+                  />
+                  {tallasAbiertas && expandVariantRows([p]).map((row) => (
+                    <TarjetaFila
+                      key={row.variant.id}
+                      className="ml-4"
+                      titulo={nombreDeVariante(p, row.variant)}
+                      subtitulo={
+                        <span className="font-mono">
+                          {row.sku}
+                          {row.barcode && <span title="Código de barras"> · {row.barcode}</span>}
+                        </span>
+                      }
+                      importe={<span className="text-emerald-400/80">{formatCurrency(row.variant.price ?? 0)}</span>}
+                      estado={<span className={`text-xs font-semibold ${colorExistencia(row.qty)}`}>{row.qty}</span>}
+                    />
+                  ))}
+                </Fragment>
+              )
+            })}
+          </ListaTarjetas>
+        ) : loading ? (
           <Spinner text="Cargando productos..." />
         ) : products.length === 0 ? (
           <div className="p-12 text-center text-slate-600">Sin resultados</div>
@@ -549,101 +726,17 @@ function ProductsHQView() {
                         </td>
                         <td className="text-slate-400 text-xs">{p.department_name ?? '—'}</td>
                         <td className="text-right font-semibold text-emerald-400">
-                          {(() => {
-                            const override = user?.branch_id
-                              ? p.branch_statuses?.find(s => s.branch_id === user.branch_id)?.price_override
-                              : null
-                            const effective = override != null ? override : (p.price ?? 0)
-                            // Con varias tallas a distinto precio, un solo número miente:
-                            // el de la fila era el de la principal. Se muestra el rango.
-                            const rango = priceRange(p.variants ?? [])
-                            const mostrarRango = override == null && rango != null && !rango.uniforme
-                            return (
-                              <div className="flex flex-col items-end leading-tight">
-                                <span>
-                                  {mostrarRango
-                                    ? `${formatCurrency(rango!.min)} – ${formatCurrency(rango!.max)}`
-                                    : formatCurrency(effective)}
-                                </span>
-                                {override != null && (
-                                  <span className="text-[9px] text-indigo-400 font-normal">
-                                    override (base {formatCurrency(p.price ?? 0)})
-                                  </span>
-                                )}
-                                {mostrarRango && (
-                                  <span className="text-[9px] text-slate-500 font-normal">
-                                    según la {SINGULAR_GRUPO[grupoDeVariantes(p.variants ?? [])]}
-                                  </span>
-                                )}
-                              </div>
-                            )
-                          })()}
+                          <PrecioDeFila p={p} />
                         </td>
                         <td className="text-right">
-                          {(() => {
-                            const variantCount = p.variants?.length ?? 0
-                            // Con varias tallas la existencia del renglón es la SUMA:
-                            // antes se veía solo la de la principal (3 de 12).
-                            const qty = variantCount > 1
-                              ? sumStock(p)
-                              : (!isHQ && user?.branch_id && p.stock_levels?.length)
-                                ? (p.stock_levels.find(s => s.branch_id === user.branch_id)?.qty_on_hand ?? p.stock ?? 0)
-                                : (p.stock_total ?? p.stock ?? 0)
-                            if (variantCount <= 1) {
-                              return (
-                                <span className={`dax-badge ${qty > 0 ? 'dax-badge-green' : 'dax-badge-red'}`}>
-                                  {qty}
-                                </span>
-                              )
-                            }
-                            const grupo = grupoDeVariantes(p.variants ?? [])
-                            return (
-                              <button
-                                type="button"
-                                onClick={() => setExpandedVariantsId(tallasAbiertas ? null : p.id)}
-                                aria-expanded={tallasAbiertas}
-                                title={tallasAbiertas ? 'Ocultar el desglose' : `Ver la existencia por ${SINGULAR_GRUPO[grupo]}`}
-                                className="flex flex-col items-end leading-tight ml-auto group/tallas"
-                              >
-                                <span className={`dax-badge ${qty > 0 ? 'dax-badge-green' : 'dax-badge-red'}`}>
-                                  {qty}
-                                </span>
-                                <span className="text-slate-400 text-[10px] mt-0.5 group-hover/tallas:text-indigo-400">
-                                  de {variantCount} {grupo}
-                                  <i className={`fa-solid ${tallasAbiertas ? 'fa-chevron-up' : 'fa-chevron-down'} ml-1 text-[8px]`} />
-                                </span>
-                              </button>
-                            )
-                          })()}
+                          <ExistenciaDeFila p={p} abierto={tallasAbiertas} onToggle={() => setExpandedVariantsId(tallasAbiertas ? null : p.id)} />
                         </td>
                         <td>
-                          {isHQ ? (
-                            <span className="text-xs text-slate-400">
-                              {p.branch_statuses?.filter(s => s.is_active_pos).length ?? 0}
-                              <span className="text-slate-600 ml-0.5">sucursales</span>
-                            </span>
-                          ) : user?.branch_id ? (
-                            (() => {
-                              const status = p.branch_statuses?.find(s => s.branch_id === user.branch_id)
-                              if (!status) return <span className="text-[10px] text-slate-600 italic">Global</span>
-                              return status.is_active_pos
-                                ? <Badge variant="green">POS activo</Badge>
-                                : <Badge variant="red">POS inactivo</Badge>
-                            })()
-                          ) : null}
+                          <EstadoDeFila p={p} />
                         </td>
                         {canEdit && (
                           <td className="text-right">
-                            <div className="inline-flex items-center gap-1">
-                              <button
-                                onClick={() => openEdit(p)}
-                                className="dax-btn-icon transition-colors p-1 text-slate-500 hover:text-indigo-400"
-                                title="Editar producto"
-                                aria-label="Editar producto"
-                              >
-                                <i className="fa-solid fa-pencil text-xs" />
-                              </button>
-                            </div>
+                            <AccionesDeFila p={p} onEditar={openEdit} />
                           </td>
                         )}
                       </tr>
@@ -663,7 +756,7 @@ function ProductsHQView() {
                           </td>
                           <td />
                           <td className="text-right text-emerald-400/80">{formatCurrency(row.variant.price ?? 0)}</td>
-                          <td className={`text-right font-semibold ${row.qty > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                          <td className={`text-right font-semibold ${colorExistencia(row.qty)}`}>
                             {row.qty}
                           </td>
                           <td colSpan={colCount - 5} />
