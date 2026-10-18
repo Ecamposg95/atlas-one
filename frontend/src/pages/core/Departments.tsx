@@ -5,6 +5,10 @@ import { Spinner } from '../../components/ui/Spinner'
 import { toast } from '../../store/toastStore'
 import { errorDetailText } from '../../utils/errorDetail'
 import { confirm as confirmDialog } from '../../components/ui/ConfirmDialog'
+import { useEsTelefono } from '../../hooks/useIsMobile'
+import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
+import { ListaTarjetas } from '../../components/ui/ListaTarjetas'
+import { TarjetaFila } from '../../components/ui/TarjetaFila'
 import type { Department } from '../../types/products'
 
 interface DeptForm { name: string }
@@ -17,6 +21,7 @@ export function Departments() {
   const [editing, setEditing] = useState<Department | null>(null)
   const [form, setForm] = useState<DeptForm>(EMPTY)
   const [saving, setSaving] = useState(false)
+  const esTelefono = useEsTelefono()
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -66,17 +71,35 @@ export function Departments() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <i className="fa-solid fa-layer-group text-indigo-400 text-xl" />
-          <h1 className="text-2xl font-black text-white">Departamentos</h1>
-        </div>
-        <button onClick={openCreate} className="dax-btn-primary text-xs">
-          <i className="fa-solid fa-plus" /> Nuevo
-        </button>
-      </div>
+      <CabeceraPagina
+        titulo={
+          <div className="flex items-center gap-3">
+            <i className="fa-solid fa-layer-group text-indigo-400 text-xl" />
+            <h1 className="text-2xl font-black text-white">Departamentos</h1>
+          </div>
+        }
+        accionPrincipal={
+          <button onClick={openCreate} className="dax-btn-primary text-xs">
+            <i className="fa-solid fa-plus" /> Nuevo
+          </button>
+        }
+      />
 
       <DaxCard padding={false}>
+        {esTelefono ? (
+          <ListaTarjetas vacio={departments.length === 0} textoVacio="Sin departamentos" cargando={loading} className="p-3">
+            {departments.map((d) => (
+              <TarjetaFila key={d.id}
+                titulo={d.name}
+                acciones={<>
+                <button onClick={() => openEdit(d)} aria-label={`Editar ${d.name}`} className="dax-btn-secondary text-xs"><i className="fa-solid fa-pen" /> Editar</button>
+                <button onClick={() => handleDelete(d)} aria-label={`Eliminar ${d.name}`} className="dax-btn-danger text-xs"><i className="fa-solid fa-trash" /> Eliminar</button>
+              </>}
+              />
+            ))}
+          </ListaTarjetas>
+        ) : (
+          <>
         {loading ? <Spinner text="Cargando..." /> : departments.length === 0 ? (
           <div className="p-12 text-center text-slate-600">Sin departamentos</div>
         ) : (
@@ -105,6 +128,8 @@ export function Departments() {
               </tbody>
             </table>
           </div>
+        )}
+          </>
         )}
       </DaxCard>
 
