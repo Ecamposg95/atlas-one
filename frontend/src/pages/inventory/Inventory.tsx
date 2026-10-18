@@ -6,6 +6,10 @@ import { organizationApi, type Branch } from '../../api/organization'
 import { DaxCard } from '../../components/ui/DaxCard'
 import { TablaDesplazable } from '../../components/ui/TablaDesplazable'
 import { Spinner } from '../../components/ui/Spinner'
+import { useEsTelefono } from '../../hooks/useIsMobile'
+import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
+import { ListaTarjetas } from '../../components/ui/ListaTarjetas'
+import { TarjetaFila } from '../../components/ui/TarjetaFila'
 import { toast } from '../../store/toastStore'
 import type { Product } from '../../types/products'
 import { formatCurrency } from '../../utils/currency'
@@ -13,6 +17,7 @@ import { expandVariantRows, initialInventoryQuery, type InventoryRow } from './v
 
 export function Inventory() {
   const location = useLocation()
+  const esTelefono = useEsTelefono()
   const [search, setSearch] = useState('')
   const [products, setProducts] = useState<Product[]>([])
   const [branches, setBranches] = useState<Branch[]>([])
@@ -88,10 +93,14 @@ export function Inventory() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center gap-3">
-        <i className="fa-solid fa-boxes text-indigo-400 text-xl" />
-        <h1 className="text-2xl font-black text-white">Inventario</h1>
-      </div>
+      <CabeceraPagina
+        titulo={
+          <div className="flex items-center gap-3">
+            <i className="fa-solid fa-boxes text-indigo-400 text-xl" />
+            <h1 className="text-2xl font-black text-white">Inventario</h1>
+          </div>
+        }
+      />
 
       <div className="flex gap-2">
         <input
@@ -105,6 +114,19 @@ export function Inventory() {
 
       {!selected && rows.length > 0 && (
         <DaxCard padding={false}>
+          {esTelefono ? (
+            <ListaTarjetas cargando={loading} className="p-3">
+              {rows.map((row) => (
+                <TarjetaFila key={row.variant.id}
+                  titulo={row.label}
+                  subtitulo={<span className="font-mono text-indigo-400">{row.sku}</span>}
+                  importe={formatCurrency(row.variant.price ?? 0)}
+                  estado={<span className={`font-bold tabular-nums ${row.qty <= 0 ? 'text-red-400' : 'text-emerald-400'}`}>{row.qty} en stock</span>}
+                  acciones={<button onClick={() => openKardex(row)} className="dax-btn-secondary text-xs"><i className="fa-solid fa-chart-line" /> Kardex</button>}
+                />
+              ))}
+            </ListaTarjetas>
+          ) : (
           <TablaDesplazable sangrado={false}>
           <table className="dax-table w-full">
             <thead><tr><th>SKU</th><th>Producto</th><th className="text-right">Precio</th><th className="text-right">Stock</th><th></th></tr></thead>
@@ -128,17 +150,18 @@ export function Inventory() {
             </tbody>
           </table>
           </TablaDesplazable>
+          )}
         </DaxCard>
       )}
 
       {selected && (
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
               <p className="text-[10px] text-slate-500 uppercase tracking-widest">Kardex</p>
               <p className="text-lg font-black text-white">{selected.label} <span className="font-mono text-indigo-400 text-sm">{selected.sku}</span></p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2 max-md:[&>button]:min-h-[44px]">
               <button onClick={() => setModal(true)} className="dax-btn-secondary text-xs">
                 <i className="fa-solid fa-sliders" /> Ajustar inventario
               </button>
@@ -149,28 +172,45 @@ export function Inventory() {
           </div>
 
           <DaxCard padding={false}>
-            {kardexLoading ? <Spinner text="Cargando..." /> : kardex.length === 0 ? (
-              <div className="p-12 text-center text-slate-600">Sin movimientos</div>
+            {esTelefono ? (
+              <ListaTarjetas cargando={kardexLoading} vacio={kardex.length === 0} textoVacio="Sin movimientos" className="p-3">
+              {kardex.map((k) => (
+                <TarjetaFila key={k.id}
+                  titulo={new Date(k.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}
+                  subtitulo={<span className={movColor(k.movement_type)}>{k.movement_type}</span>}
+                  importe={<span className={movColor(k.movement_type)}>{k.qty_change > 0 ? '+' : ''}{k.qty_change}</span>}
+                  datos={[
+                    { etiqueta: 'Saldo', valor: k.qty_after },
+                    { etiqueta: 'Ref.', valor: <span className="font-mono">{k.reference ?? '—'}</span> },
+                    { etiqueta: 'Por', valor: k.user_name },
+                  ]}
+                />
+              ))}
+            </ListaTarjetas>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="dax-table w-full">
-                  <thead><tr><th>Fecha</th><th>Tipo</th><th className="text-right">Cant.</th><th className="text-right">Saldo</th><th>Ref.</th><th>Por</th></tr></thead>
-                  <tbody>
-                    {kardex.map((k) => (
-                      <tr key={k.id}>
-                        <td className="text-xs text-slate-400">{new Date(k.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}</td>
-                        <td className={`text-xs font-semibold ${movColor(k.movement_type)}`}>{k.movement_type}</td>
-                        <td className={`text-right font-bold tabular-nums ${movColor(k.movement_type)}`}>
-                          {k.qty_change > 0 ? '+' : ''}{k.qty_change}
-                        </td>
-                        <td className="text-right text-slate-400 text-xs tabular-nums">{k.qty_after}</td>
-                        <td className="text-slate-500 text-xs font-mono">{k.reference ?? '—'}</td>
-                        <td className="text-slate-500 text-xs">{k.user_name}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              kardexLoading ? <Spinner text="Cargando..." /> : kardex.length === 0 ? (
+                <div className="p-12 text-center text-slate-600">Sin movimientos</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="dax-table w-full">
+                    <thead><tr><th>Fecha</th><th>Tipo</th><th className="text-right">Cant.</th><th className="text-right">Saldo</th><th>Ref.</th><th>Por</th></tr></thead>
+                    <tbody>
+                      {kardex.map((k) => (
+                        <tr key={k.id}>
+                          <td className="text-xs text-slate-400">{new Date(k.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}</td>
+                          <td className={`text-xs font-semibold ${movColor(k.movement_type)}`}>{k.movement_type}</td>
+                          <td className={`text-right font-bold tabular-nums ${movColor(k.movement_type)}`}>
+                            {k.qty_change > 0 ? '+' : ''}{k.qty_change}
+                          </td>
+                          <td className="text-right text-slate-400 text-xs tabular-nums">{k.qty_after}</td>
+                          <td className="text-slate-500 text-xs font-mono">{k.reference ?? '—'}</td>
+                          <td className="text-slate-500 text-xs">{k.user_name}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )
             )}
           </DaxCard>
         </div>

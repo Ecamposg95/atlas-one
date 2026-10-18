@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 /** Pantallas de la ola 2 del responsivo (catálogo y personas). Cada tarea añade la suya. */
-export const PAGINAS = ['core/Brands.tsx', 'core/Departments.tsx', 'core/Users.tsx', 'crm/Customers.tsx']
+export const PAGINAS = ['core/Brands.tsx', 'core/Departments.tsx', 'core/Users.tsx', 'crm/Customers.tsx', 'inventory/Inventory.tsx', 'hq/HQInventory.tsx']
 /** Tienen tarjetas propias y no usan TarjetaFila. */
 export const SIN_TARJETA_FILA: string[] = []
 
@@ -24,6 +24,11 @@ describe('ola 2 responsiva: catálogo y personas', () => {
     const s = fuente(p)
     expect(sinExcepciones(s)).not.toMatch(REJILLA_SIN_PREFIJO)
     expect(s).not.toMatch(/hidden md:block|md:hidden/)
+  })
+  it.each(['inventory/Inventory.tsx', 'hq/HQInventory.tsx'])('%s: las dos tablas están tras el condicional', (p) => {
+    const s = fuente(p)
+    expect((s.match(/<table/g) ?? []).length).toBe(2)
+    expect((s.match(/esTelefono \?/g) ?? []).length).toBe(2)
   })
   it('Customers conserva la paginación fuera del condicional y usa Modal del kit para pago y formulario', () => {
     const s = fuente('crm/Customers.tsx')

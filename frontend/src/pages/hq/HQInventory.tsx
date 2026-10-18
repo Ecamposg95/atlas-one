@@ -5,6 +5,10 @@ import { inventoryApi } from '../../api/inventory'
 import { organizationApi, type Branch } from '../../api/organization'
 import { DaxCard } from '../../components/ui/DaxCard'
 import { Spinner } from '../../components/ui/Spinner'
+import { useEsTelefono } from '../../hooks/useIsMobile'
+import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
+import { ListaTarjetas } from '../../components/ui/ListaTarjetas'
+import { TarjetaFila } from '../../components/ui/TarjetaFila'
 import { toast } from '../../store/toastStore'
 import { errorDetailText } from '../../utils/errorDetail'
 import { tipoMovimiento } from '../../utils/enumsEspanol'
@@ -15,6 +19,7 @@ import { expandVariantRows, initialInventoryQuery, type InventoryRow } from '../
 
 export function HQInventory() {
   const location = useLocation()
+  const esTelefono = useEsTelefono()
   const [search, setSearch] = useState('')
   const [products, setProducts] = useState<Product[]>([])
   const [branches, setBranches] = useState<Branch[]>([])
@@ -101,10 +106,14 @@ export function HQInventory() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center gap-3">
-        <i className="fa-solid fa-globe text-indigo-400 text-xl" />
-        <h1 className="text-2xl font-black text-white">Existencias</h1>
-      </div>
+      <CabeceraPagina
+        titulo={
+          <div className="flex items-center gap-3">
+            <i className="fa-solid fa-globe text-indigo-400 text-xl" />
+            <h1 className="text-2xl font-black text-white">Existencias</h1>
+          </div>
+        }
+      />
 
       <div className="flex gap-2">
         <input
@@ -118,6 +127,19 @@ export function HQInventory() {
 
       {rows.length > 0 && !selected && (
         <DaxCard padding={false}>
+          {esTelefono ? (
+            <ListaTarjetas cargando={loading} className="p-3">
+              {rows.map((row) => (
+                <TarjetaFila key={row.variant.id}
+                  titulo={row.label}
+                  subtitulo={<span className="font-mono text-indigo-400">{row.sku}</span>}
+                  importe={formatCurrency(row.variant.price ?? 0)}
+                  estado={<span className={`font-bold tabular-nums ${row.qty <= 0 ? 'text-red-400' : 'text-emerald-400'}`}>{row.qty} en stock</span>}
+                  acciones={<button onClick={() => openDetail(row)} className="dax-btn-secondary text-xs"><i className="fa-solid fa-chart-line" /> Kardex</button>}
+                />
+              ))}
+            </ListaTarjetas>
+          ) : (
           <div className="overflow-x-auto">
             <table className="dax-table w-full">
               <thead>
@@ -149,18 +171,19 @@ export function HQInventory() {
               </tbody>
             </table>
           </div>
+          )}
         </DaxCard>
       )}
 
       {selected && (
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
               <p className="text-[10px] text-slate-500 uppercase tracking-widest">Kardex</p>
               <p className="text-lg font-black text-white">{selected.label}</p>
               <p className="text-xs font-mono text-indigo-400">{selected.sku}</p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2 max-md:[&>button]:min-h-[44px]">
               <button onClick={() => setAdjustModal(true)} className="dax-btn-secondary text-xs">
                 <i className="fa-solid fa-sliders" /> Ajustar
               </button>
@@ -171,39 +194,55 @@ export function HQInventory() {
           </div>
 
           <DaxCard padding={false}>
-            {kardexLoading ? <Spinner text="Cargando kardex..." /> : kardex.length === 0 ? (
-              <div className="p-12 text-center text-slate-600">Sin movimientos registrados</div>
+            {esTelefono ? (
+              <ListaTarjetas cargando={kardexLoading} vacio={kardex.length === 0} textoVacio="Sin movimientos registrados" className="p-3">
+              {kardex.map((k) => (
+                <TarjetaFila key={k.id}
+                  titulo={new Date(k.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}
+                  subtitulo={<span className={`dax-badge ${movementColor(k.movement_type)}`}>{tipoMovimiento(k.movement_type)}</span>}
+                  importe={<span className={movementColor(k.movement_type)}>{k.qty_change > 0 ? '+' : ''}{k.qty_change}</span>}
+                  datos={[
+                    { etiqueta: 'Saldo', valor: k.qty_after },
+                    { etiqueta: 'Ref.', valor: <span className="font-mono">{k.reference ?? '—'}</span> },
+                  ]}
+                />
+              ))}
+            </ListaTarjetas>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="dax-table w-full">
-                  <thead>
-                    <tr>
-                      <th>Fecha</th>
-                      <th>Tipo</th>
-                      <th className="text-right">Cantidad</th>
-                      <th className="text-right">Saldo</th>
-                      <th>Referencia</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {kardex.map((k) => (
-                      <tr key={k.id}>
-                        <td className="text-xs text-slate-400">
-                          {new Date(k.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}
-                        </td>
-                        <td className="text-xs">
-                          <span className={`dax-badge ${movementColor(k.movement_type)}`}>{tipoMovimiento(k.movement_type)}</span>
-                        </td>
-                        <td className={`text-right font-bold tabular-nums ${movementColor(k.movement_type)}`}>
-                          {k.qty_change > 0 ? '+' : ''}{k.qty_change}
-                        </td>
-                        <td className="text-right text-slate-400 text-xs tabular-nums">{k.qty_after}</td>
-                        <td className="text-slate-500 text-xs font-mono">{k.reference ?? '—'}</td>
+              kardexLoading ? <Spinner text="Cargando kardex..." /> : kardex.length === 0 ? (
+                <div className="p-12 text-center text-slate-600">Sin movimientos registrados</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="dax-table w-full">
+                    <thead>
+                      <tr>
+                        <th>Fecha</th>
+                        <th>Tipo</th>
+                        <th className="text-right">Cantidad</th>
+                        <th className="text-right">Saldo</th>
+                        <th>Referencia</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {kardex.map((k) => (
+                        <tr key={k.id}>
+                          <td className="text-xs text-slate-400">
+                            {new Date(k.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}
+                          </td>
+                          <td className="text-xs">
+                            <span className={`dax-badge ${movementColor(k.movement_type)}`}>{tipoMovimiento(k.movement_type)}</span>
+                          </td>
+                          <td className={`text-right font-bold tabular-nums ${movementColor(k.movement_type)}`}>
+                            {k.qty_change > 0 ? '+' : ''}{k.qty_change}
+                          </td>
+                          <td className="text-right text-slate-400 text-xs tabular-nums">{k.qty_after}</td>
+                          <td className="text-slate-500 text-xs font-mono">{k.reference ?? '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )
             )}
           </DaxCard>
         </div>
