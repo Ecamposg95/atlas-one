@@ -45,6 +45,11 @@ export function Customers() {
   const [payModal, setPayModal] = useState<PayModal | null>(null)
   const [payAmount, setPayAmount] = useState('')
   const [payLoading, setPayLoading] = useState(false)
+  const payInputRef = useRef<HTMLInputElement>(null)
+  // El Modal del kit enfoca su primer control (cerrar) al montar y pisa autoFocus;
+  // este efecto corre después y devuelve el foco al monto.
+  const payAbierto = payModal !== null
+  useEffect(() => { if (payAbierto) payInputRef.current?.focus() }, [payAbierto])
   const [formModal, setFormModal] = useState<{ open: boolean; customer: Customer | null }>({ open: false, customer: null })
   const [deleting, setDeleting] = useState(false)
   const [sharing, setSharing] = useState(false)
@@ -359,7 +364,7 @@ export function Customers() {
             <div>
               <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Monto</label>
               <input type="number" step="0.01" value={payAmount} onChange={(e) => setPayAmount(e.target.value)}
-                placeholder="0.00" className="dax-input w-full text-lg font-bold" autoFocus />
+                placeholder="0.00" className="dax-input w-full text-lg font-bold" ref={payInputRef} />
             </div>
           </div>
         </Modal>
