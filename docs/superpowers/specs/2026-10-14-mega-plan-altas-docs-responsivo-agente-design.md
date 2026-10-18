@@ -376,6 +376,8 @@ responde consultas de existencias y ventas.
 
 ### SP5 · Responsivo y congruencia (olas 1-cierre y 2)
 
+Ejecutado 2026-10-18 con las decisiones de `plans/2026-10-18-sp5-responsivo-admin-ola-2.md` (kit `ui/`, 52 overlays, congruencia de botones diferida).
+
 **Pide:** petición 5. Un solo plan: cierre de ola 1 + ola 2 + congruencia.
 
 **Hallazgos:**

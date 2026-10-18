@@ -61,7 +61,7 @@ Las herramientas de la ola 1 vivían en el scratchpad de aquella sesión y ya no
 **Interfaces:**
 - Produces: `R=<worktree> bash stack.sh up|down`; `node capturas.mjs --out DIR [--anchos 390,768,1024,1440] [--temas claro,oscuro] [--rutas …] [--usuario demo_pos]` que escribe `DIR/<ruta>__<ancho>__<tema>.png`, `…__modal.png`, `…__kardex.png` y `DIR/desbordes.json`; `node diff1440.mjs BASE_DIR NEW_DIR` que escribe `NEW_DIR/diff/*.png` y `NEW_DIR/diff1440.json` (`{clave: {pixelesDistintos, porcentaje}}`).
 
-- [ ] **Step 1: `package.json` y navegador**
+- [x] **Step 1: `package.json` y navegador**
 
 ```json
 { "type": "module", "dependencies": { "playwright": "1.63.0", "pixelmatch": "^6", "pngjs": "^7" } }
@@ -69,9 +69,9 @@ Las herramientas de la ola 1 vivían en el scratchpad de aquella sesión y ya no
 
 `npm i` en el scratchpad. Playwright 1.63.0 usa el chromium 1243 ya instalado; no debe descargar nada. Al navegador le faltan `libnspr4`, `libnss3` y `libasound2t64` y no hay sudo: `apt-get download libnspr4 libnss3 libasound2t64 && for d in *.deb; do dpkg-deb -x $d libs/; done` y exportar `LD_LIBRARY_PATH=$PWD/libs/usr/lib/x86_64-linux-gnu` desde `capturas.mjs` (`process.env` antes de `chromium.launch()`).
 
-- [ ] **Step 2: `servidor.py`** — punto de entrada de uvicorn (`servidor:app`). Antes de importar `app.main`, registra en SQLite equivalentes de `timezone()`, `to_char()` y `extract()` de Postgres (con `sqlalchemy.event.listens_for(engine, "connect")` → `dbapi_conn.create_function(...)`) y compila `JSONB` como `JSON`. Sin esto `/api/sales/stats`, `/api/reports/*` y `command-center/stats` devuelven 500 en SQLite y las pantallas se capturan con errores.
+- [x] **Step 2: `servidor.py`** — punto de entrada de uvicorn (`servidor:app`). Antes de importar `app.main`, registra en SQLite equivalentes de `timezone()`, `to_char()` y `extract()` de Postgres (con `sqlalchemy.event.listens_for(engine, "connect")` → `dbapi_conn.create_function(...)`) y compila `JSONB` como `JSON`. Sin esto `/api/sales/stats`, `/api/reports/*` y `command-center/stats` devuelven 500 en SQLite y las pantallas se capturan con errores.
 
-- [ ] **Step 3: `stack.sh`**
+- [x] **Step 3: `stack.sh`**
 
 ```bash
 #!/usr/bin/env bash
@@ -100,9 +100,9 @@ case "${1:-up}" in
 esac
 ```
 
-- [ ] **Step 4: `datos_muestra.py`** — inserta por ORM en la org `demo_pos` (ATLAS_POS, admin `demo_pos` / `demo1234`) y su sucursal que vende. Se niega a correr si `DATABASE_URL` no es SQLite. Idempotente (si ya hay 12 clientes en la org, no hace nada). Crea: 5 marcas y 5 departamentos (`grep -rn "class Brand\|class Department" app`), **30 productos** con 1-3 `ProductVariant` cada uno (talla/color), precio y costo, `brand_id`/`department_id` repartidos, nombres largos en 5 de ellos ("Playera manga larga algodón peinado edición limitada"), **existencias** en la sucursal (`grep -rn "class StockOnHand\|class InventoryMovement" app`) con 3 productos en 0, y **10 movimientos** (IN/OUT/ADJUSTMENT) sobre la primera variante para el kardex; **12 clientes** (`app/modules/customers/models.py`) con teléfono, RFC, 3 con `current_balance > 0` y crédito, y 2-3 movimientos de estado de cuenta en uno de ellos (`grep -rn "class CustomerLedger\|ledger" app/modules/customers`); **6 usuarios** de roles distintos (uno inactivo, uno sin sucursal fija) ligados por `UserOrganization` como hace `seed_demo_orgs.ensure_user`. Imprime los conteos.
+- [x] **Step 4: `datos_muestra.py`** — inserta por ORM en la org `demo_pos` (ATLAS_POS, admin `demo_pos` / `demo1234`) y su sucursal que vende. Se niega a correr si `DATABASE_URL` no es SQLite. Idempotente (si ya hay 12 clientes en la org, no hace nada). Crea: 5 marcas y 5 departamentos (`grep -rn "class Brand\|class Department" app`), **30 productos** con 1-3 `ProductVariant` cada uno (talla/color), precio y costo, `brand_id`/`department_id` repartidos, nombres largos en 5 de ellos ("Playera manga larga algodón peinado edición limitada"), **existencias** en la sucursal (`grep -rn "class StockOnHand\|class InventoryMovement" app`) con 3 productos en 0, y **10 movimientos** (IN/OUT/ADJUSTMENT) sobre la primera variante para el kardex; **12 clientes** (`app/modules/customers/models.py`) con teléfono, RFC, 3 con `current_balance > 0` y crédito, y 2-3 movimientos de estado de cuenta en uno de ellos (`grep -rn "class CustomerLedger\|ledger" app/modules/customers`); **6 usuarios** de roles distintos (uno inactivo, uno sin sucursal fija) ligados por `UserOrganization` como hace `seed_demo_orgs.ensure_user`. Imprime los conteos.
 
-- [ ] **Step 5: `capturas.mjs`** (Playwright). Reglas que ya se aprendieron y hay que conservar:
+- [x] **Step 5: `capturas.mjs`** (Playwright). Reglas que ya se aprendieron y hay que conservar:
 
 1. Login: clic en `.reveal-cta`, luego `#login-user`, `#login-pass`, Enter; esperar a que la URL salga de `/login`.
 2. Tema: `localStorage['atlas_theme']` = `'light'|'dark'` con `context.addInitScript` para que aplique antes de cada documento.
@@ -133,11 +133,11 @@ const ACCIONES = {
 Cada acción: ejecutar `escribir` si existe (`fill` + 800 ms), clic en el primer `clic` que exista, esperar 500 ms, medir y capturar con la clave, y `Escape` (o clic en "Cerrar"/"Cancelar") antes de la siguiente. Si el selector no existe, anotarlo en `desbordes.json` sin fallar.
 8. Salida: `desbordes.json` por clave y un resumen por consola: número de capturas, claves con `desborda`, con `scrollInterno` y con `tap < 44`.
 
-- [ ] **Step 6: `diff1440.mjs`** — con `pngjs` + `pixelmatch` (umbral 0.1), para cada `*__1440__*.png` de BASE que exista en NEW (incluidas las `__modal`, `__detalle`, `__kardex`, `__formulario`): compara, escribe `NEW/diff/<clave>.png` y `NEW/diff1440.json`; si los tamaños difieren compara el área común y lo anota (`recortado: true`). Imprime las claves con más de 0 píxeles distintos.
+- [x] **Step 6: `diff1440.mjs`** — con `pngjs` + `pixelmatch` (umbral 0.1), para cada `*__1440__*.png` de BASE que exista en NEW (incluidas las `__modal`, `__detalle`, `__kardex`, `__formulario`): compara, escribe `NEW/diff/<clave>.png` y `NEW/diff1440.json`; si los tamaños difieren compara el área común y lo anota (`recortado: true`). Imprime las claves con más de 0 píxeles distintos.
 
-- [ ] **Step 7: Baseline** sobre b2c3004 (la rama aún no toca pantallas): `bash stack.sh up && node capturas.mjs --out /mnt/d/Devs/atlas-one/.superpowers/sdd/2026-10-18-sp5-responsivo-admin-ola-2/baseline --rutas <RUTAS_OLA2 + RUTAS_OLA1>` → 14 rutas × 4 anchos × 2 temas = 112 capturas de página + acciones. Correr **dos veces** la misma ruta y confirmar 0 píxeles distintos a 1440 (el reloj está bien pausado). Escribir `baseline-resumen.md`: tabla ruta × ancho con ok / scroll interno / desborde y el elemento culpable, y las rarezas (redirecciones, errores de API).
+- [x] **Step 7: Baseline** sobre b2c3004 (la rama aún no toca pantallas): `bash stack.sh up && node capturas.mjs --out /mnt/d/Devs/atlas-one/.superpowers/sdd/2026-10-18-sp5-responsivo-admin-ola-2/baseline --rutas <RUTAS_OLA2 + RUTAS_OLA1>` → 14 rutas × 4 anchos × 2 temas = 112 capturas de página + acciones. Correr **dos veces** la misma ruta y confirmar 0 píxeles distintos a 1440 (el reloj está bien pausado). Escribir `baseline-resumen.md`: tabla ruta × ancho con ok / scroll interno / desborde y el elemento culpable, y las rarezas (redirecciones, errores de API).
 
-- [ ] **Step 8: Sin commit** (todo es scratchpad y `.superpowers/`, gitignored). Reporte: rutas que desbordan a 390 hoy y qué elementos; cualquier selector de `ACCIONES` que no encontró su botón.
+- [x] **Step 8: Sin commit** (todo es scratchpad y `.superpowers/`, gitignored). Reporte: rutas que desbordan a 390 hoy y qué elementos; cualquier selector de `ACCIONES` que no encontró su botón.
 
 ---
 
@@ -151,7 +151,7 @@ Lo abren Brands, Departments, Users, Customers, AdminCatalog, Organization, Expe
 
 **Interfaces:** no cambia la API (`confirm(opts)`, `useConfirm()`, `ConfirmDialogProvider`, `ConfirmVariant`). Solo el DOM del diálogo.
 
-- [ ] **Step 1: Test que falla**
+- [x] **Step 1: Test que falla**
 
 ```tsx
 // @vitest-environment jsdom
@@ -182,9 +182,9 @@ describe('ConfirmDialog', () => {
 })
 ```
 
-- [ ] **Step 2: Correr y ver que falla** — `cd frontend && npx vitest run src/components/ui/__tests__/ConfirmDialog.test.tsx`. Expected: FAIL (`.dax-modal` null; la fuente contiene `#ffffff`).
+- [x] **Step 2: Correr y ver que falla** — `cd frontend && npx vitest run src/components/ui/__tests__/ConfirmDialog.test.tsx`. Expected: FAIL (`.dax-modal` null; la fuente contiene `#ffffff`).
 
-- [ ] **Step 3: Implementar.** Mantener la lógica (refs, teclado, foco). Cambiar solo el JSX a partir de la l.123:
+- [x] **Step 3: Implementar.** Mantener la lógica (refs, teclado, foco). Cambiar solo el JSX a partir de la l.123:
 
 ```tsx
   return (
@@ -221,9 +221,9 @@ describe('ConfirmDialog', () => {
 
 `styles.btn` deja de usarse (quitarlo del mapa de estilos si queda huérfano; `styles.accent` e `styles.icon` se conservan). Verificar que `--dax-text-dim` existe en `index.css` (`grep -n "dax-text-dim\|dax-text-faint" frontend/src/index.css`); si solo existe `--dax-text-faint`, usar ese.
 
-- [ ] **Step 4: Correr y ver que pasa** — el test nuevo y la suite completa (`npm test -- --run`): 667 + 2. `npm run build` verde.
+- [x] **Step 4: Correr y ver que pasa** — el test nuevo y la suite completa (`npm test -- --run`): 667 + 2. `npm run build` verde.
 
-- [ ] **Step 5: Commit** — `git commit -m "feat(ui): ConfirmDialog usa la tarjeta y el pie del kit (hoja inferior en telefono, colores del tema)"` con el trailer.
+- [x] **Step 5: Commit** — `git commit -m "feat(ui): ConfirmDialog usa la tarjeta y el pie del kit (hoja inferior en telefono, colores del tema)"` con el trailer.
 
 ---
 
@@ -237,7 +237,7 @@ describe('ConfirmDialog', () => {
 - Modify: `frontend/src/hooks/useIsMobile.ts:41-48` (comentario de `PHONE_BREAKPOINT` que cita el redirect)
 - Modify: `frontend/src/utils/cajonLateral.ts:5` (comentario dice "por debajo de 768px"; el corte es 1024)
 
-- [ ] **Step 1: Tests** — reemplazar los dos primeros `it` de `rutaInicio.test.ts` por:
+- [x] **Step 1: Tests** — reemplazar los dos primeros `it` de `rutaInicio.test.ts` por:
 
 ```ts
   it('el ADMINISTRADOR y el DUEÑO entran al escritorio adaptado también en teléfono', () => {
@@ -251,13 +251,13 @@ describe('ConfirmDialog', () => {
 ```
 Los otros dos `it` se conservan.
 
-- [ ] **Step 2: Correr y ver que falla** — `npx vitest run src/utils/rutaInicio.test.ts`. Expected: 2 FAIL (`/mobile/owner`).
+- [x] **Step 2: Correr y ver que falla** — `npx vitest run src/utils/rutaInicio.test.ts`. Expected: 2 FAIL (`/mobile/owner`).
 
-- [ ] **Step 3: Implementar** — en `rutaInicio.ts` quitar la l.11 (`if (esOficina && esMovil) return '/mobile/owner'`); `esMovil` queda en la firma (lo usan vendedores) con un comentario: `// esMovil ya no desvía al dueño: desde la ola 1 del responsivo el escritorio cabe en teléfono.` Actualizar el comentario de la l.3 (vitest ya incluye `.tsx`). En `useIsMobile.ts:41-48` y `cajonLateral.ts:5` corregir los comentarios (sin tocar lógica). `/mobile/owner` y el ítem "Resumen móvil" del menú **no se tocan**. `App.tsx:172-186` no cambia (sigue pasando `isMobile`).
+- [x] **Step 3: Implementar** — en `rutaInicio.ts` quitar la l.11 (`if (esOficina && esMovil) return '/mobile/owner'`); `esMovil` queda en la firma (lo usan vendedores) con un comentario: `// esMovil ya no desvía al dueño: desde la ola 1 del responsivo el escritorio cabe en teléfono.` Actualizar el comentario de la l.3 (vitest ya incluye `.tsx`). En `useIsMobile.ts:41-48` y `cajonLateral.ts:5` corregir los comentarios (sin tocar lógica). `/mobile/owner` y el ítem "Resumen móvil" del menú **no se tocan**. `App.tsx:172-186` no cambia (sigue pasando `isMobile`).
 
-- [ ] **Step 4: Correr y ver que pasa** — suite completa y `npm run build`.
+- [x] **Step 4: Correr y ver que pasa** — suite completa y `npm run build`.
 
-- [ ] **Step 5: Commit** — `git commit -m "feat(inicio): el dueno y el admin entran al escritorio adaptado tambien en telefono"`.
+- [x] **Step 5: Commit** — `git commit -m "feat(inicio): el dueno y el admin entran al escritorio adaptado tambien en telefono"`.
 
 ---
 
@@ -311,7 +311,7 @@ Reglas:
 **Interfaces:**
 - Produces: el test de guardia con `PAGINAS: string[]` y `SIN_TARJETA_FILA: string[]` que las tareas 4-7 extienden.
 
-- [ ] **Step 1: Test de guardia que falla**
+- [x] **Step 1: Test de guardia que falla**
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -344,9 +344,9 @@ describe('ola 2 responsiva: catálogo y personas', () => {
 })
 ```
 
-- [ ] **Step 2: Correr y ver que falla** — `npx vitest run src/pages/__tests__/responsivoOla2.test.ts`. Expected: 2 FAIL (sin `useEsTelefono`).
+- [x] **Step 2: Correr y ver que falla** — `npx vitest run src/pages/__tests__/responsivoOla2.test.ts`. Expected: 2 FAIL (sin `useEsTelefono`).
 
-- [ ] **Step 3: Brands.tsx.** Cabecera l.64-73 → `CabeceraPagina` (título = icono + h1; `accionPrincipal` = botón "Nueva Marca"). Buscador l.75-78: se conserva (ya es `flex-1`). Tabla l.80-119 → condicional. Tarjeta:
+- [x] **Step 3: Brands.tsx.** Cabecera l.64-73 → `CabeceraPagina` (título = icono + h1; `accionPrincipal` = botón "Nueva Marca"). Buscador l.75-78: se conserva (ya es `flex-1`). Tabla l.80-119 → condicional. Tarjeta:
 
 ```tsx
 <TarjetaFila key={b.id}
@@ -362,11 +362,11 @@ describe('ola 2 responsiva: catálogo y personas', () => {
 ```
 `ListaTarjetas cargando={loading} vacio={filtered.length === 0} textoVacio="Sin marcas"`. El modal (l.123-148) ya lleva `dax-modal` + `dax-modal-footer`: no se toca.
 
-- [ ] **Step 4: Departments.tsx.** Igual: cabecera l.69-78 → `CabeceraPagina` (acción "Nuevo"); tabla l.80-109 → condicional con `TarjetaFila titulo={d.name}` y las mismas dos acciones; `textoVacio="Sin departamentos"`, `cargando={loading}`. Modal l.113-131 no se toca.
+- [x] **Step 4: Departments.tsx.** Igual: cabecera l.69-78 → `CabeceraPagina` (acción "Nuevo"); tabla l.80-109 → condicional con `TarjetaFila titulo={d.name}` y las mismas dos acciones; `textoVacio="Sin departamentos"`, `cargando={loading}`. Modal l.113-131 no se toca.
 
-- [ ] **Step 5: Correr y ver que pasa** — guardia + suite completa + `npm run build`.
+- [x] **Step 5: Correr y ver que pasa** — guardia + suite completa + `npm run build`.
 
-- [ ] **Step 6: Commit** — `git commit -m "feat(catalogo): Marcas y Departamentos caben en telefono — cabecera apilada y tarjetas por renglon"`.
+- [x] **Step 6: Commit** — `git commit -m "feat(catalogo): Marcas y Departamentos caben en telefono — cabecera apilada y tarjetas por renglon"`.
 
 ---
 
@@ -376,9 +376,9 @@ describe('ola 2 responsiva: catálogo y personas', () => {
 - Modify: `frontend/src/pages/core/Users.tsx:133-188` (cabecera l.135-144, tabla l.146-188)
 - Test: `frontend/src/pages/__tests__/responsivoOla2.test.ts` (añadir `'core/Users.tsx'` a `PAGINAS`)
 
-- [ ] **Step 1: Añadir la página al test y ver que falla.**
+- [x] **Step 1: Añadir la página al test y ver que falla.**
 
-- [ ] **Step 2: Implementar.** Cabecera → `CabeceraPagina` (acción principal "Nuevo usuario"). Tabla (dentro de `TablaDesplazable sangrado={false}`, l.149) → condicional. Tarjeta:
+- [x] **Step 2: Implementar.** Cabecera → `CabeceraPagina` (acción principal "Nuevo usuario"). Tabla (dentro de `TablaDesplazable sangrado={false}`, l.149) → condicional. Tarjeta:
 
 ```tsx
 <TarjetaFila key={u.id}
@@ -399,7 +399,7 @@ describe('ola 2 responsiva: catálogo y personas', () => {
 ```
 `textoVacio="Sin usuarios"`, `cargando={loading}`. El modal l.192-290 ya lleva `dax-modal` + `dax-modal-footer`; su rejilla l.213 ya es `grid-cols-1 sm:grid-cols-2`. No se toca.
 
-- [ ] **Step 3: Suite + build verdes. Commit** — `git commit -m "feat(usuarios): la lista de usuarios cabe en telefono"`.
+- [x] **Step 3: Suite + build verdes. Commit** — `git commit -m "feat(usuarios): la lista de usuarios cabe en telefono"`.
 
 ---
 
@@ -410,7 +410,7 @@ describe('ola 2 responsiva: catálogo y personas', () => {
 - Modify: `frontend/src/pages/crm/CustomerFormModal.tsx:62-124`
 - Test: `frontend/src/pages/__tests__/responsivoOla2.test.ts` (añadir `'crm/Customers.tsx'` a `PAGINAS` y un `it` específico), `frontend/src/pages/crm/__tests__/CustomerFormModal.test.tsx` (nuevo)
 
-- [ ] **Step 1: Tests que fallan.** En el test de guardia añadir la página y:
+- [x] **Step 1: Tests que fallan.** En el test de guardia añadir la página y:
 
 ```ts
   it('Customers conserva la paginación fuera del condicional y usa Modal del kit para pago y formulario', () => {
@@ -448,9 +448,9 @@ describe('CustomerFormModal', () => {
 ```
 Ajustar el export (`default` o nombrado) y la ruta del mock a lo que haya en `CustomerFormModal.tsx:1-20` (`grep -n "^import\|^export" frontend/src/pages/crm/CustomerFormModal.tsx`).
 
-- [ ] **Step 2: Correr y ver que fallan.**
+- [x] **Step 2: Correr y ver que fallan.**
 
-- [ ] **Step 3: `CustomerFormModal.tsx`** → `ui/Modal`:
+- [x] **Step 3: `CustomerFormModal.tsx`** → `ui/Modal`:
 
 ```tsx
 <Modal open onClose={onClose} size="lg"
@@ -466,7 +466,7 @@ Ajustar el export (`default` o nombrado) y la ruta del mock a lo que haya en `Cu
 ```
 Las tres rejillas l.72, l.76 y l.90: `grid grid-cols-2 gap-3` → `grid grid-cols-1 sm:grid-cols-2 gap-3`. `Modal` ya cierra con Escape y con el fondo; quitar el `onClick={onClose}` del envoltorio viejo y el `stopPropagation`.
 
-- [ ] **Step 4: `Customers.tsx`.** Cabecera l.134-137 → `CabeceraPagina` solo con `titulo` (icono + h1). El botón "Nuevo cliente" **se queda junto al buscador** (l.160-168) para no mover nada en escritorio; esa fila pasa a `flex flex-wrap gap-2` y el botón recibe `max-md:w-full max-md:min-h-[44px] justify-center`. KPIs l.141 ya son `grid-cols-2 sm:grid-cols-4`: no se tocan. Tabla l.176-212 → condicional; la paginación l.214-220 **permanece fuera**, después del condicional. Tarjeta:
+- [x] **Step 4: `Customers.tsx`.** Cabecera l.134-137 → `CabeceraPagina` solo con `titulo` (icono + h1). El botón "Nuevo cliente" **se queda junto al buscador** (l.160-168) para no mover nada en escritorio; esa fila pasa a `flex flex-wrap gap-2` y el botón recibe `max-md:w-full max-md:min-h-[44px] justify-center`. KPIs l.141 ya son `grid-cols-2 sm:grid-cols-4`: no se tocan. Tabla l.176-212 → condicional; la paginación l.214-220 **permanece fuera**, después del condicional. Tarjeta:
 
 ```tsx
 <TarjetaFila key={c.id}
@@ -483,7 +483,7 @@ Las tres rejillas l.72, l.76 y l.90: `grid grid-cols-2 gap-3` → `grid grid-col
 ```
 Modal **estado de cuenta** (l.225-316, cabecera propia con editar/eliminar/cerrar): a la tarjeta l.226 añadir `dax-modal` y quitar `max-h-[85vh] overflow-y-auto`; envolver los botones de acción del pie (si los hay) o dejar el cuerpo con scroll propio de `.dax-modal`; rejillas: l.263 `grid-cols-3` **se conserva** con el comentario `{/* rejilla fija: 3 KPIs cortos caben a 390 */}` en la misma línea (si en la Tarea 9 desborda, pasa a `grid-cols-2 sm:grid-cols-3`); l.285 `grid-cols-2` se conserva (2 columnas caben). Los dos botones de icono de la cabecera del modal (editar l.246, eliminar l.252) reciben `dax-btn-icon`. Modal **Registrar pago** (l.320-340) → `ui/Modal size="sm"` con `title="Registrar Pago"`, `footer` = los dos botones; `onClose` = `() => { setPayModal(null); setPayAmount('') }`.
 
-- [ ] **Step 5: Suite + build verdes. Commit** — `git commit -m "feat(clientes): lista, estado de cuenta y formulario de cliente caben en telefono"`.
+- [x] **Step 5: Suite + build verdes. Commit** — `git commit -m "feat(clientes): lista, estado de cuenta y formulario de cliente caben en telefono"`.
 
 ---
 
@@ -504,9 +504,9 @@ Dos pantallas casi gemelas: buscador, tabla de existencias (5 columnas), y al el
   })
 ```
 
-- [ ] **Step 1: Añadir al test y ver que falla.**
+- [x] **Step 1: Añadir al test y ver que falla.**
 
-- [ ] **Step 2: Implementar (en los dos archivos, mismo patrón).** Cabecera de página → `CabeceraPagina` (sin acciones). Tabla de existencias → condicional; tarjeta:
+- [x] **Step 2: Implementar (en los dos archivos, mismo patrón).** Cabecera de página → `CabeceraPagina` (sin acciones). Tabla de existencias → condicional; tarjeta:
 
 ```tsx
 <TarjetaFila key={row.variant.id}
@@ -534,7 +534,7 @@ Dos pantallas casi gemelas: buscador, tabla de existencias (5 columnas), y al el
 ```
 Los helpers de color/tipo ya existen en cada archivo (Inventory `movColor` l.87; HQInventory `movementColor` l.99 y `tipoMovimiento`); no se duplican.
 
-- [ ] **Step 3: Suite + build verdes. Commit** — `git commit -m "feat(inventario): existencias y kardex caben en telefono en Inventario y Existencias HQ"`.
+- [x] **Step 3: Suite + build verdes. Commit** — `git commit -m "feat(inventario): existencias y kardex caben en telefono en Inventario y Existencias HQ"`.
 
 ---
 
@@ -545,9 +545,9 @@ Los helpers de color/tipo ya existen en cada archivo (Inventory `movColor` l.87;
 - Modify: `frontend/src/pages/core/AdminCatalog.tsx` (l.51 hook; cabecera l.265-296; `TablaDesplazable`/tarjetas propias l.410-438 se conservan)
 - Test: guardia (añadir `'inventory/Products.tsx'` y `'core/AdminCatalog.tsx'` a `PAGINAS`, y `'core/AdminCatalog.tsx'` a `SIN_TARJETA_FILA`)
 
-- [ ] **Step 1: Añadir al test y ver que falla.**
+- [x] **Step 1: Añadir al test y ver que falla.**
 
-- [ ] **Step 2: `Products.tsx`.**
+- [x] **Step 2: `Products.tsx`.**
   - ImportModal: l.72 `grid grid-cols-2 gap-2` (alcance) **se conserva** (dos columnas caben; la guardia lo permite). l.155 `grid grid-cols-3 gap-3 text-center` → `grid grid-cols-3 gap-2 sm:gap-3 text-center` con el comentario `{/* rejilla fija: 3 contadores cortos caben a 390 */}` en la línea anterior **y en la misma línea** de la clase (la guardia filtra por línea), y los `text-2xl` de los tres contadores → `text-xl sm:text-2xl`.
   - Cabecera l.323-407: ya es `flex … flex-wrap` con botones solo icono bajo `sm`. Se migra a `CabeceraPagina` con `titulo` = icono + h1 + chip y `acciones` = **todo el bloque de botones de hoy en su mismo orden** (contador, Importar, Etiquetas CSV, Generar códigos, Nuevo producto, conmutador lista/cuadrícula), conservando `aria-label` y `hidden sm:inline`. **No** se usa `accionPrincipal` (el kit la movería al frente y cambiaría el orden en escritorio).
   - Filtros l.410-424 → `BarraFiltros` (el input `dax-input max-w-xs` y el select `dax-input max-w-[200px]` quedan como hijos; bajo `sm` la barra los hace `w-full`).
@@ -568,9 +568,9 @@ Los helpers de color/tipo ya existen en cada archivo (Inventory `movColor` l.87;
 ```
   Cuando `tallasAbiertas`, después de la tarjeta se pintan los sub-renglones (`expandVariantRows([p])`, l.650) como `TarjetaFila className="ml-4"` con `titulo` = nombre de la talla/color, `subtitulo` = SKU, `importe` = precio de la talla y `estado` = existencia, con los mismos formateos que las celdas de l.651-660. Los botones de `AccionesDeFila` llevan texto visible junto al icono (`<span className="md:sr-only">Editar</span>` no: el texto se muestra siempre en la tarjeta y en la tabla sigue como hoy; si hoy son solo icono, el componente recibe `conTexto?: boolean` y la tarjeta lo pasa `true`).
 
-- [ ] **Step 3: `AdminCatalog.tsx`.** l.51 `const enTarjetas = useMediaQuery('(max-width: 767px)')` → `const enTarjetas = useEsTelefono()` (quitar el import de `useMediaQuery` si queda huérfano). Cabecera l.265-296 → `CabeceraPagina` con `titulo` = icono + h1, `descripcion` = "Gestión completa de productos · {org}", `accionPrincipal` = Link "Nuevo producto", `acciones` = Exportar + Vista completa. Las tarjetas propias l.411-436 se conservan.
+- [x] **Step 3: `AdminCatalog.tsx`.** l.51 `const enTarjetas = useMediaQuery('(max-width: 767px)')` → `const enTarjetas = useEsTelefono()` (quitar el import de `useMediaQuery` si queda huérfano). Cabecera l.265-296 → `CabeceraPagina` con `titulo` = icono + h1, `descripcion` = "Gestión completa de productos · {org}", `accionPrincipal` = Link "Nuevo producto", `acciones` = Exportar + Vista completa. Las tarjetas propias l.411-436 se conservan.
 
-- [ ] **Step 4: Suite + build verdes. Commit** — `git commit -m "feat(productos): Productos y Catalogo con cabecera del kit, filtros apilables y tarjetas en telefono"`.
+- [x] **Step 4: Suite + build verdes. Commit** — `git commit -m "feat(productos): Productos y Catalogo con cabecera del kit, filtros apilables y tarjetas en telefono"`.
 
 ---
 
@@ -579,7 +579,7 @@ Los helpers de color/tipo ya existen en cada archivo (Inventory `movColor` l.87;
 **Files:**
 - Test: `frontend/src/__tests__/overlaysFueraDelKit.test.ts` (nuevo)
 
-- [ ] **Step 1: Escribir el test.** Recorre `src/` (misma función `archivos()` de `src/__tests__/unSoloFormularioDeProducto.test.ts`, excluyendo `__tests__`), cuenta `fixed inset-0` por archivo (sin contar `components/ui/Modal.tsx` ni `components/ui/ConfirmDialog.tsx`) y compara con la lista congelada:
+- [x] **Step 1: Escribir el test.** Recorre `src/` (misma función `archivos()` de `src/__tests__/unSoloFormularioDeProducto.test.ts`, excluyendo `__tests__`), cuenta `fixed inset-0` por archivo (sin contar `components/ui/Modal.tsx` ni `components/ui/ConfirmDialog.tsx`) y compara con la lista congelada:
 
 ```ts
 /** Overlays hechos a mano que existían el 2026-10-18 (deuda conocida; ver spec SP5).
@@ -604,9 +604,9 @@ it('no aparece ningún overlay manual nuevo fuera de ui/Modal', () => { expect(e
 ```
 Al escribirlo, **regenerar la lista desde el árbol real** (`grep -rc "fixed inset-0" frontend/src --include=*.tsx | grep -v ":0"`) porque las tareas 5 ya quitaron `CustomerFormModal` y el segundo de `Customers`; la lista de arriba es la esperada tras las tareas 1-7 (Customers queda en 1). El test también comprueba que ningún archivo de `CONOCIDOS` falta (si alguien migra uno, debe borrarlo de la lista: eso es intencional, falla "para bien").
 
-- [ ] **Step 2: Correr** — debe pasar a la primera si la lista coincide con el árbol; si no, la diferencia es un hallazgo (anotar y corregir la lista o el código).
+- [x] **Step 2: Correr** — debe pasar a la primera si la lista coincide con el árbol; si no, la diferencia es un hallazgo (anotar y corregir la lista o el código).
 
-- [ ] **Step 3: Commit** — `git commit -m "test(ui): congela el inventario de overlays manuales fuera de ui/Modal"`.
+- [x] **Step 3: Commit** — `git commit -m "test(ui): congela el inventario de overlays manuales fuera de ui/Modal"`.
 
 ---
 
@@ -614,11 +614,11 @@ Al escribirlo, **regenerar la lista desde el árbol real** (`grep -rc "fixed ins
 
 **Files:** Output `.superpowers/sdd/2026-10-18-sp5-responsivo-admin-ola-2/final/` (capturas, `desbordes.json`, `diff1440.json`, `diff/`), `.superpowers/sdd/2026-10-18-sp5-responsivo-admin-ola-2/ola-2-findings.md`
 
-- [ ] `bash stack.sh down && bash stack.sh up` (reinicia Vite para que vea los cambios).
-- [ ] `node capturas.mjs --out …/final --rutas <las 14>` (4 anchos, 2 temas) → `desbordes.json`: **cero** claves con `desborda` y cero con `scrollInterno` a 390/768/1024 en las 8 rutas de la ola 2 y sus acciones. En las 6 de la ola 1, cero `desborda` (la T7 de aquella ola nunca corrió; esto la cierra). Cada entrada que quede es un hallazgo con su elemento.
-- [ ] `node diff1440.mjs baseline final` → **cero** píxeles distintos a 1440 en las 14 rutas (claro y oscuro) y sus acciones, **salvo** `ConfirmDialog` (no aparece en capturas) y lo que explique el cambio de cabecera a `CabeceraPagina` si mueve 1 px el `h1` (se mira el recorte y se decide: si es ≤ 2 px de alto de fila, se acepta y se anota; si cambia el orden o el ancho de algo, es hallazgo).
-- [ ] Tap targets a 390 y 768: lista de `tap < 44` de `desbordes.json` → cada botón de acción principal o de fila que mida menos es hallazgo.
-- [ ] Escribir `ola-2-findings.md`: tabla ruta × ancho × tema con ✅/❌, lista de hallazgos con archivo:línea propuesto, y las rutas de las capturas a 390 para que el usuario las vea. Los hallazgos Important (desborde, scroll interno, diff a 1440 no explicado, tap < 44 en acción principal) **vuelven como fix round a la tarea dueña** antes de la Tarea 10.
+- [x] `bash stack.sh down && bash stack.sh up` (reinicia Vite para que vea los cambios).
+- [x] `node capturas.mjs --out …/final --rutas <las 14>` (4 anchos, 2 temas) → `desbordes.json`: **cero** claves con `desborda` y cero con `scrollInterno` a 390/768/1024 en las 8 rutas de la ola 2 y sus acciones. En las 6 de la ola 1, cero `desborda` (la T7 de aquella ola nunca corrió; esto la cierra). Cada entrada que quede es un hallazgo con su elemento.
+- [x] `node diff1440.mjs baseline final` → **cero** píxeles distintos a 1440 en las 14 rutas (claro y oscuro) y sus acciones, **salvo** `ConfirmDialog` (no aparece en capturas) y lo que explique el cambio de cabecera a `CabeceraPagina` si mueve 1 px el `h1` (se mira el recorte y se decide: si es ≤ 2 px de alto de fila, se acepta y se anota; si cambia el orden o el ancho de algo, es hallazgo).
+- [x] Tap targets a 390 y 768: lista de `tap < 44` de `desbordes.json` → cada botón de acción principal o de fila que mida menos es hallazgo.
+- [x] Escribir `ola-2-findings.md`: tabla ruta × ancho × tema con ✅/❌, lista de hallazgos con archivo:línea propuesto, y las rutas de las capturas a 390 para que el usuario las vea. Los hallazgos Important (desborde, scroll interno, diff a 1440 no explicado, tap < 44 en acción principal) **vuelven como fix round a la tarea dueña** antes de la Tarea 10.
 
 ---
 
@@ -630,9 +630,9 @@ Al escribirlo, **regenerar la lista desde el árbol real** (`grep -rc "fixed ins
 - Modify: `docs/superpowers/plans/2026-10-01-responsivo-admin-ola-1.md` (marcar `- [x]` las casillas de T1-T6, T8 y T9 que este plan cerró; en T7 anotar "cerrada por SP5 ola 2, Tarea 9, 2026-10-18")
 - Modify: `docs/superpowers/specs/2026-10-14-mega-plan-altas-docs-responsivo-agente-design.md` §4 SP5: una línea "Ejecutado 2026-10-18 con las decisiones de `plans/2026-10-18-sp5-responsivo-admin-ola-2.md` (kit `ui/`, 52 overlays, congruencia de botones diferida)".
 
-- [ ] `docs/FRONTEND_VIEWS.md` §1: "Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (`TarjetaFila`, `ListaTarjetas`, `BarraFiltros`, `CabeceraPagina`, `Modal` con `.dax-modal`); patrón en `docs/superpowers/specs/2026-09-30-responsivo-admin-design.md §4` y guardia en `src/pages/__tests__/responsivoOla2.test.ts` y `src/__tests__/overlaysFueraDelKit.test.ts`."
-- [ ] `CLAUDE.md` §5, receta **"Hacer responsiva una pantalla de admin"** (6 líneas): 1) `const esTelefono = useEsTelefono()` (`hooks/useIsMobile.ts`, < 768); 2) cabecera → `CabeceraPagina`, filtros → `BarraFiltros`; 3) la `<table>` no se toca: `esTelefono ? <ListaTarjetas><TarjetaFila…/> : <table…>`, nunca `hidden md:block`; 4) rejillas: `grid-cols-N` siempre con prefijo (`grid-cols-1 sm:grid-cols-2`); 5) modales: `ui/Modal`, o `dax-modal` + `dax-modal-footer` si tienen cabecera propia; nunca un `fixed inset-0` nuevo (lo frena `overlaysFueraDelKit.test.ts`); 6) verificar con `capturas.mjs` a 390/768/1024 y `diff1440.mjs` contra baseline (herramienta en el scratchpad; receta en el plan de SP5).
-- [ ] Commit `docs: patron responsivo del lado administrador (olas 1 y 2) y cierre del plan de la ola 1`, que incluye también este plan (`docs/superpowers/plans/2026-10-18-sp5-responsivo-admin-ola-2.md`) con sus casillas marcadas.
+- [x] `docs/FRONTEND_VIEWS.md` §1: "Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (`TarjetaFila`, `ListaTarjetas`, `BarraFiltros`, `CabeceraPagina`, `Modal` con `.dax-modal`); patrón en `docs/superpowers/specs/2026-09-30-responsivo-admin-design.md §4` y guardia en `src/pages/__tests__/responsivoOla2.test.ts` y `src/__tests__/overlaysFueraDelKit.test.ts`."
+- [x] `CLAUDE.md` §5, receta **"Hacer responsiva una pantalla de admin"** (6 líneas): 1) `const esTelefono = useEsTelefono()` (`hooks/useIsMobile.ts`, < 768); 2) cabecera → `CabeceraPagina`, filtros → `BarraFiltros`; 3) la `<table>` no se toca: `esTelefono ? <ListaTarjetas><TarjetaFila…/> : <table…>`, nunca `hidden md:block`; 4) rejillas: `grid-cols-N` siempre con prefijo (`grid-cols-1 sm:grid-cols-2`); 5) modales: `ui/Modal`, o `dax-modal` + `dax-modal-footer` si tienen cabecera propia; nunca un `fixed inset-0` nuevo (lo frena `overlaysFueraDelKit.test.ts`); 6) verificar con `capturas.mjs` a 390/768/1024 y `diff1440.mjs` contra baseline (herramienta en el scratchpad; receta en el plan de SP5).
+- [x] Commit `docs: patron responsivo del lado administrador (olas 1 y 2) y cierre del plan de la ola 1`, que incluye también este plan (`docs/superpowers/plans/2026-10-18-sp5-responsivo-admin-ola-2.md`) con sus casillas marcadas.
 - [ ] Memoria (controlador): actualizar `responsivo-telefono.md` y `mega-plan-2026-10-ejecucion.md` con la ola 2, los hallazgos pendientes y los seguimientos (botones crudos, 8 overlays de la ola 3, `ProductDetailModal`).
 
 ### Cierre (manual, con permiso)

@@ -130,6 +130,14 @@ Edita `scripts/init_presets_v2.py` (seed de `industry_presets`) y/o el fallback 
 4. `scripts/import_rmazh_export.py catalogo.xlsx --org N --branch M --dry-run` → revisar incidencias y "EXISTENCIAS MAYORES A 500" → real. Idempotente; `--tope N` recorta relleno.
 5. Verificar el POS **con el cajero**, no con el admin (`GET /api/products/pos/search`).
 
+### Hacer responsiva una pantalla de admin
+1. `const esTelefono = useEsTelefono()` (`hooks/useIsMobile.ts`, < 768).
+2. Cabecera → `CabeceraPagina`, filtros → `BarraFiltros` (`components/ui/`).
+3. La `<table>` no se toca: `esTelefono ? <ListaTarjetas><TarjetaFila…/></ListaTarjetas> : <table…>`, nunca `hidden md:block`.
+4. Rejillas: `grid-cols-N` siempre con prefijo (`grid-cols-1 sm:grid-cols-2`).
+5. Modales: `ui/Modal`, o `dax-modal` + `dax-modal-footer` si tienen cabecera propia; nunca un `fixed inset-0` nuevo (lo frena `overlaysFueraDelKit.test.ts`).
+6. Verificar con `capturas.mjs` a 390/768/1024 y `diff1440.mjs` contra baseline (herramienta en el scratchpad; receta en `docs/superpowers/plans/2026-10-18-sp5-responsivo-admin-ola-2.md`).
+
 ---
 
 ## 6. Gotchas que te van a morder

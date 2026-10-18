@@ -40,6 +40,8 @@ Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.l
 ### Componentes base compartidos
 `DaxCard` (tarjeta tokenizada), `StatusChip`/`Badge` (estados), `Button` (`dax-btn-*`), `Spinner`, `.dax-input`, `.dax-table`. Gráficas: `components/atlas-one/*` (BarChart, Sparkline, Donut, LineChart) y Chart.js en varias vistas HQ/reportes.
 
+Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (`TarjetaFila`, `ListaTarjetas`, `BarraFiltros`, `CabeceraPagina`, `Modal` con `.dax-modal`); patrón en `docs/superpowers/specs/2026-09-30-responsivo-admin-design.md §4` y guardia en `src/pages/__tests__/responsivoOla2.test.ts` y `src/__tests__/overlaysFueraDelKit.test.ts`.
+
 ### Índice maestro (ruta → archivo → quién)
 | Ruta | Archivo | Roles | Módulo |
 |---|---|---|---|
@@ -193,7 +195,7 @@ Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.l
 - **Componentes clave:** `AgentDiagnosticsPanel`, `PrinterInstallWizard`, `TicketPreview` (interno).
 - **Notas:** Tabs por SO con autodetección; banner si el agente está offline. CUPS server-side deprecado (solo agente local). Datos de muestra hardcodeados en el preview.
 
-### `/sales` — Historial de ventas
+### `/sales` — Historial de ventas 📱
 - **Archivo:** `pages/sales/SalesHistory.tsx` (367 líneas)
 - **Propósito:** Ventas por rango con KPIs, detalle de ticket, reimprimir y disparar devoluciones.
 - **Quién la ve:** Gerente, Cajero.
@@ -214,7 +216,7 @@ Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.l
 - **Datos/API:** `productsApi.search`, `customersApi.search`, `quotesApi.create`.
 - **Notas:** Carrito/dropdowns inline (debounce 300ms). **Gotcha:** `notes` se captura pero NO se envía; el payload solo manda `{sku, quantity}`.
 
-### `/returns` — Devoluciones
+### `/returns` — Devoluciones 📱
 - **Archivo:** `pages/sales/Returns.tsx` (261 líneas)
 - **Propósito:** Bandeja de aprobación: pendientes/historial, detalle (reingreso vs merma), aprobar/rechazar con motivo.
 - **Quién la ve:** Gerente, Cajero — módulo `returns`. Si es CAJERO renderiza `ReturnsBranchView`. `CAN_APPROVE`=Admin/Dueño/Gerente.
@@ -233,7 +235,7 @@ Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.l
 
 > **Solapamiento fuerte:** HQOperations, HQReportsHub y HQControl consumen `reportsApi.commandCenterStats` y repiten el "strip de KPIs del día", métodos de pago (doughnut), ranking de sucursales y top productos, con `PAYMENT_COLORS`/rangos reimplementados en cada archivo. Diferenciadores reales abajo.
 
-### `/hq/operations` — Operaciones (command center)
+### `/hq/operations` — Operaciones (command center) 📱
 - **Archivo:** `pages/hq/HQOperations.tsx` (664 líneas)
 - **Propósito:** "War room" en vivo: revenue/tickets/métodos, velocidad por hora, estado de cada sucursal, top productos, feed de alertas. Auto-refresh 60s.
 - **Quién la ve:** Admin, Dueño — módulo `pos`.
@@ -241,7 +243,7 @@ Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.l
 - **Componentes clave:** `KPICard`, `Bar`/`Doughnut` (chart.js), `useKeyboardShortcuts` (1/2/3/r).
 - **Notas:** Auto-refresh se pausa con `document.hidden`. Errores solo a consola. Tema oscuro fijo. **Diferenciador:** es el "live monitor".
 
-### `/hq/reports-hub` — Reportes HQ (Ultra)
+### `/hq/reports-hub` — Reportes HQ (Ultra) 📱
 - **Archivo:** `pages/hq/HQReportsHub.tsx` (655 líneas)
 - **Propósito:** Suite analítica premium: velocímetro hora actual, gauge de cumplimiento, 6 KPIs, tendencia dual, doughnut de pagos, heatmap día×hora, leaderboard, stock bajo, top con sparklines.
 - **Quién la ve:** Admin, Dueño — módulo `pos`.
@@ -255,21 +257,21 @@ Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.l
 - **Datos/API:** `reportsApi.auditDiscrepancies/commandCenterStats`, `organizationApi.getBranches`, import dinámico `GET /platform/audit/logs`.
 - **Notas:** **Diferenciador:** lo exclusivo de gobierno (diferencias de caja, audit log, config). Navegación cruzada con Operations.
 
-### `/hq/sales` — Ventas HQ (log)
+### `/hq/sales` — Ventas HQ (log) 📱
 - **Archivo:** `pages/hq/HQSalesLog.tsx` (259 líneas)
 - **Propósito:** Bitácora consolidada de todas las sucursales: KPIs, filtros fecha/sucursal, búsqueda folio/cliente, paginación, detalle.
 - **Quién la ve:** Admin, Dueño — módulo `pos`.
 - **Datos/API:** `salesApi.list`, `GET /sales/stats`, `organizationApi.getBranches`.
 - **Notas:** Búsqueda de texto filtra en cliente sobre la página actual (no server-side).
 
-### `/hq/returns` — Devoluciones HQ
+### `/hq/returns` — Devoluciones HQ 📱
 - **Archivo:** `pages/hq/HQReturns.tsx` (274 líneas)
 - **Propósito:** Aprobación de devoluciones multisucursal: pendientes/historial, filtro por sucursal, aprobar/rechazar.
 - **Quién la ve:** Admin, Dueño — módulo `returns` (`CAN_APPROVE` incluye Gerente).
 - **Datos/API:** `returnsApi.list/approve/reject`, `organizationApi.getBranches`, `toast`.
 - **Notas:** Misma regla de reembolso CASH alto con `force`. Única HQ que muta con toasts.
 
-### `/hq/inventory` — Inventario por sucursal
+### `/hq/inventory` — Inventario por sucursal 📱
 - **Archivo:** `pages/hq/HQInventory.tsx` (224 líneas)
 - **Propósito:** Búsqueda global de productos con kardex por variante y ajustes manuales de stock por sucursal.
 - **Quién la ve:** **Solo Admin** — módulo `inventory`.
@@ -296,7 +298,7 @@ Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.l
 
 > **Formulario de producto unificado (SP1).** `components/products/FormularioProducto.tsx` es el único formulario de alta/edición; la página `ProductForm` lo monta como página, las listas de HQ (`Products.tsx`) y de sucursal (`ProductsBranchView.tsx`) lo abren dentro de un `Modal` (sin cerrar con Escape ni con el fondo), y `AdminProductCreate`, `ProductModal` y `ProductFormModal` ya no existen. Excepciones anotadas: `components/pos/modals/ProductDetailModal.tsx` (ficha del POS) y `pages/scanner/StoreScanner.tsx` (ediciones parciales).
 
-### `/products` — Catálogo / consulta de productos
+### `/products` — Catálogo / consulta de productos 📱
 - **Archivo:** `pages/inventory/Products.tsx` (~720 líneas)
 - **Propósito:** Vista central del catálogo: buscar/filtrar, lista o grid, crear/editar, importar Excel/CSV, y (roles sucursal) ajustar precio/stock/flags por sucursal.
 - **Quién la ve:** Admin, Dueño, Gerente, Cajero — módulo `catalog`. UI bifurca por rol (HQ ve matriz global; sucursal ve `ProductsBranchView`).
@@ -304,7 +306,7 @@ Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.l
 - **Componentes clave:** `ImportModal`, `FormularioProducto` (en `Modal`), `BranchStatusEditor`, `ProductImageUploader`.
 - **Notas:** Todos los roles editan con `FormularioProducto` en un `Modal`: Admin/Dueño desde la lista HQ; Gerente/Cajero desde `ProductsBranchView` (pasa `variant_id` del renglón). Cerrar el importador tras una carga parcial recarga la lista (`cerrarImportacion`). Refetch por `location.key`.
 
-### `/inventory` — Inventario (kardex y ajustes)
+### `/inventory` — Inventario (kardex y ajustes) 📱
 - **Archivo:** `pages/inventory/Inventory.tsx` (193 líneas)
 - **Propósito:** Buscar producto → kardex (historial de movimientos) + ajustes manuales por sucursal.
 - **Quién la ve:** módulo `inventory`.
@@ -333,7 +335,7 @@ Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.l
 - **Componentes clave:** `FormularioProducto` con las secciones `ProductBasicsSection`, `ProductCommercialSection`, `ProductTieredPricesSection`, `ProductPackagingSection`, `ProductVariantsSection`/`ProductVariantsEditor`, `ProductBranchMatrixSection`, `ProductInitialStockSection`; lógica pura en `productoForm.ts`.
 - **Notas:** Admin en create ve matriz + stock inicial; cajero tiene sucursal bloqueada. En edit no toca matriz/stock. Maneja 409/SKU duplicado. **`products/new` monta `<ProductForm key="new" />` y `products/:id/edit` monta un wrapper `ProductFormEditRoute` con `<ProductForm key={id} />`** (`App.tsx:44-50`) — fix 2026-09-22: sin el `key`, React Router reutilizaba la instancia y "Nuevo producto" heredaba los datos del producto que se estaba editando (auditoría #3, `docs/AUDITORIA-2026-09-22.md`).
 
-### `/admin/catalog` — Catálogo (administración)
+### `/admin/catalog` — Catálogo (administración) 📱
 - **Archivo:** `pages/core/AdminCatalog.tsx` (534 líneas)
 - **Propósito:** Panel avanzado: KPIs, filtros por aprobación, ciclo de vida (aprobar/rechazar/archivar/restaurar/duplicar), matriz de sucursales, auditoría.
 - **Quién la ve:** Admin — módulo `catalog`.
@@ -345,7 +347,7 @@ Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.l
 - **Archivo:** `App.tsx` (sin página propia).
 - **Notas:** redirige a `/products/new?volver=/admin/catalog`; `pages/admin/AdminProductCreate.tsx` se eliminó.
 
-### `/departments` — Departamentos
+### `/departments` — Departamentos 📱
 - **Archivo:** `pages/core/Departments.tsx` (112 líneas)
 - **Propósito:** CRUD de departamentos (categorías). **Quién la ve:** Admin — módulo `catalog`, `hideForGastro`.
 - **Datos/API:** `productsApi.get/create/update/deleteDepartment`. `confirm()`/`alert()`.
@@ -353,7 +355,7 @@ Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.l
   (barra final en la URL que el backend no registra) — auditoría #7, mismo fix que
   `/brands`.
 
-### `/brands` — Marcas
+### `/brands` — Marcas 📱
 - **Archivo:** `pages/core/Brands.tsx` (143 líneas)
 - **Propósito:** CRUD de marcas con logo opcional + búsqueda en cliente. **Quién la ve:** Admin — módulo `catalog`, `hideForGastro`.
 - **Datos/API:** `productsApi.get/create/update/deleteBrand`.
@@ -365,7 +367,7 @@ Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.l
 
 ## 6. Finanzas, CRM, RRHH, Portal & Core-admin
 
-### `/cash-history` — Control de caja
+### `/cash-history` — Control de caja 📱
 - **Archivo:** `pages/finance/CashHistory.tsx` (356 líneas)
 - **Propósito:** Turno abierto: entradas/salidas manuales, KPIs por método, cerrar/arquear e imprimir/descargar cortes históricos.
 - **Quién la ve:** Gerente, Cajero — módulo `cash_management`. Usuario de sucursal → `CashBranchView`.
@@ -385,14 +387,14 @@ Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.l
 - **Quién la ve:** Admin, Dueño — módulo `payments`.
 - **Datos/API:** `purchasesApi.list/getStats/create/updateStatus/getById/receive`.
 
-### `/reports` — Reportes
+### `/reports` — Reportes 📱
 - **Archivo:** `pages/finance/Reports.tsx` (219 líneas)
 - **Propósito:** Dashboard de ventas por rango: KPIs, ventas por hora, métodos, top productos, ventas recientes.
 - **Quién la ve:** Gerente.
 - **Datos/API:** `reportsApi.dashboard`.
 - **Notas:** **Consciente del tema** (`useTheme` para la gráfica). Chart.js.
 
-### `/customers` — Clientes
+### `/customers` — Clientes 📱
 - **Archivo:** `pages/crm/Customers.tsx` (236 líneas)
 - **Propósito:** Directorio con crédito/cuenta corriente: lista buscable con saldo, estado de cuenta (ledger) y registro de abonos.
 - **Quién la ve:** Admin, Dueño — módulo `crm`.
@@ -419,7 +421,7 @@ Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.l
 - **Datos/API:** `portalApi.getAccounts/getBalance/getTransactions/getQuotes` (`Promise.allSettled`).
 - **Notas:** La vista más distinta: orientada a cliente final, no a operación interna.
 
-### `/users` — Usuarios
+### `/users` — Usuarios 📱
 - **Archivo:** `pages/core/Users.tsx` (193 líneas)
 - **Propósito:** Cuentas del sistema: alta/edición, rol, sucursal, activar/desactivar, cambiar contraseña.
 - **Quién la ve:** Admin.
