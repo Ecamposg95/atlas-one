@@ -128,7 +128,7 @@ export function HQInventory() {
       {rows.length > 0 && !selected && (
         <DaxCard padding={false}>
           {esTelefono ? (
-            <ListaTarjetas cargando={loading} className="p-3">
+            <ListaTarjetas className="p-3">
               {rows.map((row) => (
                 <TarjetaFila key={row.variant.id}
                   titulo={row.label}
