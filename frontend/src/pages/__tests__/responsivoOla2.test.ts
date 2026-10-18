@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 /** Pantallas de la ola 2 del responsivo (catálogo y personas). Cada tarea añade la suya. */
-export const PAGINAS = ['core/Brands.tsx', 'core/Departments.tsx']
+export const PAGINAS = ['core/Brands.tsx', 'core/Departments.tsx', 'core/Users.tsx']
 /** Tienen tarjetas propias y no usan TarjetaFila. */
 export const SIN_TARJETA_FILA: string[] = []
 
