@@ -311,19 +311,19 @@ export function Customers() {
 
             {selected.current_balance > 0 && (
               <button onClick={() => setPayModal({ id: selected.id, name: selected.name })}
-                className="dax-btn-primary w-full justify-center mb-4 text-sm">
+                className="dax-btn-primary w-full justify-center mb-4 text-sm max-md:min-h-[44px]">
                 <i className="fa-solid fa-money-bill-wave" /> Registrar Pago
               </button>
             )}
 
             <div className="grid grid-cols-2 gap-2 mb-4">
               <button onClick={() => handlePdf(selected)} disabled={sharing}
-                className="dax-btn-secondary justify-center text-sm disabled:opacity-40">
+                className="dax-btn-secondary justify-center text-sm max-md:min-h-[44px] disabled:opacity-40">
                 <i className="fa-solid fa-file-pdf text-red-400" /> Descargar PDF
               </button>
               <button onClick={() => handleWhatsApp(selected)} disabled={sharing || !toWaPhone(selected.phone)}
                 title={!toWaPhone(selected.phone) ? 'El cliente no tiene teléfono válido' : 'Enviar por WhatsApp'}
-                className="dax-btn-secondary justify-center text-sm disabled:opacity-40">
+                className="dax-btn-secondary justify-center text-sm max-md:min-h-[44px] disabled:opacity-40">
                 <i className="fa-brands fa-whatsapp text-emerald-400" /> WhatsApp
               </button>
             </div>

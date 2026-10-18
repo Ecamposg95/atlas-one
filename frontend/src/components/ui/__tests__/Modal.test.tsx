@@ -73,4 +73,9 @@ describe('Modal', () => {
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(cierres).toHaveLength(1)
   })
+
+  it('el botón de cierre usa dax-btn-icon (44 px en teléfono)', () => {
+    render(<Modal open onClose={() => {}} title="T"><p>c</p></Modal>)
+    expect(screen.getByLabelText('Cerrar').classList.contains('dax-btn-icon')).toBe(true)
+  })
 })

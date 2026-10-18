@@ -177,7 +177,7 @@ export function HQInventory() {
 
       {selected && (
         <div className="space-y-3">
-          <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="flex flex-wrap items-center max-md:items-start justify-between gap-2">
             <div>
               <p className="text-[10px] text-slate-500 uppercase tracking-widest">Kardex</p>
               <p className="text-lg font-black text-white">{selected.label}</p>

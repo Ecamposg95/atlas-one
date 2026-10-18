@@ -156,7 +156,7 @@ export function Inventory() {
 
       {selected && (
         <div className="space-y-3">
-          <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="flex flex-wrap items-center max-md:items-start justify-between gap-2">
             <div>
               <p className="text-[10px] text-slate-500 uppercase tracking-widest">Kardex</p>
               <p className="text-lg font-black text-white">{selected.label} <span className="font-mono text-indigo-400 text-sm">{selected.sku}</span></p>
@@ -228,7 +228,7 @@ export function Inventory() {
           <div className="dax-card dax-modal p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-black text-white">Ajuste de Stock</h3>
-              <button onClick={() => setModal(false)} className="text-slate-500 hover:text-white"><i className="fa-solid fa-xmark" /></button>
+              <button onClick={() => setModal(false)} className="dax-btn-icon text-slate-500 hover:text-white"><i className="fa-solid fa-xmark" /></button>
             </div>
             <p className="text-slate-400 text-sm mb-4">{selected.label}</p>
             <div className="space-y-3">

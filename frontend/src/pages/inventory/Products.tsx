@@ -60,7 +60,7 @@ function ImportModal({ onClose, onDone, isHQ }: { onClose: () => void; onDone: (
       <div className="dax-card dax-modal p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-black text-white">Importar productos</h3>
-          <button onClick={cerrar} className="text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
+          <button onClick={cerrar} className="dax-btn-icon text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
         </div>
 
         {!result ? (
@@ -232,7 +232,7 @@ function PrecioDeFila({ p }: { p: Product }) {
 }
 
 /** Celda Stock: existencia (suma de tallas) y el botón que abre el desglose. */
-function ExistenciaDeFila({ p, abierto, onToggle }: { p: Product; abierto: boolean; onToggle: () => void }) {
+function ExistenciaDeFila({ p, abierto, onToggle, className = '' }: { p: Product; abierto: boolean; onToggle: () => void; className?: string }) {
   const { user } = useAuthStore()
   const isHQ = HQ_ROLES.includes(user?.role ?? '')
   const variantCount = p.variants?.length ?? 0
@@ -257,7 +257,7 @@ function ExistenciaDeFila({ p, abierto, onToggle }: { p: Product; abierto: boole
       onClick={onToggle}
       aria-expanded={abierto}
       title={abierto ? 'Ocultar el desglose' : `Ver la existencia por ${SINGULAR_GRUPO[grupo]}`}
-      className="flex flex-col items-end leading-tight ml-auto group/tallas"
+      className={`flex flex-col items-end leading-tight ml-auto group/tallas ${className}`.trim()}
     >
       <span className={`dax-badge ${qty > 0 ? 'dax-badge-green' : 'dax-badge-red'}`}>
         {qty}
@@ -542,7 +542,7 @@ function ProductsHQView() {
       />
 
       {/* Filtros */}
-      <BarraFiltros className="gap-3">
+      <BarraFiltros className="gap-3 !items-stretch">
         <input
           type="text"
           placeholder="Buscar por nombre o SKU..."
@@ -578,7 +578,7 @@ function ProductsHQView() {
                     estado={<EstadoDeFila p={p} />}
                     datos={[
                       { etiqueta: 'Departamento', valor: p.department_name ?? '—' },
-                      { etiqueta: 'Existencia', valor: <ExistenciaDeFila p={p} abierto={tallasAbiertas} onToggle={() => setExpandedVariantsId(tallasAbiertas ? null : p.id)} /> },
+                      { etiqueta: 'Existencia', valor: <ExistenciaDeFila p={p} abierto={tallasAbiertas} className="max-md:min-h-[44px]" onToggle={() => setExpandedVariantsId(tallasAbiertas ? null : p.id)} /> },
                     ]}
                     acciones={canEdit ? <AccionesDeFila p={p} onEditar={openEdit} conTexto /> : undefined}
                   />

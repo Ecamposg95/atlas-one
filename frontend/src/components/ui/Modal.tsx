@@ -117,7 +117,7 @@ export function Modal({ open, onClose, title, children, footer, size = 'md', clo
             type="button"
             onClick={onClose}
             aria-label="Cerrar"
-            className="w-8 h-8 grid place-items-center rounded-lg transition-colors hover:bg-black/5 dark:hover:bg-white/10"
+            className="dax-btn-icon w-8 h-8 grid place-items-center rounded-lg transition-colors hover:bg-black/5 dark:hover:bg-white/10"
             style={{ color: 'var(--dax-text-muted)' }}
           >
             <i className="fa-solid fa-xmark" />

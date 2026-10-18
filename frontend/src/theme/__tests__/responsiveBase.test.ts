@@ -66,3 +66,11 @@ describe('alturas de pantalla completa', () => {
     expect(css).not.toMatch(/min-height:\s*100vh/)
   })
 })
+
+describe('pie de modal con objetivos táctiles', () => {
+  it('los botones del pie miden 44 px en teléfono', () => {
+    const b = media('@media (max-width: 767px) {\n  .dax-modal-footer button')
+    expect(b).toContain('.dax-modal-footer button')
+    expect(b).toMatch(/min-height:\s*44px/)
+  })
+})

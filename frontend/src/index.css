@@ -745,6 +745,12 @@
   padding-top: 0.75rem;
 }
 
+/* Botones del pie de un modal: objetivo táctil de 44 px en teléfono. */
+@media (max-width: 767px) {
+  .dax-modal-footer button,
+  .dax-modal-footer a { min-height: 44px; }
+}
+
 /* ─── 3. Barra de filtros: en teléfono cada control ocupa el ancho ────
    `BarraFiltros` (components/ui) pinta `.dax-filtros`; en escritorio es
    la fila `flex flex-wrap` de siempre y cada hijo conserva su `w-36`.
