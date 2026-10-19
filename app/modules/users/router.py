@@ -55,6 +55,8 @@ def read_user_context(
         "context_type": "HQ",  # Default
         "allowed_templates": [],
         "plan": None,
+        # Modo básico: qué tan larga es la interfaz. Sin org activa, completa.
+        "perfil_ui": "completo",
     }
 
     # 1. Resolve Organization
@@ -71,6 +73,8 @@ def read_user_context(
             # el nombre en la tarjeta de inicio. Sin org activa queda None.
             from app.services.capabilities_service import resumen_plan
             ctx["plan"] = resumen_plan(org)
+            from app.services.perfil_ui import perfil_efectivo
+            ctx["perfil_ui"] = perfil_efectivo(org)
 
             # Preset info
             if org.industry_type:

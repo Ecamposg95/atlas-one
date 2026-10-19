@@ -88,7 +88,7 @@ _ORG_UPDATE_FIELDS = {
     "name", "legal_name", "email", "phone", "address", "logo_url",
     "tax_id", "tax_regime", "website", "timezone",
     "ticket_header", "ticket_footer", "printer_name",
-    "industry_type", "status", "plan", "branding_config", "is_active",
+    "industry_type", "status", "plan", "branding_config", "is_active", "perfil_ui",
     "latitude", "longitude", "maps_url",
 }
 _BRANCH_UPDATE_FIELDS = {
