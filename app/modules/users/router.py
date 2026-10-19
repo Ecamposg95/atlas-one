@@ -137,7 +137,7 @@ def read_user_context(
 
     # Campos del formulario de producto según el giro (mega plan, principio 3).
     from app.modules.products.campos import campos_producto
-    ctx["campos_producto"] = campos_producto(ctx["preset"], ctx["enabled_modules"])
+    ctx["campos_producto"] = campos_producto(ctx["preset"], ctx["enabled_modules"], ctx["perfil_ui"])
 
     return ctx
 
