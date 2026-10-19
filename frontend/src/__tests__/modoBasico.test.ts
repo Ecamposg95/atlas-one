@@ -15,6 +15,12 @@ describe('modo básico: carga y render condicional', () => {
     expect(pos).not.toMatch(/from '\.\.\/\.\.\/components\/pos\/AltaRapidaProducto'/)
   })
 
+  it('el alta corta se precarga y va dentro de un límite de error (el carrito no se pierde)', () => {
+    const pos = src('pages/pos/POS.tsx')
+    expect(pos).toMatch(/if \(opciones\.altaCorta\) void import\('\.\.\/\.\.\/components\/pos\/AltaRapidaProducto'\)/)
+    expect(pos).toMatch(/<LimiteDeError[\s\S]*<Suspense[\s\S]*<AltaRapidaProducto[\s\S]*<\/LimiteDeError>/)
+  })
+
   it.each(NUEVOS)('%s no esconde con la clase hidden', (p) => {
     expect(src(p)).not.toMatch(/className=["'`][^"'`]*\bhidden\b/)
   })

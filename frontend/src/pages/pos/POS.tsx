@@ -40,6 +40,8 @@ import {
   type PendingSale,
 } from '../../utils/offlineQueue'
 import { opcionesPorPerfil } from './opcionesPos'
+import { LimiteDeError } from '../../components/ui/LimiteDeError'
+import { toast as toastGlobal } from '../../store/toastStore'
 
 // Alta corta del modo básico: chunk propio, no viaja en POS-*.js.
 const AltaRapidaProducto = lazy(() => import('../../components/pos/AltaRapidaProducto'))
@@ -61,6 +63,8 @@ export function POS() {
   const hayPropina = useCapacidad('propina')
   const hayFactura = useCapacidad('factura')
   const opciones = opcionesPorPerfil(useEnabledModulesStore((s) => s.perfilUi))
+  // Precarga del alta corta: si el chunk quedó viejo tras un deploy, falla aquí y no al abrirla.
+  useEffect(() => { if (opciones.altaCorta) void import('../../components/pos/AltaRapidaProducto').catch(() => {}) }, [opciones.altaCorta])
   // `capacidades` arranca vacia y se llena cuando responde /users/me/context. Sin
   // esta bandera, "todavia no se" es indistinguible de "no lo tiene contratado", y
   // todo lo que decide con esa respuesta se equivoca en la primera carga.
@@ -939,15 +943,20 @@ export function POS() {
         />
       )}
       {createProductOpen && (opciones.altaCorta ? (
-        <Suspense fallback={null}>
-          <AltaRapidaProducto
-            onClose={() => setCreateProductOpen(false)}
-            onCreado={() => {
-              setCreateProductOpen(false)
-              setProductRefreshKey(k => k + 1)
-            }}
-          />
-        </Suspense>
+        <LimiteDeError onError={() => {
+          setCreateProductOpen(false)
+          toastGlobal.error('No se pudo abrir el alta de producto. Termina la venta y recarga la página.')
+        }}>
+          <Suspense fallback={<div className="text-center text-sm p-4 text-dax-muted">Abriendo…</div>}>
+            <AltaRapidaProducto
+              onClose={() => setCreateProductOpen(false)}
+              onCreado={() => {
+                setCreateProductOpen(false)
+                setProductRefreshKey(k => k + 1)
+              }}
+            />
+          </Suspense>
+        </LimiteDeError>
       ) : (
         <ProductDetailModal
           product={null}

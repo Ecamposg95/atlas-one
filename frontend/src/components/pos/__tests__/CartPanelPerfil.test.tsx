@@ -56,4 +56,15 @@ describe('CartPanel según el perfil', () => {
     expect(screen.getByText('-10%')).toBeTruthy()
     expect(screen.getByText('Desc. -5%')).toBeTruthy()
   })
+
+  it('básico con un cliente de un ticket pausado: chip de solo lectura, se puede quitar pero no cambiar', () => {
+    useEnabledModulesStore.setState({ loaded: true, perfilUi: 'basico' } as never)
+    render(
+      <CartPanel onPay={() => {}} onPark={() => {}} customerName="Ana Pérez" onClearCustomer={() => {}}
+        sessionLocked={false} onOpenSession={() => {}} />,
+    )
+    expect(screen.getByText('Ana Pérez')).toBeTruthy()
+    expect(screen.getByLabelText('Quitar cliente')).toBeTruthy()
+    expect(screen.queryByTitle('Cambiar cliente')).toBeNull()
+  })
 })

@@ -368,6 +368,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
       {customerName && (
         <div className="relative z-30 px-4 py-2.5 flex items-center gap-2" style={{ borderBottom: '1px solid var(--dax-row-border)' }}>
           <i className="fa-solid fa-user text-dax-muted text-sm" />
+          {opciones.cliente ? (
           <button
             onClick={() => setClienteAbierto(true)}
             className="text-sm flex-1 truncate text-left font-medium min-h-[44px] hover:brightness-110 transition-colors"
@@ -376,6 +377,14 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
           >
             {customerName}
           </button>
+          ) : (
+          <span
+            className="text-sm flex-1 truncate text-left font-medium min-h-[44px] flex items-center"
+            style={{ color: 'var(--dax-text)' }}
+          >
+            {customerName}
+          </span>
+          )}
           <button
             onClick={onClearCustomer}
             className="dax-btn-icon text-dax-muted hover:text-dax-danger text-sm rounded-lg"
