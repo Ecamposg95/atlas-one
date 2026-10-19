@@ -127,11 +127,9 @@ export function AdminCatalog() {
   }, [listFilters, noBranchOnly, loadList, loadKpis])
 
   const handleEdit = (product: Product) => {
-    // `/products?edit=<id>` no lo lee nadie: el lápiz dejaba al admin en el
-    // listado, sin formulario. La edición completa (precios escalonados,
-    // empaques y tablas de tallas) vive en /products/:id/edit, que admite
-    // ADMINISTRADOR/DUEÑO/GERENTE/CAJERO (ver App.tsx).
-    navigate(`/products/${product.id}/edit`)
+    // La edición completa (escalones, empaques, tallas) vive en /products/:id/edit;
+    // `volver` regresa aquí al guardar.
+    navigate(`/products/${product.id}/edit?volver=/admin/catalog`)
   }
 
   const handleMatrix = (product: Product) => {
@@ -276,7 +274,7 @@ export function AdminCatalog() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Link
-            to="/admin/products/new"
+            to="/products/new?volver=/admin/catalog"
             className="dax-btn-primary dax-btn-icon text-xs inline-flex items-center gap-1.5 whitespace-nowrap"
           >
             <i className="fa-solid fa-plus" /> Nuevo producto

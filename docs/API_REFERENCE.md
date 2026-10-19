@@ -21,7 +21,7 @@ Catálogo de endpoints por dominio. Todos bajo `/api`. Swagger vivo en `/docs`. 
 ## Users · `/api/users`
 | Método | Ruta | Qué hace | Gating |
 |---|---|---|---|
-| GET | /me/context | **Contexto del frontend**: user, org, branch, preset, `enabled_modules`, `plan: {clave, nombre}` (null sin org activa), templates | auth |
+| GET | /me/context | **Contexto del frontend**: user, org, branch, preset, `enabled_modules`, `plan: {clave, nombre}` (null sin org activa), templates · `campos_producto` `{visibles, ocultos}`: qué campos del formulario de producto muestra el giro (ficha boutique `gender/model/material` solo en `ATLAS_POS_BOUTIQUE`; `variants` solo con el módulo) | auth |
 | GET | / · GET /me · GET /{id} | Lista / actual / detalle (`UserRead.has_reprint_pin`, derivado, nunca el hash) | auth+org |
 | POST | / · PUT /{id} · DELETE /{id} | Crear / editar / soft-delete; acepta `reprint_pin` (4-8 dígitos, `""` borra, 422 fuera de formato) | [admin/dueño] **(2026-09-19)** — antes sin check de rol admin, cualquier cajero podía tocar `/api/users`; corregido junto con el PIN |
 

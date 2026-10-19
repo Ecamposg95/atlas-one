@@ -131,6 +131,10 @@ def read_user_context(
     from app.capacidades import resolver
     ctx["capacidades"] = resolver(ctx["enabled_modules"])
 
+    # Campos del formulario de producto según el giro (mega plan, principio 3).
+    from app.modules.products.campos import campos_producto
+    ctx["campos_producto"] = campos_producto(ctx["preset"], ctx["enabled_modules"])
+
     return ctx
 
 

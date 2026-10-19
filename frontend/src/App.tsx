@@ -42,7 +42,6 @@ const Brands          = lazy(() => import('./pages/core/Brands').then(m => ({ de
 const Users           = lazy(() => import('./pages/core/Users').then(m => ({ default: m.Users })))
 const Organization    = lazy(() => import('./pages/core/Organization').then(m => ({ default: m.Organization })))
 const Startup         = lazy(() => import('./pages/core/Startup').then(m => ({ default: m.Startup })))
-const AdminProductCreate = lazy(() => import('./pages/admin/AdminProductCreate').then(m => ({ default: m.AdminProductCreate })))
 const ProductForm = lazy(() => import('./pages/products/ProductForm').then(m => ({ default: m.ProductForm })))
 
 // `key={id}` fuerza remount al navegar entre ediciones de productos distintos
@@ -294,14 +293,8 @@ export default function App() {
               </RequireRole>
             }
           />
-          <Route
-            path="admin/products/new"
-            element={
-              <RequireRole roles={['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO']}>
-                <Suspense fallback={<PageLoader />}><AdminProductCreate /></Suspense>
-              </RequireRole>
-            }
-          />
+          {/* El alta del Catálogo es el mismo formulario que /products/new. */}
+          <Route path="admin/products/new" element={<Navigate to="/products/new?volver=/admin/catalog" replace />} />
           {/* Scanner de tienda — corrige precios y cuenta existencias parado en
               el pasillo. Mismo guard que admin/catalog y products/:id/edit:
               es escritura de catálogo/inventario scoped por sucursal. */}

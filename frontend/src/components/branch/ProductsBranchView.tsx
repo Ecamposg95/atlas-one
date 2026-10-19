@@ -1,21 +1,22 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuthStore } from '../../store/authStore'
 import { productsApi } from '../../api/products'
 import { inventoryApi } from '../../api/inventory'
 import { toast } from '../../store/toastStore'
 import { ui, brand, fmtMoney } from './branchUI'
-import type { Product, Brand, Department, ProductPrice, PackagingUnit, CatalogKpis, UploadPreviewResponse } from '../../types/products'
-import { expandVariantRows, grupoDeVariantes, nombreDeVariante } from '../../pages/inventory/variantRows'
-import { esFilaPrincipal, planIdentidadDeFila } from './variantEdit'
+import type { Product, CatalogKpis, UploadPreviewResponse } from '../../types/products'
+import { expandVariantRows } from '../../pages/inventory/variantRows'
 
 import { TablaDesplazable } from '../ui/TablaDesplazable'
+import { Modal as ModalFormulario } from '../ui/Modal'
+import { FormularioProducto } from '../products/FormularioProducto'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 // Un renglón por variante — con varias tallas, cada renglón lleva su propio
 // variant_id para que "Ajustar stock" no siempre pegue a la primera variante.
 // `label` es la etiqueta a mostrar (con variante si aplica); `name` se deja
-// intacto como el nombre real del producto (lo usa el prefill del editor).
+// intacto como el nombre real del producto.
 interface ProductRow extends Product {
   variant_id?: string
   label: string
@@ -90,8 +91,6 @@ export function ProductsBranchView() {
   const branchId = user?.branch_id ?? null
 
   const [items, setItems] = useState<ProductRow[]>([])
-  const [departments, setDepartments] = useState<Department[]>([])
-  const [brands, setBrands] = useState<Brand[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'low'>('all')
@@ -100,7 +99,7 @@ export function ProductsBranchView() {
   // Qué renglón se está editando: el producto completo + la talla de la que
   // salió la fila. Sin el `variantId`, el formulario escribía siempre la
   // identidad de la principal.
-  const [editing, setEditing] = useState<{ product: Product; variantId?: string } | null>(null)
+  const [editing, setEditing] = useState<{ productId: string; variantId?: string } | null>(null)
   const [creating, setCreating] = useState(false)
   const [stockTarget, setStockTarget] = useState<ProductRow | null>(null)
   const [showImport, setShowImport] = useState(false)
@@ -139,8 +138,6 @@ export function ProductsBranchView() {
   }, [])
 
   useEffect(() => {
-    productsApi.getDepartments().then(setDepartments).catch(() => {})
-    productsApi.getBrands().then(setBrands).catch(() => {})
     loadKpis()
   }, [loadKpis])
 
@@ -162,14 +159,9 @@ export function ProductsBranchView() {
     return items
   }, [items, filter])
 
-  // ── Edit: cargar producto completo (con prices + packaging_units) ─────────
-  async function openEdit(p: ProductRow) {
-    try {
-      const full = await productsApi.getById(p.id)
-      setEditing({ product: full, variantId: p.variant_id })
-    } catch {
-      setEditing({ product: p, variantId: p.variant_id })
-    }
+  // ── Edit: FormularioProducto carga el producto completo por su cuenta ─────
+  function openEdit(p: ProductRow) {
+    setEditing({ productId: p.id, variantId: p.variant_id })
   }
 
   // ── Excel template + import ────────────────────────────────────────────────
@@ -317,24 +309,18 @@ export function ProductsBranchView() {
 
       {/* Modals */}
       {creating && (
-        <ProductFormModal
-          mode="create"
-          departments={departments}
-          brands={brands}
-          onClose={() => setCreating(false)}
-          onSaved={() => { setCreating(false); load(search); loadKpis() }}
-        />
+        <ModalFormulario open onClose={() => setCreating(false)} size="xl" closeOnBackdrop={false} closeOnEscape={false} title="Nuevo producto">
+          <FormularioProducto mode="create" presentacion="modal"
+            onDone={() => { setCreating(false); load(search); loadKpis() }}
+            onCancel={() => setCreating(false)} />
+        </ModalFormulario>
       )}
       {editing && (
-        <ProductFormModal
-          mode="edit"
-          product={editing.product}
-          variantId={editing.variantId}
-          departments={departments}
-          brands={brands}
-          onClose={() => setEditing(null)}
-          onSaved={() => { setEditing(null); load(search); loadKpis() }}
-        />
+        <ModalFormulario open onClose={() => setEditing(null)} size="xl" closeOnBackdrop={false} closeOnEscape={false} title="Editar producto">
+          <FormularioProducto mode="edit" productId={editing.productId} variantId={editing.variantId} presentacion="modal"
+            onDone={() => { setEditing(null); load(search); loadKpis() }}
+            onCancel={() => setEditing(null)} />
+        </ModalFormulario>
       )}
       {stockTarget && (
         <StockAdjustModal
@@ -526,447 +512,6 @@ function ProductFichaModal({ product: p, onClose, onEdit, onAdjustStock }: Ficha
       </div>
     </Modal>
   )
-}
-
-// ─── Product form modal (create + edit) ───────────────────────────────────────
-
-const SINGULAR_GRUPO = { tallas: 'talla', colores: 'color', variantes: 'variante' } as const
-
-interface FormModalProps {
-  mode: 'create' | 'edit'
-  product?: Product
-  /** Talla de la que salió el renglón; sin ella el formulario es el del producto. */
-  variantId?: string
-  departments: Department[]
-  brands: Brand[]
-  onClose: () => void
-  onSaved: () => void
-}
-
-function ProductFormModal({ mode, product, variantId, departments, brands, onClose, onSaved }: FormModalProps) {
-  const { user } = useAuthStore()
-  // La fila puede ser una talla que NO es la principal. En ese caso el SKU y
-  // el código de barras son los de ESA talla y se guardan en ella, no en el
-  // producto (`PUT /products/{id}` escribe siempre la principal).
-  const filaPrincipal = !product || esFilaPrincipal(product, variantId)
-  const variante = product?.variants?.find((v) => v.id === variantId)
-  // Nunca "Estándar" en pantalla: si la variante no tiene nombre propio se
-  // muestra el del producto.
-  const nombreVariante = product && variante ? nombreDeVariante(product, variante) : 'la variante'
-  const grupo = grupoDeVariantes(product?.variants ?? [])
-  const [form, setForm] = useState({
-    name: product?.name ?? '',
-    sku: (filaPrincipal ? product?.sku : variante?.sku) ?? '',
-    barcode: (filaPrincipal ? product?.barcode : variante?.barcode) ?? '',
-    cost: String(product?.cost ?? ''),
-    price: String(product?.price ?? ''),
-    department_id: product?.department?.id ?? '',
-    brand_id: product?.brand_id ?? '',
-    initial_stock: '',
-    description: product?.description ?? '',
-  })
-  const [tiers, setTiers] = useState<TierRow[]>(
-    (product?.prices ?? []).map((p: ProductPrice) => ({
-      id: p.id,
-      price_name: p.price_name,
-      min_quantity: String(p.min_quantity),
-      unit_price: String(p.unit_price),
-    }))
-  )
-  const [packs, setPacks] = useState<PackRow[]>(
-    (product?.packaging_units ?? []).map((u: PackagingUnit) => ({
-      id: u.id,
-      name: u.name,
-      barcode: u.barcode ?? '',
-      units_per_package: String(u.units_per_package),
-      package_price: String(u.package_price),
-    }))
-  )
-  const [imageUrl, setImageUrl] = useState<string | null>(product?.image_url ?? null)
-  const [imgUploading, setImgUploading] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const fileRef = useRef<HTMLInputElement>(null)
-
-  const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((s) => ({ ...s, [k]: v }))
-
-  async function uploadImage(file: File) {
-    if (!product) {
-      toast.error('Crea el producto primero, luego sube su foto')
-      return
-    }
-    setImgUploading(true)
-    try {
-      const updated = await productsApi.uploadImage(product.id, file)
-      setImageUrl(updated.image_url ?? null)
-      toast.success('Foto actualizada')
-    } catch (e: unknown) {
-      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      toast.error(detail ?? 'No se pudo subir la foto')
-    } finally {
-      setImgUploading(false)
-    }
-  }
-
-  async function deleteImage() {
-    if (!product) return
-    setImgUploading(true)
-    try {
-      await productsApi.deleteImage(product.id)
-      setImageUrl(null)
-      toast.success('Foto eliminada')
-    } catch {
-      toast.error('No se pudo eliminar la foto')
-    } finally {
-      setImgUploading(false)
-    }
-  }
-
-  async function submit() {
-    if (!form.name.trim() || !form.sku.trim()) {
-      toast.error('Nombre y SKU son requeridos')
-      return
-    }
-    const cost = parseFloat(form.cost)
-    const price = parseFloat(form.price)
-    if (isNaN(cost) || isNaN(price) || price <= 0) {
-      toast.error('Costo y precio deben ser números válidos (precio > 0)')
-      return
-    }
-
-    const cleanTiers = tiers
-      .map((t) => ({
-        price_name: t.price_name.trim(),
-        min_quantity: parseFloat(t.min_quantity),
-        unit_price: parseFloat(t.unit_price),
-      }))
-      .filter((t) => t.price_name && !isNaN(t.min_quantity) && !isNaN(t.unit_price))
-
-    const cleanPacks = packs
-      .map((u) => ({
-        name: u.name.trim() || 'Caja',
-        barcode: u.barcode.trim() || null,
-        units_per_package: parseFloat(u.units_per_package),
-        package_price: parseFloat(u.package_price),
-      }))
-      .filter((u) => !isNaN(u.units_per_package) && u.units_per_package > 0 && !isNaN(u.package_price))
-
-    setSaving(true)
-    try {
-      if (mode === 'create') {
-        const initialStock = form.initial_stock ? parseFloat(form.initial_stock) : undefined
-        await productsApi.create({
-          name: form.name.trim(),
-          sku: form.sku.trim(),
-          barcode: form.barcode.trim() || null,
-          description: form.description.trim() || null,
-          cost,
-          price,
-          department_id: form.department_id || null,
-          brand_id: form.brand_id || null,
-          branch_id: user?.branch_id ?? undefined,
-          initial_stock: initialStock,
-          prices: cleanTiers,
-          packaging_units: cleanPacks,
-          image_url: imageUrl ?? null,
-        })
-        toast.success('Producto creado')
-      } else if (product) {
-        // El SKU/código de una talla no principal NO puede viajar en
-        // `PUT /products/{id}`: ahí sobrescribiría los de la principal.
-        const identidad = planIdentidadDeFila(product, variantId, {
-          sku: form.sku.trim(),
-          barcode: form.barcode.trim() || null,
-        })
-        // Primero el producto: si revienta (409 por SKU/nombre duplicado, por
-        // ejemplo) la talla se queda intacta en vez de quedar ya renombrada
-        // con el producto sin guardar.
-        await productsApi.update(product.id, {
-          name: form.name.trim(),
-          ...identidad.productPatch,
-          description: form.description.trim() || null,
-          cost,
-          price,
-          department_id: form.department_id || null,
-          brand_id: form.brand_id || null,
-          prices: cleanTiers,
-          packaging_units: cleanPacks,
-          image_url: imageUrl ?? null,
-        })
-        if (identidad.variantPatch) {
-          await productsApi.updateVariant(identidad.variantPatch.variantId, identidad.variantPatch.patch)
-        }
-        toast.success('Producto actualizado')
-      }
-      onSaved()
-    } catch (e: unknown) {
-      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      toast.error(detail ?? 'No se pudo guardar')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Modal onClose={onClose} title={mode === 'create' ? 'Nuevo producto' : 'Editar producto'} size="xl">
-      {/* Section 1 — Datos básicos (slate accent) */}
-      <section className={`${ui.card} p-4`}>
-        <SectionHeader icon="fa-info-circle" label="Datos básicos" accentColor="slate" />
-        <div className="flex gap-4 mb-3">
-          <div className="flex-shrink-0">
-            <div
-              onClick={() => mode === 'edit' && fileRef.current?.click()}
-              className={`w-24 h-24 rounded-2xl bg-stone-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden border-2 border-dashed border-stone-300 dark:border-slate-700 ${
-                mode === 'edit' ? 'cursor-pointer hover:border-purple-500' : 'opacity-60'
-              }`}
-              title={mode === 'edit' ? 'Cambiar foto' : 'Crea el producto primero'}
-            >
-              {imgUploading ? (
-                <i className="fa-solid fa-spinner fa-spin text-purple-500" />
-              ) : imageUrl ? (
-                <img src={imageUrl} alt="" className="w-full h-full object-cover" />
-              ) : (
-                <div className="text-center">
-                  <i className="fa-solid fa-camera text-slate-400 text-xl block mb-1" />
-                  <span className="text-[9px] text-slate-500 font-semibold">Subir foto</span>
-                </div>
-              )}
-            </div>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0]
-                if (f) uploadImage(f)
-                e.target.value = ''
-              }}
-            />
-            {imageUrl && mode === 'edit' && (
-              <button
-                onClick={deleteImage}
-                type="button"
-                className="mt-2 w-full text-[10px] font-semibold text-rose-600 hover:text-rose-700"
-              >
-                Quitar foto
-              </button>
-            )}
-          </div>
-          <div className="flex-1 space-y-2">
-            <Field label="Nombre *">
-              <input className={ui.input} value={form.name} onChange={(e) => set('name', e.target.value)} autoFocus />
-            </Field>
-            <Field label="Descripción">
-              <input className={ui.input} value={form.description} onChange={(e) => set('description', e.target.value)} placeholder="Opcional" />
-            </Field>
-            <Field label="O pegar URL de imagen">
-              <input
-                className={ui.input}
-                type="url"
-                value={imageUrl ?? ''}
-                onChange={(e) => setImageUrl(e.target.value.trim() || null)}
-                placeholder="https://… (alternativa a subir archivo)"
-              />
-            </Field>
-          </div>
-        </div>
-        {!filaPrincipal && variante && (
-          <p className="text-xs text-amber-700 dark:text-amber-400 mb-3">
-            <i className="fa-solid fa-circle-info mr-1.5" aria-hidden="true" />
-            SKU y código de barras son los de <strong>{nombreVariante}</strong> y
-            se guardan en esa {SINGULAR_GRUPO[grupo]}.
-            Nombre, costo, precio y escalones son del producto completo.
-          </p>
-        )}
-        <div className="grid grid-cols-2 gap-3">
-          <Field label={filaPrincipal ? 'SKU *' : `SKU de ${nombreVariante} *`}>
-            <input className={ui.input} value={form.sku} onChange={(e) => set('sku', e.target.value)} />
-          </Field>
-          <Field label={filaPrincipal ? 'Código de barras' : `Código de barras de ${nombreVariante}`}>
-            <input className={ui.input} value={form.barcode} onChange={(e) => set('barcode', e.target.value)} />
-          </Field>
-          <Field label="Costo *">
-            <input className={ui.input} type="number" step="0.01" value={form.cost} onChange={(e) => set('cost', e.target.value)} />
-          </Field>
-          <Field label="Precio *">
-            <input className={ui.input} type="number" step="0.01" value={form.price} onChange={(e) => set('price', e.target.value)} />
-          </Field>
-          <Field label="Departamento">
-            <select className={ui.input} value={form.department_id} onChange={(e) => set('department_id', e.target.value)}>
-              <option value="">— Sin asignar —</option>
-              {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-          </Field>
-          <Field label="Marca">
-            <select className={ui.input} value={form.brand_id} onChange={(e) => set('brand_id', e.target.value)}>
-              <option value="">— Sin asignar —</option>
-              {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
-          </Field>
-          {mode === 'create' && (
-            <Field label="Stock inicial">
-              <input className={ui.input} type="number" step="1" value={form.initial_stock} onChange={(e) => set('initial_stock', e.target.value)} placeholder="Opcional" />
-            </Field>
-          )}
-        </div>
-      </section>
-
-      {/* Section 2 — Precios escalonados (purple accent, tier palette) */}
-      <section className={`${ui.card} p-4 mt-3`}>
-        <div className="flex items-center justify-between mb-3">
-          <SectionHeader icon="fa-bolt" label="Precios escalonados" accentColor="purple" />
-          <button
-            type="button"
-            onClick={() => setTiers((t) => [...t, { price_name: `Precio ${t.length + 1}`, min_quantity: '', unit_price: '' }])}
-            className="text-[10px] font-bold text-purple-700 dark:text-purple-400 hover:text-purple-900 dark:hover:text-purple-200"
-          >
-            <i className="fa-solid fa-plus mr-1" /> Agregar
-          </button>
-        </div>
-        {tiers.length === 0 ? (
-          <p className={`text-xs italic ${ui.muted}`}>Sin precios escalonados — solo se usa el precio base.</p>
-        ) : (
-          <div className="space-y-2">
-            {tiers.map((t, i) => {
-              const s = tierStyle(i)
-              return (
-                <div key={i} className={`rounded-xl border ${s.border} ${s.bg} p-3`}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <i className={`fa-solid ${s.icon} ${s.text}`} aria-hidden="true" />
-                    <input
-                      className={`bg-transparent flex-1 font-bold text-sm outline-none ${s.text}`}
-                      value={t.price_name}
-                      onChange={(e) => setTiers((arr) => arr.map((x, idx) => idx === i ? { ...x, price_name: e.target.value } : x))}
-                      placeholder="Nombre del precio (ej. Mayoreo)"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setTiers((arr) => arr.filter((_, idx) => idx !== i))}
-                      className="text-rose-500 hover:text-rose-600 p-1"
-                      aria-label="Eliminar"
-                    >
-                      <i className="fa-solid fa-trash text-xs" />
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Field label="Cantidad mínima">
-                      <input
-                        className={`${ui.input} text-sm tabular-nums`}
-                        type="number"
-                        step="1"
-                        value={t.min_quantity}
-                        onChange={(e) => setTiers((arr) => arr.map((x, idx) => idx === i ? { ...x, min_quantity: e.target.value } : x))}
-                      />
-                    </Field>
-                    <Field label="Precio por unidad">
-                      <input
-                        className={`${ui.input} text-sm tabular-nums`}
-                        type="number"
-                        step="0.01"
-                        value={t.unit_price}
-                        onChange={(e) => setTiers((arr) => arr.map((x, idx) => idx === i ? { ...x, unit_price: e.target.value } : x))}
-                      />
-                    </Field>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </section>
-
-      {/* Section 3 — Empaques (blue accent, single tone) */}
-      <section className={`${ui.card} p-4 mt-3`}>
-        <div className="flex items-center justify-between mb-3">
-          <SectionHeader icon="fa-box-open" label="Empaques (caja, paquete)" accentColor="blue" />
-          <button
-            type="button"
-            onClick={() => setPacks((u) => [...u, { name: 'Caja', barcode: '', units_per_package: '', package_price: '' }])}
-            className="text-[10px] font-bold text-blue-700 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-200"
-          >
-            <i className="fa-solid fa-plus mr-1" /> Agregar
-          </button>
-        </div>
-        {packs.length === 0 ? (
-          <p className={`text-xs italic ${ui.muted}`}>Sin empaques registrados.</p>
-        ) : (
-          <div className="space-y-2">
-            {packs.map((u, i) => (
-              <div key={i} className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <i className="fa-solid fa-box-open text-blue-700 dark:text-blue-300" aria-hidden="true" />
-                  <input
-                    className="bg-transparent flex-1 font-bold text-sm outline-none text-blue-700 dark:text-blue-300"
-                    value={u.name}
-                    onChange={(e) => setPacks((arr) => arr.map((x, idx) => idx === i ? { ...x, name: e.target.value } : x))}
-                    placeholder="Caja"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setPacks((arr) => arr.filter((_, idx) => idx !== i))}
-                    className="text-rose-500 hover:text-rose-600 p-1"
-                    aria-label="Eliminar"
-                  >
-                    <i className="fa-solid fa-trash text-xs" />
-                  </button>
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <Field label="Código">
-                    <input
-                      className={`${ui.input} text-sm`}
-                      value={u.barcode}
-                      onChange={(e) => setPacks((arr) => arr.map((x, idx) => idx === i ? { ...x, barcode: e.target.value } : x))}
-                      placeholder="Opcional"
-                    />
-                  </Field>
-                  <Field label="Unidades / caja">
-                    <input
-                      className={`${ui.input} text-sm tabular-nums`}
-                      type="number"
-                      step="1"
-                      value={u.units_per_package}
-                      onChange={(e) => setPacks((arr) => arr.map((x, idx) => idx === i ? { ...x, units_per_package: e.target.value } : x))}
-                    />
-                  </Field>
-                  <Field label="$ por caja">
-                    <input
-                      className={`${ui.input} text-sm tabular-nums`}
-                      type="number"
-                      step="0.01"
-                      value={u.package_price}
-                      onChange={(e) => setPacks((arr) => arr.map((x, idx) => idx === i ? { ...x, package_price: e.target.value } : x))}
-                    />
-                  </Field>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <div className="flex gap-2 mt-6 sticky bottom-0 bg-white dark:bg-slate-900 pt-3">
-        <button onClick={onClose} className={`${ui.btnSecondary} flex-1`} disabled={saving}>Cancelar</button>
-        <button onClick={submit} disabled={saving} className={`${ui.btnPrimary} flex-1`}>
-          {saving ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Guardar</>}
-        </button>
-      </div>
-    </Modal>
-  )
-}
-
-interface TierRow {
-  id?: string
-  price_name: string
-  min_quantity: string
-  unit_price: string
-}
-
-interface PackRow {
-  id?: string
-  name: string
-  barcode: string
-  units_per_package: string
-  package_price: string
 }
 
 // ─── Stock adjust modal ───────────────────────────────────────────────────────

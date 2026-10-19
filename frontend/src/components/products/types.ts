@@ -1,7 +1,7 @@
 import type { Brand, Department } from '../../types/products'
 import type { Branch } from '../../types/auth'
 
-/** Form state compartido entre AdminProductCreate y ProductForm (cajero). */
+/** Form state compartido entre la antigua página de alta y ProductForm (cajero). */
 export interface ProductFormValue {
   name: string
   sku: string
@@ -63,5 +63,16 @@ export interface PriceRow {
 }
 
 export const emptyPriceRow = (): PriceRow => ({ price_name: '', min_quantity: 1, unit_price: 0 })
+
+/** Fila editable de empaque (caja, master…). */
+export interface PackagingRow {
+  id?: string
+  name: string
+  barcode: string
+  units_per_package: number
+  package_price: number
+}
+
+export const emptyPackagingRow = (): PackagingRow => ({ name: 'Caja', barcode: '', units_per_package: 1, package_price: 0 })
 
 export type { Brand, Department, Branch }

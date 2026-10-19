@@ -33,12 +33,14 @@ export interface ModalProps {
   size?: keyof typeof SIZES
   /** Cerrar al hacer clic en el fondo (default true). Apagar en flujos que no deben perderse por un clic accidental. */
   closeOnBackdrop?: boolean
+  /** Cerrar con la tecla Escape (default true). Apagar en formularios largos: Esc soltó lo capturado. */
+  closeOnEscape?: boolean
 }
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
-export function Modal({ open, onClose, title, children, footer, size = 'md', closeOnBackdrop = true }: ModalProps) {
+export function Modal({ open, onClose, title, children, footer, size = 'md', closeOnBackdrop = true, closeOnEscape = true }: ModalProps) {
   const panelRef = useRef<HTMLDivElement | null>(null)
   const restoreFocusRef = useRef<HTMLElement | null>(null)
 
@@ -56,6 +58,7 @@ export function Modal({ open, onClose, title, children, footer, size = 'md', clo
     if (!open) return
     function handleKey(e: KeyboardEvent) {
       if (e.key === 'Escape') {
+        if (!closeOnEscape) return
         e.preventDefault()
         onClose()
         return
@@ -73,7 +76,7 @@ export function Modal({ open, onClose, title, children, footer, size = 'md', clo
     }
     document.addEventListener('keydown', handleKey)
     return () => document.removeEventListener('keydown', handleKey)
-  }, [open, onClose])
+  }, [open, onClose, closeOnEscape])
 
   // Scroll-lock del body mientras el modal está abierto.
   useEffect(() => {

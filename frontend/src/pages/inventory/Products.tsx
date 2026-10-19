@@ -1,6 +1,6 @@
-import { Fragment, useEffect, useState, useCallback, useRef, type FormEvent } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
-import { productsApi, type BranchStatusPatch } from '../../api/products'
+import { Fragment, useEffect, useState, useCallback, useRef } from 'react'
+import { useLocation } from 'react-router-dom'
+import { productsApi } from '../../api/products'
 import { useAuthStore } from '../../store/authStore'
 import { useBranchCountStore, esTiendaUnica } from '../../store/branchCountStore'
 import { useIsBranchUser } from '../../components/branch/useIsBranchUser'
@@ -8,20 +8,19 @@ import { ProductsBranchView } from '../../components/branch/ProductsBranchView'
 import { DaxCard } from '../../components/ui/DaxCard'
 import { Spinner } from '../../components/ui/Spinner'
 import { Badge } from '../../components/ui/Badge'
-import type { Product, Department, Brand, ProductBranchStatus } from '../../types/products'
+import type { Product, Department } from '../../types/products'
 import { formatCurrency } from '../../utils/currency'
 import { sortByName } from '../../utils/sortByName'
 import { toast } from '../../store/toastStore'
-import { GENEROS } from '../../components/products/ProductCommercialSection'
-import { ProductImageUploader } from '../../components/products/ProductImageUploader'
+import { Modal } from '../../components/ui/Modal'
+import { FormularioProducto } from '../../components/products/FormularioProducto'
 import { expandVariantRows, grupoDeVariantes, nombreDeVariante, priceRange, sumStock } from './variantRows'
-import { claseEtiquetaFila } from '../../utils/formResponsivo'
+import { cerrarImportacion, debeCerrarSolo } from './importacion'
 
 const SINGULAR_GRUPO = { tallas: 'talla', colores: 'color', variantes: 'variante' } as const
 
 const HQ_ROLES = ['ADMINISTRADOR', 'DUEÑO']
 const CAN_EDIT_ROLES = ['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO']
-const BRANCH_EDIT_ROLES = ['GERENTE', 'CAJERO']
 
 // ─── Import Modal ──────────────────────────────────────────────────────────────
 
@@ -40,7 +39,7 @@ function ImportModal({ onClose, onDone, isHQ }: { onClose: () => void; onDone: (
       const uploadScope = isHQ ? scope : 'branch'
       const res = await productsApi.uploadProducts(file, uploadScope)
       setResult(res)
-      if (res.created > 0 || res.updated > 0) onDone()
+      if (debeCerrarSolo(res)) onDone()
     } catch (e: any) {
       setError(e?.response?.data?.detail ?? 'Error al importar. Revisa el archivo.')
     } finally {
@@ -48,12 +47,15 @@ function ImportModal({ onClose, onDone, isHQ }: { onClose: () => void; onDone: (
     }
   }
 
+  // Fondo y X: si ya entró algo, recargar la lista; si no, solo cerrar.
+  const cerrar = () => (cerrarImportacion(result) === 'recargar' ? onDone() : onClose())
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={cerrar}>
       <div className="dax-card dax-modal p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-black text-white">Importar productos</h3>
-          <button onClick={onClose} className="text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
+          <button onClick={cerrar} className="text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
         </div>
 
         {!result ? (
@@ -174,7 +176,7 @@ function ImportModal({ onClose, onDone, isHQ }: { onClose: () => void; onDone: (
               </div>
             )}
 
-            <button onClick={onClose} className="w-full dax-btn-primary justify-center">
+            <button onClick={onDone} className="w-full dax-btn-primary justify-center">
               <i className="fa-solid fa-check" /> Cerrar
             </button>
           </div>
@@ -184,956 +186,11 @@ function ImportModal({ onClose, onDone, isHQ }: { onClose: () => void; onDone: (
   )
 }
 
-// ─── Branch Status Editor (CAJERO/GERENTE) ─────────────────────────────────────
-
-/**
- * Variantes sobre las que hay que escribir el PBS del producto.
- *
- * Antes esto devolvía solo `variants[0]`: apagar el POS o fijar un precio de
- * sucursal dejaba las demás tallas vendiéndose, y al precio viejo. Es un bug
- * de dinero, así que el cambio va a TODAS las tallas vivas (el backend ya
- * excluye las retiradas de `variants`).
- *
- * Aquí no se usa `/branch-status/bulk-toggle` a propósito: ese endpoint es
- * admin-only y esta ficha la usan CAJERO/GERENTE, que sí pueden hacer el
- * PATCH de su propia sucursal.
- */
-function pickVariantIds(p: Product): string[] {
-  const vivas = (p.variants ?? []).map((v) => v.id)
-  if (vivas.length > 0) return vivas
-  const primero = p.branch_statuses?.[0]?.variant_id
-  return primero ? [primero] : []
-}
-
-/**
- * Toma el PBS existente para la sucursal del usuario (si existe).
- * Si no hay, devuelve valores por defecto sensatos para iniciar la edición.
- */
-function pickBranchStatus(p: Product, branchId: number | null): ProductBranchStatus | null {
-  if (!branchId) return null
-  return p.branch_statuses?.find(s => s.branch_id === branchId) ?? null
-}
-
-function mensajeDeError(e: any): string {
-  const detail = e?.response?.data?.detail
-  if (e?.response?.status === 403) return 'No tienes permiso para editar esta sucursal.'
-  if (e?.response?.status === 404) return 'Producto no disponible en tu sucursal.'
-  return typeof detail === 'string' ? detail : 'Error al guardar los cambios.'
-}
-
-interface BranchStatusEditorProps {
-  product: Product
-  branchId: number
-  onSaved: (updated: ProductBranchStatus) => void
-  onCancel: () => void
-}
-
-function BranchStatusEditor({ product, branchId, onSaved, onCancel }: BranchStatusEditorProps) {
-  const existing = pickBranchStatus(product, branchId)
-  const variantIds = pickVariantIds(product)
-  const grupo = grupoDeVariantes(product.variants ?? [])
-
-  const [priceOverride, setPriceOverride] = useState<string>(
-    existing?.price_override != null ? String(existing.price_override) : ''
-  )
-  const [minStock, setMinStock] = useState<string>(
-    existing?.min_stock_alert != null ? String(existing.min_stock_alert) : ''
-  )
-  const [maxStock, setMaxStock] = useState<string>(
-    existing?.max_stock_limit != null ? String(existing.max_stock_limit) : ''
-  )
-  const [isActivePos, setIsActivePos] = useState<boolean>(existing?.is_active_pos ?? true)
-  const [isActiveHq, setIsActiveHq] = useState<boolean>(existing?.is_active_hq ?? true)
-  const [isVisible, setIsVisible] = useState<boolean>(existing?.is_visible ?? true)
-
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  // Sólo enviamos los campos que realmente cambiaron vs el estado inicial
-  // del PBS. Para un PBS nuevo (existing=null), enviamos todo lo que el
-  // usuario haya tocado para que el backend lo cree con esos valores.
-  const buildPatch = (): BranchStatusPatch => {
-    const patch: BranchStatusPatch = {}
-
-    // price_override: string vacío → null (limpiar override)
-    const initialPrice = existing?.price_override ?? null
-    const currentPrice = priceOverride.trim() === '' ? null : Number(priceOverride)
-    if (currentPrice !== initialPrice) patch.price_override = currentPrice
-
-    const initialMin = existing?.min_stock_alert ?? null
-    const currentMin = minStock.trim() === '' ? null : Number(minStock)
-    if (currentMin !== initialMin) patch.min_stock_alert = currentMin
-
-    const initialMax = existing?.max_stock_limit ?? null
-    const currentMax = maxStock.trim() === '' ? null : Number(maxStock)
-    if (currentMax !== initialMax) patch.max_stock_limit = currentMax
-
-    if ((existing?.is_active_pos ?? true) !== isActivePos) patch.is_active_pos = isActivePos
-    if ((existing?.is_active_hq ?? true) !== isActiveHq) patch.is_active_hq = isActiveHq
-    if ((existing?.is_visible ?? true) !== isVisible) patch.is_visible = isVisible
-
-    return patch
-  }
-
-  const handleSave = async () => {
-    if (variantIds.length === 0) { setError('No se encontró una variante editable para este producto.'); return }
-
-    const patch = buildPatch()
-    if (Object.keys(patch).length === 0) {
-      toast.info('No hay cambios que guardar.')
-      onCancel()
-      return
-    }
-
-    // Validación numérica mínima — evitar enviar NaN
-    if (patch.price_override !== undefined && patch.price_override !== null && !Number.isFinite(patch.price_override)) {
-      setError('Precio inválido.'); return
-    }
-    if (patch.min_stock_alert !== undefined && patch.min_stock_alert !== null && !Number.isFinite(patch.min_stock_alert)) {
-      setError('Stock mínimo inválido.'); return
-    }
-    if (patch.max_stock_limit !== undefined && patch.max_stock_limit !== null && !Number.isFinite(patch.max_stock_limit)) {
-      setError('Stock máximo inválido.'); return
-    }
-
-    setSaving(true); setError(null)
-    try {
-      // Una escritura por talla (el endpoint es por variante y el bulk es
-      // admin-only). En paralelo y con `allSettled`: si una talla falla, las
-      // demás ya quedaron escritas y hay que decir cuántas entraron en vez de
-      // abortar a la mitad sin avisar qué quedó divergente.
-      const res = await Promise.allSettled(
-        variantIds.map((vid) => productsApi.updateBranchStatus(vid, patch)),
-      )
-      const fallidas = res.filter((r) => r.status === 'rejected') as PromiseRejectedResult[]
-      if (fallidas.length === variantIds.length) {
-        setError(mensajeDeError(fallidas[0].reason))
-        return
-      }
-      if (fallidas.length > 0) {
-        setError(
-          `Se aplicó a ${variantIds.length - fallidas.length} de ${variantIds.length} ` +
-          `${grupo}: ${mensajeDeError(fallidas[0].reason)}`,
-        )
-        return
-      }
-      // La primera (la principal) es la que la tabla muestra.
-      const principal = (res[0] as PromiseFulfilledResult<ProductBranchStatus>).value
-      toast.success(
-        variantIds.length > 1
-          ? `Cambios guardados en tu sucursal para las ${variantIds.length} ${grupo}.`
-          : 'Cambios guardados en tu sucursal.',
-      )
-      onSaved(principal)
-    } catch (e: any) {
-      setError(mensajeDeError(e))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const clearOverride = () => setPriceOverride('')
-
-  return (
-    <div className="bg-slate-800/60 border border-indigo-500/20 rounded-xl p-4 space-y-3">
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-300">
-            <i className="fa-solid fa-store mr-1.5" />
-            Configuración por sucursal
-          </p>
-          <p className="text-slate-400 text-xs mt-0.5">
-            Los cambios aquí afectan únicamente a <span className="text-white font-semibold">tu sucursal</span>.
-            El precio base del producto no se modifica.
-          </p>
-          {variantIds.length > 1 && (
-            <p className="text-slate-400 text-xs mt-0.5">
-              Se aplican a las <span className="text-white font-semibold">{variantIds.length} {grupo}</span> del producto.
-            </p>
-          )}
-        </div>
-        <span className="text-[10px] text-slate-500 font-mono">
-          Base: {formatCurrency(product.price ?? 0)}
-        </span>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {/* Precio override */}
-        <div className="sm:col-span-1">
-          <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-            Precio de venta en sucursal
-          </label>
-          <div className="flex items-center gap-1.5">
-            <input
-              type="number" min="0" step="0.01"
-              className="dax-input w-full text-xs"
-              placeholder={`Hereda ${formatCurrency(product.price ?? 0)}`}
-              value={priceOverride}
-              onChange={e => setPriceOverride(e.target.value)}
-            />
-            <button
-              type="button"
-              onClick={clearOverride}
-              disabled={priceOverride === ''}
-              className="px-2 py-1.5 rounded-lg border border-slate-700/50 text-[10px] font-semibold text-slate-400 hover:text-white hover:border-slate-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
-              title="Vaciar override (volver a usar el precio base)"
-            >
-              Limpiar
-            </button>
-          </div>
-          <p className="text-[10px] text-slate-600 mt-1">Vacío = usa el precio base del producto.</p>
-        </div>
-
-        {/* Stock min */}
-        <div>
-          <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-            Stock mínimo (alerta)
-          </label>
-          <input
-            type="number" min="0" step="1"
-            className="dax-input w-full text-xs"
-            placeholder="opcional"
-            value={minStock}
-            onChange={e => setMinStock(e.target.value)}
-          />
-        </div>
-
-        {/* Stock max */}
-        <div>
-          <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-            Stock máximo
-          </label>
-          <input
-            type="number" min="0" step="1"
-            className="dax-input w-full text-xs"
-            placeholder="opcional"
-            value={maxStock}
-            onChange={e => setMaxStock(e.target.value)}
-          />
-        </div>
-      </div>
-
-      {/* Flags */}
-      <div className="flex flex-wrap gap-4 pt-1">
-        <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={isActivePos}
-            onChange={e => setIsActivePos(e.target.checked)}
-            className="rounded"
-          />
-          Activo en POS
-        </label>
-        <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={isActiveHq}
-            onChange={e => setIsActiveHq(e.target.checked)}
-            className="rounded"
-          />
-          Activo en HQ
-        </label>
-        <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={isVisible}
-            onChange={e => setIsVisible(e.target.checked)}
-            className="rounded"
-          />
-          Visible
-        </label>
-      </div>
-
-      {error && (
-        <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
-          <i className="fa-solid fa-circle-exclamation mr-1.5" />{error}
-        </p>
-      )}
-
-      <div className="flex items-center justify-end gap-2 pt-1">
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={saving}
-          className="dax-btn-secondary text-xs"
-        >
-          Cancelar
-        </button>
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={saving || variantIds.length === 0}
-          className="dax-btn text-xs flex items-center gap-1.5 disabled:opacity-50"
-        >
-          {saving ? <i className="fa-solid fa-spinner fa-spin text-[10px]" /> : <i className="fa-solid fa-floppy-disk text-[10px]" />}
-          Guardar
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// ─── Create Product Mini Modal (CAJERO/GERENTE) ────────────────────────────────
-
-interface CreateProductMiniModalProps {
-  brands: Brand[]
-  departments: Department[]
-  onClose: () => void
-  onCreated: (product: Product) => void
-}
-
-function CreateProductMiniModal({ brands, departments, onClose, onCreated }: CreateProductMiniModalProps) {
-  const [name, setName] = useState('')
-  const [sku, setSku] = useState('')
-  const [price, setPrice] = useState('')
-  const [cost, setCost] = useState('')
-  const [departmentId, setDepartmentId] = useState('')
-  const [brandId, setBrandId] = useState('')
-  const [barcode, setBarcode] = useState('')
-
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault()
-    if (!name.trim()) { setError('El nombre es requerido.'); return }
-    if (!sku.trim()) { setError('El SKU es requerido.'); return }
-    const priceNum = Number(price)
-    const costNum = Number(cost)
-    if (!Number.isFinite(priceNum) || priceNum < 0) { setError('Precio inválido.'); return }
-    if (!Number.isFinite(costNum) || costNum < 0) { setError('Costo inválido.'); return }
-    if (!departmentId) { setError('Selecciona un departamento.'); return }
-    if (!brandId) { setError('Selecciona una marca.'); return }
-
-    setSaving(true); setError(null)
-    try {
-      // El backend crea automáticamente el PBS para la sucursal del CAJERO;
-      // no es necesario enviar branch_id.
-      const created = await productsApi.create({
-        name: name.trim(),
-        sku: sku.trim(),
-        price: priceNum,
-        cost: costNum,
-        department_id: departmentId,
-        brand_id: brandId,
-        barcode: barcode.trim() || null,
-      })
-      toast.success('Producto creado. Disponible en tu sucursal.')
-      onCreated(created)
-    } catch (e: any) {
-      const detail = e?.response?.data?.detail
-      if (e?.response?.status === 409) {
-        setError(`SKU '${sku.trim()}' ya existe en la organización.`)
-      } else if (e?.response?.status === 422) {
-        setError(typeof detail === 'string' ? detail : 'Faltan campos requeridos.')
-      } else {
-        setError(typeof detail === 'string' ? detail : 'Error al crear el producto.')
-      }
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
-    >
-      <form
-        onSubmit={handleSubmit}
-        className="dax-card dax-modal p-5 w-full max-w-md space-y-4"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-black text-white">Nuevo producto</h3>
-            <p className="text-slate-500 text-[11px] mt-0.5">
-              Se creará activo en <span className="text-indigo-400 font-semibold">tu sucursal</span>.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-slate-500 hover:text-white"
-            aria-label="Cerrar"
-          >
-            <i className="fa-solid fa-xmark text-lg" />
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 gap-3">
-          <div>
-            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-              Nombre *
-            </label>
-            <input
-              className="dax-input w-full text-sm"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="ej. Martillo de bola 16oz"
-              autoFocus
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                SKU *
-              </label>
-              <input
-                className="dax-input w-full text-sm font-mono"
-                value={sku}
-                onChange={e => setSku(e.target.value)}
-                placeholder="SKU-001"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                Código de barras
-              </label>
-              <input
-                className="dax-input w-full text-sm font-mono"
-                value={barcode}
-                onChange={e => setBarcode(e.target.value)}
-                placeholder="opcional"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                Precio *
-              </label>
-              <input
-                type="number" min="0" step="0.01"
-                className="dax-input w-full text-sm"
-                value={price}
-                onChange={e => setPrice(e.target.value)}
-                placeholder="0.00"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                Costo *
-              </label>
-              <input
-                type="number" min="0" step="0.01"
-                className="dax-input w-full text-sm"
-                value={cost}
-                onChange={e => setCost(e.target.value)}
-                placeholder="0.00"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-              Departamento *
-            </label>
-            <select
-              className="dax-input w-full text-sm"
-              value={departmentId}
-              onChange={e => setDepartmentId(e.target.value)}
-            >
-              <option value="">Selecciona...</option>
-              {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-              Marca *
-            </label>
-            <select
-              className="dax-input w-full text-sm"
-              value={brandId}
-              onChange={e => setBrandId(e.target.value)}
-            >
-              <option value="">Selecciona...</option>
-              {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
-          </div>
-        </div>
-
-        {error && (
-          <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
-            <i className="fa-solid fa-circle-exclamation mr-1.5" />{error}
-          </p>
-        )}
-
-        <div className="dax-modal-footer -mx-5 px-5 flex items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={saving}
-            className="dax-btn-secondary text-sm"
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            disabled={saving}
-            className="dax-btn text-sm flex items-center gap-1.5 disabled:opacity-50"
-          >
-            {saving ? <i className="fa-solid fa-spinner fa-spin text-xs" /> : <i className="fa-solid fa-plus text-xs" />}
-            Crear
-          </button>
-        </div>
-      </form>
-    </div>
-  )
-}
-
-// ─── Product Modal ─────────────────────────────────────────────────────────────
-
-interface PriceRow {
-  id?: string
-  price_name: string
-  min_quantity: number
-  unit_price: number
-}
-
-interface PackagingRow {
-  id?: string
-  name: string
-  barcode: string
-  units_per_package: number
-  package_price: number
-}
-
-interface ProductModalProps {
-  product: Product | null  // null = create mode
-  onClose: () => void
-  onSaved: () => void
-  brands: Brand[]
-  departments: Department[]
-  isCajero?: boolean
-}
-
-function ProductModal({ product, onClose, onSaved, brands, departments, isCajero = false }: ProductModalProps) {
-  const isEdit = !!product
-
-  // editedProduct tracks server-reflected state (e.g. after image upload).
-  const [editedProduct, setEditedProduct] = useState<Product | null>(product ?? null)
-
-  const [name, setName] = useState(product?.name ?? '')
-  const [sku, setSku] = useState(product?.sku ?? '')
-  const [barcode, setBarcode] = useState(product?.barcode ?? '')
-  const [unit, setUnit] = useState(product?.unit ?? 'pza')
-  const [price, setPrice] = useState(String(product?.price ?? ''))
-  const [cost, setCost] = useState(String(product?.cost ?? ''))
-  const [description, setDescription] = useState(product?.description ?? '')
-  const [imageUrl, setImageUrl] = useState(product?.image_url ?? '')
-  const [hasIva, setHasIva] = useState(product?.has_iva ?? false)
-  const [taxRate, setTaxRate] = useState(String(product?.tax_rate ?? 16))
-  const [usesInventory, setUsesInventory] = useState(product?.uses_inventory ?? true)
-  const [brandId, setBrandId] = useState(product?.brand_id ?? '')
-  const [deptId, setDeptId] = useState(product?.department?.id ?? '')
-  // Ficha boutique: género, modelo y material. '' = sin capturar → null.
-  const [gender, setGender] = useState(product?.gender ?? '')
-  const [model, setModel] = useState(product?.model ?? '')
-  const [material, setMaterial] = useState(product?.material ?? '')
-
-  const [prices, setPrices] = useState<PriceRow[]>(
-    product?.prices?.map(p => ({
-      id: p.id,
-      price_name: p.price_name,
-      min_quantity: p.min_quantity,
-      unit_price: p.unit_price,
-    })) ?? []
-  )
-
-  const [packagings, setPackagings] = useState<PackagingRow[]>(
-    product?.packaging_units?.map(u => ({
-      id: u.id,
-      name: u.name,
-      barcode: u.barcode ?? '',
-      units_per_package: u.units_per_package,
-      package_price: u.package_price,
-    })) ?? []
-  )
-
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const addPrice = () =>
-    setPrices(prev => [...prev, { price_name: '', min_quantity: 0, unit_price: 0 }])
-
-  const removePrice = (i: number) =>
-    setPrices(prev => prev.filter((_, idx) => idx !== i))
-
-  const updatePrice = (i: number, field: keyof PriceRow, val: string | number) =>
-    setPrices(prev => prev.map((p, idx) => idx === i ? { ...p, [field]: val } : p))
-
-  const addPackaging = () =>
-    setPackagings(prev => [...prev, { name: 'Caja', barcode: '', units_per_package: 1, package_price: 0 }])
-
-  const removePackaging = (i: number) =>
-    setPackagings(prev => prev.filter((_, idx) => idx !== i))
-
-  const updatePackaging = (i: number, field: keyof PackagingRow, val: string | number) =>
-    setPackagings(prev => prev.map((u, idx) => idx === i ? { ...u, [field]: val } : u))
-
-  const handleSave = async () => {
-    if (!name.trim() || !sku.trim()) { setError('Nombre y SKU son requeridos'); return }
-    setSaving(true)
-    setError(null)
-    try {
-      const payload = {
-        name: name.trim(),
-        sku: sku.trim(),
-        barcode: barcode.trim() || null,
-        unit: unit.trim() || 'pza',
-        price: Number(price),
-        cost: Number(cost),
-        description: description.trim() || null,
-        image_url: imageUrl.trim() || null,
-        has_iva: hasIva,
-        tax_rate: hasIva ? Number(taxRate) : 0,
-        uses_inventory: usesInventory,
-        brand_id: brandId || null,
-        department_id: deptId || null,
-        gender: gender || null,
-        model: model.trim() || null,
-        material: material.trim() || null,
-        prices: prices.map(p => ({
-          price_name: p.price_name,
-          min_quantity: Number(p.min_quantity),
-          unit_price: Number(p.unit_price),
-        })),
-        packaging_units: packagings.map(u => ({
-          name: u.name,
-          barcode: u.barcode || null,
-          units_per_package: Number(u.units_per_package),
-          package_price: Number(u.package_price),
-        })),
-      }
-      if (isEdit) {
-        await productsApi.update(product!.id, payload)
-      } else {
-        await productsApi.create({ ...payload, initial_stock: 0 } as any)
-      }
-      onSaved()
-    } catch (e: any) {
-      setError(e?.response?.data?.detail ?? 'Error al guardar')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'rgba(0,0,0,0.7)' }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
-    >
-      <div
-        className="dax-modal w-full max-w-2xl rounded-2xl"
-        style={{ background: 'var(--dax-surface)', border: '1px solid var(--dax-border)' }}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--dax-border-dim)' }}>
-          <h2 className="font-bold text-base" style={{ color: 'var(--dax-text)' }}>
-            {isEdit ? 'Editar Producto' : 'Nuevo Producto'}
-          </h2>
-          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition-colors">
-            <i className="fa-solid fa-xmark text-xs" />
-          </button>
-        </div>
-
-        <div className="px-5 py-4 space-y-5">
-          {/* Banner informativo para CAJERO en modo edición */}
-          {isCajero && isEdit && (
-            <div className="flex items-start gap-2 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20">
-              <i className="fa-solid fa-circle-info text-amber-400 text-xs mt-0.5 flex-shrink-0" />
-              <p className="text-amber-300 text-xs leading-relaxed">
-                Puedes editar el nombre, descripción e imagen. El precio, costo, SKU y código de barras son de solo lectura para tu rol.
-              </p>
-            </div>
-          )}
-          {/* Datos básicos */}
-          <section className="space-y-3">
-            <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--dax-text-faint)' }}>Datos generales</p>
-            {/* A 390 px dos columnas fijas dejaban campos de ~145 px. */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="sm:col-span-2">
-                <label className="block text-xs mb-1" style={{ color: 'var(--dax-text-muted)' }}>Nombre *</label>
-                <input className="dax-input w-full" value={name} onChange={e => setName(e.target.value)} placeholder="Nombre del producto" />
-              </div>
-              <div>
-                <label className="block text-xs mb-1" style={{ color: 'var(--dax-text-muted)' }}>SKU *</label>
-                <input className={`dax-input w-full font-mono ${isCajero ? 'opacity-50 cursor-not-allowed' : ''}`} value={sku} onChange={e => !isCajero && setSku(e.target.value)} placeholder="SKU-001" readOnly={isCajero} title={isCajero ? 'CAJERO no puede modificar el SKU' : undefined} />
-              </div>
-              <div>
-                <label className="block text-xs mb-1" style={{ color: 'var(--dax-text-muted)' }}>Código de barras</label>
-                <input className={`dax-input w-full font-mono ${isCajero ? 'opacity-50 cursor-not-allowed' : ''}`} value={barcode} onChange={e => !isCajero && setBarcode(e.target.value)} placeholder="7501055..." readOnly={isCajero} title={isCajero ? 'CAJERO no puede modificar el código de barras' : undefined} />
-              </div>
-              <div>
-                <label className="block text-xs mb-1" style={{ color: 'var(--dax-text-muted)' }}>Precio base *</label>
-                <input className={`dax-input w-full ${isCajero ? 'opacity-50 cursor-not-allowed' : ''}`} type="number" min="0" step="0.01" value={price} onChange={e => !isCajero && setPrice(e.target.value)} readOnly={isCajero} title={isCajero ? 'CAJERO no puede modificar el precio base' : undefined} />
-              </div>
-              <div>
-                <label className="block text-xs mb-1" style={{ color: 'var(--dax-text-muted)' }}>Costo</label>
-                <input className={`dax-input w-full ${isCajero ? 'opacity-50 cursor-not-allowed' : ''}`} type="number" min="0" step="0.01" value={cost} onChange={e => !isCajero && setCost(e.target.value)} readOnly={isCajero} title={isCajero ? 'CAJERO no puede modificar el costo' : undefined} />
-              </div>
-              <div>
-                <label className="block text-xs mb-1" style={{ color: 'var(--dax-text-muted)' }}>Unidad de venta</label>
-                <select className="dax-input w-full" value={unit} onChange={e => setUnit(e.target.value)}>
-                  <option value="pza">Pieza (pza)</option>
-                  <option value="kg">Kilogramo (kg)</option>
-                  <option value="lt">Litro (lt)</option>
-                  <option value="cja">Caja (cja)</option>
-                  <option value="par">Par</option>
-                  <option value="mt">Metro (mt)</option>
-                  <option value="srv">Servicio</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs mb-1" style={{ color: 'var(--dax-text-muted)' }}>Marca</label>
-                <select className="dax-input w-full" value={brandId} onChange={e => setBrandId(e.target.value)}>
-                  <option value="">Sin marca</option>
-                  {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs mb-1" style={{ color: 'var(--dax-text-muted)' }}>Departamento</label>
-                <select className="dax-input w-full" value={deptId} onChange={e => setDeptId(e.target.value)}>
-                  <option value="">Sin departamento</option>
-                  {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs mb-1" style={{ color: 'var(--dax-text-muted)' }}>Género</label>
-                <select className="dax-input w-full" value={gender} onChange={e => setGender(e.target.value)}>
-                  <option value="">—</option>
-                  {GENEROS.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs mb-1" style={{ color: 'var(--dax-text-muted)' }}>Modelo</label>
-                {/* Va pegado al nombre en el nombre de venta:
-                    "Louis Vuitton · Chamarra mezclilla". */}
-                <input className="dax-input w-full" value={model} onChange={e => setModel(e.target.value)}
-                       placeholder="mezclilla, cargo, slim…" />
-              </div>
-              <div>
-                <label className="block text-xs mb-1" style={{ color: 'var(--dax-text-muted)' }}>Material</label>
-                <input className="dax-input w-full" value={material} onChange={e => setMaterial(e.target.value)}
-                       placeholder="Algodón, piel, lana…" />
-              </div>
-              {isEdit && editedProduct ? (
-                <ProductImageUploader
-                  product={editedProduct}
-                  onUpdated={(updated) => {
-                    setEditedProduct(updated)
-                    setImageUrl(updated.image_url ?? '')
-                  }}
-                />
-              ) : (
-                <div className="sm:col-span-2">
-                  <label className="block text-xs mb-1" style={{ color: 'var(--dax-text-muted)' }}>URL de imagen</label>
-                  <input className="dax-input w-full" value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="https://..." />
-                </div>
-              )}
-              <div className="sm:col-span-2">
-                <label className="block text-xs mb-1" style={{ color: 'var(--dax-text-muted)' }}>Descripción</label>
-                <textarea className="dax-input w-full" rows={2} value={description} onChange={e => setDescription(e.target.value)} placeholder="Descripción opcional" />
-              </div>
-              <div className="sm:col-span-2 flex flex-wrap items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <input type="checkbox" id="has_iva" checked={hasIva} onChange={e => setHasIva(e.target.checked)} className="rounded" />
-                  <label htmlFor="has_iva" className="text-xs cursor-pointer" style={{ color: 'var(--dax-text-muted)' }}>
-                    Aplica IVA
-                  </label>
-                  {hasIva && (
-                    <div className="flex items-center gap-1">
-                      <input
-                        className="dax-input w-16 text-xs text-center"
-                        type="number" min="0" max="100" step="0.5"
-                        value={taxRate}
-                        onChange={e => setTaxRate(e.target.value)}
-                      />
-                      <span className="text-xs" style={{ color: 'var(--dax-text-faint)' }}>%</span>
-                    </div>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <input type="checkbox" id="uses_inventory" checked={usesInventory} onChange={e => setUsesInventory(e.target.checked)} className="rounded" />
-                  <label htmlFor="uses_inventory" className="text-xs cursor-pointer" style={{ color: 'var(--dax-text-muted)' }}>
-                    Controla inventario
-                  </label>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* Precios escalonados */}
-          <section className="space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--dax-text-faint)' }}>
-                Precios escalonados
-              </p>
-              <button
-                onClick={addPrice}
-                className="flex items-center gap-1 text-[10px] font-bold text-indigo-400 hover:text-indigo-300 px-2 py-0.5 rounded hover:bg-indigo-500/10 transition-colors"
-              >
-                <i className="fa-solid fa-plus" /> Agregar tier
-              </button>
-            </div>
-            {prices.length === 0 ? (
-              <p className="text-xs py-2 text-center" style={{ color: 'var(--dax-text-faint)' }}>Sin precios adicionales (solo precio base)</p>
-            ) : (
-              <div className="space-y-2">
-                {prices.map((p, i) => (
-                  <div
-                    key={i}
-                    className="grid grid-cols-1 sm:grid-cols-[1fr_80px_90px_28px] gap-2 items-end rounded-lg border border-slate-800/70 p-2 sm:rounded-none sm:border-0 sm:p-0"
-                  >
-                    <div>
-                      <label className={claseEtiquetaFila(i, 'block text-[10px] mb-0.5')} style={{ color: 'var(--dax-text-faint)' }}>Nombre</label>
-                      <input
-                        className="dax-input w-full text-xs"
-                        value={p.price_name}
-                        onChange={e => updatePrice(i, 'price_name', e.target.value)}
-                        placeholder="ej. Mayoreo"
-                      />
-                    </div>
-                    <div>
-                      <label className={claseEtiquetaFila(i, 'block text-[10px] mb-0.5')} style={{ color: 'var(--dax-text-faint)' }}>Min. piezas</label>
-                      <input
-                        className="dax-input w-full text-xs"
-                        type="number" min="1"
-                        value={p.min_quantity}
-                        onChange={e => updatePrice(i, 'min_quantity', Number(e.target.value))}
-                      />
-                    </div>
-                    <div>
-                      <label className={claseEtiquetaFila(i, 'block text-[10px] mb-0.5')} style={{ color: 'var(--dax-text-faint)' }}>Precio/u</label>
-                      <input
-                        className="dax-input w-full text-xs"
-                        type="number" min="0" step="0.01"
-                        value={p.unit_price}
-                        onChange={e => updatePrice(i, 'unit_price', Number(e.target.value))}
-                      />
-                    </div>
-                    <button
-                      onClick={() => removePrice(i)}
-                      aria-label={`Quitar el precio ${i + 1}`}
-                      className="w-full min-h-[44px] sm:w-7 sm:h-8 sm:min-h-0 flex items-center justify-center gap-1.5 rounded border border-slate-700 sm:border-0 text-slate-500 hover:text-red-400 transition-colors"
-                    >
-                      <i className="fa-solid fa-xmark text-xs" />
-                      <span className="text-[11px] font-semibold sm:hidden">Quitar</span>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-
-          {/* Empaques */}
-          <section className="space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--dax-text-faint)' }}>
-                Empaques / Cajas
-              </p>
-              <button
-                onClick={addPackaging}
-                className="flex items-center gap-1 text-[10px] font-bold text-indigo-400 hover:text-indigo-300 px-2 py-0.5 rounded hover:bg-indigo-500/10 transition-colors"
-              >
-                <i className="fa-solid fa-plus" /> Agregar empaque
-              </button>
-            </div>
-            {packagings.length === 0 ? (
-              <p className="text-xs py-2 text-center" style={{ color: 'var(--dax-text-faint)' }}>Sin empaques definidos</p>
-            ) : (
-              <div className="space-y-2">
-                {packagings.map((u, i) => (
-                  <div
-                    key={i}
-                    className="grid grid-cols-1 sm:grid-cols-[1fr_70px_90px_1fr_28px] gap-2 items-end rounded-lg border border-slate-800/70 p-2 sm:rounded-none sm:border-0 sm:p-0"
-                  >
-                    <div>
-                      <label className={claseEtiquetaFila(i, 'block text-[10px] mb-0.5')} style={{ color: 'var(--dax-text-faint)' }}>Nombre</label>
-                      <input
-                        className="dax-input w-full text-xs"
-                        value={u.name}
-                        onChange={e => updatePackaging(i, 'name', e.target.value)}
-                        placeholder="Caja"
-                      />
-                    </div>
-                    <div>
-                      <label className={claseEtiquetaFila(i, 'block text-[10px] mb-0.5')} style={{ color: 'var(--dax-text-faint)' }}>Unidades</label>
-                      <input
-                        className="dax-input w-full text-xs"
-                        type="number" min="1"
-                        value={u.units_per_package}
-                        onChange={e => updatePackaging(i, 'units_per_package', Number(e.target.value))}
-                      />
-                    </div>
-                    <div>
-                      <label className={claseEtiquetaFila(i, 'block text-[10px] mb-0.5')} style={{ color: 'var(--dax-text-faint)' }}>Precio/caja</label>
-                      <input
-                        className="dax-input w-full text-xs"
-                        type="number" min="0" step="0.01"
-                        value={u.package_price}
-                        onChange={e => updatePackaging(i, 'package_price', Number(e.target.value))}
-                      />
-                    </div>
-                    <div>
-                      <label className={claseEtiquetaFila(i, 'block text-[10px] mb-0.5')} style={{ color: 'var(--dax-text-faint)' }}>Código de barras</label>
-                      <input
-                        className="dax-input w-full text-xs font-mono"
-                        value={u.barcode}
-                        onChange={e => updatePackaging(i, 'barcode', e.target.value)}
-                        placeholder="Opcional"
-                      />
-                    </div>
-                    <button
-                      onClick={() => removePackaging(i)}
-                      aria-label={`Quitar el empaque ${i + 1}`}
-                      className="w-full min-h-[44px] sm:w-7 sm:h-8 sm:min-h-0 flex items-center justify-center gap-1.5 rounded border border-slate-700 sm:border-0 text-slate-500 hover:text-red-400 transition-colors"
-                    >
-                      <i className="fa-solid fa-xmark text-xs" />
-                      <span className="text-[11px] font-semibold sm:hidden">Quitar</span>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-
-          {error && (
-            <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
-              <i className="fa-solid fa-circle-exclamation mr-1.5" />{error}
-            </p>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="dax-modal-footer flex items-center justify-end gap-2 px-5 py-4 border-t" style={{ borderColor: 'var(--dax-border-dim)', background: 'var(--dax-surface)' }}>
-          <button onClick={onClose} className="dax-btn-secondary text-sm" disabled={saving}>
-            Cancelar
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="dax-btn text-sm flex items-center gap-2"
-          >
-            {saving ? <i className="fa-solid fa-spinner fa-spin text-xs" /> : <i className="fa-solid fa-floppy-disk text-xs" />}
-            {isEdit ? 'Guardar cambios' : 'Crear producto'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ─── Main Products Page ─────────────────────────────────────────────────────────
 
 export function Products() {
-  // Roles de sucursal (CAJERO/GERENTE) ven la vista simplificada con modales
-  // y acciones por fila; HQ conserva la matriz multi-sucursal completa.
+  // Roles de sucursal (CAJERO/GERENTE) ven la vista simplificada por renglón;
+  // HQ conserva la matriz multi-sucursal. Ambas editan con FormularioProducto en un Modal.
   if (useIsBranchUser()) return <ProductsBranchView />
   return <ProductsHQView />
 }
@@ -1141,18 +198,14 @@ export function Products() {
 // Separado para no romper Rules of Hooks: el return condicional de arriba
 // no puede convivir con hooks en el mismo componente.
 function ProductsHQView() {
-  const navigate = useNavigate()
   const location = useLocation()
   const { user } = useAuthStore()
   const isHQ = HQ_ROLES.includes(user?.role ?? '')
   const unaSolaSucursal = esTiendaUnica(useBranchCountStore((s) => s.count))
   const canEdit = CAN_EDIT_ROLES.includes(user?.role ?? '')
-  // CAJERO/GERENTE tienen además el editor PBS inline para toggles rápidos.
-  const isBranchEditor = BRANCH_EDIT_ROLES.includes(user?.role ?? '') && user?.branch_id != null
 
   const [products, setProducts] = useState<Product[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
-  const [brands, setBrands] = useState<Brand[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(0)
   const [search, setSearch] = useState('')
@@ -1161,15 +214,11 @@ function ProductsHQView() {
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Modal state
-  const [modalProduct, setModalProduct] = useState<Product | null | undefined>(undefined) // undefined = closed, null = create, Product = edit
+  // Formulario único (components/products/FormularioProducto) dentro de un Modal.
+  const [editor, setEditor] = useState<{ mode: 'create' } | { mode: 'edit'; productId: string } | null>(null)
   const [showImport, setShowImport] = useState(false)
-  // CAJERO/GERENTE: id del producto cuya fila está expandida para editar PBS.
-  const [expandedPbsProductId, setExpandedPbsProductId] = useState<string | null>(null)
   // Producto cuyo desglose por talla está abierto en la tabla.
   const [expandedVariantsId, setExpandedVariantsId] = useState<string | null>(null)
-  // CAJERO/GERENTE: modal simplificado para crear producto.
-  const [showMiniCreate, setShowMiniCreate] = useState(false)
   // Tallas sin código de barras (se pide una vez al abrir la pantalla).
   const [codigosFaltantes, setCodigosFaltantes] = useState(0)
   const [generandoCodigos, setGenerandoCodigos] = useState(false)
@@ -1182,9 +231,8 @@ function ProductsHQView() {
     try {
       const params: Record<string, unknown> = { search: q, skip: pg * LIMIT, limit: LIMIT }
       if (dept) params.department_id = dept
-      // CAJERO/GERENTE: NO enviamos branch_id ni active_in_branch — el backend
-      // los deriva del JWT (defense in depth). Admins podrán usar un selector
-      // de sucursal más adelante; por ahora ningún rol los envía desde aquí.
+      // No enviamos branch_id ni active_in_branch: el backend los deriva del JWT
+      // (defense in depth). Esta vista es la de HQ; ningún rol los envía desde aquí.
       const res = await productsApi.list(params)
       setProducts(res.items ?? [])
       setTotal(res.total ?? 0)
@@ -1202,9 +250,6 @@ function ProductsHQView() {
     productsApi.getDepartments()
       .then((d) => setDepartments(sortByName(d)))
       .catch(() => toast.error('No se pudieron cargar los departamentos.'))
-    productsApi.getBrands()
-      .then((b) => setBrands(sortByName(b)))
-      .catch(() => toast.error('No se pudieron cargar las marcas.'))
     // Silencioso a propósito: si el contador falla, el botón simplemente no
     // aparece — no es motivo para molestar con un toast al abrir el catálogo.
     productsApi.barcodesMissingCount()
@@ -1222,7 +267,7 @@ function ProductsHQView() {
   }, [search, deptId, load])
 
   // Refetch list whenever we navigate back to this page (e.g., after saving
-  // a product in ProductForm). location.key changes on every navigation event,
+  // a product in the page form /products/:id/edit). location.key changes on every navigation event,
   // so this fires on mount and on any return from a child route.
   const isFirstRender = useRef(true)
   useEffect(() => {
@@ -1233,59 +278,9 @@ function ProductsHQView() {
 
   const pages = Math.ceil(total / LIMIT)
 
-  const openEdit = async (p: Product) => {
-    // CAJERO/GERENTE con sucursal asignada: ruta al formulario dedicado.
-    // El editor PBS inline sigue disponible vía el botón de sliders (⊟).
-    if (BRANCH_EDIT_ROLES.includes(user?.role ?? '')) {
-      if (!user?.branch_id) {
-        toast.error('Tu usuario no tiene sucursal asignada. Contacta al administrador.')
-        return
-      }
-      navigate(`/products/${p.id}/edit`)
-      return
-    }
-    // Admin flow: cargar datos completos y abrir modal global.
-    try {
-      const full = await productsApi.getById(p.id)
-      setModalProduct(full)
-    } catch {
-      toast.error('No se pudo cargar el detalle — mostrando datos básicos.')
-      setModalProduct(p)
-    }
-  }
-
-  const openBranchSettings = (p: Product) => {
-    setViewMode('list')
-    setExpandedPbsProductId(prev => (prev === p.id ? null : p.id))
-  }
-
-  const handleSaved = () => {
-    setModalProduct(undefined)
-    load(search, deptId, page)
-  }
-
-  /** Actualiza el producto en memoria con el PBS recién guardado, sin re-fetch. */
-  const mergePbsIntoProduct = (productId: string, updated: ProductBranchStatus) => {
-    setProducts(prev => prev.map(p => {
-      if (p.id !== productId) return p
-      const existing = p.branch_statuses ?? []
-      const idx = existing.findIndex(s => s.id === updated.id || (s.variant_id === updated.variant_id && s.branch_id === updated.branch_id))
-      const next = idx >= 0
-        ? existing.map((s, i) => (i === idx ? updated : s))
-        : [...existing, updated]
-      return { ...p, branch_statuses: next }
-    }))
-  }
-
-  const handleNewProductClick = () => {
-    if (isBranchEditor) navigate('/products/new')
-    else setModalProduct(null)
-  }
-
-  const handleMiniCreated = () => {
-    setShowMiniCreate(false)
-    load(search, deptId, page)
-  }
+  const openEdit = (p: Product) => setEditor({ mode: 'edit', productId: p.id })
+  const handleSaved = () => { setEditor(null); load(search, deptId, page) }
+  const handleNewProductClick = () => setEditor({ mode: 'create' })
 
   const descargarEtiquetas = async () => {
     setDescargandoEtiquetas(true)
@@ -1505,16 +500,6 @@ function ProductsHQView() {
                     `md` hacia arriba, igual que siempre. */}
                 {canEdit && (
                   <div className="absolute top-2 right-2 flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-                    {isBranchEditor && (
-                      <button
-                        onClick={() => openBranchSettings(p)}
-                        className="w-6 h-6 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 rounded-full flex items-center justify-center bg-slate-700 border border-slate-600 hover:bg-indigo-600 hover:border-indigo-500"
-                        title="Ajustes en mi sucursal"
-                        aria-label="Ajustes en mi sucursal"
-                      >
-                        <i className="fa-solid fa-sliders text-[9px] text-white" />
-                      </button>
-                    )}
                     <button
                       onClick={() => openEdit(p)}
                       className="w-6 h-6 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 rounded-full flex items-center justify-center bg-slate-700 border border-slate-600 hover:bg-indigo-600 hover:border-indigo-500"
@@ -1544,7 +529,6 @@ function ProductsHQView() {
               </thead>
               <tbody>
                 {products.map((p) => {
-                  const isExpanded = isBranchEditor && expandedPbsProductId === p.id
                   const tallasAbiertas = expandedVariantsId === p.id && (p.variants?.length ?? 0) > 1
                   const colCount = 6 + (canEdit ? 1 : 0)
                   return (
@@ -1651,15 +635,6 @@ function ProductsHQView() {
                         {canEdit && (
                           <td className="text-right">
                             <div className="inline-flex items-center gap-1">
-                              {isBranchEditor && (
-                                <button
-                                  onClick={() => openBranchSettings(p)}
-                                  className={`dax-btn-icon transition-colors p-1 ${isExpanded ? 'text-indigo-400' : 'text-slate-500 hover:text-indigo-400'}`}
-                                  title={isExpanded ? 'Cerrar ajustes de sucursal' : 'Ajustes en mi sucursal'}
-                                >
-                                  <i className={`fa-solid ${isExpanded ? 'fa-chevron-up' : 'fa-sliders'} text-xs`} />
-                                </button>
-                              )}
                               <button
                                 onClick={() => openEdit(p)}
                                 className="dax-btn-icon transition-colors p-1 text-slate-500 hover:text-indigo-400"
@@ -1694,21 +669,6 @@ function ProductsHQView() {
                           <td colSpan={colCount - 5} />
                         </tr>
                       ))}
-                      {isExpanded && user?.branch_id != null && (
-                        <tr className="bg-slate-900/40">
-                          <td colSpan={colCount} className="px-4 py-3">
-                            <BranchStatusEditor
-                              product={p}
-                              branchId={user.branch_id}
-                              onSaved={(updated) => {
-                                mergePbsIntoProduct(p.id, updated)
-                                setExpandedPbsProductId(null)
-                              }}
-                              onCancel={() => setExpandedPbsProductId(null)}
-                            />
-                          </td>
-                        </tr>
-                      )}
                     </Fragment>
                   )
                 })}
@@ -1747,25 +707,17 @@ function ProductsHQView() {
           onDone={() => { setShowImport(false); load(search, deptId, page) }}
         />
       )}
-      {/* Modal global de edición (solo para admin / DUEÑO; CAJERO/GERENTE usan inline). */}
-      {!isBranchEditor && modalProduct !== undefined && (
-        <ProductModal
-          product={modalProduct}
-          onClose={() => setModalProduct(undefined)}
-          onSaved={handleSaved}
-          brands={brands}
-          departments={departments}
-          isCajero={user?.role === 'CAJERO'}
-        />
-      )}
-      {/* Modal simplificado de creación para CAJERO/GERENTE. */}
-      {showMiniCreate && (
-        <CreateProductMiniModal
-          brands={brands}
-          departments={departments}
-          onClose={() => setShowMiniCreate(false)}
-          onCreated={handleMiniCreated}
-        />
+      {editor && (
+        <Modal open onClose={() => setEditor(null)} size="xl" closeOnBackdrop={false} closeOnEscape={false}
+          title={editor.mode === 'create' ? 'Nuevo producto' : 'Editar producto'}>
+          <FormularioProducto
+            mode={editor.mode}
+            productId={editor.mode === 'edit' ? editor.productId : undefined}
+            presentacion="modal"
+            onDone={handleSaved}
+            onCancel={() => setEditor(null)}
+          />
+        </Modal>
       )}
     </div>
   )

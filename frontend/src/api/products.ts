@@ -17,21 +17,21 @@ interface ProductsResponse {
   pages: number
 }
 
-interface ProductPricePayload {
+export interface ProductPricePayload {
   price_name: string
   min_quantity: number
   unit_price: number
   linked_package_id?: string | null
 }
 
-interface PackagingUnitPayload {
+export interface PackagingUnitPayload {
   name?: string
   barcode?: string | null
   units_per_package: number
   package_price: number
 }
 
-interface ProductCreate {
+export interface ProductCreate {
   sku: string
   name: string
   cost: number
@@ -65,6 +65,9 @@ interface ProductCreate {
   packaging_units?: PackagingUnitPayload[]
   extra_variants?: ExtraVariantPayload[]
 }
+
+/** PUT /products/{id}: parcial; lo que no viaja no se toca (incluidos `prices` y `packaging_units`). */
+export type ProductUpdate = Partial<ProductCreate>
 
 /**
  * Campos del `ProductBranchStatus` que CAJERO/GERENTE pueden editar para su
@@ -256,7 +259,7 @@ export const productsApi = {
     return data
   },
 
-  update: async (id: string, payload: Partial<ProductCreate>): Promise<Product> => {
+  update: async (id: string, payload: ProductUpdate): Promise<Product> => {
     const { data } = await client.put<Product>(`/products/${id}`, payload)
     return data
   },
