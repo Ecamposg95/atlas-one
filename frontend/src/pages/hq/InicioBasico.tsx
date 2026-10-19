@@ -45,7 +45,7 @@ function Titulo({ children, enlace }: { children: ReactNode; enlace?: { a: strin
     <div className="flex items-center justify-between gap-2 mb-3">
       <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{children}</p>
       {enlace && (
-        <Link to={enlace.a} className="text-[10px] font-bold text-indigo-400 hover:underline whitespace-nowrap">
+        <Link to={enlace.a} className="text-[10px] font-bold text-indigo-400 hover:underline whitespace-nowrap max-md:inline-flex max-md:items-center max-md:min-h-[44px]">
           {enlace.texto}
         </Link>
       )}

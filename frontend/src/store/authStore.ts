@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { User, Organization, Branch } from '../types/auth'
+import { useEnabledModulesStore } from './enabledModulesStore'
 
 interface AuthStore {
   user: User | null
@@ -80,6 +81,8 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     localStorage.removeItem('atlas_org')
     localStorage.removeItem('atlas_branch')
     set({ user: null, token: null, org: null, branch: null, isAuthenticated: false, foreignSession: false })
+    // perfil, módulos y plan son de la org: la siguiente sesión los recarga
+    useEnabledModulesStore.getState().reset()
   },
 
   // Restaurar sesión desde localStorage al cargar la app

@@ -18,18 +18,25 @@ import {
 import { Bar } from 'react-chartjs-2'
 import { formatCurrency } from '../../utils/currency'
 import { todayStr, daysAgoStr } from '../../utils/dates'
+import { useModoBasico } from '../../store/enabledModulesStore'
+import { useAuthStore } from '../../store/authStore'
+import { parametrosReportes } from './parametrosReportes'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, Tooltip, Legend)
 
-const PRESETS = [
+const presets = (diasSemana: number) => [
   { label: 'Hoy', start: () => todayStr(), end: () => todayStr() },
   { label: 'Ayer', start: () => daysAgoStr(1), end: () => daysAgoStr(1) },
-  { label: 'Semana', start: () => daysAgoStr(7), end: () => todayStr() },
+  { label: 'Semana', start: () => daysAgoStr(diasSemana), end: () => todayStr() },
   { label: 'Mes', start: () => daysAgoStr(30), end: () => todayStr() },
 ]
 
 export function Reports() {
   const { theme } = useTheme()
+  const modoBasico = useModoBasico()
+  const rol = useAuthStore((s) => s.user?.role)
+  const { branch_id, diasSemana } = parametrosReportes(modoBasico ? 'basico' : 'completo', rol)
+  const PRESETS = presets(diasSemana)
   const chartGrid  = theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(99,102,241,0.08)'
   const chartTicks = theme === 'dark' ? '#64748b' : '#94a3b8'
   const [data, setData] = useState<DashboardData | null>(null)
@@ -40,18 +47,18 @@ export function Reports() {
   const load = useCallback(async (start: string, end: string) => {
     setLoading(true)
     try {
-      const res = await reportsApi.dashboard({ start_date: start, end_date: end })
+      const res = await reportsApi.dashboard({ start_date: start, end_date: end, ...(branch_id !== undefined ? { branch_id } : {}) })
       setData(res)
     } catch {
       setData(null)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [branch_id])
 
   useEffect(() => { load(startDate, endDate) }, [])
 
-  const applyPreset = (p: typeof PRESETS[0]) => {
+  const applyPreset = (p: ReturnType<typeof presets>[number]) => {
     const s = p.start(), e = p.end()
     setStartDate(s); setEndDate(e); load(s, e)
   }

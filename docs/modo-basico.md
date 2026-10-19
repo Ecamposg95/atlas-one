@@ -10,8 +10,8 @@ abriendo por URL.
 
 | `organization.perfil_ui` | Plan | Perfil |
 |---|---|---|
-| `NULL` o `auto` | FREE (o NULL, vacío, desconocido: `plans.obtener_plan`) | básico |
-| `NULL` o `auto` | START, PRO, BUSINESS, SCALE, ULTRA_PLUS | completo |
+| `NULL` o `auto` | `FREE` explícito | básico |
+| `NULL` o `auto` | START, PRO, BUSINESS, SCALE, ULTRA_PLUS, o plan NULL, vacío o desconocido | completo |
 | `basico` | cualquiera | básico |
 | `completo` | cualquiera | completo |
 

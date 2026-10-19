@@ -135,7 +135,7 @@ def _poca_existencia(db: Session, org_id: int, sucursal: Optional[int], umbral: 
     filas = (
         q.group_by(ProductVariant.id, Product.name, ProductVariant.variant_name, ProductVariant.sku)
         .having(existencia <= umbral)
-        .order_by(existencia.asc(), Product.name)
+        .order_by(existencia.asc(), Product.name, ProductVariant.id)
         .limit(MAX_POCA_EXISTENCIA)
         .all()
     )

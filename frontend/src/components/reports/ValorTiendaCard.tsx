@@ -43,7 +43,7 @@ export function ValorTiendaCard({
     >
       <div className="flex justify-between items-start gap-2 mb-1">
         <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Valor de la tienda</p>
-        <Link to="/hq/valor-inventario" className="text-[10px] font-bold text-amber-400 hover:underline whitespace-nowrap">
+        <Link to="/hq/valor-inventario" className="text-[10px] font-bold text-amber-400 hover:underline whitespace-nowrap max-md:inline-flex max-md:items-center max-md:min-h-[44px]">
           Ver desglose →
         </Link>
       </div>

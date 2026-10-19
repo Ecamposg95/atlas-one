@@ -26,3 +26,14 @@ export function SelectorPerfilUi({ valor, onCambio, deshabilitado, estilo }: {
     </select>
   )
 }
+
+/** Perfil que de verdad ve la tienda: el forzado, o el que deriva del plan (solo FREE explícito = básico). */
+export function perfilEfectivoUi(perfilUi: string | null | undefined, plan: string | null | undefined): 'basico' | 'completo' {
+  if (perfilUi === 'basico' || perfilUi === 'completo') return perfilUi
+  return String(plan ?? '').trim().toUpperCase() === 'FREE' ? 'basico' : 'completo'
+}
+
+/** Línea "Efectivo: básico/completo" junto al selector. */
+export function PerfilEfectivoHint({ perfilUi, plan }: { perfilUi: string | null | undefined; plan: string | null | undefined }) {
+  return <span style={{ fontSize: 11, color: 'var(--p-muted)' }}>{`Efectivo: ${perfilEfectivoUi(perfilUi, plan) === 'basico' ? 'básico' : 'completo'}`}</span>
+}

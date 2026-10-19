@@ -20,7 +20,8 @@ import { PlatformPageShell } from '../../components/platform/PlatformPageShell'
 import { StatusBadge } from '../../components/platform/StatusBadge'
 import { SideDrawer } from '../../components/platform/SideDrawer'
 import { ConfirmModal } from '../../components/platform/ConfirmModal'
-import { SelectorPerfilUi } from './SelectorPerfilUi'
+import { errorDetailText } from '../../utils/errorDetail'
+import { SelectorPerfilUi, PerfilEfectivoHint } from './SelectorPerfilUi'
 import { TablaDesplazable } from '../../components/ui/TablaDesplazable'
 
 // ── Inline shared styles (tokens) ────────────────────────────────────────────
@@ -429,8 +430,7 @@ export function PlatformOrgDetail() {
       toast.success('Perfil de interfaz actualizado')
       await load()
     } catch (err: any) {
-      const detalle = err?.response?.data?.detail
-      toast.error(typeof detalle === 'string' ? detalle : 'No se pudo cambiar el perfil de interfaz')
+      toast.error(errorDetailText(err?.response?.data?.detail, 'No se pudo cambiar el perfil de interfaz'))
     } finally {
       setCambiandoPerfil(false)
     }
@@ -712,12 +712,15 @@ export function PlatformOrgDetail() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
           <span style={{ fontSize: 12, color: 'var(--p-muted)' }}>Perfil de interfaz</span>
-          <SelectorPerfilUi
-            valor={org.perfil_ui}
-            onCambio={aplicarPerfilUi}
-            deshabilitado={cambiandoPerfil}
-            estilo={{ ...inputStyle, width: 'auto', minWidth: 220 }}
-          />
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+            <SelectorPerfilUi
+              valor={org.perfil_ui}
+              onCambio={aplicarPerfilUi}
+              deshabilitado={cambiandoPerfil}
+              estilo={{ ...inputStyle, width: 'auto', minWidth: 220 }}
+            />
+            <PerfilEfectivoHint perfilUi={org.perfil_ui} plan={org.plan} />
+          </div>
         </div>
         {!planUso ? (
           <p style={{ margin: 0, fontSize: 12, color: 'var(--p-muted)' }}>Sin datos de plan</p>

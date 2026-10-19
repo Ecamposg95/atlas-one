@@ -33,6 +33,14 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('InicioBasico', () => {
+  it('los enlaces de las tarjetas miden 44px en teléfono', async () => {
+    pintar()
+    await screen.findByTestId('cifra-hoy')
+    for (const texto of ['Ver corte →', 'Ver productos →', 'Ver desglose →']) {
+      expect(screen.getByText(texto).className).toContain('max-md:min-h-[44px]')
+    }
+  })
+
   it('vendido hoy, ayer y en 7 días', async () => {
     pintar()
     const hoy = await screen.findByTestId('cifra-hoy')

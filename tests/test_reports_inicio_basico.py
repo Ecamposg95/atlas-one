@@ -127,6 +127,16 @@ def test_poca_existencia_con_el_tope_de_la_empresa(client, db, org, branch_a, ad
     assert len(d["productos"]) == 10
 
 
+def test_poca_existencia_empata_con_orden_estable(client, db, org, branch_a, admin_user, auth_admin):
+    for n in range(4):
+        _variante(db, org, branch_a, "Igual", f"IG-{n}", 1)
+    db.commit()
+    a = client.get(URL, headers=auth_admin).json()["poca_existencia"]["productos"]
+    b = client.get(URL, headers=auth_admin).json()["poca_existencia"]["productos"]
+    assert [p["variant_id"] for p in a] == [p["variant_id"] for p in b]
+    assert [p["variant_id"] for p in a] == sorted(p["variant_id"] for p in a)
+
+
 def test_poca_existencia_sin_inactivos_borrados_ni_bodegas(client, db, org, branch_a, hq_branch, admin_user, auth_admin):
     _variante(db, org, branch_a, "Activo", "A-1", 1)
     inactivo = _variante(db, org, branch_a, "Inactivo", "I-1", 0)

@@ -387,9 +387,12 @@ function ProductsHQView() {
       .catch(() => toast.error('No se pudieron cargar los departamentos.'))
     // Silencioso a propósito: si el contador falla, el botón simplemente no
     // aparece — no es motivo para molestar con un toast al abrir el catálogo.
-    productsApi.barcodesMissingCount()
-      .then(setCodigosFaltantes)
-      .catch(() => setCodigosFaltantes(0))
+    // En básico el botón no existe: no se pide el contador.
+    if (!modoBasico) {
+      productsApi.barcodesMissingCount()
+        .then(setCodigosFaltantes)
+        .catch(() => setCodigosFaltantes(0))
+    }
   }, [])
 
   useEffect(() => {
