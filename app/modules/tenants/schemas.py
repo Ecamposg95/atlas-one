@@ -11,6 +11,10 @@ from app.models.organization import IndustryType
 # texto que el PUT rechaza.
 TERMS_MAX_LEN = 2000
 
+# Tope de las instrucciones del asistente IA. El textarea de Empresa usa el
+# mismo `maxLength`.
+AI_INSTRUCCIONES_MAX = 4000
+
 # Estilo del renglon de producto del ticket. 'compact' es el de siempre (una
 # linea); 'detailed' imprime marca / nombre completo / talla (boutique).
 TICKET_LINE_STYLES = ("compact", "detailed")
@@ -129,6 +133,10 @@ class OrganizationUpdate(BaseModel):
     # ADMINISTRADOR/DUEÑO puede cambiarla: no hace falta guardia nueva.
     card_surcharge_pct: Optional[Decimal] = None
 
+    # Instrucciones para el asistente IA (SP4). Caen FUERA de la whitelist de
+    # no-admins del router: solo ADMINISTRADOR/DUEÑO las cambia.
+    ai_instrucciones: Optional[str] = Field(default=None, max_length=AI_INSTRUCCIONES_MAX)
+
     _estilo_valido = field_validator("ticket_line_style")(_valida_estilo_de_linea)
 
     model_config = {"extra": "ignore"}
@@ -148,6 +156,9 @@ class OrganizationRead(OrganizationBase):
     # Comision por pago con tarjeta. Se expone en la lectura para que el panel
     # de Empresa arme el formulario sin un GET extra.
     card_surcharge_pct: Decimal = Decimal("0")
+
+    # Instrucciones para el asistente IA; el panel de Empresa las edita.
+    ai_instrucciones: Optional[str] = None
 
     class Config:
         from_attributes = True

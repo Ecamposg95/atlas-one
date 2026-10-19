@@ -240,6 +240,11 @@ class Organization(Base):
     # La regla de calculo vive en app/services/card_surcharge.py.
     card_surcharge_pct = Column(Numeric(5, 2), default=0, server_default="0", nullable=False)
 
+    # Instrucciones del dueño para el asistente IA (SP4, 2026-10): escala de
+    # tallas, abreviaturas de marca en el SKU, departamentos. NULL = solo las
+    # convenciones del preset (app/modules/ai/prompts/).
+    ai_instrucciones = Column(Text, nullable=True)
+
     # SaaS
     status = Column(String, default="ACTIVE", index=True)  # ACTIVE, SUSPENDED
     plan = Column(String, default="FREE")

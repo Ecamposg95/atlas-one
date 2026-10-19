@@ -105,3 +105,7 @@ from app.modules.bar import models as _bar_models  # noqa: F401
 # 15. Tipo de cambio USD (tabla GLOBAL, sin organization_id — ver el docstring
 #     de app/models/exchange_rate.py). Registrada aqui para `create_all`.
 from .exchange_rate import ExchangeRate  # noqa: F401
+
+# 16. Asistente IA (SP4): conversaciones, mensajes, propuestas y uso diario.
+#     Registradas aqui para `create_all`.
+from app.modules.ai import models as _ai_models  # noqa: F401

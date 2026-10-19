@@ -158,6 +158,7 @@ def delete_organization(
     from app.models.hr import Employee, BranchAssignment, Attendance
     from app.models.modules import OrganizationModule
     from app.models.print_job import PrintJob
+    from app.modules.ai.limpieza import borrar_datos_ai_de_org
 
     deleted = {}
 
@@ -389,6 +390,10 @@ def delete_organization(
             ContainerType.organization_id == org_id
         ).delete(synchronize_session=False)
         db.flush()
+
+        # Asistente IA (SP4): conversaciones/mensajes/propuestas apuntan a
+        # users y organization; van antes de borrar usuarios y la org.
+        deleted.update(borrar_datos_ai_de_org(db, org_id))
 
         deleted["print_jobs"] = db.query(PrintJob).filter(
             PrintJob.organization_id == org_id
