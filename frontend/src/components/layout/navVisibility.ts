@@ -1,4 +1,5 @@
-import type { Role } from '../../types/auth'
+import type { PlanOrg, Role } from '../../types/auth'
+import { recortarPorPlan } from './navPerfilPlan'
 
 /** Roles que operan desde una sucursal (ven BranchNav, no el árbol de HQ). */
 export const BRANCH_ROLES: Role[] = ['CAJERO', 'GERENTE']
@@ -26,6 +27,8 @@ export interface NavVisibilityOptions {
   /** Módulos activos de la org. Vacío = aún no cargó (o falló): fail-open. */
   enabledModules: string[]
   isGastro: boolean
+  /** Plan comercial de la org. null/undefined = no cargó: no se recorta (fail-open). */
+  plan?: PlanOrg | null
 }
 
 /**
@@ -39,14 +42,15 @@ export interface NavVisibilityOptions {
  * es autoritativa.
  */
 export function visibleNavItems(items: NavItem[], opts: NavVisibilityOptions): NavItem[] {
-  const { role, allowed, enabledModules, isGastro } = opts
+  const { role, allowed, enabledModules, isGastro, plan } = opts
   const modulesLoaded = enabledModules.length > 0
   const hasModule = (key: string | undefined) => !key || !modulesLoaded || enabledModules.includes(key)
   const isBranchRole = BRANCH_ROLES.includes(role)
-  return items
+  const porModulo = items
     .filter((n) => allowed.includes(n.url))
     .filter((n) => hasModule(n.module))
     .filter((n) => !isBranchRole || hasModule(n.branchModule))
     .filter((n) => !(n.hideForGastro && isGastro))
-    .sort((a, b) => a.sort - b.sort)
+  // El perfil por plan va al final: solo esconde entre lo que ya pasó rol y módulo.
+  return recortarPorPlan(porModulo, plan).sort((a, b) => a.sort - b.sort)
 }

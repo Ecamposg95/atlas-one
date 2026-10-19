@@ -1,0 +1,6 @@
+{
+  "_comentario": "Bytes sin comprimir de la ruta crítica login → POS: entrada + <link rel=modulepreload> + assets/POS-*.js. Lo mide scripts/presupuesto_bundle.py (CI, job frontend-build; deploy-ionos depende de él). Una regresión es un salto por encima del tope (≈ +2.5 % sobre la medición vigente); no se debe tocar el número por unos cuantos bytes legítimos. Para subirlo, edita este archivo en el mismo PR y justifícalo en el commit. Las entradas de prohibidos_en_precarga se comparan por prefijo del nombre de archivo (startswith): 'charts-' prohíbe cualquier assets/charts-*.js en la precarga.",
+  "tope_bytes": 452500,
+  "prohibidos_en_precarga": ["charts-"],
+  "medicion_base": { "fecha": "2026-10-15", "bytes": 628331, "commit": "109aad0" }
+}

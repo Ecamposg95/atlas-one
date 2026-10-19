@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
+import { useEnabledModulesStore } from '../../store/enabledModulesStore'
+import { urlsOcultasPorPlan } from '../../components/layout/navPerfilPlan'
 import { salesApi } from '../../api/sales'
 import { DaxCard } from '../../components/ui/DaxCard'
 import type { SalesDocument } from '../../types/sales'
@@ -55,6 +57,11 @@ export function AtlasPOS() {
 // no puede convivir con hooks en el mismo componente.
 function AtlasPOSHome() {
   const { user, org } = useAuthStore()
+  const { plan, enabledModules } = useEnabledModulesStore()
+  // Mismo criterio que el menú: sin módulo hr o con /hr/me oculto por el plan, no hay tile.
+  const quickAccess = QUICK_ACCESS.filter((q) =>
+    q.url !== '/hr/me' ||
+    ((enabledModules.length === 0 || enabledModules.includes('hr')) && !urlsOcultasPorPlan(plan).includes('/hr/me')))
   const [sales, setSales] = useState<SalesDocument[]>([])
   const [kpiTotal, setKpiTotal] = useState(0)
   const [kpiCount, setKpiCount] = useState(0)
@@ -120,7 +127,7 @@ function AtlasPOSHome() {
       <div>
         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Acceso rápido</p>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {QUICK_ACCESS.map((item) => (
+          {quickAccess.map((item) => (
             <Link
               key={item.url}
               to={item.url}

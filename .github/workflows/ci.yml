@@ -111,6 +111,12 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+      # Ruta crítica login → POS (entrada + modulepreload + POS-*.js) contra
+      # frontend/presupuesto_bundle.json. Solo biblioteca estándar: este job no
+      # instala requirements.txt y ubuntu-latest trae python3.
+      - name: Presupuesto de descarga de la ruta crítica
+        run: python3 scripts/presupuesto_bundle.py --dist frontend/dist --presupuesto frontend/presupuesto_bundle.json
+
   deploy-ionos:
     name: Deploy a IONOS
     runs-on: ubuntu-latest

@@ -25,6 +25,12 @@ export interface Organization {
   hq_branch_id: number | null
 }
 
+/** Plan comercial de la organización activa, tal como lo manda `/users/me/context`. */
+export interface PlanOrg {
+  clave: string
+  nombre: string
+}
+
 export interface User {
   id: number
   username: string

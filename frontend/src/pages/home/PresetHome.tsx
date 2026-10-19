@@ -1,9 +1,11 @@
-import { useEffect } from 'react'
+import { Children, isValidElement, useEffect, type ReactElement, type ReactNode } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useEnabledModulesStore } from '../../store/enabledModulesStore'
 import { useAuthStore } from '../../store/authStore'
 import { rolesConAcceso } from '../../components/layout/navConfig'
+import type { PlanOrg } from '../../types/auth'
 import { GastroHomeDay } from './GastroHomeDay'
+import { separarWidgets } from './widgetsPorPlan'
 
 /**
  * Home distinta por preset (Atlas One verticals).
@@ -20,7 +22,7 @@ import { GastroHomeDay } from './GastroHomeDay'
  */
 export function PresetHome() {
   const { user, org } = useAuthStore()
-  const { preset, loaded, load } = useEnabledModulesStore()
+  const { preset, loaded, load, plan, enabledModules } = useEnabledModulesStore()
 
   useEffect(() => {
     if (!loaded) load()
@@ -41,7 +43,7 @@ export function PresetHome() {
   // "Ir al POS" aquí lo mandaría a una ruta que su propia guarda le rebota.
   // Se deriva de ROLE_ROUTES para no tener una segunda lista que mantener.
   const puedeCobrar = !!user?.role && rolesConAcceso('/pos').includes(user.role)
-  const home = { greeting, orgName, puedeCobrar }
+  const home = { greeting, orgName, puedeCobrar, plan, enabledModules }
 
   switch (preset) {
     // Taxonomy v2 (2026-05-15)
@@ -82,6 +84,8 @@ interface HomeProps {
   orgName: string
   /** ¿Este rol puede abrir el punto de venta? (ver ROLE_ROUTES). */
   puedeCobrar: boolean
+  plan: PlanOrg | null
+  enabledModules: string[]
 }
 
 function HomeShell({
@@ -90,13 +94,25 @@ function HomeShell({
   title,
   subtitle,
   accent,
+  plan,
+  enabledModules,
   children,
 }: Omit<HomeProps, 'puedeCobrar'> & {
   title: string
   subtitle: string
   accent: string
-  children: React.ReactNode
+  children: ReactNode
 }) {
+  // Los widgets llegan como hijos; se reparten aquí para que cada home siga
+  // siendo una lista legible de tarjetas y no una tabla de datos.
+  const hijos = Children.toArray(children)
+  const widgets = hijos.filter(esWidget)
+  const otros = hijos.filter((h) => !esWidget(h))
+  const { visibles, ocultos } = separarWidgets(
+    widgets.map((w) => ({ module: w.props.module, title: w.props.title, nodo: w })),
+    plan,
+    enabledModules,
+  )
   return (
     <div style={{ padding: '2rem', maxWidth: 1200, margin: '0 auto' }}>
       <header style={{ marginBottom: 24 }}>
@@ -134,7 +150,11 @@ function HomeShell({
         gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
         gap: 16,
       }}>
-        {children}
+        {visibles.map((w) => w.nodo)}
+        {otros}
+        {plan && ocultos.length > 0 && (
+          <TarjetaPlan plan={plan} ocultos={ocultos.map((w) => w.title)} />
+        )}
       </div>
     </div>
   )
@@ -147,6 +167,38 @@ interface WidgetProps {
   cta: string
   ctaUrl: string
   beta?: boolean
+  /** Módulo que la pantalla destino necesita. En FREE, sin el módulo el widget no se pinta. */
+  module?: string
+}
+
+function esWidget(nodo: ReactNode): nodo is ReactElement<WidgetProps> {
+  return isValidElement(nodo) && nodo.type === Widget
+}
+
+/** Una sola tarjeta para todo lo que el plan no cubre: el upsell no se repite en cada widget. */
+function TarjetaPlan({ plan, ocultos }: { plan: PlanOrg; ocultos: string[] }) {
+  return (
+    <div
+      data-testid="tarjeta-plan"
+      style={{
+        background: 'var(--p-surface)',
+        border: '1px dashed var(--p-border)',
+        borderRadius: 6,
+        padding: 16,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+      }}
+    >
+      <strong style={{ fontSize: 13 }}>Tu plan: {plan.nombre}</strong>
+      <p style={{ margin: 0, fontSize: 12, color: 'var(--p-muted)', lineHeight: 1.5 }}>
+        No incluidos en tu configuración actual: {ocultos.join(', ')}. Pregunta por los planes de Atlas One.
+      </p>
+      <p style={{ margin: 0, fontSize: 12, color: 'var(--p-muted)' }}>
+        Pídelos a tu asesor de Atlas Tech; el cambio de plan lo hace la plataforma.
+      </p>
+    </div>
+  )
 }
 
 function Widget({ icon, title, description, cta, ctaUrl, beta }: WidgetProps) {
@@ -207,59 +259,65 @@ function Widget({ icon, title, description, cta, ctaUrl, beta }: WidgetProps) {
 
 // ── Per-preset homes ────────────────────────────────────────────────────────
 
-function BarberHome({ greeting, orgName, puedeCobrar }: HomeProps) {
+function BarberHome({ greeting, orgName, puedeCobrar, plan, enabledModules }: HomeProps) {
   return (
     <HomeShell
       greeting={greeting}
       orgName={orgName}
+      plan={plan}
+      enabledModules={enabledModules}
       title="Atlas One Barber"
       subtitle="Agenda de cortes, paquetes prepagados y comisiones del equipo."
       accent="#0891b2"
     >
-      <Widget icon="fa-calendar" title="Agenda de hoy" description="Cortes y barbas agendadas, sillas disponibles." cta="Abrir agenda" ctaUrl="/appointments" beta />
-      <Widget icon="fa-id-card" title="Paquetes prepagados" description="Bonos de N cortes y vencimientos próximos." cta="Ver paquetes" ctaUrl="/memberships" beta />
-      <Widget icon="fa-percent" title="Comisiones del turno" description="Resumen por barbero al cierre del día." cta="Ver comisiones" ctaUrl="/commissions" beta />
-      <Widget icon="fa-address-book" title="Clientes recurrentes" description="Historial de cortes y preferencias." cta="Ver clientes" ctaUrl="/customers" />
-      {puedeCobrar && <Widget icon="fa-cash-register" title="Cobrar" description="Cobrar servicio o paquete en silla." cta="Ir al POS" ctaUrl="/pos" />}
-      <Widget icon="fa-chart-pie" title="Reportes" description="Ingreso por barbero, servicios top." cta="Ver reportes" ctaUrl="/reports" />
+      <Widget module="appointments" icon="fa-calendar" title="Agenda de hoy" description="Cortes y barbas agendadas, sillas disponibles." cta="Abrir agenda" ctaUrl="/appointments" beta />
+      <Widget module="memberships" icon="fa-id-card" title="Paquetes prepagados" description="Bonos de N cortes y vencimientos próximos." cta="Ver paquetes" ctaUrl="/memberships" beta />
+      <Widget module="commissions" icon="fa-percent" title="Comisiones del turno" description="Resumen por barbero al cierre del día." cta="Ver comisiones" ctaUrl="/commissions" beta />
+      <Widget module="crm" icon="fa-address-book" title="Clientes recurrentes" description="Historial de cortes y preferencias." cta="Ver clientes" ctaUrl="/customers" />
+      {puedeCobrar && <Widget module="pos" icon="fa-cash-register" title="Cobrar" description="Cobrar servicio o paquete en silla." cta="Ir al POS" ctaUrl="/pos" />}
+      <Widget module="reports" icon="fa-chart-pie" title="Reportes" description="Ingreso por barbero, servicios top." cta="Ver reportes" ctaUrl="/reports" />
     </HomeShell>
   )
 }
 
-function BeautyWellnessHome({ greeting, orgName, puedeCobrar }: HomeProps) {
+function BeautyWellnessHome({ greeting, orgName, puedeCobrar, plan, enabledModules }: HomeProps) {
   return (
     <HomeShell
       greeting={greeting}
       orgName={orgName}
+      plan={plan}
+      enabledModules={enabledModules}
       title="Atlas One Beauty & Wellness"
       subtitle="Agenda, servicios, comisiones y clientes en un solo lugar."
       accent="#ec4899"
     >
-      <Widget icon="fa-calendar" title="Citas de hoy" description="Agenda del día por profesional y cabina." cta="Abrir agenda" ctaUrl="/appointments" beta />
-      <Widget icon="fa-id-card" title="Membresías activas" description="Saldo de paquetes y vencimientos próximos." cta="Ver membresías" ctaUrl="/memberships" beta />
-      <Widget icon="fa-percent" title="Comisiones del turno" description="Resumen de comisiones al cierre." cta="Ver comisiones" ctaUrl="/commissions" beta />
-      <Widget icon="fa-address-book" title="Clientes" description="Historial, preferencias y frecuencia." cta="Ver clientes" ctaUrl="/customers" />
-      {puedeCobrar && <Widget icon="fa-cash-register" title="Vender" description="Cobrar servicio o producto." cta="Ir al POS" ctaUrl="/pos" />}
-      <Widget icon="fa-chart-pie" title="Reportes" description="Servicios top, ticket promedio." cta="Ver reportes" ctaUrl="/reports" />
+      <Widget module="appointments" icon="fa-calendar" title="Citas de hoy" description="Agenda del día por profesional y cabina." cta="Abrir agenda" ctaUrl="/appointments" beta />
+      <Widget module="memberships" icon="fa-id-card" title="Membresías activas" description="Saldo de paquetes y vencimientos próximos." cta="Ver membresías" ctaUrl="/memberships" beta />
+      <Widget module="commissions" icon="fa-percent" title="Comisiones del turno" description="Resumen de comisiones al cierre." cta="Ver comisiones" ctaUrl="/commissions" beta />
+      <Widget module="crm" icon="fa-address-book" title="Clientes" description="Historial, preferencias y frecuencia." cta="Ver clientes" ctaUrl="/customers" />
+      {puedeCobrar && <Widget module="pos" icon="fa-cash-register" title="Vender" description="Cobrar servicio o producto." cta="Ir al POS" ctaUrl="/pos" />}
+      <Widget module="reports" icon="fa-chart-pie" title="Reportes" description="Servicios top, ticket promedio." cta="Ver reportes" ctaUrl="/reports" />
     </HomeShell>
   )
 }
 
-function HealthHome({ greeting, orgName, puedeCobrar }: HomeProps) {
+function HealthHome({ greeting, orgName, puedeCobrar, plan, enabledModules }: HomeProps) {
   return (
     <HomeShell
       greeting={greeting}
       orgName={orgName}
+      plan={plan}
+      enabledModules={enabledModules}
       title="Atlas One Health"
       subtitle="Pacientes, agenda, planes de tratamiento y cobros."
       accent="#06b6d4"
     >
-      <Widget icon="fa-calendar" title="Consultas de hoy" description="Agenda por consultorio y profesional." cta="Abrir agenda" ctaUrl="/appointments" beta />
-      <Widget icon="fa-user-injured" title="Pacientes" description="Historial clínico, notas y contactos." cta="Ver pacientes" ctaUrl="/customers" />
-      <Widget icon="fa-id-card" title="Planes de tratamiento" description="Paquetes prepagados y avance por paciente." cta="Ver planes" ctaUrl="/memberships" beta />
-      <Widget icon="fa-percent" title="Comisiones" description="Pago por consulta o sesión." cta="Ver comisiones" ctaUrl="/commissions" beta />
-      {puedeCobrar && <Widget icon="fa-cash-register" title="Cobrar" description="Cobro de consulta o paquete." cta="Ir al POS" ctaUrl="/pos" />}
-      <Widget icon="fa-chart-pie" title="Reportes" description="Consultas atendidas, ingresos por profesional." cta="Ver reportes" ctaUrl="/reports" />
+      <Widget module="appointments" icon="fa-calendar" title="Consultas de hoy" description="Agenda por consultorio y profesional." cta="Abrir agenda" ctaUrl="/appointments" beta />
+      <Widget module="crm" icon="fa-user-injured" title="Pacientes" description="Historial clínico, notas y contactos." cta="Ver pacientes" ctaUrl="/customers" />
+      <Widget module="memberships" icon="fa-id-card" title="Planes de tratamiento" description="Paquetes prepagados y avance por paciente." cta="Ver planes" ctaUrl="/memberships" beta />
+      <Widget module="commissions" icon="fa-percent" title="Comisiones" description="Pago por consulta o sesión." cta="Ver comisiones" ctaUrl="/commissions" beta />
+      {puedeCobrar && <Widget module="pos" icon="fa-cash-register" title="Cobrar" description="Cobro de consulta o paquete." cta="Ir al POS" ctaUrl="/pos" />}
+      <Widget module="reports" icon="fa-chart-pie" title="Reportes" description="Consultas atendidas, ingresos por profesional." cta="Ver reportes" ctaUrl="/reports" />
     </HomeShell>
   )
 }
@@ -327,59 +385,65 @@ function BarHome({ greeting, orgName, puedeCobrar }: HomeProps) {
   )
 }
 
-function RetailHome({ greeting, orgName }: HomeProps) {
+function RetailHome({ greeting, orgName, plan, enabledModules }: HomeProps) {
   return (
     <HomeShell
       greeting={greeting}
       orgName={orgName}
+      plan={plan}
+      enabledModules={enabledModules}
       title="Atlas One Retail"
       subtitle="Inventario, compras, sucursales y caja multi-tienda."
       accent="#3366ff"
     >
-      <Widget icon="fa-boxes" title="Inventario" description="Stock por sucursal y movimientos del día." cta="Ver inventario" ctaUrl="/inventory" />
-      <Widget icon="fa-truck" title="Compras" description="Órdenes a proveedores y recepciones." cta="Ver compras" ctaUrl="/purchasing" beta />
+      <Widget module="inventory" icon="fa-boxes" title="Inventario" description="Stock por sucursal y movimientos del día." cta="Ver inventario" ctaUrl="/inventory" />
+      <Widget module="purchasing" icon="fa-truck" title="Compras" description="Órdenes a proveedores y recepciones." cta="Ver compras" ctaUrl="/purchasing" beta />
       <Widget icon="fa-store" title="Sucursales" description="Resumen de cada sucursal y catálogo habilitado." cta="Ver sucursales" ctaUrl="/hq/branches" />
-      <Widget icon="fa-tag" title="Promociones" description="Promos activas, descuentos por temporada." cta="Ver promos" ctaUrl="/admin/catalog" />
-      <Widget icon="fa-file-invoice-dollar" title="Cotizaciones" description="Presupuestos abiertos y conversión a venta." cta="Ver cotizaciones" ctaUrl="/quotes" />
-      <Widget icon="fa-chart-pie" title="Reportes" description="Margen, rotación, productos top." cta="Ver reportes" ctaUrl="/hq/reports-hub" />
+      <Widget module="promotions" icon="fa-tag" title="Promociones" description="Promos activas, descuentos por temporada." cta="Ver promos" ctaUrl="/admin/catalog" />
+      <Widget module="quotes" icon="fa-file-invoice-dollar" title="Cotizaciones" description="Presupuestos abiertos y conversión a venta." cta="Ver cotizaciones" ctaUrl="/quotes" />
+      <Widget module="reports" icon="fa-chart-pie" title="Reportes" description="Margen, rotación, productos top." cta="Ver reportes" ctaUrl="/hq/reports-hub" />
     </HomeShell>
   )
 }
 
-function ServicesHome({ greeting, orgName }: HomeProps) {
+function ServicesHome({ greeting, orgName, plan, enabledModules }: HomeProps) {
   return (
     <HomeShell
       greeting={greeting}
       orgName={orgName}
+      plan={plan}
+      enabledModules={enabledModules}
       title="Atlas One Services"
       subtitle="Órdenes de trabajo, agenda, cotizaciones y técnicos."
       accent="#33cc99"
     >
-      <Widget icon="fa-screwdriver-wrench" title="Órdenes de trabajo" description="OT abiertas, en proceso y entregadas." cta="Ver OT" ctaUrl="/seguimiento" />
-      <Widget icon="fa-calendar" title="Agenda de servicio" description="Citas de hoy y disponibilidad de técnicos." cta="Abrir agenda" ctaUrl="/appointments" beta />
-      <Widget icon="fa-file-invoice-dollar" title="Cotizaciones" description="Presupuestos pendientes de aprobación." cta="Ver cotizaciones" ctaUrl="/quotes" />
-      <Widget icon="fa-percent" title="Comisiones" description="Comisiones por técnico y servicio." cta="Ver comisiones" ctaUrl="/commissions" beta />
-      <Widget icon="fa-address-book" title="Clientes" description="Historial de servicios por cliente." cta="Ver clientes" ctaUrl="/customers" />
-      <Widget icon="fa-chart-pie" title="Reportes" description="Tiempos, OT por técnico, ingresos." cta="Ver reportes" ctaUrl="/reports" />
+      <Widget module="quotes" icon="fa-screwdriver-wrench" title="Órdenes de trabajo" description="OT abiertas, en proceso y entregadas." cta="Ver OT" ctaUrl="/seguimiento" />
+      <Widget module="appointments" icon="fa-calendar" title="Agenda de servicio" description="Citas de hoy y disponibilidad de técnicos." cta="Abrir agenda" ctaUrl="/appointments" beta />
+      <Widget module="quotes" icon="fa-file-invoice-dollar" title="Cotizaciones" description="Presupuestos pendientes de aprobación." cta="Ver cotizaciones" ctaUrl="/quotes" />
+      <Widget module="commissions" icon="fa-percent" title="Comisiones" description="Comisiones por técnico y servicio." cta="Ver comisiones" ctaUrl="/commissions" beta />
+      <Widget module="crm" icon="fa-address-book" title="Clientes" description="Historial de servicios por cliente." cta="Ver clientes" ctaUrl="/customers" />
+      <Widget module="reports" icon="fa-chart-pie" title="Reportes" description="Tiempos, OT por técnico, ingresos." cta="Ver reportes" ctaUrl="/reports" />
     </HomeShell>
   )
 }
 
-function EnterpriseHome({ greeting, orgName }: HomeProps) {
+function EnterpriseHome({ greeting, orgName, plan, enabledModules }: HomeProps) {
   return (
     <HomeShell
       greeting={greeting}
       orgName={orgName}
+      plan={plan}
+      enabledModules={enabledModules}
       title="Atlas One Enterprise"
       subtitle="Toda la operación a la vista: multi-sucursal, IA, integraciones."
       accent="#aa44ff"
     >
       <Widget icon="fa-gauge-high" title="Control Tower" description="KPIs ejecutivos y salud de la plataforma." cta="Ir a operaciones" ctaUrl="/hq/operations" />
-      <Widget icon="fa-microchip" title="Copiloto IA" description="Predicciones, automatizaciones y resúmenes." cta="Abrir IA" ctaUrl="/ai" beta />
-      <Widget icon="fa-truck" title="Compras" description="OC, proveedores y cuentas por pagar." cta="Ver compras" ctaUrl="/purchasing" beta />
-      <Widget icon="fa-industry" title="Manufactura" description="Producción y consumo de insumos." cta="Ver manufactura" ctaUrl="/inventory" />
-      <Widget icon="fa-users-gear" title="RRHH" description="Asistencia, nómina, vacaciones." cta="Ir a RRHH" ctaUrl="/hr" />
-      <Widget icon="fa-chart-line" title="Reportes ejecutivos" description="Vista global multi-sucursal." cta="Ver reportes" ctaUrl="/hq/reports-hub" />
+      <Widget module="ai" icon="fa-microchip" title="Copiloto IA" description="Predicciones, automatizaciones y resúmenes." cta="Abrir IA" ctaUrl="/ai" beta />
+      <Widget module="purchasing" icon="fa-truck" title="Compras" description="OC, proveedores y cuentas por pagar." cta="Ver compras" ctaUrl="/purchasing" beta />
+      <Widget module="inventory" icon="fa-industry" title="Manufactura" description="Producción y consumo de insumos." cta="Ver manufactura" ctaUrl="/inventory" />
+      <Widget module="hr" icon="fa-users-gear" title="RRHH" description="Asistencia, nómina, vacaciones." cta="Ir a RRHH" ctaUrl="/hr" />
+      <Widget module="reports" icon="fa-chart-line" title="Reportes ejecutivos" description="Vista global multi-sucursal." cta="Ver reportes" ctaUrl="/hq/reports-hub" />
     </HomeShell>
   )
 }

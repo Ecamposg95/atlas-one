@@ -1,9 +1,13 @@
 import { useMemo, useState } from 'react'
 import {
-  ResponsiveContainer, AreaChart, Area, Line, XAxis, YAxis,
-  CartesianGrid, Tooltip,
-} from 'recharts'
+  Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip,
+  type ChartData, type ChartOptions,
+} from 'chart.js'
+import { Line } from 'react-chartjs-2'
 import { formatCurrency } from '../../../utils/currency'
+import { conAlpha, token, useTemaActual } from '../../../utils/cssToken'
+
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip)
 
 export interface TrendPoint {
   date: string
@@ -48,12 +52,12 @@ export function TrendChart({
   signupsSeries,
   showSeriesToggles = false,
 }: Props) {
+  const tema = useTemaActual()
   const [revOn, setRevOn] = useState(true)
   const [salesOn, setSalesOn] = useState(false)
   const [signupsOn, setSignupsOn] = useState(false)
 
-  // Merge optional series into a single dataset by index, so Recharts can plot
-  // multiple lines off the same array.
+  // Las series opcionales se funden por índice, igual que antes con recharts.
   const merged = useMemo(() => {
     if (!data || data.length === 0) return []
     return data.map((p, i) => ({
@@ -63,6 +67,92 @@ export function TrendChart({
     }))
   }, [data, salesSeries, signupsSeries])
 
+  const hasSales = !!salesSeries && salesSeries.length > 0
+  const hasSignups = !!signupsSeries && signupsSeries.length > 0
+  const ejeDerecho = (hasSales && salesOn) || (hasSignups && signupsOn)
+
+  const chartData = useMemo<ChartData<'line'>>(() => {
+    const acento = token('--p-accent', '#6366f1')
+    const muted = token('--p-muted', '#94a3b8')
+    const datasets: ChartData<'line'>['datasets'] = []
+    if (revOn) {
+      datasets.push({
+        label: 'Ventas diarias', yAxisID: 'y',
+        data: merged.map((p) => p.revenue),
+        borderColor: acento, borderWidth: 1.75, pointRadius: 0, tension: 0.35,
+        fill: true, backgroundColor: conAlpha(acento, 0.18),
+      })
+      datasets.push({
+        label: 'Promedio móvil 7d', yAxisID: 'y',
+        data: merged.map((p) => p.ma7 ?? null),
+        borderColor: muted, borderWidth: 1.25, borderDash: [3, 3], pointRadius: 0, tension: 0.35,
+        spanGaps: true,
+      })
+    }
+    if (hasSales && salesOn) {
+      datasets.push({
+        label: 'Tickets', yAxisID: 'y2',
+        data: merged.map((p) => p.sales ?? 0),
+        borderColor: token('--p-success', '#4ade80'), borderWidth: 1.5, pointRadius: 0, tension: 0.35,
+      })
+    }
+    if (hasSignups && signupsOn) {
+      datasets.push({
+        label: 'Signups', yAxisID: 'y2',
+        data: merged.map((p) => p.signups ?? 0),
+        borderColor: token('--p-warning', '#fbbf24'), borderWidth: 1.5, pointRadius: 0, tension: 0.35,
+      })
+    }
+    return { labels: merged.map((p) => p.label), datasets }
+  }, [merged, revOn, salesOn, signupsOn, hasSales, hasSignups, tema])
+
+  const options = useMemo<ChartOptions<'line'>>(() => {
+    const hint = token('--p-hint', '#64748b')
+    const borde = token('--p-border', '#1f2937')
+    const mono = token('--font-mono', 'ui-monospace, monospace')
+    return {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: token('--p-sidebar', '#0f172a'),
+          borderColor: borde, borderWidth: 1,
+          titleColor: token('--p-text', '#e2e8f0'), bodyColor: token('--p-text', '#e2e8f0'),
+          callbacks: {
+            title: (items) => `Día ${items[0]?.label ?? ''}`,
+            label: (ctx) => {
+              const v = typeof ctx.parsed.y === 'number' ? ctx.parsed.y : 0
+              const esDinero = ctx.dataset.yAxisID === 'y'
+              return `${ctx.dataset.label}: ${esDinero ? formatCurrency(v) : v}`
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { color: hint, font: { size: 10, family: mono }, maxTicksLimit: 12, maxRotation: 0 },
+        },
+        y: {
+          position: 'left',
+          grid: { display: showGrid, color: borde, tickBorderDash: [2, 4] },
+          border: { display: false },
+          ticks: { color: hint, font: { size: 10, family: mono }, callback: (v) => chartCurrencyShort(Number(v)) },
+        },
+        y2: {
+          position: 'right',
+          display: ejeDerecho,
+          grid: { drawOnChartArea: false },
+          border: { display: false },
+          ticks: { color: hint, font: { size: 10, family: mono }, callback: (v) => intShort(Number(v)) },
+        },
+      },
+    }
+  }, [showGrid, ejeDerecho, tema])
+
   if (!data || data.length === 0) {
     return (
       <div style={{ height, display: 'grid', placeItems: 'center', color: 'var(--p-muted)', fontSize: 13 }}>
@@ -71,38 +161,20 @@ export function TrendChart({
     )
   }
 
-  const hasSales = !!salesSeries && salesSeries.length > 0
-  const hasSignups = !!signupsSeries && signupsSeries.length > 0
-
   return (
     <div className="chart-wrap">
       {showSeriesToggles && (
         <div className="series-toggles" role="group" aria-label="Series">
-          <button
-            type="button"
-            className={'pill ' + (revOn ? 'active' : '')}
-            aria-pressed={revOn}
-            onClick={() => setRevOn(v => !v)}
-          >
+          <button type="button" className={'pill ' + (revOn ? 'active' : '')} aria-pressed={revOn} onClick={() => setRevOn((v) => !v)}>
             Revenue
           </button>
           {hasSales && (
-            <button
-              type="button"
-              className={'pill ' + (salesOn ? 'active' : '')}
-              aria-pressed={salesOn}
-              onClick={() => setSalesOn(v => !v)}
-            >
+            <button type="button" className={'pill ' + (salesOn ? 'active' : '')} aria-pressed={salesOn} onClick={() => setSalesOn((v) => !v)}>
               Sales
             </button>
           )}
           {hasSignups && (
-            <button
-              type="button"
-              className={'pill ' + (signupsOn ? 'active' : '')}
-              aria-pressed={signupsOn}
-              onClick={() => setSignupsOn(v => !v)}
-            >
+            <button type="button" className={'pill ' + (signupsOn ? 'active' : '')} aria-pressed={signupsOn} onClick={() => setSignupsOn((v) => !v)}>
               Signups
             </button>
           )}
@@ -117,110 +189,9 @@ export function TrendChart({
           <span className="mono">USD</span>
         </div>
       )}
-      <ResponsiveContainer width="100%" height={height} minWidth={0}>
-        <AreaChart data={merged} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-          <defs>
-            <linearGradient id="pv2TrendFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--p-accent)" stopOpacity={0.28} />
-              <stop offset="100%" stopColor="var(--p-accent)" stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          {showGrid && (
-            <CartesianGrid
-              stroke="var(--p-border)"
-              strokeDasharray="2 4"
-              vertical={false}
-            />
-          )}
-          <XAxis
-            dataKey="label"
-            tick={{ fill: 'var(--p-hint)', fontSize: 10, fontFamily: 'var(--font-mono)' }}
-            axisLine={false}
-            tickLine={false}
-            minTickGap={24}
-          />
-          <YAxis
-            yAxisId="left"
-            tickFormatter={chartCurrencyShort}
-            tick={{ fill: 'var(--p-hint)', fontSize: 10, fontFamily: 'var(--font-mono)' }}
-            axisLine={false}
-            tickLine={false}
-            width={48}
-          />
-          {(hasSales || hasSignups) && (
-            <YAxis
-              yAxisId="right"
-              orientation="right"
-              tickFormatter={intShort}
-              tick={{ fill: 'var(--p-hint)', fontSize: 10, fontFamily: 'var(--font-mono)' }}
-              axisLine={false}
-              tickLine={false}
-              width={36}
-            />
-          )}
-          <Tooltip
-            contentStyle={{
-              background: 'var(--p-sidebar)',
-              border: '1px solid var(--p-border)',
-              borderRadius: 8,
-              color: 'var(--p-text)',
-              fontSize: 12,
-            }}
-            cursor={{ stroke: 'var(--p-accent-line)' }}
-            formatter={(value: any, name: any) => {
-              const v = typeof value === 'number' ? value : Number(value) || 0
-              if (name === 'revenue') return [formatCurrency(v), 'Ventas diarias']
-              if (name === 'ma7') return [formatCurrency(v), 'Promedio móvil 7d']
-              if (name === 'sales') return [v, 'Tickets']
-              if (name === 'signups') return [v, 'Signups']
-              return [v, name]
-            }}
-            labelFormatter={(label) => `Día ${label}`}
-          />
-          {revOn && (
-            <Area
-              yAxisId="left"
-              type="monotone"
-              dataKey="revenue"
-              stroke="var(--p-accent)"
-              strokeWidth={1.75}
-              fill="url(#pv2TrendFill)"
-            />
-          )}
-          {revOn && (
-            <Line
-              yAxisId="left"
-              type="monotone"
-              dataKey="ma7"
-              stroke="var(--p-muted)"
-              strokeWidth={1.25}
-              strokeDasharray="3 3"
-              dot={false}
-              connectNulls
-            />
-          )}
-          {hasSales && salesOn && (
-            <Line
-              yAxisId="right"
-              type="monotone"
-              dataKey="sales"
-              stroke="var(--p-success, #4ade80)"
-              strokeWidth={1.5}
-              dot={false}
-            />
-          )}
-          {hasSignups && signupsOn && (
-            <Line
-              yAxisId="right"
-              type="monotone"
-              dataKey="signups"
-              stroke="var(--p-warning, #fbbf24)"
-              strokeWidth={1.5}
-              dot={false}
-            />
-          )}
-        </AreaChart>
-      </ResponsiveContainer>
+      <div style={{ height, width: '100%' }}>
+        <Line data={chartData} options={options} />
+      </div>
     </div>
   )
 }

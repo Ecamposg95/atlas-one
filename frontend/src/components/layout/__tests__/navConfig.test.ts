@@ -183,3 +183,30 @@ describe('Valor de la tienda (/hq/valor-inventario)', () => {
     expect(operacion?.urls).toContain('/hq/valor-inventario')
   })
 })
+
+describe('los ítems que recibieron `module:` en SP2', () => {
+  const conModulo = Object.fromEntries(ALL_NAV.map((n) => [n.url, n.module]))
+
+  it('Mi expediente exige hr; Cotización móvil, quotes; Consulta móvil, catalog', () => {
+    expect(conModulo['/hr/me']).toBe('hr')
+    expect(conModulo['/mobile/sales']).toBe('quotes')
+    expect(conModulo['/mobile/query']).toBe('catalog')
+  })
+
+  it('Reportes HQ, Control y los paneles móviles NO exigen módulo (nada se apaga)', () => {
+    for (const u of ['/hq/reports-hub', '/hq/control', '/mobile/owner', '/mobile/dashboard']) {
+      expect(conModulo[u], u).toBeUndefined()
+    }
+  })
+
+  it('la operación diaria sigue sin `module:` (no hay vía nueva para esconderle la caja a una tienda)', () => {
+    for (const u of ['/atlas-pos', '/pos', '/sales', '/cash-history', '/returns', '/products', '/reports',
+                     '/printer-settings', '/hq/operations', '/organization', '/hq/branches', '/users']) {
+      expect(conModulo[u], u).toBeUndefined()
+    }
+  })
+
+  it('una org con solo core (preset nunca aplicado) conserva Mi día, Cobrar y Corte', () => {
+    expect(menu('CAJERO', ['core'])).toEqual(expect.arrayContaining(['/atlas-pos', '/pos', '/cash-history']))
+  })
+})

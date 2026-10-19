@@ -20,6 +20,8 @@ el último eslabón, no un paso en paralelo con las pruebas. Un solo despliegue 
 (`concurrency: group: deploy-ionos, cancel-in-progress: false`): un segundo push espera
 al primero en vez de cancelarlo, para no dejar el contenedor a medias.
 
+**Presupuesto de bundle:** el paso "Presupuesto de descarga de la ruta crítica" de `frontend-build` (`scripts/presupuesto_bundle.py`) mide los bytes de login → POS contra `frontend/presupuesto_bundle.json`; si lo rebasa, `frontend-build` falla y **`deploy-ionos` no corre**. Lee la salida del paso (medido vs `tope_bytes`); para subir el tope edita ese JSON en el mismo PR y justifícalo en el commit.
+
 Pasos (todos por SSH con una llave de despliegue dedicada, secretos `IONOS_SSH_KEY` /
 `IONOS_KNOWN_HOSTS` / `IONOS_HOST` — huella fijada, sin `ssh-keyscan` en caliente):
 
