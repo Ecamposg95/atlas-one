@@ -8,6 +8,7 @@ const src = (p: string) => readFileSync(resolve(__dirname, '..', p), 'utf8')
 const NUEVOS = [
   'pages/pos/opcionesPos.ts', 'components/pos/AltaRapidaProducto.tsx', 'components/layout/navPerfilBasico.ts',
   'pages/hq/InicioBasico.tsx', 'components/layout/PorPerfil.tsx',
+  'components/ui/MasOpciones.tsx', 'pages/platform/SelectorPerfilUi.tsx',
 ]
 
 describe('modo básico: carga y render condicional', () => {
