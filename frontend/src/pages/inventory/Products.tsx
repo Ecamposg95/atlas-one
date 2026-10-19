@@ -13,6 +13,7 @@ import { BarraFiltros } from '../../components/ui/BarraFiltros'
 import { ListaTarjetas } from '../../components/ui/ListaTarjetas'
 import { TarjetaFila } from '../../components/ui/TarjetaFila'
 import { useEsTelefono } from '../../hooks/useIsMobile'
+import { useModoBasico } from '../../store/enabledModulesStore'
 import type { Product, Department } from '../../types/products'
 import { formatCurrency } from '../../utils/currency'
 import { sortByName } from '../../utils/sortByName'
@@ -335,6 +336,8 @@ function ProductsHQView() {
   const unaSolaSucursal = esTiendaUnica(useBranchCountStore((s) => s.count))
   const canEdit = CAN_EDIT_ROLES.includes(user?.role ?? '')
   const esTelefono = useEsTelefono()
+  // Modo básico: sin importador, etiquetas CSV, códigos ni rejilla (render condicional).
+  const modoBasico = useModoBasico()
 
   const [products, setProducts] = useState<Product[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
@@ -480,6 +483,8 @@ function ProductsHQView() {
               <span className="text-slate-500 text-sm">{total.toLocaleString()} productos</span>
               {canEdit && (
                 <>
+                  {!modoBasico && (
+                  <>
                   <button
                     onClick={() => setShowImport(true)}
                     aria-label="Importar productos"
@@ -509,6 +514,8 @@ function ProductsHQView() {
                       <span className="hidden sm:inline">Generar códigos </span>({codigosFaltantes})
                     </button>
                   )}
+                  </>
+                  )}
                   <button
                     onClick={handleNewProductClick}
                     aria-label="Nuevo producto"
@@ -518,6 +525,7 @@ function ProductsHQView() {
                   </button>
                 </>
               )}
+              {!modoBasico && (
               <div className="flex items-center bg-slate-800 rounded-lg border border-slate-700/50 p-0.5">
                 <button
                   onClick={() => setViewMode('list')}
@@ -536,6 +544,7 @@ function ProductsHQView() {
                   <i className="fa-solid fa-grip w-4 text-xs" />
                 </button>
               </div>
+              )}
             </div>
           </>
         }

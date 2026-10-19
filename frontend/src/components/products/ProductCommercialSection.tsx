@@ -41,14 +41,16 @@ export function ProductCommercialSection({ value, onChange, errors, departments,
             {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
           </select>
         </label>
-        <label className="text-xs text-slate-400 space-y-1">
-          Marca
-          <select className="dax-input w-full" value={value.brand_id}
-            onChange={(e) => onChange('brand_id', e.target.value)}>
-            <option value="">— Ninguna —</option>
-            {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </select>
-        </label>
+        {campoVisible(campos, 'brand_id', value.brand_id) && (
+          <label className="text-xs text-slate-400 space-y-1">
+            Marca
+            <select className="dax-input w-full" value={value.brand_id}
+              onChange={(e) => onChange('brand_id', e.target.value)}>
+              <option value="">— Ninguna —</option>
+              {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </label>
+        )}
         {campoVisible(campos, 'gender', value.gender) && (
           <label className="text-xs text-slate-400 space-y-1">
             Género
@@ -96,7 +98,8 @@ export function ProductCommercialSection({ value, onChange, errors, departments,
             onChange={(e) => onChange('has_iva', e.target.checked)} />
           Aplica IVA
         </label>
-        {value.has_iva && (
+        {/* En básico la tasa se queda en 16 y no se pinta, salvo que el producto ya traiga otra. */}
+        {value.has_iva && campoVisible(campos, 'tax_rate', Number(value.tax_rate) !== 16 ? value.tax_rate : null) && (
           <label className="text-xs text-slate-400 space-y-1">
             Tasa IVA (%)
             <input type="number" step="0.01" min="0" className="dax-input w-full" value={value.tax_rate}

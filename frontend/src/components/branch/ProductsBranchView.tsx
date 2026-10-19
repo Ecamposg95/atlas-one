@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuthStore } from '../../store/authStore'
+import { useModoBasico } from '../../store/enabledModulesStore'
 import { productsApi } from '../../api/products'
 import { inventoryApi } from '../../api/inventory'
 import { toast } from '../../store/toastStore'
@@ -103,6 +104,8 @@ export function ProductsBranchView() {
   const [creating, setCreating] = useState(false)
   const [stockTarget, setStockTarget] = useState<ProductRow | null>(null)
   const [showImport, setShowImport] = useState(false)
+  // Modo básico: sin plantilla ni importador de Excel (render condicional).
+  const modoBasico = useModoBasico()
   const [fichaTarget, setFichaTarget] = useState<ProductRow | null>(null)
 
   // ── Load ───────────────────────────────────────────────────────────────────
@@ -189,6 +192,8 @@ export function ProductsBranchView() {
             <p className="text-white/70 text-xs mt-1">{visible.length} productos</p>
           </div>
           <div className="flex items-center gap-2">
+            {!modoBasico && (
+            <>
             <button
               onClick={downloadTemplate}
               className="inline-flex items-center gap-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-3 py-2.5 transition-colors"
@@ -205,6 +210,8 @@ export function ProductsBranchView() {
               <i className="fa-solid fa-file-import" />
               Importar Excel
             </button>
+            </>
+            )}
             <button
               onClick={() => setCreating(true)}
               className="inline-flex items-center gap-2 rounded-xl bg-white text-purple-700 hover:bg-white/90 active:bg-white/80 text-sm font-bold px-4 py-2.5 transition-colors"
