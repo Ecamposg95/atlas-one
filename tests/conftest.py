@@ -289,6 +289,40 @@ def auth_superadmin(superadmin):
     return _auth_header(superadmin)
 
 
+@pytest.fixture()
+def admin_sin_sucursal(db, org):
+    """ADMINISTRADOR sin `branch_id` (oficina central pura).
+
+    Sin sucursal ni `target_branch_ids`, el alta lo habilita en todas las
+    sucursales que venden (mega plan 2026-10, §6.4).
+    """
+    return _make_user(db, org, None, "admin_sin_sucursal", Role.ADMINISTRADOR)
+
+
+@pytest.fixture()
+def auth_admin_sin_sucursal(admin_sin_sucursal):
+    return _auth_header(admin_sin_sucursal)
+
+
+@pytest.fixture()
+def catalog_module_enabled(db, org):
+    """Enciende el módulo `catalog` para la org de prueba.
+
+    `require_module("catalog")` exime a ADMINISTRADOR/DUEÑO; CAJERO/GERENTE
+    lo necesitan para crear, editar, duplicar e importar productos.
+    """
+    from app.models.modules import Module, OrganizationModule
+    if db.query(Module).filter(Module.key == "catalog").first() is None:
+        db.add(Module(key="catalog", name="Catálogo"))
+        db.flush()
+    if db.query(OrganizationModule).filter(
+        OrganizationModule.organization_id == org.id,
+        OrganizationModule.module_key == "catalog",
+    ).first() is None:
+        db.add(OrganizationModule(organization_id=org.id, module_key="catalog", is_enabled=True))
+        db.flush()
+
+
 # ── Product Fixtures ──────────────────────────────────────────────────────────
 def _make_product(db, org, name, sku, price, branches_active=None):
     """

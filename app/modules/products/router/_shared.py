@@ -54,35 +54,19 @@ from app.core.tenant_context import get_current_active_organization
 
 logger = logging.getLogger(__name__)
 
-_MANAGER_ROLES: frozenset = frozenset({"ADMINISTRADOR", "GERENTE", "DUEÑO"})
-
-# Track 3 (POS bug-fix): el cajero es el usuario con más control en tiendas.
-# Tiene CRUD completo + bulk + import/export + approve/reject/restore sobre
-# productos visibles en su sucursal. La invariante multi-tenant
-# (organization_id == current_user.org_id) y el scope de sucursal
-# (CAJERO solo actúa sobre PBS de su branch_id) se siguen aplicando en
-# las funciones de bajo nivel (`get_product_if_visible`, `resolve_pbs_target_branch`).
-_PRODUCT_ADVANCED_ROLES: frozenset = frozenset(
-    {"ADMINISTRADOR", "GERENTE", "DUEÑO", "CAJERO"}
+# Fuente única: `services/comun.py` (los servicios no pueden importar de aquí).
+# Se conservan los nombres históricos para los sub-routers que ya los usan.
+from app.modules.products.services.comun import (  # noqa: E402
+    MANAGER_ROLES as _MANAGER_ROLES,
+    PRODUCT_ADVANCED_ROLES as _PRODUCT_ADVANCED_ROLES,
+    celda_decimal as _safe_decimal,
+    celda_texto as _safe_str,
+    celda_vacia as _is_na,
+    variante_principal,
+    variantes_vivas,
 )
 
 CRITICAL_STOCK_THRESHOLD = 5
-
-
-def variantes_vivas(product: Product) -> list:
-    """Variantes del producto que siguen vendibles (sin soft-delete)."""
-    return [v for v in (product.variants or []) if v.deleted_at is None]
-
-
-def variante_principal(product: Product):
-    """La variante "principal": la primera VIVA en orden de creacion.
-
-    `product.variants[0]` incluye las retiradas (`DELETE /variants/{id}`), asi
-    que despues de retirar la primera talla las rutas de escritura terminaban
-    editando una variante que ya no se vende. None si no queda ninguna viva.
-    """
-    vivas = variantes_vivas(product)
-    return vivas[0] if vivas else None
 
 
 def aplanar_sale_name(p_read: ProductRead, p: Product) -> None:
@@ -313,32 +297,3 @@ def _compute_product_read(
                 vr.stock_total = directo.get(vr.id, Decimal(0))
 
     return p_read
-
-
-def _safe_str(val) -> str:
-    if val is None:
-        return ""
-    s = str(val).strip()
-    if s.lower() == "nan":
-        return ""
-    return s
-
-
-def _is_na(val) -> bool:
-    """Return True when a cell value from openpyxl/csv should be treated as missing."""
-    if val is None:
-        return True
-    if isinstance(val, float) and math.isnan(val):
-        return True
-    if isinstance(val, str) and val.strip().lower() in ("nan", "none"):
-        return True
-    return False
-
-
-def _safe_decimal(val, default: Decimal = Decimal(0)) -> Decimal:
-    try:
-        if _is_na(val):
-            return default
-        return Decimal(str(val))
-    except Exception:
-        return default

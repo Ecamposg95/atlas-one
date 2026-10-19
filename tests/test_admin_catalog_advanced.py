@@ -139,10 +139,11 @@ class TestDuplicateProduct:
         assert len(stock_rows) == 0, "Duplicate should not copy stock"
 
     def test_cajero_allowed(
-        self, client, products_setup, cajero_a, auth_cajero_a, org,
+        self, client, products_setup, catalog_module_enabled, cajero_a, auth_cajero_a, org,
     ):
         # Track 3: CAJERO is an advanced catalog role and may duplicate a
-        # product visible in its branch. (Was 403 pre-Track-3.)
+        # product visible in its branch. (Was 403 pre-Track-3.) Desde SP1 el
+        # cajero ademas necesita el modulo `catalog`.
         product, _ = products_setup["product_a"]
         r = client.post(
             f"/api/products/{product.id}/duplicate",

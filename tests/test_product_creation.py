@@ -19,24 +19,10 @@ from app.models.users import User, UserOrganization, Role, PlatformRole
 from app.models.organization import Organization, Branch, BranchType
 from app.models.products import ProductVariant, ProductBranchStatus
 from app.models.inventory import StockOnHand, InventoryMovement, MovementType
-from app.models.modules import Module, OrganizationModule
 from app.core.security import get_password_hash, create_access_token
 
 
 # ── Extra fixtures specific to creation tests ────────────────────────────────
-@pytest.fixture()
-def catalog_module_enabled(db, org):
-    """Enable the `catalog` module for the test org so require_module passes."""
-    mod = db.query(Module).filter(Module.key == "catalog").first()
-    if not mod:
-        mod = Module(key="catalog", name="Catalog")
-        db.add(mod)
-        db.flush()
-    db.add(OrganizationModule(
-        organization_id=org.id, module_key="catalog", is_enabled=True
-    ))
-    db.flush()
-
 
 def _make_extra_user(db, org, username, role, branch=None):
     u = User(
@@ -287,11 +273,14 @@ class TestProductCreationValidation:
 
 # ── Catalog scope / Multi-tenancy ────────────────────────────────────────────
 class TestProductCreationScope:
-    def test_admin_creates_global_product(
-        self, client, db, catalog_module_enabled, org,
+    def test_admin_sin_sucursal_y_sin_ninguna_que_venda_crea_catalogo_global(
+        self, client, db, catalog_module_enabled, org, hq_branch,
         admin_no_branch, auth_admin_nobranch,
     ):
-        """HQ admin without branch_id and without target_branch_ids → no PBS rows."""
+        """Sin `target_branch_ids` el alta habilita en todas las sucursales que
+        venden (mega plan 2026-10 §6.4). Si la org no tiene ninguna que venda
+        (solo HQ con can_sell=False), no hay PBS y el OUTER JOIN de ATS-11 lo
+        muestra en todas, como siempre."""
         r = client.post(
             "/api/products/", json=_payload(sku="G-1"),
             headers=_with_org(auth_admin_nobranch, org),
@@ -302,7 +291,7 @@ class TestProductCreationScope:
         pbs = db.query(ProductBranchStatus).filter(
             ProductBranchStatus.variant_id == variant.id
         ).all()
-        assert len(pbs) == 0, "Global product should not create ProductBranchStatus rows"
+        assert len(pbs) == 0
 
     def test_product_visible_in_own_branch_pos_search(
         self, client, catalog_module_enabled, org,
