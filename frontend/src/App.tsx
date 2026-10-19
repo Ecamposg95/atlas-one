@@ -12,6 +12,8 @@ const _savedTheme = localStorage.getItem('atlas_theme') ?? 'dark'
 document.documentElement.classList.add(_savedTheme)
 import { Layout } from './components/layout/Layout'
 import { RequireRole, RutaPorRol } from './components/layout/RequireRole'
+import { PorPerfil } from './components/layout/PorPerfil'
+
 import { LoginPage } from './pages/Login'
 
 // Lazy imports — cada grupo de páginas se carga bajo demanda
@@ -32,6 +34,8 @@ const HQInventory     = lazy(() => import('./pages/hq/HQInventory').then(m => ({
 const HQBranches      = lazy(() => import('./pages/hq/HQBranches').then(m => ({ default: m.HQBranches })))
 const HQBranchDetail  = lazy(() => import('./pages/hq/HQBranchDetail').then(m => ({ default: m.HQBranchDetail })))
 const HQValorInventario = lazy(() => import('./pages/hq/HQValorInventario').then(m => ({ default: m.HQValorInventario })))
+// Modo básico: chunk propio (sin chart.js); lo monta PorPerfil en /hq/operations.
+const InicioBasico    = lazy(() => import('./pages/hq/InicioBasico').then(m => ({ default: m.InicioBasico })))
 
 // Catalog / Core
 const AdminCatalog    = lazy(() => import('./pages/core/AdminCatalog').then(m => ({ default: m.AdminCatalog })))
@@ -270,8 +274,9 @@ export default function App() {
 
           {/* HQ */}
           <Route path="hq">
-            <Route path="operations" element={<RutaPorRol url="/hq/operations"><Suspense fallback={<PageLoader />}><HQOperations /></Suspense></RutaPorRol>} />
-            <Route path="reports-hub" element={<RutaPorRol url="/hq/reports-hub"><Suspense fallback={<PageLoader />}><HQReportsHub /></Suspense></RutaPorRol>} />
+            {/* Modo básico (FREE): Inicio corto y los Reportes de la cajera; las de paga, lo de siempre. */}
+            <Route path="operations" element={<RutaPorRol url="/hq/operations"><Suspense fallback={<PageLoader />}><PorPerfil basico={<InicioBasico />} completo={<HQOperations />} /></Suspense></RutaPorRol>} />
+            <Route path="reports-hub" element={<RutaPorRol url="/hq/reports-hub"><Suspense fallback={<PageLoader />}><PorPerfil basico={<Reports />} completo={<HQReportsHub />} /></Suspense></RutaPorRol>} />
             <Route path="control" element={<RutaPorRol url="/hq/control"><Suspense fallback={<PageLoader />}><HQControl /></Suspense></RutaPorRol>} />
             <Route path="sales" element={<RutaPorRol url="/hq/sales"><Suspense fallback={<PageLoader />}><HQSalesLog /></Suspense></RutaPorRol>} />
             <Route path="returns" element={<RutaPorRol url="/hq/returns"><Suspense fallback={<PageLoader />}><HQReturns /></Suspense></RutaPorRol>} />
