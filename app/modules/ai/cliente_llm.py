@@ -109,6 +109,8 @@ def _leer_respuesta(cuerpo: Any) -> RespuestaLLM:
         mensaje = cuerpo["choices"][0]["message"]
     except (KeyError, IndexError, TypeError):
         raise ProveedorNoDisponible(_FORMATO)
+    if not isinstance(mensaje, dict):
+        raise ProveedorNoDisponible(_FORMATO)
     contenido = mensaje.get("content")
     if isinstance(contenido, list):  # algunos proveedores mandan partes
         contenido = "".join(p.get("text", "") for p in contenido if isinstance(p, dict))
@@ -119,11 +121,16 @@ def _leer_respuesta(cuerpo: Any) -> RespuestaLLM:
             (tc or {}).get("id") or f"llamada_{i}", funcion.get("name") or "", funcion.get("arguments"),
         ))
     uso = cuerpo.get("usage") or {}
+    try:
+        tokens_entrada = int(uso.get("prompt_tokens") or 0)
+        tokens_salida = int(uso.get("completion_tokens") or 0)
+    except (ValueError, TypeError, AttributeError):
+        raise ProveedorNoDisponible(_FORMATO)
     return RespuestaLLM(
         texto=contenido if isinstance(contenido, str) else None,
         tool_calls=llamadas,
-        tokens_entrada=int(uso.get("prompt_tokens") or 0),
-        tokens_salida=int(uso.get("completion_tokens") or 0),
+        tokens_entrada=tokens_entrada,
+        tokens_salida=tokens_salida,
     )
 
 
@@ -136,6 +143,15 @@ class ClienteOpenAICompatible:
             timeout=timeout, transport=transport,
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
         )
+
+    def cerrar(self) -> None:
+        self._http.close()
+
+    def __enter__(self) -> "ClienteOpenAICompatible":
+        return self
+
+    def __exit__(self, *exc: Any) -> None:
+        self.cerrar()
 
     def completar(self, mensajes: list[dict], herramientas: list[dict]) -> RespuestaLLM:
         cuerpo: dict[str, Any] = {"model": self.modelo, "messages": mensajes}
@@ -191,8 +207,25 @@ class ClienteFalso:
         return self.guion.pop(0)
 
 
+# Un solo cliente por proceso mientras la configuración no cambie (evita
+# abrir un pool de conexiones por petición).
+_CLIENTES: dict[tuple, ClienteOpenAICompatible] = {}
+
+
+def reiniciar_cliente_por_defecto() -> None:
+    """Cierra y olvida los clientes en caché (para pruebas)."""
+    for c in _CLIENTES.values():
+        c.cerrar()
+    _CLIENTES.clear()
+
+
 def cliente_por_defecto() -> ClienteOpenAICompatible:
     cfg = configuracion()
     if not cfg.api_key:
         raise HTTPException(status_code=503, detail=NO_CONFIGURADO)
-    return ClienteOpenAICompatible(cfg.base_url, cfg.api_key, cfg.modelo)
+    clave = (cfg.base_url, cfg.modelo, cfg.api_key)
+    cliente = _CLIENTES.get(clave)
+    if cliente is None:
+        reiniciar_cliente_por_defecto()  # config nueva: suelta el anterior
+        cliente = _CLIENTES[clave] = ClienteOpenAICompatible(cfg.base_url, cfg.api_key, cfg.modelo)
+    return cliente

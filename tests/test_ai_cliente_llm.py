@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from app.modules.ai.cliente_llm import (
     BASE_URL_POR_DEFECTO, MODELO_POR_DEFECTO, NO_CONFIGURADO, ClienteFalso, ClienteOpenAICompatible,
     LlamadaHerramienta, ProveedorNoDisponible, RespuestaLLM, cliente_por_defecto, configuracion,
-    limite_tokens_dia,
+    limite_tokens_dia, reiniciar_cliente_por_defecto,
 )
 
 HERRAMIENTA = {"type": "function", "function": {
@@ -69,7 +69,7 @@ class TestLecturaDeRespuesta:
                                        "function": {"name": "buscar_producto", "arguments": '{"q": "versace"}'}}
 
     def test_argumentos_mal_formados_no_revientan(self):
-        # Review Focus #2: el JSON roto no tumba el turno; queda marcado.
+        # El JSON roto no tumba el turno; queda marcado.
         mensaje = {"role": "assistant", "content": "", "tool_calls": [
             {"type": "function", "function": {"name": "listar_marcas", "arguments": '{"q": "ver'}},
         ]}
@@ -183,3 +183,38 @@ class TestClienteFalso:
         assert falso.llamadas[0]["herramientas"] == [HERRAMIENTA]
         with pytest.raises(AssertionError):
             falso.completar([], [])
+
+
+class TestFormatoInesperado:
+    def test_message_nulo(self):
+        with pytest.raises(ProveedorNoDisponible, match="formato inesperado"):
+            _cliente(lambda req: httpx.Response(200, json={"choices": [{"message": None}]})).completar([], [])
+
+    def test_usage_no_numerico(self):
+        cuerpo = _respuesta({"role": "assistant", "content": "x"}, uso={"prompt_tokens": "mucho"})
+        with pytest.raises(ProveedorNoDisponible, match="formato inesperado"):
+            _cliente(lambda req: httpx.Response(200, json=cuerpo)).completar([], [])
+
+
+class TestCicloDeVida:
+    def test_cliente_por_defecto_se_reutiliza(self, monkeypatch):
+        monkeypatch.setenv("LLM_API_KEY", "k")
+        monkeypatch.setenv("LLM_MODEL", "m1")
+        reiniciar_cliente_por_defecto()
+        try:
+            a = cliente_por_defecto()
+            assert cliente_por_defecto() is a
+            monkeypatch.setenv("LLM_MODEL", "m2")
+            b = cliente_por_defecto()
+            assert b is not a and b.modelo == "m2"
+            assert a._http.is_closed
+        finally:
+            reiniciar_cliente_por_defecto()
+
+    def test_cerrar_y_contexto(self):
+        c = _cliente(lambda req: httpx.Response(200))
+        c.cerrar()
+        assert c._http.is_closed
+        with _cliente(lambda req: httpx.Response(200)) as c2:
+            assert not c2._http.is_closed
+        assert c2._http.is_closed
