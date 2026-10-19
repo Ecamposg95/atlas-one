@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { useEnabledModulesStore } from './enabledModulesStore'
 
 interface ImpersonationState {
   orgId: number | null
@@ -33,10 +34,12 @@ export const useImpersonationStore = create<ImpersonationState>((set) => ({
   start: (orgId, orgName) => {
     write({ orgId, orgName })
     set({ orgId, orgName })
+    useEnabledModulesStore.getState().reset()
   },
   exit: () => {
     write(null)
     set({ orgId: null, orgName: null })
+    useEnabledModulesStore.getState().reset()
   },
   hydrate: () => {
     const stored = read()

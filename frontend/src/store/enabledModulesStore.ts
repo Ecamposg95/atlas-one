@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import client from '../api/client'
 import { puede } from '../utils/capacidades'
-import type { PlanOrg } from '../types/auth'
+import type { PerfilUi, PlanOrg } from '../types/auth'
 import { leerCamposProducto, TODO_VISIBLE, type CamposProducto } from '../components/products/camposProducto'
 
 /**
@@ -24,6 +24,7 @@ interface ContextResponse {
   capacidades?: string[]
   plan?: { clave?: unknown; nombre?: unknown } | null
   campos_producto?: unknown
+  perfil_ui?: unknown
   // (other fields present in /me/context but not needed here)
 }
 
@@ -31,6 +32,11 @@ interface ContextResponse {
 function leerPlan(crudo: ContextResponse['plan']): PlanOrg | null {
   if (!crudo || typeof crudo.clave !== 'string' || typeof crudo.nombre !== 'string') return null
   return { clave: crudo.clave, nombre: crudo.nombre }
+}
+
+/** Solo 'basico' acorta la interfaz; ausente (servidor viejo) o raro = completo. */
+export function leerPerfilUi(crudo: unknown): PerfilUi {
+  return crudo === 'basico' ? 'basico' : 'completo'
 }
 
 interface EnabledModulesStore {
@@ -41,6 +47,8 @@ interface EnabledModulesStore {
   plan: PlanOrg | null
   /** Campos del formulario de producto según el giro; falla abierto. */
   camposProducto: CamposProducto
+  /** Perfil de interfaz; 'completo' mientras no carga, si falló o si el servidor no lo manda. */
+  perfilUi: PerfilUi
   loaded: boolean
   loading: boolean
   load: () => Promise<void>
@@ -60,6 +68,7 @@ export const useEnabledModulesStore = create<EnabledModulesStore>((set, get) => 
   capacidades: [],
   plan: null,
   camposProducto: TODO_VISIBLE,
+  perfilUi: 'completo',
   loaded: false,
   loading: false,
 
@@ -78,6 +87,7 @@ export const useEnabledModulesStore = create<EnabledModulesStore>((set, get) => 
         capacidades,
         plan,
         camposProducto: leerCamposProducto(r.data?.campos_producto),
+        perfilUi: leerPerfilUi(r.data?.perfil_ui),
         loaded: true,
         loading: false,
       })
@@ -88,13 +98,13 @@ export const useEnabledModulesStore = create<EnabledModulesStore>((set, get) => 
       // Las capacidades NO siguen esta política: fallan cerradas (lista
       // vacía), igual que cuando el servidor sí responde pero la tienda no
       // tiene ninguna encendida.
-      set({ enabledModules: [], preset: null, capacidades: [], plan: null, camposProducto: TODO_VISIBLE, loaded: true, loading: false })
+      set({ enabledModules: [], preset: null, capacidades: [], plan: null, camposProducto: TODO_VISIBLE, perfilUi: 'completo', loaded: true, loading: false })
       applyPresetAttribute(null)
     }
   },
 
   reset: () => {
-    set({ enabledModules: [], preset: null, capacidades: [], plan: null, camposProducto: TODO_VISIBLE, loaded: false, loading: false })
+    set({ enabledModules: [], preset: null, capacidades: [], plan: null, camposProducto: TODO_VISIBLE, perfilUi: 'completo', loaded: false, loading: false })
     applyPresetAttribute(null)
   },
 }))
@@ -106,3 +116,7 @@ export const useCapacidad = (clave: string): boolean =>
 /** Campos del formulario de producto que ve este giro. */
 export const useCamposProducto = (): CamposProducto =>
   useEnabledModulesStore((s) => s.camposProducto)
+
+/** `true` cuando la organización ve la interfaz corta (modo básico). */
+export const useModoBasico = (): boolean =>
+  useEnabledModulesStore((s) => s.perfilUi === 'basico')

@@ -1,3 +1,4 @@
+import { campoVisible, TODO_VISIBLE, type CamposProducto } from './camposProducto'
 import type { ProductErrors, ProductFormValue, SetField } from './types'
 
 interface Props {
@@ -7,11 +8,15 @@ interface Props {
   /** Pide la sugerencia de SKU. Sin este prop el botón no se pinta. */
   onSuggestSku?: () => void
   suggestingSku?: boolean
+  /** Qué campos ve este giro/perfil; sin la prop se ve todo. */
+  campos?: CamposProducto
 }
 
 const UNIDADES = ['pza', 'kg', 'lt', 'mt', 'caja', 'par', 'srv']
 
-export function ProductBasicsSection({ value, onChange, errors, onSuggestSku, suggestingSku }: Props) {
+export function ProductBasicsSection({ value, onChange, errors, onSuggestSku, suggestingSku, campos = TODO_VISIBLE }: Props) {
+  // 'pza' es el valor por defecto: no cuenta como "ya trae unidad".
+  const verUnidad = campoVisible(campos, 'unit', value.unit !== 'pza' ? value.unit : null)
   return (
     <section className="space-y-3">
       <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wide">Básicos</h2>
@@ -45,25 +50,31 @@ export function ProductBasicsSection({ value, onChange, errors, onSuggestSku, su
           <input className="dax-input w-full font-mono" value={value.barcode}
             onChange={(e) => onChange('barcode', e.target.value)} />
         </label>
-        <label className="text-xs text-slate-400 space-y-1">
-          Unidad
-          <select className="dax-input w-full" value={value.unit}
-            onChange={(e) => onChange('unit', e.target.value)}>
-            {UNIDADES.map((u) => <option key={u} value={u}>{u}</option>)}
-            {/* Un producto viejo con una unidad fuera de la lista no se queda sin opción. */}
-            {value.unit && !UNIDADES.includes(value.unit) && <option value={value.unit}>{value.unit}</option>}
-          </select>
-        </label>
-        <label className="text-xs text-slate-400 space-y-1 md:col-span-2">
-          Descripción
-          <textarea className="dax-input w-full" rows={2} value={value.description}
-            onChange={(e) => onChange('description', e.target.value)} />
-        </label>
-        <label className="text-xs text-slate-400 space-y-1 md:col-span-2">
-          URL de imagen
-          <input className="dax-input w-full" placeholder="https://..." value={value.image_url}
-            onChange={(e) => onChange('image_url', e.target.value)} />
-        </label>
+        {verUnidad && (
+          <label className="text-xs text-slate-400 space-y-1">
+            Unidad
+            <select className="dax-input w-full" value={value.unit}
+              onChange={(e) => onChange('unit', e.target.value)}>
+              {UNIDADES.map((u) => <option key={u} value={u}>{u}</option>)}
+              {/* Un producto viejo con una unidad fuera de la lista no se queda sin opción. */}
+              {value.unit && !UNIDADES.includes(value.unit) && <option value={value.unit}>{value.unit}</option>}
+            </select>
+          </label>
+        )}
+        {campoVisible(campos, 'description', value.description) && (
+          <label className="text-xs text-slate-400 space-y-1 md:col-span-2">
+            Descripción
+            <textarea className="dax-input w-full" rows={2} value={value.description}
+              onChange={(e) => onChange('description', e.target.value)} />
+          </label>
+        )}
+        {campoVisible(campos, 'image_url', value.image_url) && (
+          <label className="text-xs text-slate-400 space-y-1 md:col-span-2">
+            URL de imagen
+            <input className="dax-input w-full" placeholder="https://..." value={value.image_url}
+              onChange={(e) => onChange('image_url', e.target.value)} />
+          </label>
+        )}
       </div>
     </section>
   )

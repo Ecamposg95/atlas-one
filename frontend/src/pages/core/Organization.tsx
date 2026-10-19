@@ -8,6 +8,8 @@ import { toast } from '../../store/toastStore'
 import { confirm as confirmDialog } from '../../components/ui/ConfirmDialog'
 import client from '../../api/client'
 import { errorDetailText } from '../../utils/errorDetail'
+import { MasOpciones } from '../../components/ui/MasOpciones'
+import { useModoBasico } from '../../store/enabledModulesStore'
 
 const BRANCH_TYPES: Branch['branch_type'][] = ['HQ', 'STORE', 'WAREHOUSE', 'OFFICE']
 const branchTypeLabel = (t: string) =>
@@ -58,6 +60,8 @@ export function Organization() {
   const logoInputRef = useRef<HTMLInputElement>(null)
   const [fxInfo, setFxInfo] = useState<ExchangeRateInfo | null>(null)
   const [fxRefreshing, setFxRefreshing] = useState(false)
+  // Modo básico: logo, dólares, comisión y lo boutique del ticket van plegados.
+  const modoBasico = useModoBasico()
 
   useEffect(() => {
     setLoading(true)
@@ -78,8 +82,10 @@ export function Organization() {
       // vacío = sin ajuste / sin comisión.
       const margen = orgForm.usd_rate_margin
       const comision = orgForm.card_surcharge_pct
+      // `perfil_ui` lo cambia solo la plataforma: no viaja en el PUT de tenant.
+      const { perfil_ui: _perfil, ...datos } = orgForm
       const updated = await organizationApi.updateOrg({
-        ...orgForm,
+        ...datos,
         usd_rate_margin: margen === '' || margen == null ? 0 : margen,
         card_surcharge_pct: comision === '' || comision == null ? 0 : comision,
       })
@@ -232,6 +238,7 @@ export function Organization() {
             </div>
           </DaxCard>
 
+          <MasOpciones activo={modoBasico}>
           {/* Logo de la empresa */}
           <DaxCard>
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">
@@ -390,6 +397,7 @@ export function Organization() {
               </button>
             </div>
           </DaxCard>
+          </MasOpciones>
 
           {/* Encabezado y pie de ticket */}
           <DaxCard>
@@ -421,6 +429,7 @@ export function Organization() {
                 />
                 <p className="text-[10px] mt-1 text-slate-600">Hasta 2 líneas · se muestra al final del ticket.</p>
               </div>
+              <MasOpciones activo={modoBasico} titulo="Más opciones del ticket">
               <div>
                 <label className="dax-label">Términos y condiciones</label>
                 <textarea
@@ -518,6 +527,7 @@ export function Organization() {
                   <span className="block text-[10px] text-slate-600">Dos líneas al final del ticket con el proveedor del sistema.</span>
                 </label>
               </div>
+              </MasOpciones>
               <div className="flex justify-end">
                 <button onClick={saveOrg} disabled={saving || nameInvalido} className="dax-btn-primary disabled:opacity-40">
                   {saving ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Guardar ticket</>}
@@ -525,6 +535,34 @@ export function Organization() {
               </div>
             </div>
           </DaxCard>
+
+          {/* Modo básico: tope de "Se está acabando" del Inicio. */}
+          {modoBasico && (
+            <DaxCard>
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">
+                <i className="fa-solid fa-boxes-stacked mr-1.5" />Lo que se está acabando
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+                <div>
+                  <label className="dax-label" htmlFor="umbral-poca-existencia">Avisar cuando queden (piezas o menos)</label>
+                  <input
+                    id="umbral-poca-existencia"
+                    type="number" min="0" max="1000" step="1"
+                    value={orgForm.umbral_poca_existencia ?? ''}
+                    onChange={(e) => setOrgForm((p) => ({ ...p, umbral_poca_existencia: e.target.value === '' ? null : Number(e.target.value) }))}
+                    className="dax-input w-full tabular-nums"
+                    placeholder="3"
+                  />
+                  <p className="text-[10px] mt-1 text-slate-600">Vacío = 3. Se ve en Inicio, en «Se está acabando».</p>
+                </div>
+                <div className="flex justify-end">
+                  <button onClick={saveOrg} disabled={saving || nameInvalido} className="dax-btn-primary disabled:opacity-40">
+                    {saving ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Guardar aviso</>}
+                  </button>
+                </div>
+              </div>
+            </DaxCard>
+          )}
         </div>
       )}
 

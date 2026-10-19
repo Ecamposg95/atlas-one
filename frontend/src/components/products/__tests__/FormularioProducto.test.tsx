@@ -21,6 +21,7 @@ vi.mock('../../../store/toastStore', () => ({ toast: { success: vi.fn(), error: 
 const { FormularioProducto } = await import('../FormularioProducto')
 const { useAuthStore } = await import('../../../store/authStore')
 const { useEnabledModulesStore } = await import('../../../store/enabledModulesStore')
+const { organizationApi } = await import('../../../api/organization')
 
 const admin = { id: 1, username: 'admin', role: 'ADMINISTRADOR', branch_id: null, branch_name: null }
 const cajera = { id: 2, username: 'caja', role: 'CAJERO', branch_id: 20, branch_name: 'Roma' }
@@ -39,7 +40,7 @@ const producto = {
 beforeEach(() => {
   vi.clearAllMocks()
   useAuthStore.setState({ user: admin } as never)
-  useEnabledModulesStore.setState({ enabledModules: ['core'], loaded: true, camposProducto: { visibles: [], ocultos: [] } } as never)
+  useEnabledModulesStore.setState({ enabledModules: ['core'], loaded: true, perfilUi: 'completo', camposProducto: { visibles: [], ocultos: [] } } as never)
 })
 afterEach(cleanup)
 
@@ -159,5 +160,72 @@ describe('FormularioProducto', () => {
     const onCancel = vi.fn()
     render(<MemoryRouter><FormularioProducto mode="edit" productId="nada" presentacion="modal" onDone={() => {}} onCancel={onCancel} /></MemoryRouter>)
     await waitFor(() => expect(onCancel).toHaveBeenCalled())
+  })
+})
+
+// Lo que manda el servidor a una FREE (Tarea 2): ficha + OCULTOS_BASICO.
+const OCULTOS_BASICO = ['gender', 'model', 'material', 'brand_id', 'description', 'unit', 'image_url', 'tax_rate', 'packaging_units', 'variants']
+const enBasico = () => useEnabledModulesStore.setState({
+  enabledModules: ['core', 'variants'], loaded: true, perfilUi: 'basico',
+  camposProducto: { visibles: [], ocultos: OCULTOS_BASICO },
+} as never)
+
+describe('FormularioProducto en modo básico', () => {
+  it('alta corta de la dueña con una sucursal: sin matriz, la sucursal va sola (Review Focus #3)', async () => {
+    enBasico()
+    api.create.mockResolvedValue({ ...producto, id: 'nuevo' })
+    render(<MemoryRouter><FormularioProducto mode="create" presentacion="pagina" onDone={() => {}} onCancel={() => {}} /></MemoryRouter>)
+    await screen.findByText('Crear producto')
+    for (const oculto of ['Marca', 'Unidad', 'Descripción', 'URL de imagen', 'Tasa IVA (%)', 'Empaques / Cajas', 'Activación por sucursal']) {
+      expect(screen.queryByText(oculto)).toBeNull()
+    }
+    expect(screen.getByText('Precio por cantidad')).toBeTruthy()
+    expect(screen.getByText('Departamento')).toBeTruthy()
+    escribir(/^Nombre/, 'Blusa'); escribir(/^SKU/, 'blu'); escribir(/^Precio/, '120'); escribir(/^Costo/, '60')
+    escribir(/Stock inicial/, '3')
+    fireEvent.click(screen.getByText('Crear producto'))
+    await waitFor(() => expect(api.create).toHaveBeenCalled())
+    const payload = api.create.mock.calls[0][0]
+    expect(payload.target_branch_ids).toEqual([20])
+    expect(payload.branch_id).toBe(20)
+    expect(payload.initial_stock).toBe(3)
+  })
+
+  it('con dos sucursales la matriz sigue y nada se marca solo (Review Focus #3)', async () => {
+    enBasico()
+    vi.mocked(organizationApi.getBranches).mockResolvedValueOnce([
+      { id: 20, name: 'Roma', branch_type: 'STORE', is_headquarters: false },
+      { id: 21, name: 'Condesa', branch_type: 'STORE', is_headquarters: false },
+    ] as never)
+    render(<MemoryRouter><FormularioProducto mode="create" presentacion="pagina" onDone={() => {}} onCancel={() => {}} /></MemoryRouter>)
+    await screen.findByText('Crear producto')
+    expect(screen.getByText('Activación por sucursal')).toBeTruthy()
+    escribir(/^Nombre/, 'Blusa'); escribir(/^SKU/, 'blu'); escribir(/^Precio/, '120'); escribir(/^Costo/, '60')
+    fireEvent.click(screen.getByText('Crear producto'))
+    expect(await screen.findByText('Activa al menos una sucursal')).toBeTruthy()
+    expect(api.create).not.toHaveBeenCalled()
+  })
+
+  it('edición: un producto con marca y descripción las sigue mostrando (Review Focus #2)', async () => {
+    enBasico()
+    api.getBrands.mockResolvedValueOnce([{ id: 'b1', name: 'Nike' }] as never)
+    api.getById.mockResolvedValue({
+      ...producto, brand_id: 'b1', description: 'Algodón peinado',
+      variants: [producto.variants[0]], packaging_units: [],
+    })
+    render(<MemoryRouter><FormularioProducto mode="edit" productId="p1" presentacion="pagina" onDone={() => {}} onCancel={() => {}} /></MemoryRouter>)
+    await screen.findByText('Guardar cambios')
+    expect(screen.getByText('Marca')).toBeTruthy()
+    expect((screen.getByLabelText('Descripción') as HTMLTextAreaElement).value).toBe('Algodón peinado')
+    expect(screen.queryByText('Unidad')).toBeNull()          // trae 'pza', el valor por defecto
+    expect(screen.queryByText('Empaques / Cajas')).toBeNull() // sin empaques
+  })
+
+  it('edición: los empaques que ya existen se ven aunque básico los esconda', async () => {
+    enBasico()
+    api.getById.mockResolvedValue({ ...producto, variants: [producto.variants[0]] })
+    render(<MemoryRouter><FormularioProducto mode="edit" productId="p1" presentacion="pagina" onDone={() => {}} onCancel={() => {}} /></MemoryRouter>)
+    await screen.findByText('Guardar cambios')
+    expect(screen.getByText('Empaques / Cajas')).toBeTruthy()
   })
 })

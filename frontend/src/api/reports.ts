@@ -133,6 +133,50 @@ export interface ValuacionInventario {
   grupos: ValuacionGrupo[]
 }
 
+// --- Inicio básico (GET /reports/inicio-basico, modo básico 2026-10) ------
+export interface PeriodoVentas {
+  desde: string
+  hasta: string
+  total: number
+  tickets: number
+}
+
+export interface ProductoTop {
+  nombre: string
+  cantidad: number
+  total: number
+}
+
+export interface ProductoPocaExistencia {
+  variant_id: string
+  nombre: string
+  sku: string
+  existencia: number
+}
+
+export interface CorteInicio {
+  estado: 'abierto' | 'cerrado' | 'sin_turno'
+  cajera: string | null
+  abierto_en: string | null
+  cerrado_en: string | null
+  /** Solo con turno abierto. */
+  efectivo_esperado: number | null
+  /** Solo con turno cerrado. */
+  efectivo_contado: number | null
+}
+
+export interface InicioBasico {
+  /** null = todas las sucursales de la org. */
+  branch_id: number | null
+  hoy: PeriodoVentas
+  ayer: PeriodoVentas
+  semana: PeriodoVentas
+  por_metodo_hoy: Record<string, number>
+  top_semana: ProductoTop[]
+  poca_existencia: { umbral: number; productos: ProductoPocaExistencia[] }
+  corte: CorteInicio
+}
+
 export const reportsApi = {
   dashboard: async (params: { start_date: string; end_date: string; branch_id?: number }): Promise<DashboardData> => {
     const { data } = await client.get<DashboardData>('/reports/dashboard', { params })
@@ -199,6 +243,12 @@ export const reportsApi = {
     params: { agrupar?: AgruparValuacion; branch_id?: number } = {},
   ): Promise<ValuacionInventario> => {
     const { data } = await client.get<ValuacionInventario>('/reports/valor-inventario', { params })
+    return data
+  },
+
+  inicioBasico: async (branchId?: number): Promise<InicioBasico> => {
+    const params = branchId != null ? { branch_id: branchId } : {}
+    const { data } = await client.get<InicioBasico>('/reports/inicio-basico', { params })
     return data
   },
 }

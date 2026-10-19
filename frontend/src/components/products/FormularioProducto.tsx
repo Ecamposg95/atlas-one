@@ -3,7 +3,7 @@ import { productsApi } from '../../api/products'
 import { organizationApi } from '../../api/organization'
 import { sortByName } from '../../utils/sortByName'
 import { useAuthStore } from '../../store/authStore'
-import { useCamposProducto, useEnabledModulesStore } from '../../store/enabledModulesStore'
+import { useCamposProducto, useEnabledModulesStore, useModoBasico } from '../../store/enabledModulesStore'
 import { DaxCard } from '../ui/DaxCard'
 import { Spinner } from '../ui/Spinner'
 import { toast } from '../../store/toastStore'
@@ -17,6 +17,7 @@ import { ProductVariantsEditor } from './ProductVariantsEditor'
 import { ProductBranchMatrixSection } from './ProductBranchMatrixSection'
 import { ProductInitialStockSection } from './ProductInitialStockSection'
 import { ProductImageUploader } from './ProductImageUploader'
+import { campoVisible } from './camposProducto'
 import {
   EMPTY_PRODUCT_FORM, type BranchActivation, type Brand, type Branch, type Department,
   type PackagingRow, type PriceRow, type ProductErrors, type ProductFormValue,
@@ -56,6 +57,7 @@ export function FormularioProducto({ mode, productId, variantId, presentacion, o
   const userBranchId = user?.branch_id ?? null
   const hasVariantsModule = useEnabledModulesStore((s) => s.enabledModules.includes('variants'))
   const campos = useCamposProducto()
+  const modoBasico = useModoBasico()
 
   const [departments, setDepartments] = useState<Department[]>([])
   const [brands, setBrands] = useState<Brand[]>([])
@@ -85,9 +87,13 @@ export function FormularioProducto({ mode, productId, variantId, presentacion, o
       loaders.push(organizationApi.getBranches().then((bchs) => {
         if (cancelled) return
         setBranches(bchs)
+        // Modo básico con una sola sucursal: la matriz no se pinta, así que la
+        // sucursal va marcada y es el destino de la existencia inicial.
+        const unica = modoBasico && bchs.length === 1
         const init: Record<number, BranchActivation> = {}
-        for (const b of bchs) init[b.id] = { enabled: false, is_active_pos: true, is_active_hq: false, is_visible: true }
+        for (const b of bchs) init[b.id] = { enabled: unica, is_active_pos: true, is_active_hq: false, is_visible: true }
         setBranchActivation(init)
+        if (unica && mode === 'create') setForm((f) => ({ ...f, initial_stock_branch_id: String(bchs[0].id) }))
       }))
     } else if (userBranchId && user?.branch_name) {
       // Branch mínima para poder mostrar el nombre en la sección de existencia.
@@ -116,7 +122,7 @@ export function FormularioProducto({ mode, productId, variantId, presentacion, o
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, productId, variantId, isAdmin, userBranchId, user?.branch_name])
+  }, [mode, productId, variantId, isAdmin, userBranchId, user?.branch_name, modoBasico])
 
   const setField = <K extends keyof ProductFormValue>(key: K, value: ProductFormValue[K]) => {
     setForm((f) => ({ ...f, [key]: value }))
@@ -209,6 +215,10 @@ export function FormularioProducto({ mode, productId, variantId, presentacion, o
   const filaTalla = principalCargada && loaded && !esFilaPrincipal(loaded, variantId)
     ? loaded.variants!.find((v) => v.id === variantId) ?? null : null
   const cta = mode === 'create' ? 'Crear producto' : 'Guardar cambios'
+  // Modo básico: con una sola sucursal la matriz sobra (ya va marcada); tallas
+  // y empaques se esconden salvo que el producto ya los tenga (nada se apaga).
+  const matrizOculta = modoBasico && branches.length === 1
+  const muestraTallas = hasVariantsModule && campoVisible(campos, 'variants', (loaded?.variants?.length ?? 0) > 1 ? 'si' : null)
 
   const contenido = (
     <div className="p-0 sm:p-4 space-y-6">
@@ -225,29 +235,36 @@ export function FormularioProducto({ mode, productId, variantId, presentacion, o
           </label>
         </>
       )}
-      <ProductBasicsSection value={form} onChange={setField} errors={errors} onSuggestSku={sugerirSku} suggestingSku={sugiriendoSku} />
-      {mode === 'edit' && loaded && (
+      <ProductBasicsSection value={form} onChange={setField} errors={errors} onSuggestSku={sugerirSku} suggestingSku={sugiriendoSku} campos={campos} />
+      {mode === 'edit' && loaded && campoVisible(campos, 'image_url', loaded.image_url) && (
         <ProductImageUploader product={loaded} onUpdated={(p) => { setLoaded(p); setField('image_url', p.image_url ?? '') }} />
       )}
       <ProductCommercialSection value={form} onChange={setField} errors={errors} departments={departments} brands={brands} campos={campos} />
       <ProductTieredPricesSection prices={prices} onChange={setPrices} errors={errors}
-        help="Para precios por cantidad (mayoreo, promo). Se aplica sobre el precio base." />
-      <ProductPackagingSection packagings={packagings} onChange={setPackagings} errors={errors} />
-      {mode === 'create' && hasVariantsModule && (
+        titulo={modoBasico ? 'Precio por cantidad' : undefined}
+        help={modoBasico
+          ? 'Ej.: «Mayoreo» a partir de 6 piezas, a $45 cada una.'
+          : 'Para precios por cantidad (mayoreo, promo). Se aplica sobre el precio base.'} />
+      {campoVisible(campos, 'packaging_units', packagings.length > 0 ? 'si' : null) && (
+        <ProductPackagingSection packagings={packagings} onChange={setPackagings} errors={errors} />
+      )}
+      {mode === 'create' && muestraTallas && (
         <ProductVariantsSection baseSku={form.sku} rows={variantRows} onRowsChange={setVariantRows} firstIsPrincipal
           errors={errors} showInitialStock principalStock={form.initial_stock}
           onPrincipalStockChange={(v) => setField('initial_stock', v)} stockBranchName={sucursalStock?.name ?? null} />
       )}
-      {mode === 'create' && isAdmin && (
+      {mode === 'create' && isAdmin && !matrizOculta && (
         <ProductBranchMatrixSection branches={branches} activation={branchActivation} onToggle={toggleBranch} onSetAll={setAllBranches} errors={errors} />
       )}
       {mode === 'create' && (
         <ProductInitialStockSection value={form} onChange={setField} errors={errors} branches={branches} enabledBranchIds={enabledBranchIds}
-          lockedBranchId={!isAdmin && userBranchId ? userBranchId : undefined}
+          lockedBranchId={!isAdmin && userBranchId ? userBranchId : matrizOculta ? branches[0].id : undefined}
           perVariantTotal={hasVariantsModule && variantRows.length > 0 ? total : null}
-          footer={isAdmin ? 'Para existencia en varias sucursales, usa Inventario después de crear.' : 'La existencia se aplica a tu sucursal.'} />
+          footer={isAdmin
+            ? (matrizOculta ? 'La existencia se aplica a tu tienda.' : 'Para existencia en varias sucursales, usa Inventario después de crear.')
+            : 'La existencia se aplica a tu sucursal.'} />
       )}
-      {mode === 'edit' && hasVariantsModule && loaded && <ProductVariantsEditor product={loaded} onChanged={alCambiarTallas} />}
+      {mode === 'edit' && muestraTallas && loaded && <ProductVariantsEditor product={loaded} onChanged={alCambiarTallas} />}
       <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center sm:justify-end gap-2 pt-2 border-t border-slate-800/60">
         <button type="button" className="dax-btn-secondary text-xs min-h-[44px] sm:min-h-0 justify-center" onClick={onCancel} disabled={submitting}>
           Cancelar

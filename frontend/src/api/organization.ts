@@ -32,6 +32,10 @@ export interface Organization {
   // Comisión por pago con tarjeta (2026-09-17). 0 = apagada: no se cobra ni se
   // muestra nada en el POS, el ticket, el corte ni los reportes.
   card_surcharge_pct?: number | string
+  // Modo básico (2026-10). `perfil_ui` lo cambia solo la plataforma; aquí se
+  // lee y el PUT de tenant lo descarta. El tope es de "se está acabando".
+  perfil_ui?: string | null
+  umbral_poca_existencia?: number | null
 }
 
 /** Respuesta de GET /api/organization/exchange-rate. */

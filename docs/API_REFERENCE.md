@@ -21,7 +21,7 @@ Catálogo de endpoints por dominio. Todos bajo `/api`. Swagger vivo en `/docs`. 
 ## Users · `/api/users`
 | Método | Ruta | Qué hace | Gating |
 |---|---|---|---|
-| GET | /me/context | **Contexto del frontend**: user, org, branch, preset, `enabled_modules`, `plan: {clave, nombre}` (null sin org activa), templates · `campos_producto` `{visibles, ocultos}`: qué campos del formulario de producto muestra el giro (ficha boutique `gender/model/material` solo en `ATLAS_POS_BOUTIQUE`; `variants` solo con el módulo) | auth |
+| GET | /me/context | **Contexto del frontend**: user, org, branch, preset, `enabled_modules`, `plan: {clave, nombre}` (null sin org activa), templates · `perfil_ui` (`basico`|`completo`; solo plan `FREE` explícito → básico, el resto completo; forzable por la plataforma; ver `docs/modo-basico.md`) · `campos_producto` `{visibles, ocultos}` (en básico además oculta `brand_id, description, unit, image_url, tax_rate, packaging_units, variants`): qué campos del formulario de producto muestra el giro (ficha boutique `gender/model/material` solo en `ATLAS_POS_BOUTIQUE`; `variants` solo con el módulo) | auth |
 | GET | / · GET /me · GET /{id} | Lista / actual / detalle (`UserRead.has_reprint_pin`, derivado, nunca el hash) | auth+org |
 | POST | / · PUT /{id} · DELETE /{id} | Crear / editar / soft-delete; acepta `reprint_pin` (4-8 dígitos, `""` borra, 422 fuera de formato) | [admin/dueño] **(2026-09-19)** — antes sin check de rol admin, cualquier cajero podía tocar `/api/users`; corregido junto con el PIN |
 
@@ -145,6 +145,7 @@ CRUD productos + aprobar/rechazar/restore/duplicate/imagen; `search` (variants/p
 | **/by-waiter** | Ventas + **propinas** por mesero (`coalesce(server_user_id, seller_id)`) |
 | /audit/discrepancies · /aging-report · /product/{id} · /export/csv | Arqueos / antigüedad de saldos / analítica de producto / CSV |
 | **/valor-inventario** `?branch_id=&agrupar=sucursal\|departamento\|marca` | Valor de la tienda (2026-10): `totales {piezas, skus, valor_venta, valor_costo, piezas_sin_costo, skus_sin_costo}` + `grupos[]` ordenados por `valor_venta`. Σ existencia × precio (completo) y Σ existencia × costo **solo de variantes con costo > 0**; costo NULL/0 cuenta como "sin costo". Sin borrados (`deleted_at`), sin existencias ≤ 0; sin `branch_id` el alcance por defecto son las sucursales con `is_active AND can_sell`; un `branch_id` explícito mira esa sucursal aunque esté cerrada, y uno de otra org devuelve 404. ADMIN/DUEÑO/SUPERADMIN ven todo; GERENTE recibe siempre su sucursal (ignora `branch_id`) con `valor_costo: null` (`ve_costo: false`) y sin sucursal asignada da 403; demás roles (CAJERO) 403. Vive en `app/routers/reports_valuacion.py`. Sin instantánea diaria (v1 calcula en vivo). |
+| **/inicio-basico** `?branch_id=` | Inicio del modo básico (2026-10), una sola llamada: `hoy`/`ayer`/`semana` `{desde, hasta, total, tickets}` (7 días incluido hoy, `SALES_REPORT_STATUSES`), `por_metodo_hoy` (de `daily-summary`, sin vuelto), `top_semana[]` (máx. 5 por piezas), `poca_existencia {umbral, productos[]}` (existencia por variante ≤ `organization.umbral_poca_existencia` o 3, máx. 10, activos y no borrados; sin `branch_id` solo sucursales activas que venden) y `corte {estado: abierto\|cerrado\|sin_turno, cajera, abierto_en, cerrado_en, efectivo_esperado, efectivo_contado}`. ADMIN/DUEÑO/SUPERADMIN: org o sucursal pedida (404 si es de otra org); GERENTE: siempre la suya; demás 403. Vive en `app/routers/reports_inicio.py`. |
 
 ## Impresora · `/api/printer`
 `POST /test-print · /print-ticket · /reprint-ticket/{id} · /reprint-refunded/{id} · /print-cash-cut` · `GET /printers · /download-agent`. Genera ESC/POS base64 (el agente local imprime, no el server). Registra `PrintJob`. `reprint-ticket`/`reprint-refunded` aceptan `pin` (2026-09-19): si la venta no es propia-y-reciente, primero prueban el PIN de reimpresión de un supervisor (`users.reprint_pin_hash`) y si no, su contraseña.
@@ -209,6 +210,8 @@ CRUD `/stations`, `/routes` (dept→estación) · `POST /tickets` (fire) · `GET
 | reports | /reports/* | Reportería cross-tenant + export CSV streaming |
 | audit | /audit/logs | Bitácora de acciones del superadmin |
 | impersonation | /impersonate[/exit] | ⚠️ **Stub**: audita pero no emite JWT scoped |
+
+- `PUT /api/platform/organizations/{id}` acepta `perfil_ui` (`auto`\|`basico`\|`completo`, 422 si es otro); el `PUT /api/organization/` de tenant lo descarta como a `plan`. `OrganizationRead` expone `perfil_ui` y `umbral_poca_existencia` (este sí lo guarda la dueña).
 
 ---
 

@@ -5,6 +5,7 @@ from decimal import Decimal
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from app.models.organization import IndustryType
+from app.services.perfil_ui import normalizar_perfil_ui
 
 # Tope de los terminos de compra. El mismo numero vive en el `maxLength` del
 # panel de Empresa: API y pantalla tienen que coincidir o el dueño escribe un
@@ -129,7 +130,15 @@ class OrganizationUpdate(BaseModel):
     # ADMINISTRADOR/DUEÑO puede cambiarla: no hace falta guardia nueva.
     card_surcharge_pct: Optional[Decimal] = None
 
+    # Modo básico (2026-10). `perfil_ui` es de PLATAFORMA: el PUT de tenant lo
+    # descarta como a `plan`; solo `/api/platform/organizations/{id}` lo guarda.
+    perfil_ui: Optional[str] = None
+    # Tope de "se está acabando" del Inicio básico. Cae FUERA de la whitelist
+    # de no-admins del router: solo ADMINISTRADOR/DUEÑO lo cambia.
+    umbral_poca_existencia: Optional[int] = Field(default=None, ge=0, le=1000)
+
     _estilo_valido = field_validator("ticket_line_style")(_valida_estilo_de_linea)
+    _perfil_valido = field_validator("perfil_ui")(normalizar_perfil_ui)
 
     model_config = {"extra": "ignore"}
 
@@ -148,6 +157,10 @@ class OrganizationRead(OrganizationBase):
     # Comision por pago con tarjeta. Se expone en la lectura para que el panel
     # de Empresa arme el formulario sin un GET extra.
     card_surcharge_pct: Decimal = Decimal("0")
+
+    # Modo básico: la plataforma lee el perfil forzado; Empresa, el tope.
+    perfil_ui: Optional[str] = None
+    umbral_poca_existencia: Optional[int] = None
 
     class Config:
         from_attributes = True

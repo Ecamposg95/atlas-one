@@ -8,9 +8,11 @@ interface Props {
   errors?: ProductErrors
   /** Copy de ayuda opcional bajo el header. */
   help?: string
+  /** Encabezado de la sección; el modo básico lo dice más llano. */
+  titulo?: string
 }
 
-export function ProductTieredPricesSection({ prices, onChange, errors, help }: Props) {
+export function ProductTieredPricesSection({ prices, onChange, errors, help, titulo = 'Precios escalonados' }: Props) {
   // `errors` se declaraba en Props y no se usaba: los fallos de un renglon
   // quedaban invisibles y el usuario solo veia un aviso generico.
   const errorDe = (i: number, campo: string) => errors?.[`prices.${i}.${campo}`]
@@ -22,7 +24,7 @@ export function ProductTieredPricesSection({ prices, onChange, errors, help }: P
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wide">Precios escalonados</h2>
+        <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wide">{titulo}</h2>
         <button
           type="button"
           onClick={add}

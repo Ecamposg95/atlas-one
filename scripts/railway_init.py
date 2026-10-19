@@ -161,6 +161,11 @@ COLUMN_MIGRATIONS = [
     ("products", "model",    "ALTER TABLE products ADD COLUMN model VARCHAR(80);"),
     ("products", "material", "ALTER TABLE products ADD COLUMN material VARCHAR(80);"),
     ("organization", "ticket_line_style", "ALTER TABLE organization ADD COLUMN ticket_line_style VARCHAR(12) NOT NULL DEFAULT 'compact';"),
+    # Modo básico 2026-10. Las dos nacen NULL: NULL = 'auto' (el perfil sale
+    # del plan: las FREE ven la interfaz corta, las de paga la de siempre) y
+    # NULL = tope de 3 piezas en "se está acabando".
+    ("organization", "perfil_ui", "ALTER TABLE organization ADD COLUMN perfil_ui VARCHAR(12);"),
+    ("organization", "umbral_poca_existencia", "ALTER TABLE organization ADD COLUMN umbral_poca_existencia INTEGER;"),
     # Atribucion por pago (2026-09-02) — ver los bloques de arriba.
     *MIGRACIONES_PAYMENTS_CASH_SESSION,
     *MIGRACIONES_CASH_MOVEMENT_AUTHOR,

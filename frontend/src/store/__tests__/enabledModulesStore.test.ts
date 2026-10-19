@@ -51,3 +51,35 @@ describe('enabledModulesStore.plan', () => {
     expect(useEnabledModulesStore.getState().plan).toBeNull()
   })
 })
+
+describe('enabledModulesStore.perfilUi', () => {
+  it('arranca en completo mientras el contexto no carga', () => {
+    expect(useEnabledModulesStore.getState().perfilUi).toBe('completo')
+  })
+
+  it('guarda basico cuando el servidor lo manda', async () => {
+    get.mockResolvedValue(contexto({ perfil_ui: 'basico' }))
+    await useEnabledModulesStore.getState().load()
+    expect(useEnabledModulesStore.getState().perfilUi).toBe('basico')
+  })
+
+  it.each([undefined, null, 'raro', 'BASICO', 3])('%s (servidor viejo o valor raro) = completo', async (valor) => {
+    get.mockResolvedValue(contexto({ perfil_ui: valor }))
+    await useEnabledModulesStore.getState().load()
+    expect(useEnabledModulesStore.getState().perfilUi).toBe('completo')
+  })
+
+  it('si la petición falla, completo (fail-open, Review Focus #1)', async () => {
+    get.mockRejectedValue(new Error('red caída'))
+    await useEnabledModulesStore.getState().load()
+    expect(useEnabledModulesStore.getState().perfilUi).toBe('completo')
+    expect(useEnabledModulesStore.getState().loaded).toBe(true)
+  })
+
+  it('reset vuelve a completo', async () => {
+    get.mockResolvedValue(contexto({ perfil_ui: 'basico' }))
+    await useEnabledModulesStore.getState().load()
+    useEnabledModulesStore.getState().reset()
+    expect(useEnabledModulesStore.getState().perfilUi).toBe('completo')
+  })
+})

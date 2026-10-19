@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { lazy, Suspense, useEffect, useState, useCallback, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { cashApi } from '../../api/cash'
 import { salesApi, parkedTicketsApi } from '../../api/sales'
@@ -39,6 +39,12 @@ import {
   isNetworkError,
   type PendingSale,
 } from '../../utils/offlineQueue'
+import { opcionesPorPerfil } from './opcionesPos'
+import { LimiteDeError } from '../../components/ui/LimiteDeError'
+import { toast as toastGlobal } from '../../store/toastStore'
+
+// Alta corta del modo básico: chunk propio, no viaja en POS-*.js.
+const AltaRapidaProducto = lazy(() => import('../../components/pos/AltaRapidaProducto'))
 
 type PayMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'MIXED'
 type LeftTab = 'products' | 'pending'
@@ -56,6 +62,9 @@ export function POS() {
   const savedPrinterName = usePOSStore((s) => s.printerName)
   const hayPropina = useCapacidad('propina')
   const hayFactura = useCapacidad('factura')
+  const opciones = opcionesPorPerfil(useEnabledModulesStore((s) => s.perfilUi))
+  // Precarga del alta corta: si el chunk quedó viejo tras un deploy, falla aquí y no al abrirla.
+  useEffect(() => { if (opciones.altaCorta) void import('../../components/pos/AltaRapidaProducto').catch(() => {}) }, [opciones.altaCorta])
   // `capacidades` arranca vacia y se llena cuando responde /users/me/context. Sin
   // esta bandera, "todavia no se" es indistinguible de "no lo tiene contratado", y
   // todo lo que decide con esa respuesta se equivoca en la primera carga.
@@ -933,7 +942,22 @@ export function POS() {
           }}
         />
       )}
-      {createProductOpen && (
+      {createProductOpen && (opciones.altaCorta ? (
+        <LimiteDeError onError={() => {
+          setCreateProductOpen(false)
+          toastGlobal.error('No se pudo abrir el alta de producto. Termina la venta y recarga la página.')
+        }}>
+          <Suspense fallback={<div className="text-center text-sm p-4 text-dax-muted">Abriendo…</div>}>
+            <AltaRapidaProducto
+              onClose={() => setCreateProductOpen(false)}
+              onCreado={() => {
+                setCreateProductOpen(false)
+                setProductRefreshKey(k => k + 1)
+              }}
+            />
+          </Suspense>
+        </LimiteDeError>
+      ) : (
         <ProductDetailModal
           product={null}
           mode="create"
@@ -945,7 +969,7 @@ export function POS() {
             showToast('Producto creado')
           }}
         />
-      )}
+      ))}
       {showOfflineModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setShowOfflineModal(false)}>
           <div

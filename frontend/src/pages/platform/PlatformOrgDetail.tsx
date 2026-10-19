@@ -20,6 +20,8 @@ import { PlatformPageShell } from '../../components/platform/PlatformPageShell'
 import { StatusBadge } from '../../components/platform/StatusBadge'
 import { SideDrawer } from '../../components/platform/SideDrawer'
 import { ConfirmModal } from '../../components/platform/ConfirmModal'
+import { errorDetailText } from '../../utils/errorDetail'
+import { SelectorPerfilUi, PerfilEfectivoHint } from './SelectorPerfilUi'
 import { TablaDesplazable } from '../../components/ui/TablaDesplazable'
 
 // ── Inline shared styles (tokens) ────────────────────────────────────────────
@@ -260,6 +262,7 @@ export function PlatformOrgDetail() {
   const [planUso, setPlanUso] = useState<PlanUso | null>(null)
   const [planPendiente, setPlanPendiente] = useState<string | null>(null)
   const [cambiandoPlan, setCambiandoPlan] = useState(false)
+  const [cambiandoPerfil, setCambiandoPerfil] = useState(false)
   const [upsellLoading, setUpsellLoading] = useState(false)
   const [activatingModule, setActivatingModule] = useState<string | null>(null)
 
@@ -415,6 +418,22 @@ export function PlatformOrgDetail() {
     const idx = (k: string) => plans.findIndex(p => p.clave === k)
     if (idx(nuevo) < idx(actual)) setPlanPendiente(nuevo)
     else aplicarPlan(nuevo)
+  }
+
+  // ── Perfil de interfaz (modo básico) ───────────────────────────────────
+  // Solo cambia qué se MUESTRA; la tienda lo ve al recargar (vuelve a pedir /me/context).
+  const aplicarPerfilUi = async (nuevo: string) => {
+    if (nuevo === (org?.perfil_ui ?? 'auto')) return
+    setCambiandoPerfil(true)
+    try {
+      await platformApi.updateOrg(id, { perfil_ui: nuevo })
+      toast.success('Perfil de interfaz actualizado')
+      await load()
+    } catch (err: any) {
+      toast.error(errorDetailText(err?.response?.data?.detail, 'No se pudo cambiar el perfil de interfaz'))
+    } finally {
+      setCambiandoPerfil(false)
+    }
   }
 
   // ── Edit drawer save ───────────────────────────────────────────────────
@@ -690,6 +709,18 @@ export function PlatformOrgDetail() {
               </option>
             ))}
           </select>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+          <span style={{ fontSize: 12, color: 'var(--p-muted)' }}>Perfil de interfaz</span>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+            <SelectorPerfilUi
+              valor={org.perfil_ui}
+              onCambio={aplicarPerfilUi}
+              deshabilitado={cambiandoPerfil}
+              estilo={{ ...inputStyle, width: 'auto', minWidth: 220 }}
+            />
+            <PerfilEfectivoHint perfilUi={org.perfil_ui} plan={org.plan} />
+          </div>
         </div>
         {!planUso ? (
           <p style={{ margin: 0, fontSize: 12, color: 'var(--p-muted)' }}>Sin datos de plan</p>

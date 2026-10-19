@@ -34,6 +34,8 @@ export interface PlatformOrg {
   is_active: boolean
   created_at: string
   plan: string | null
+  /** 'auto' | 'basico' | 'completo'; null = auto. */
+  perfil_ui?: string | null
 }
 
 export interface OrgDependencies {

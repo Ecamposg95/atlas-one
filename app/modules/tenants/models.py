@@ -240,6 +240,13 @@ class Organization(Base):
     # La regla de calculo vive en app/services/card_surcharge.py.
     card_surcharge_pct = Column(Numeric(5, 2), default=0, server_default="0", nullable=False)
 
+    # Modo básico (2026-10). `perfil_ui`: NULL o 'auto' = se deriva del plan
+    # (FREE → básico); 'basico'/'completo' = forzado por la plataforma. Solo
+    # decide qué muestra la interfaz (app/services/perfil_ui.py).
+    perfil_ui = Column(String(12), nullable=True)
+    # Tope de "se está acabando" del Inicio básico, en piezas. NULL = 3.
+    umbral_poca_existencia = Column(Integer, nullable=True)
+
     # SaaS
     status = Column(String, default="ACTIVE", index=True)  # ACTIVE, SUSPENDED
     plan = Column(String, default="FREE")
