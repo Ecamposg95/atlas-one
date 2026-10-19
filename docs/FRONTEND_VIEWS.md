@@ -55,8 +55,8 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 | `/quotes`, `/quotes/new` | `sales/Quotes`, `QuoteMaker` | Admin, Dueño | quotes |
 | `/returns` | `sales/Returns` | Gerente, Cajero | returns |
 | `/seguimiento` | `sales/Seguimiento` | Admin, Dueño | quotes |
-| `/hq/operations` | `hq/HQOperations` | Admin, Dueño | pos |
-| `/hq/reports-hub` | `hq/HQReportsHub` | Admin, Dueño | pos |
+| `/hq/operations` | `hq/HQOperations` · en modo básico `hq/InicioBasico` | Admin, Dueño | pos |
+| `/hq/reports-hub` | `hq/HQReportsHub` · en modo básico `finance/Reports` | Admin, Dueño | pos |
 | `/hq/control` | `hq/HQControl` | Admin, Dueño | pos |
 | `/hq/sales` | `hq/HQSalesLog` | Admin, Dueño | pos |
 | `/hq/returns` | `hq/HQReturns` | Admin, Dueño | returns |
@@ -243,6 +243,12 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Datos/API:** `reportsApi.commandCenterStats/exportCsv`, `reportsApi.valorInventario` (tarjeta "Valor de la tienda"). Alertas leídas en `localStorage`.
 - **Componentes clave:** `KPICard`, `Bar`/`Doughnut` (chart.js), `useKeyboardShortcuts` (1/2/3/r).
 - **Notas:** Auto-refresh se pausa con `document.hidden`. Errores solo a consola. Tema oscuro fijo. **Diferenciador:** es el "live monitor".
+
+### `/hq/operations` en modo básico — Inicio básico 📱
+- **Archivo:** `pages/hq/InicioBasico.tsx` (chunk propio, sin chart.js); lo monta `components/layout/PorPerfil.tsx` cuando `perfil_ui = basico` (ver `docs/modo-basico.md`).
+- **Propósito:** "¿Cómo voy?": vendido hoy, ayer y 7 días; cobros de hoy por método; caja (turno abierto/cerrado, quién, efectivo esperado); lo que se está acabando (tope de Empresa); lo más vendido; valor de la tienda (`ValorTiendaCard`).
+- **Datos/API:** `reportsApi.inicioBasico` (`GET /reports/inicio-basico`) y `reportsApi.valorInventario`.
+- **Responsivo:** kit `ui/`; listas con tabla en escritorio y `TarjetaFila` bajo 768 (`useEsTelefono`). Está en `PAGINAS` de `responsivoOla2.test.ts`.
 
 ### `/hq/reports-hub` — Reportes HQ (Ultra) 📱
 - **Archivo:** `pages/hq/HQReportsHub.tsx` (655 líneas)

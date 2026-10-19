@@ -43,6 +43,8 @@ ninguna organización existente cambia de comportamiento sin configurarlas):
 | `usd_rate_mode` | `String(10)` | `'off'` | `off`\|`auto`(FIX+margen)\|`manual`. String con constantes Python, no enum de Postgres (regla de oro §5) |
 | `usd_rate_manual` | `Numeric(10,4)` | `NULL` | Tipo fijo si `mode='manual'` |
 | `usd_rate_margin` | `Numeric(10,4)` | `0` | Se suma al FIX en modo `auto` |
+| `perfil_ui` | `String(12)` | `NULL` | Modo básico (2026-10): `NULL`/`auto` = se deriva del plan (FREE → básico), `basico`/`completo` = forzado por la plataforma. Solo decide qué muestra la interfaz (`app/services/perfil_ui.py`) |
+| `umbral_poca_existencia` | `Integer` | `NULL` | Tope en piezas de "Se está acabando" del Inicio básico; `NULL` = 3. Lo guarda la dueña en Empresa |
 
 **Columnas en `branches`** (`app/modules/tenants/models.py`):
 
