@@ -7,10 +7,11 @@ from sqlalchemy import and_, or_, select
 from app.crud.products import query_visible_products
 from app.models import Brand, Department, Product, ProductVariant, StockOnHand
 from app.models.organization import Branch
+from app.modules.products.models import ProductBranchStatus
 from app.modules.products.sale_name import sku_sugerido
 from app.modules.products.services import sku_en_uso
 
-from .contexto import Contexto, ErrorHerramienta, Herramienta, ambito_sucursal
+from .contexto import Contexto, ErrorHerramienta, Herramienta, ambito_sucursal, ve_toda_la_org
 
 TOPE_PALABRAS = 6
 TOPE_EXISTENCIAS = 60
@@ -61,7 +62,7 @@ def listar_marcas(ctx: Contexto, args: dict) -> dict:
     return {"marcas": [{"id": m.id, "nombre": m.name} for m in filas]}
 
 
-def _producto(p: Product) -> dict:
+def _producto(p: Product, habilitadas: set[str] | None = None) -> dict:
     return {
         "id": p.id,
         "nombre": p.name,
@@ -71,7 +72,8 @@ def _producto(p: Product) -> dict:
         "genero": p.gender,
         "variantes": [
             {"id": v.id, "sku": v.sku, "color": v.color, "talla": v.size, "precio": float(v.price or 0)}
-            for v in p.variants if v.deleted_at is None
+            for v in p.variants
+            if v.deleted_at is None and (habilitadas is None or v.id in habilitadas)
         ],
     }
 
@@ -94,7 +96,19 @@ def buscar_producto(ctx: Contexto, args: dict) -> dict:
         .limit(limite)
         .all()
     )
-    return {"productos": [_producto(p) for p in productos]}
+    habilitadas = None
+    if not ve_toda_la_org(ctx.user):
+        # Igual que el POS: solo las variantes habilitadas en la sucursal del usuario.
+        ids = [v.id for p in productos for v in p.variants]
+        habilitadas = {
+            vid for (vid,) in ctx.db.query(ProductBranchStatus.variant_id).filter(
+                ProductBranchStatus.organization_id == ctx.org_id,
+                ProductBranchStatus.branch_id == ctx.user.branch_id,
+                ProductBranchStatus.is_active_pos.is_(True),
+                ProductBranchStatus.variant_id.in_(ids),
+            )
+        } if ids else set()
+    return {"productos": [_producto(p, habilitadas) for p in productos]}
 
 
 def sugerir_sku(ctx: Contexto, args: dict) -> dict:

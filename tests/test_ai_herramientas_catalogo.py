@@ -110,3 +110,36 @@ class TestExistencias:
         _, ajena = _otra_org(db)
         r = ejecutar("consultar_existencias", {"q": "Producto", "sucursal_id": ajena.id}, _ctx(db, org, admin_user))
         assert r == {"error": f"La sucursal {ajena.id} no existe."}
+
+
+class TestAislamiento:
+    def test_buscar_y_existencias_no_cruzan_organizaciones(self, db, org, admin_user, branch_a):
+        otra, ajena = _otra_org(db)
+        _, v_propia = _make_product(db, org, "Playera Cruce", "CRU-PLAY-M", 100, [(branch_a.id, True)])
+        p_aj, v_aj = _make_product(db, otra, "Playera Cruce", "CRU-PLAY-M-AJ", 100, [(ajena.id, True)])
+        ctx = _ctx(db, org, admin_user)
+        r = ejecutar("buscar_producto", {"q": "Cruce"}, ctx)
+        assert [x["id"] for x in r["productos"]] == [v_propia.product_id]
+        assert [v["id"] for x in r["productos"] for v in x["variantes"]] == [v_propia.id]
+        e = ejecutar("consultar_existencias", {"q": "Cruce"}, ctx)
+        assert [f["sku"] for f in e["filas"]] == ["CRU-PLAY-M"]
+        assert all(f["sucursal_id"] != ajena.id for f in e["filas"])
+        assert ejecutar("consultar_existencias", {"q": "Cruce", "sucursal_id": ajena.id}, ctx) == {
+            "error": f"La sucursal {ajena.id} no existe.",
+        }
+
+    def test_cajero_solo_ve_variantes_habilitadas_en_su_sucursal(self, db, org, admin_user, cajero_a, branch_a):
+        from decimal import Decimal
+        from app.modules.products.models import ProductBranchStatus
+        from app.models import ProductVariant
+        p, v1 = _make_product(db, org, "Camisa Dos", "DOS-CAM-M", 100, [(branch_a.id, True)])
+        v2 = ProductVariant(product_id=p.id, sku="DOS-CAM-L", price=Decimal("100"), cost=Decimal("60"), organization_id=org.id)
+        db.add(v2)
+        db.flush()
+        db.add(ProductBranchStatus(variant_id=v2.id, branch_id=branch_a.id, organization_id=org.id,
+                                   is_active_pos=False, is_visible=False))
+        db.flush()
+        db.refresh(p)
+        skus = lambda u: sorted(v["sku"] for x in ejecutar("buscar_producto", {"q": "Camisa Dos"}, _ctx(db, org, u))["productos"] for v in x["variantes"])
+        assert skus(cajero_a) == ["DOS-CAM-M"]
+        assert skus(admin_user) == ["DOS-CAM-L", "DOS-CAM-M"]
