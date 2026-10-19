@@ -31,6 +31,9 @@ export interface PlanOrg {
   nombre: string
 }
 
+/** Perfil de interfaz (modo básico, 2026-10). Lo decide el servidor en /users/me/context. */
+export type PerfilUi = 'basico' | 'completo'
+
 export interface User {
   id: number
   username: string
