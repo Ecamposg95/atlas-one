@@ -4,6 +4,10 @@ import { DaxCard } from '../../components/ui/DaxCard'
 import { Spinner } from '../../components/ui/Spinner'
 import { toast } from '../../store/toastStore'
 import { confirm as confirmDialog } from '../../components/ui/ConfirmDialog'
+import { useEsTelefono } from '../../hooks/useIsMobile'
+import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
+import { ListaTarjetas } from '../../components/ui/ListaTarjetas'
+import { TarjetaFila } from '../../components/ui/TarjetaFila'
 import type { Brand } from '../../types/products'
 
 interface BrandForm { name: string; logo_url: string }
@@ -17,6 +21,7 @@ export function Brands() {
   const [form, setForm] = useState<BrandForm>(EMPTY)
   const [saving, setSaving] = useState(false)
   const [search, setSearch] = useState('')
+  const esTelefono = useEsTelefono()
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -61,15 +66,19 @@ export function Brands() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <i className="fa-solid fa-tags text-indigo-400 text-xl" />
-          <h1 className="text-2xl font-black text-white">Marcas</h1>
-        </div>
-        <button onClick={openCreate} className="dax-btn-primary text-xs">
-          <i className="fa-solid fa-plus" /> Nueva Marca
-        </button>
-      </div>
+      <CabeceraPagina
+        titulo={
+          <div className="flex items-center gap-3">
+            <i className="fa-solid fa-tags text-indigo-400 text-xl" />
+            <h1 className="text-2xl font-black text-white">Marcas</h1>
+          </div>
+        }
+        accionPrincipal={
+          <button onClick={openCreate} className="dax-btn-primary text-xs">
+            <i className="fa-solid fa-plus" /> Nueva Marca
+          </button>
+        }
+      />
 
       <div className="flex gap-2">
         <input type="text" placeholder="Buscar marca..."
@@ -77,6 +86,23 @@ export function Brands() {
       </div>
 
       <DaxCard padding={false}>
+        {esTelefono ? (
+          <ListaTarjetas vacio={filtered.length === 0} textoVacio="Sin marcas" cargando={loading} className="p-3">
+            {filtered.map((b) => (
+              <TarjetaFila key={b.id}
+                titulo={<span className="flex items-center gap-2">
+                  {b.logo_url ? <img src={b.logo_url} alt="" className="h-8 w-8 object-contain rounded" /> : <span className="h-8 w-8 bg-slate-700 rounded flex items-center justify-center"><i className="fa-solid fa-image text-slate-500 text-xs" /></span>}
+                  {b.name}
+                </span>}
+                acciones={<>
+                <button onClick={() => openEdit(b)} aria-label={`Editar ${b.name}`} className="dax-btn-secondary text-xs"><i className="fa-solid fa-pen" /> Editar</button>
+                <button onClick={() => handleDelete(b)} aria-label={`Eliminar ${b.name}`} className="dax-btn-danger text-xs"><i className="fa-solid fa-trash" /> Eliminar</button>
+              </>}
+              />
+            ))}
+          </ListaTarjetas>
+        ) : (
+          <>
         {loading ? <Spinner text="Cargando marcas..." /> : filtered.length === 0 ? (
           <div className="p-12 text-center text-slate-600">Sin marcas</div>
         ) : (
@@ -115,6 +141,8 @@ export function Brands() {
               </tbody>
             </table>
           </div>
+        )}
+          </>
         )}
       </DaxCard>
 

@@ -8,7 +8,8 @@ import { CatalogKpis } from '../../components/catalog/CatalogKpis'
 import { ProductBranchMatrix } from '../../components/catalog/ProductBranchMatrix'
 import { ProductAuditDrawer } from '../../components/catalog/ProductAuditDrawer'
 import { TablaDesplazable } from '../../components/ui/TablaDesplazable'
-import { useMediaQuery } from '../../hooks/useMediaQuery'
+import { useEsTelefono } from '../../hooks/useIsMobile'
+import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
 import { ACCIONES_CATALOGO, accionesDeProducto, type ClaveAccionCatalogo } from './catalogActions'
 import { formatCurrency } from '../../utils/currency'
 import { toast } from '../../store/toastStore'
@@ -48,7 +49,7 @@ export function AdminCatalog() {
   // Bajo `md` la tabla pedía ~1020 px de ancho (7 columnas + hasta 7 botones
   // de 44 px en la última) y había que desplazarse ~660 px para llegar a
   // «Editar», momento en el que ya no se veía de qué producto se trataba.
-  const enTarjetas = useMediaQuery('(max-width: 767px)')
+  const enTarjetas = useEsTelefono()
 
   const pages = Math.max(1, Math.ceil(total / PAGE_LIMIT))
 
@@ -261,40 +262,45 @@ export function AdminCatalog() {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
+      {/* Header. Los tres botones van en `acciones` en el orden de hoy: con
+          `accionPrincipal` el kit pondría "Nuevo producto" al final en escritorio. */}
+      <CabeceraPagina
+        titulo={
           <div className="flex items-center gap-3">
             <i className="fa-solid fa-book text-indigo-400 text-xl" />
             <h1 className="text-2xl font-black text-white">Catálogo</h1>
           </div>
+        }
+        descripcion={
           <p className="text-slate-500 text-xs mt-0.5">
             Gestión completa de productos · {org?.name ?? 'Organización'}
           </p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <Link
-            to="/products/new?volver=/admin/catalog"
-            className="dax-btn-primary dax-btn-icon text-xs inline-flex items-center gap-1.5 whitespace-nowrap"
-          >
-            <i className="fa-solid fa-plus" /> Nuevo producto
-          </Link>
-          <button
-            onClick={handleExport}
-            className="dax-btn-secondary dax-btn-icon text-xs inline-flex items-center gap-1.5 whitespace-nowrap"
-            title="Exportar catálogo filtrado a Excel"
-          >
-            <i className="fa-solid fa-file-excel text-emerald-400" /> Exportar
-          </button>
-          <Link
-            to="/products"
-            className="dax-btn-secondary dax-btn-icon text-xs inline-flex items-center gap-1.5 whitespace-nowrap"
-            title="Vista completa con import, packaging y precios escalonados"
-          >
-            <i className="fa-solid fa-layer-group" /> Vista completa
-          </Link>
-        </div>
-      </div>
+        }
+        acciones={
+          <>
+            <Link
+              to="/products/new?volver=/admin/catalog"
+              className="dax-btn-primary dax-btn-icon text-xs inline-flex items-center gap-1.5 whitespace-nowrap"
+            >
+              <i className="fa-solid fa-plus" /> Nuevo producto
+            </Link>
+            <button
+              onClick={handleExport}
+              className="dax-btn-secondary dax-btn-icon text-xs inline-flex items-center gap-1.5 whitespace-nowrap"
+              title="Exportar catálogo filtrado a Excel"
+            >
+              <i className="fa-solid fa-file-excel text-emerald-400" /> Exportar
+            </button>
+            <Link
+              to="/products"
+              className="dax-btn-secondary dax-btn-icon text-xs inline-flex items-center gap-1.5 whitespace-nowrap"
+              title="Vista completa con import, packaging y precios escalonados"
+            >
+              <i className="fa-solid fa-layer-group" /> Vista completa
+            </Link>
+          </>
+        }
+      />
 
       {/* KPIs */}
       <CatalogKpis

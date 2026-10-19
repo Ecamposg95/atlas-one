@@ -200,7 +200,7 @@ CSS a añadir en `index.css`, en la zona "BASE RESPONSIVA" (fuera de `@layer`):
 
 `Modal.tsx`: al panel (`className={\`w-full ${SIZES[size]} rounded-xl flex flex-col max-h-[90vh] outline-none\`}`) quitarle `max-h-[90vh]` y añadir `dax-modal`; al contenedor del `footer` añadir `dax-modal-footer`. Comentario: `.dax-modal` da el tope de alto (90dvh) y la hoja inferior bajo `sm` (ver `index.css §2`).
 
-- [ ] **Step 1: devDeps y un test que falle**
+- [x] **Step 1: devDeps y un test que falle**
 
 `cd frontend && npm i -D jsdom@^25 @testing-library/react@^16 @testing-library/user-event@^14 @testing-library/jest-dom@^6`. Crear los cuatro archivos de test (con `// @vitest-environment jsdom`), por ejemplo `TarjetaFila.test.tsx`:
 
@@ -241,21 +241,21 @@ describe('TarjetaFila', () => {
 
 `ListaTarjetas.test.tsx`: 60 hijos se renderizan todos; `vacio` muestra `textoVacio`; `cargando` muestra "Cargando…" y no los hijos. `BarraFiltros.test.tsx`: raíz tiene clase `dax-filtros`; `accion` va dentro de `.dax-filtros-accion`; `ParFechas` tiene `grid grid-cols-2 sm:contents`. `Modal.test.tsx`: el panel tiene `dax-modal` y el pie `dax-modal-footer`; el contenido sigue montado (misma instancia: un `data-testid` con contador de montajes vía `useEffect`) tras disparar el `change` de un `matchMedia` falso (Review Focus #2: la hoja inferior es CSS, no remonta).
 
-- [ ] **Step 2: Correr y ver que fallan**
+- [x] **Step 2: Correr y ver que fallan**
 
 Run: `cd frontend && npx vitest run src/components/ui/__tests__ 2>&1 | tail -5`
 Expected: fallan por módulos inexistentes (`TarjetaFila`, `ListaTarjetas`, `BarraFiltros`) y por clases ausentes en `Modal`.
 
-- [ ] **Step 3: Implementar las cuatro primitivas, el CSS y el cambio de `Modal`** según las interfaces de arriba. Reglas de `TarjetaFila`: rejilla `grid grid-cols-2 gap-x-3 gap-y-1 text-xs` con etiqueta en `--dax-text-faint` y valor en `--dax-text`; importe `font-semibold tabular-nums`; botón "Ver más"/"Ver menos" con `aria-expanded`, `min-h-[44px]`; `acciones` en `flex flex-wrap gap-2 mt-2` con `[&>button]:min-h-[44px]`.
+- [x] **Step 3: Implementar las cuatro primitivas, el CSS y el cambio de `Modal`** según las interfaces de arriba. Reglas de `TarjetaFila`: rejilla `grid grid-cols-2 gap-x-3 gap-y-1 text-xs` con etiqueta en `--dax-text-faint` y valor en `--dax-text`; importe `font-semibold tabular-nums`; botón "Ver más"/"Ver menos" con `aria-expanded`, `min-h-[44px]`; `acciones` en `flex flex-wrap gap-2 mt-2` con `[&>button]:min-h-[44px]`.
 
-- [ ] **Step 4: Correr y ver que pasan**
+- [x] **Step 4: Correr y ver que pasan**
 
 Run: `cd frontend && npx vitest run src/components/ui/__tests__ 2>&1 | tail -3 && npm test -- --run 2>&1 | tail -2 && npm run build 2>&1 | tail -2`
 Expected: tests verdes, suite completa sin nuevos fallos, build ok.
 
-- [ ] **Step 5: Comprobar el POS** (usa `.dax-modal`, no `Modal.tsx`, pero `KDS.tsx` sí usa `Modal`): `node capturas.mjs --out …/t1 --rutas /pos,/kitchen --anchos 390,1440` y mirar que el POS de cajera sigue igual a 390 y a 1440 (comparar a ojo con el baseline; `/kitchen` solo si el demo_pos tiene el módulo; si no, omitir y anotarlo).
+- [x] **Step 5: Comprobar el POS** (usa `.dax-modal`, no `Modal.tsx`, pero `KDS.tsx` sí usa `Modal`): `node capturas.mjs --out …/t1 --rutas /pos,/kitchen --anchos 390,1440` y mirar que el POS de cajera sigue igual a 390 y a 1440 (comparar a ojo con el baseline; `/kitchen` solo si el demo_pos tiene el módulo; si no, omitir y anotarlo).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/package.json frontend/package-lock.json frontend/src/components/ui/TarjetaFila.tsx frontend/src/components/ui/ListaTarjetas.tsx frontend/src/components/ui/BarraFiltros.tsx frontend/src/components/ui/CabeceraPagina.tsx frontend/src/components/ui/Modal.tsx frontend/src/index.css frontend/src/components/ui/__tests__
@@ -348,13 +348,15 @@ Commit: `feat(inicio): Inicio HQ cabe en telefono — cabecera apilada, KPIs y l
 
 ### Task 7: verificación de la ola y hallazgos
 
+_Tarea cerrada por SP5 ola 2, Tarea 9, 2026-10-18._
+
 **Files:** Output `.superpowers/sdd/responsivo-ola1/final/` (capturas, `desbordes.json`, `diff1440.json`), `.superpowers/sdd/responsivo-ola1/ola-1-findings.md`
 
-- [ ] `bash stack.sh down && bash stack.sh up` (reinicia Vite para que vea los cambios).
-- [ ] `node capturas.mjs --out …/final` (las 8 rutas, 4 anchos, 2 temas) → `desbordes.json`: **cero** entradas con `desborda` o `elementos` a 390/768/1024. Cada una que quede es un hallazgo con su elemento.
-- [ ] `node diff1440.mjs baseline final` → **cero** píxeles distintos en las 8 rutas a 1440 (claro y oscuro). Toda diferencia se lista con su recorte `diff/*.png`.
-- [ ] Tap targets a 390: en cada captura de modal y lista, `page.evaluate` que mida todos los `button, a, [role=button]` visibles y liste los de alto < 44 px → hallazgos.
-- [ ] Escribir `ola-1-findings.md`: tabla ruta × ancho × tema con ✅/❌, lista de hallazgos con archivo:línea propuesto, y las rutas de las capturas a 390 para que el usuario las vea. Si hay hallazgos Important (desborde, diff a 1440, tap < 44 en acción principal), **vuelven como fix round a la tarea dueña** antes de la Tarea 8.
+- [x] `bash stack.sh down && bash stack.sh up` (reinicia Vite para que vea los cambios).
+- [x] `node capturas.mjs --out …/final` (las 8 rutas, 4 anchos, 2 temas) → `desbordes.json`: **cero** entradas con `desborda` o `elementos` a 390/768/1024. Cada una que quede es un hallazgo con su elemento.
+- [x] `node diff1440.mjs baseline final` → **cero** píxeles distintos en las 8 rutas a 1440 (claro y oscuro). Toda diferencia se lista con su recorte `diff/*.png`.
+- [x] Tap targets a 390: en cada captura de modal y lista, `page.evaluate` que mida todos los `button, a, [role=button]` visibles y liste los de alto < 44 px → hallazgos.
+- [x] Escribir `ola-1-findings.md`: tabla ruta × ancho × tema con ✅/❌, lista de hallazgos con archivo:línea propuesto, y las rutas de las capturas a 390 para que el usuario las vea. Si hay hallazgos Important (desborde, diff a 1440, tap < 44 en acción principal), **vuelven como fix round a la tarea dueña** antes de la Tarea 8.
 
 ---
 
@@ -362,10 +364,10 @@ Commit: `feat(inicio): Inicio HQ cabe en telefono — cabecera apilada, KPIs y l
 
 **Files:** Modify `frontend/src/utils/rutaInicio.ts`; Test `frontend/src/utils/rutaInicio.test.ts`; Modify `frontend/src/hooks/useIsMobile.ts` (comentario de `PHONE_BREAKPOINT` que cita el redirect)
 
-- [ ] Tests: dueño/admin con `esMovil=true` y preset `ATLAS_POS` → `/hq/operations`; con preset `ATLAS_ONE_RETAIL` → `/home` (Review Focus #5); vendedor móvil sigue a `/mobile/dashboard`; cliente a `/portal`; cajero a `/atlas-pos`. Ajustar/retirar el test actual que espera `/mobile/owner`.
-- [ ] Quitar la rama `if (esOficina && esMovil) return '/mobile/owner'`; `esMovil` queda en la firma (lo usan vendedores) con un comentario de por qué ya no aplica al dueño. Actualizar el comentario de `useIsMobile.ts` l.22-29.
-- [ ] `/mobile/owner` y el ítem "Resumen móvil" del menú **no se tocan**.
-- [ ] `npm test -- --run` y `npm run build` verdes. Commit: `feat(inicio): el dueno y el admin entran al escritorio adaptado tambien en telefono`.
+- [x] Tests: dueño/admin con `esMovil=true` y preset `ATLAS_POS` → `/hq/operations`; con preset `ATLAS_ONE_RETAIL` → `/home` (Review Focus #5); vendedor móvil sigue a `/mobile/dashboard`; cliente a `/portal`; cajero a `/atlas-pos`. Ajustar/retirar el test actual que espera `/mobile/owner`.
+- [x] Quitar la rama `if (esOficina && esMovil) return '/mobile/owner'`; `esMovil` queda en la firma (lo usan vendedores) con un comentario de por qué ya no aplica al dueño. Actualizar el comentario de `useIsMobile.ts` l.22-29.
+- [x] `/mobile/owner` y el ítem "Resumen móvil" del menú **no se tocan**.
+- [x] `npm test -- --run` y `npm run build` verdes. Commit: `feat(inicio): el dueno y el admin entran al escritorio adaptado tambien en telefono`.
 
 ---
 

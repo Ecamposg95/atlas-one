@@ -9,6 +9,10 @@ import { toast } from '../../store/toastStore'
 import { confirm } from '../../components/ui/ConfirmDialog'
 import { errorDetailText } from '../../utils/errorDetail'
 import { rolUsuario } from '../../utils/enumsEspanol'
+import { useEsTelefono } from '../../hooks/useIsMobile'
+import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
+import { ListaTarjetas } from '../../components/ui/ListaTarjetas'
+import { TarjetaFila } from '../../components/ui/TarjetaFila'
 
 const ROLES = ['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO', 'VENDEDOR', 'SOPORTE_OPERATIVO']
 // Solo estos roles pueden autorizar una reimpresión desde el POS (mismo
@@ -31,6 +35,7 @@ const EMPTY_FORM: UserForm = {
 }
 
 export function Users() {
+  const esTelefono = useEsTelefono()
   const [users, setUsers] = useState<SystemUser[]>([])
   const [branches, setBranches] = useState<Branch[]>([])
   const [loading, setLoading] = useState(true)
@@ -132,17 +137,43 @@ export function Users() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <i className="fa-solid fa-users-cog text-indigo-400 text-xl" />
-          <h1 className="text-2xl font-black text-white">Usuarios</h1>
-        </div>
-        <button onClick={openCreate} className="dax-btn-primary text-xs">
-          <i className="fa-solid fa-plus" /> Nuevo usuario
-        </button>
-      </div>
+      <CabeceraPagina
+        titulo={
+          <div className="flex items-center gap-3">
+            <i className="fa-solid fa-users-cog text-indigo-400 text-xl" />
+            <h1 className="text-2xl font-black text-white">Usuarios</h1>
+          </div>
+        }
+        accionPrincipal={
+          <button onClick={openCreate} className="dax-btn-primary text-xs">
+            <i className="fa-solid fa-plus" /> Nuevo usuario
+          </button>
+        }
+      />
 
       <DaxCard padding={false}>
+        {esTelefono ? (
+          <ListaTarjetas vacio={users.length === 0} textoVacio="Sin usuarios" cargando={loading} className="p-3">
+            {users.map((u) => (
+              <TarjetaFila key={u.id}
+                titulo={<span className="min-w-0 truncate font-mono text-indigo-400">{u.username}</span>}
+                subtitulo={u.full_name ?? '—'}
+                estado={<Badge variant={roleVariant(u.role) as 'red' | 'yellow' | 'blue' | 'green' | 'slate'}>{rolUsuario(u.role)}</Badge>}
+                datos={[
+                  { etiqueta: 'Sucursal', valor: u.branch_name ?? 'Sin sucursal fija' },
+                  { etiqueta: 'Estado', valor: <span className={u.is_active ? 'text-emerald-400' : 'text-slate-500'}>{u.is_active ? 'Activo' : 'Inactivo'}</span> },
+                ]}
+                acciones={<>
+                  <button onClick={() => openEdit(u)} aria-label={`Editar a ${u.username}`} className="dax-btn-secondary text-xs"><i className="fa-solid fa-pen" /> Editar</button>
+                  <button onClick={() => handleToggle(u)} aria-label={u.is_active ? `Desactivar a ${u.username}` : `Activar a ${u.username}`} className="dax-btn-secondary text-xs">
+                    <i className={`fa-solid ${u.is_active ? 'fa-circle-xmark' : 'fa-circle-check'}`} /> {u.is_active ? 'Desactivar' : 'Activar'}
+                  </button>
+                </>}
+              />
+            ))}
+          </ListaTarjetas>
+        ) : (
+          <>
         {loading ? <Spinner text="Cargando usuarios..." /> : users.length === 0 ? (
           <div className="p-12 text-center text-slate-600">Sin usuarios</div>
         ) : (
@@ -184,6 +215,8 @@ export function Users() {
               </tbody>
             </table>
           </TablaDesplazable>
+        )}
+          </>
         )}
       </DaxCard>
 
