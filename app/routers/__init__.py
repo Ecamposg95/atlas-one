@@ -8,6 +8,7 @@ from . import cash
 from . import customers
 from . import branches
 from . import reports
+from . import reports_valuacion
 from . import printer
 from . import returns
 # documents eliminado en Sprint 4 (ver tech-debt roadmap PR #156).

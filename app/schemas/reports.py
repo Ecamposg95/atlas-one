@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Dict
+from typing import List, Dict, Optional
 from datetime import date
 from decimal import Decimal
 
@@ -22,3 +22,34 @@ class AgingReportResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# --- Valor de la tienda (valuacion de inventario) ---------------------------
+# Dinero y piezas viajan como float (JSON numerico, como /dashboard); Decimal se
+# serializaria como cadena en Pydantic v2 y la tarjeta tendria que parsear.
+
+class ValuacionTotales(BaseModel):
+    piezas: float
+    skus: int
+    valor_venta: float
+    valor_costo: Optional[float]  # None cuando el rol no ve costos (gerente)
+    piezas_sin_costo: float
+    skus_sin_costo: int
+
+
+class ValuacionGrupo(BaseModel):
+    clave: str   # id de sucursal/departamento/marca; "" = sin asignar
+    nombre: str
+    piezas: float
+    skus: int
+    valor_venta: float
+    valor_costo: Optional[float]
+    piezas_sin_costo: float
+
+
+class ValuacionInventarioResponse(BaseModel):
+    agrupar: str
+    branch_id: Optional[int]
+    ve_costo: bool
+    totales: ValuacionTotales
+    grupos: List[ValuacionGrupo]

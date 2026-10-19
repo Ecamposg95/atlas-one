@@ -6,8 +6,9 @@ import {
   Tooltip, Legend,
 } from 'chart.js'
 import { Bar, Doughnut } from 'react-chartjs-2'
-import { reportsApi, type CommandCenterStats } from '../../api/reports'
+import { reportsApi, type CommandCenterStats, type ValuacionInventario } from '../../api/reports'
 import { KPICard } from '../../components/reports/KPICard'
+import { ValorTiendaCard } from '../../components/reports/ValorTiendaCard'
 import { Spinner } from '../../components/ui/Spinner'
 import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
 import { ListaTarjetas } from '../../components/ui/ListaTarjetas'
@@ -128,6 +129,10 @@ export function HQOperations() {
   const [now, setNow] = useState(new Date())
   const [countdown, setCountdown] = useState(60)
   const [branchSearch, setBranchSearch] = useState('')
+  // Valor de la tienda: se calcula aparte del command center y una sola vez
+  // por visita (la existencia no cambia cada 60 s como las ventas).
+  const [valuacion, setValuacion] = useState<ValuacionInventario | null>(null)
+  const [valuacionError, setValuacionError] = useState<string | null>(null)
   const [branchSort, setBranchSort] = useState<BranchSort>('sales')
   const [readAlerts, setReadAlerts] = useState<Set<string>>(() => loadReadAlerts())
   const refreshRef = useRef<number | null>(null)
@@ -180,6 +185,15 @@ export function HQOperations() {
     document.addEventListener('visibilitychange', onVis)
     return () => document.removeEventListener('visibilitychange', onVis)
   }, [load])
+
+  useEffect(() => {
+    reportsApi.valorInventario({ agrupar: 'sucursal' })
+      .then((v) => { setValuacion(v); setValuacionError(null) })
+      .catch((e: any) => setValuacionError(errorDetailText(
+        e?.response?.data?.detail,
+        'No se pudo calcular el valor de la tienda. Vuelve a intentar en unos segundos.',
+      )))
+  }, [])
 
   useKeyboardShortcuts([
     { keys: '1', handler: () => setPeriod('today') },
@@ -540,6 +554,20 @@ export function HQOperations() {
               )}
               <p className="text-[9px] text-slate-600 mt-1">Ver Control HQ →</p>
             </Link>
+          </div>
+
+          {/* Valor de la tienda (SP3): dos cifras + hueco de costos. Media
+              anchura en escritorio; SP7 decidirá su lugar definitivo. */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <ValorTiendaCard
+              valorVenta={valuacion?.totales.valor_venta ?? 0}
+              valorCosto={valuacion ? valuacion.totales.valor_costo : null}
+              piezas={valuacion?.totales.piezas ?? 0}
+              piezasSinCosto={valuacion?.totales.piezas_sin_costo ?? 0}
+              skusSinCosto={valuacion?.totales.skus_sin_costo ?? 0}
+              cargando={!valuacion && !valuacionError}
+              error={valuacionError}
+            />
           </div>
 
           {/* Charts + Branch Matrix */}

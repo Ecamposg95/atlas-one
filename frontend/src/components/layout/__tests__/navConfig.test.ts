@@ -156,3 +156,30 @@ describe('las guardas de ruta', () => {
     expect(rolesConAcceso('/ruta/inventada')).toEqual([])
   })
 })
+
+describe('Valor de la tienda (/hq/valor-inventario)', () => {
+  it('lo ven administrador, dueño y gerente con el módulo reports', () => {
+    expect(menu('ADMINISTRADOR', BOUTIQUE)).toContain('/hq/valor-inventario')
+    expect(menu('DUEÑO', BOUTIQUE)).toContain('/hq/valor-inventario')
+    expect(menu('GERENTE', BOUTIQUE)).toContain('/hq/valor-inventario')
+    expect(rolesConAcceso('/hq/valor-inventario')).toEqual(
+      expect.arrayContaining(['ADMINISTRADOR', 'DUEÑO', 'GERENTE']),
+    )
+  })
+
+  it('la cajera no lo ve ni lo abre por URL', () => {
+    expect(menu('CAJERO', BOUTIQUE)).not.toContain('/hq/valor-inventario')
+    expect(rolesConAcceso('/hq/valor-inventario')).not.toContain('CAJERO')
+  })
+
+  it('depende del módulo reports (módulo base: lo tienen FREE y ULTRA+)', () => {
+    const sinReports = BOUTIQUE.filter((m) => m !== 'reports')
+    expect(menu('ADMINISTRADOR', sinReports)).not.toContain('/hq/valor-inventario')
+  })
+
+  it('tiene título para la barra superior y cae en el grupo Operación del menú HQ', () => {
+    expect(ROUTE_TITLES['/hq/valor-inventario']).toBe('Valor de la tienda')
+    const operacion = HQ_NAV_GROUPS.find((g) => g.header === 'Operación')
+    expect(operacion?.urls).toContain('/hq/valor-inventario')
+  })
+})
