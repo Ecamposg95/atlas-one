@@ -2,6 +2,8 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { productsApi } from '../../api/products'
 import { usePOSStore } from '../../store/posStore'
 import { useAuthStore } from '../../store/authStore'
+import { useEnabledModulesStore } from '../../store/enabledModulesStore'
+import { opcionesPorPerfil } from '../../pages/pos/opcionesPos'
 import type { Product, ProductVariant } from '../../types/products'
 import { ProductDetailModal } from './modals/ProductDetailModal'
 import { VariantPickerModal } from './modals/VariantPickerModal'
@@ -74,6 +76,7 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
   const usdRate = useExchangeRateStore((s) => s.rate)
   const { user } = useAuthStore()
   const canEdit = !!user?.role && EDIT_ROLES.includes(user.role)
+  const opciones = opcionesPorPerfil(useEnabledModulesStore((s) => s.perfilUi))
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<Product[]>([])
   const [loading, setLoading] = useState(false)
@@ -392,7 +395,7 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
                         </span>
                       </div>
 
-                      {usdRate !== null && (
+                      {opciones.usd && usdRate !== null && (
                         <p
                           className="text-[10px] font-semibold tabular-nums text-right"
                           style={{ color: 'var(--dax-text-faint)' }}
@@ -462,7 +465,7 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
         product={detailProduct}
         onClose={() => { setDetailProduct(null); devolverFoco() }}
         onAddToCart={(p) => { addToCart(p); setDetailProduct(null) }}
-        canEdit={canEdit}
+        canEdit={canEdit && opciones.editarProducto}
         onSaved={() => {
           productsApi.posSearch('', sortBy).then(setDefaultResults).catch(() => {})
           if (query.trim()) search(query)

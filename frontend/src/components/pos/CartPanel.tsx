@@ -14,7 +14,8 @@ import { autoTierTarget, forcedTierMap, cajaTierOf } from '../../pages/pos/cartT
 import { groupCart, type CartGroup } from '../../pages/pos/cartGroups'
 import { useExchangeRateStore } from '../../store/exchangeRateStore'
 import { usdSummary } from '../../utils/usd'
-import { useCapacidad } from '../../store/enabledModulesStore'
+import { useCapacidad, useEnabledModulesStore } from '../../store/enabledModulesStore'
+import { opcionesPorPerfil } from '../../pages/pos/opcionesPos'
 
 type PaymentMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'MIXED'
 
@@ -47,6 +48,10 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
   const usdLine = usdSummary(total, usdRate)
   const hayPropina = useCapacidad('propina')
   const hayFactura = useCapacidad('factura')
+  // Modo básico: qué controles opcionales se pintan. El cobro no cambia.
+  const opciones = opcionesPorPerfil(useEnabledModulesStore((s) => s.perfilUi))
+  // Un descuento que ya viene (ticket pausado) se sigue viendo aunque básico esconda el control.
+  const muestraDescuentoGlobal = opciones.descuentos || globalDiscount > 0
   const [editingGlobalDisc, setEditingGlobalDisc] = useState(false)
   // El cliente se asigna desde aquí: el cajero no tenía dónde hacerlo.
   const [clienteAbierto, setClienteAbierto] = useState(false)
@@ -330,7 +335,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
         <div className="flex items-center gap-2">
           {/* Siempre visible: se puede anotar el cliente con el carrito vacío
               y sin caja abierta (no cobra nada). */}
-          {!customerName && (
+          {!customerName && opciones.cliente && (
             <button
               onClick={() => setClienteAbierto(true)}
               className="text-dax-muted hover:text-dax-accent text-sm min-h-[44px] flex items-center gap-1 transition-colors font-semibold"
@@ -628,6 +633,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                               {hasTiers && <i className="fa-solid fa-tags text-[9px]" />}
                               {formatCurrency(unitItem.price)}/u
                             </button>
+                            {(opciones.descuentos || (unitItem.discount ?? 0) > 0) && (
                             <button
                               onClick={() => { setEditing({ key: priceKey!, mode: 'discount' }); setDiscountInput(String(unitItem.discount || 0)) }}
                               className="text-sm tabular-nums min-h-[40px] min-w-[40px] px-2 rounded-lg transition-colors hover:bg-dax-elevated"
@@ -636,6 +642,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                             >
                               {(unitItem.discount ?? 0) > 0 ? `-${unitItem.discount}%` : '%'}
                             </button>
+                            )}
                           </div>
                         )}
                         {/* Espaciador cuando no hay unitItem — solo en escritorio:
@@ -724,6 +731,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                           </div>
                           {unitsPerBox > 0 && unitPriceCaja > 0 && (
                             <div className="flex items-center gap-1 text-[10px] tabular-nums font-mono whitespace-nowrap">
+                              {opciones.forzarPieza ? (
                               <button
                                 ref={(el) => {
                                   if (editingPrice === cajaKey) activePriceTriggerRef.current = el
@@ -743,6 +751,15 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                                 {isCajaForced && <i className="fa-solid fa-bolt text-[8px]" />}
                                 {formatCurrency(unitPriceCaja)}/pz
                               </button>
+                              ) : (
+                              <span
+                                className="flex items-center gap-1"
+                                style={{ color: isCajaForced ? 'var(--dax-warning)' : 'var(--dax-text-muted)' }}
+                              >
+                                {isCajaForced && <i className="fa-solid fa-bolt text-[8px]" />}
+                                {formatCurrency(unitPriceCaja)}/pz
+                              </span>
+                              )}
                               {savingsPct >= 1 && (
                                 <span
                                   className="font-bold px-1 py-0.5 rounded"
@@ -798,9 +815,9 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
         </div>
 
         {/* Botones pareados: Descuento global | Aplicar caja a todo */}
-        <div className="grid grid-cols-2 gap-2 mt-2">
+        <div className={muestraDescuentoGlobal ? 'grid grid-cols-2 gap-2 mt-2' : 'grid grid-cols-1 gap-2 mt-2'}>
           {/* Izquierda — Descuento global */}
-          {editingGlobalDisc ? (
+          {muestraDescuentoGlobal && (editingGlobalDisc ? (
             <div
               className="rounded-lg px-2.5 py-2 flex items-center gap-1.5 bg-dax-warning-soft border border-dax-warning"
               title="Descuento global al ticket"
@@ -855,7 +872,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
               <i className="fa-solid fa-tag text-[10px]" style={{ color: '#fff' }} aria-hidden="true" />
               <span className="truncate">Descuento global</span>
             </button>
-          )}
+          ))}
 
           {/* Derecha — Bulk caja: aplica precio caja a todo el carrito o restaura */}
           {(() => {
@@ -939,7 +956,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
           <span className="text-lg uppercase tracking-wide">Total</span>
           <span className="tabular-nums text-dax-text text-4xl">{formatCurrency(total)}</span>
         </div>
-        {usdLine && (
+        {opciones.usd && usdLine && (
           <div
             className="flex justify-end text-xs font-semibold tabular-nums pt-0.5"
             style={{ color: 'var(--dax-text-muted)' }}
@@ -1043,7 +1060,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
       <ProductDetailModal
         product={detailProduct}
         onClose={() => setDetailProduct(null)}
-        canEdit={true}
+        canEdit={opciones.editarProducto}
       />
 
       {clienteAbierto && <CustomerModal onClose={() => setClienteAbierto(false)} />}
