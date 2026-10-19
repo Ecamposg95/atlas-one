@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
 from dataclasses import dataclass, field
 from typing import Any, Optional, Protocol
 
@@ -208,15 +209,23 @@ class ClienteFalso:
 
 
 # Un solo cliente por proceso mientras la configuración no cambie (evita
-# abrir un pool de conexiones por petición).
+# abrir un pool de conexiones por petición). FastAPI corre los handlers
+# síncronos en hilos: todo acceso a la caché va bajo `_CANDADO`.
 _CLIENTES: dict[tuple, ClienteOpenAICompatible] = {}
+_CANDADO = threading.Lock()
+
+
+def _vaciar_clientes() -> None:
+    """Cierra y olvida los clientes en caché. Supone `_CANDADO` tomado."""
+    for c in list(_CLIENTES.values()):
+        c.cerrar()
+    _CLIENTES.clear()
 
 
 def reiniciar_cliente_por_defecto() -> None:
     """Cierra y olvida los clientes en caché (para pruebas)."""
-    for c in _CLIENTES.values():
-        c.cerrar()
-    _CLIENTES.clear()
+    with _CANDADO:
+        _vaciar_clientes()
 
 
 def cliente_por_defecto() -> ClienteOpenAICompatible:
@@ -224,8 +233,9 @@ def cliente_por_defecto() -> ClienteOpenAICompatible:
     if not cfg.api_key:
         raise HTTPException(status_code=503, detail=NO_CONFIGURADO)
     clave = (cfg.base_url, cfg.modelo, cfg.api_key)
-    cliente = _CLIENTES.get(clave)
-    if cliente is None:
-        reiniciar_cliente_por_defecto()  # config nueva: suelta el anterior
-        cliente = _CLIENTES[clave] = ClienteOpenAICompatible(cfg.base_url, cfg.api_key, cfg.modelo)
-    return cliente
+    with _CANDADO:
+        cliente = _CLIENTES.get(clave)
+        if cliente is None:
+            _vaciar_clientes()  # config nueva: suelta el anterior
+            cliente = _CLIENTES[clave] = ClienteOpenAICompatible(cfg.base_url, cfg.api_key, cfg.modelo)
+        return cliente

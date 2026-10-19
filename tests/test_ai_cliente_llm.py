@@ -218,3 +218,15 @@ class TestCicloDeVida:
         with _cliente(lambda req: httpx.Response(200)) as c2:
             assert not c2._http.is_closed
         assert c2._http.is_closed
+
+    def test_hilos_simultaneos_comparten_un_cliente_abierto(self, monkeypatch):
+        from concurrent.futures import ThreadPoolExecutor
+        monkeypatch.setenv("LLM_API_KEY", "k")
+        reiniciar_cliente_por_defecto()
+        try:
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                clientes = list(pool.map(lambda _: cliente_por_defecto(), range(8)))
+            assert all(c is clientes[0] for c in clientes)
+            assert not clientes[0]._http.is_closed
+        finally:
+            reiniciar_cliente_por_defecto()
