@@ -178,7 +178,7 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Propósito:** Caja operativa: busca productos, arma carrito, cobra (efectivo/tarjeta/transferencia/mixto), pausa/reanuda tickets, devoluciones, movimientos de efectivo e impresión.
 - **Quién la ve:** Cajero, Gerente — módulo `pos`.
 - **Datos/API:** `cashApi.getStatus/close`, `salesApi.create/getMyLast`, `parkedTicketsApi.list/park/resume/remove`, `printerApi.*` (agente local), `utils/offlineQueue` (IndexedDB). Store `usePOSStore`.
-- **Componentes clave:** `ProductSearch`, `CartPanel`, `PendingOrders`; modales `SessionModal`, `Cash/Card/Transfer/MixedPaymentModal`, `ReturnModal`, `CashMovementModal`, `CloseSessionModal`, `ProductDetailModal`.
+- **Componentes clave:** `ProductSearch`, `CartPanel`, `PendingOrders`; modales `SessionModal`, `Cash/Card/Transfer/MixedPaymentModal`, `ReturnModal`, `CashMovementModal`, `CloseSessionModal`, `ProductDetailModal` (ficha de solo consulta: existencia y precio por talla, escalones, agregar al carrito, entrada rápida de existencia); alta y edición con el formulario único vía `AltaRapidaProducto` y `EditarProductoPos` (chunks `lazy()` precargados, dentro de `LimiteDeError`).
 - **Notas:** Sin turno de caja abierto → carrito bloqueado. Layout 40/60. Polling de pausados 10s + flush offline 30s. Ítems "caja" se expanden a piezas; descuento global se distribuye al unit_price. Auto-imprime ticket/corte. Toast inline propio (debería usar `toastStore`).
 
 ### `/atlas-pos` — Mi día (AtlasPOS)
@@ -310,7 +310,7 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 
 ## 5. Inventario, Productos & Catálogo
 
-> **Formulario de producto unificado (SP1).** `components/products/FormularioProducto.tsx` es el único formulario de alta/edición; la página `ProductForm` lo monta como página, las listas de HQ (`Products.tsx`) y de sucursal (`ProductsBranchView.tsx`) lo abren dentro de un `Modal` (sin cerrar con Escape ni con el fondo), y `AdminProductCreate`, `ProductModal` y `ProductFormModal` ya no existen. Excepciones anotadas: `components/pos/modals/ProductDetailModal.tsx` (ficha del POS) y `pages/scanner/StoreScanner.tsx` (ediciones parciales).
+> **Formulario de producto unificado (SP1).** `components/products/FormularioProducto.tsx` es el único formulario de alta/edición; la página `ProductForm` lo monta como página, las listas de HQ (`Products.tsx`) y de sucursal (`ProductsBranchView.tsx`) lo abren dentro de un `Modal` (sin cerrar con Escape ni con el fondo), y `AdminProductCreate`, `ProductModal` y `ProductFormModal` ya no existen. Excepción anotada: `pages/scanner/StoreScanner.tsx` (ediciones parciales). **SP1-c (2026-10-21):** la ficha del POS (`components/pos/modals/ProductDetailModal.tsx`) ya no crea ni edita: "Editar" abre `EditarProductoPos` y "Nuevo producto" abre `AltaRapidaProducto`, ambos `FormularioProducto` en el `Modal` del kit, en todos los perfiles. Las reglas de alta propias del POS (costo, código de barras y existencia inicial obligatorios) ceden a `validarProducto`/`campos_producto`; la foto se sube desde el formulario.
 
 ### `/products` — Catálogo / consulta de productos 📱
 - **Archivo:** `pages/inventory/Products.tsx` (~720 líneas)
@@ -648,7 +648,7 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 
 1. **Dashboards HQ duplicados.** HQOperations / HQReportsHub / HQControl repiten KPIs-del-día, doughnut de métodos, ranking de sucursales y top productos desde `commandCenterStats`, con `PAYMENT_COLORS`/rangos reimplementados en cada archivo (y colores divergentes: CARD `#0ea5e9` vs `#6366f1`). Además el concepto "sucursal online" difiere (`status==='ONLINE'` vs `pending_cuts>0`).
 
-2. **Superficies de producto.** `FormularioProducto` es el formulario único fuera del POS; queda `ProductDetailModal` (ficha del POS) como excepción por ruling.
+2. **Superficies de producto.** `FormularioProducto` es el formulario único dentro y fuera del POS (SP1-c); `ProductDetailModal` es solo consulta y la única excepción es `StoreScanner` (ediciones parciales).
 
 3. **Dos generaciones de UI en Platform.** v2 "Editorial" (Metrics/Health, `KPICardV2`, `SkeletonState`) vs v1 "PageShell" (el resto). Las Mobile* de platform son un tercer mundo (Tailwind + axios directo).
 
