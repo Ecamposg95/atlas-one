@@ -185,7 +185,7 @@ export function ProductDetailModal({ product, onClose, onAddToCart, onSaved, can
             <button
               type="button"
               onClick={() => setEditando(true)}
-              className="dax-btn-secondary text-xs"
+              className="dax-btn-secondary text-xs max-md:min-h-[44px]"
               title="Editar producto"
             >
               <i className="fa-solid fa-pen text-[11px]" aria-hidden="true" /> Editar
@@ -254,7 +254,7 @@ export function ProductDetailModal({ product, onClose, onAddToCart, onSaved, can
             <button
               type="button"
               onClick={() => setAgregando(true)}
-              className="dax-btn-secondary text-xs w-full justify-center"
+              className="dax-btn-secondary text-xs w-full justify-center max-md:min-h-[44px]"
             >
               <i className="fa-solid fa-plus" aria-hidden="true" /> Agregar existencia
             </button>
