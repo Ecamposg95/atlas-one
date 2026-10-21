@@ -289,7 +289,7 @@ export function Purchases() {
             </div>
           ))}
         </div>
-        <button onClick={addItem} className="dax-btn-secondary text-xs">
+        <button onClick={addItem} className="dax-btn-secondary text-xs max-md:min-h-[44px]">
           <i className="fa-solid fa-plus" /> Agregar artículo
         </button>
       </Modal>

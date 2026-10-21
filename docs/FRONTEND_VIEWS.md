@@ -40,7 +40,7 @@ Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.l
 ### Componentes base compartidos
 `DaxCard` (tarjeta tokenizada), `StatusChip`/`Badge` (estados), botones: las clases `dax-btn-primary` / `dax-btn-secondary` / `dax-btn-danger` / `dax-btn-ghost` (+ `dax-btn-icon` para solo-icono en teléfono) son la API oficial y `ui/Button` es solo un envoltorio de esas clases (lo usa gastro); guardia `src/__tests__/botonesDelKit.test.ts`, `Spinner`, `.dax-input`, `.dax-table`. Gráficas: `components/atlas-one/*` (BarChart, Sparkline, Donut, LineChart) y Chart.js en varias vistas HQ/reportes.
 
-Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (`TarjetaFila`, `ListaTarjetas`, `BarraFiltros`, `CabeceraPagina`, `Modal` con `.dax-modal`); patrón en `docs/superpowers/specs/2026-09-30-responsivo-admin-design.md §4` y guardia en `src/pages/__tests__/responsivoOla2.test.ts` y `src/__tests__/overlaysFueraDelKit.test.ts`.
+Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (`TarjetaFila`, `ListaTarjetas`, `BarraFiltros`, `CabeceraPagina`, `Modal` con `.dax-modal`); patrón en `docs/superpowers/specs/2026-09-30-responsivo-admin-design.md §4` y guardia en `src/pages/__tests__/responsivoOla2.test.ts` (catálogo y personas), `src/pages/__tests__/responsivoOla3.test.ts` (gastos, compras, RR.HH., cajas, logística, cotizaciones, pedidos) y `src/__tests__/overlaysFueraDelKit.test.ts`.
 
 ### Índice maestro (ruta → archivo → quién)
 | Ruta | Archivo | Roles | Módulo |
@@ -203,8 +203,9 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Datos/API:** `salesApi.list/getStats`, `printerApi.getTicketBase64/printViaAgent`.
 - **Notas:** Presets de fecha + paginación (100). Toggle "incluir abiertas" (por defecto solo PAID/REFUNDED/CANCELLED). Devolver solo en PAID. Reimprimir requiere `printerName`. `Promise.allSettled`.
 
-### `/quotes` — Cotizaciones
-- **Archivo:** `pages/sales/Quotes.tsx` (181 líneas)
+### `/quotes` — Cotizaciones 📱
+- **Archivo:** `pages/sales/Quotes.tsx` (233 líneas)
+- **Responsivo:** kit `ui/`; tabla en escritorio y `TarjetaFila` bajo 768 (`useEsTelefono`); diálogos en `ui/Modal`. Está en `PAGINAS_OLA3` de `responsivoOla3.test.ts`.
 - **Propósito:** Listar cotizaciones con KPIs, ver detalle, convertir a venta (efectivo) o eliminar.
 - **Quién la ve:** Admin, Dueño — módulo `quotes`.
 - **Datos/API:** `quotesApi.list/getStats/convertToSale/delete`.
@@ -224,8 +225,9 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Datos/API:** `returnsApi.list/approve/reject`.
 - **Notas:** Regla R-3: reembolso CASH >$10,000 requiere `force=true` (doble confirmación). `serverDetail()` extrae el `detail` de FastAPI. **Gotcha:** hooks tras early-return.
 
-### `/seguimiento` — Pedidos abiertos
-- **Archivo:** `pages/sales/Seguimiento.tsx` (124 líneas)
+### `/seguimiento` — Pedidos abiertos 📱
+- **Archivo:** `pages/sales/Seguimiento.tsx` (155 líneas)
+- **Responsivo:** kit `ui/`; tabla en escritorio y `TarjetaFila` bajo 768 (`useEsTelefono`); diálogos en `ui/Modal`. Está en `PAGINAS_OLA3` de `responsivoOla3.test.ts`.
 - **Propósito:** Ventas en estado PENDING (crédito/sin cerrar) por sucursal, con detalle.
 - **Quién la ve:** Admin, Dueño.
 - **Datos/API:** `salesApi.list({status:'PENDING'})`. Solo lectura.
@@ -327,15 +329,17 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Datos/API:** `productsApi.search`, `inventoryApi.getKardex/createAdjustment`, `organizationApi.getBranches`.
 - **Notas:** **Gotcha:** la API espera variant UUID (`p.variants?.[0]?.id ?? p.id`). Casi idéntica a `HQInventory` (candidata a unificar).
 
-### `/logistics` — Logística / transferencias
-- **Archivo:** `pages/inventory/Logistics.tsx` (270 líneas)
+### `/logistics` — Logística / transferencias 📱
+- **Archivo:** `pages/inventory/Logistics.tsx` (275 líneas)
+- **Responsivo:** kit `ui/`; tabla en escritorio y `TarjetaFila` bajo 768 (`useEsTelefono`); diálogos en `ui/Modal`. Está en `PAGINAS_OLA3` de `responsivoOla3.test.ts`.
 - **Propósito:** Listar y crear solicitudes de transferencia de inventario entre sucursales.
 - **Quién la ve:** módulo `logistics`.
 - **Datos/API:** `client.get/post('/transfers/')`, `organizationApi.getBranches`, `productsApi.search`.
 - **Notas:** Estados DRAFT/REQUESTED/PARTIALLY_FULFILLED/COMPLETED/CANCELLED. Solo lista + creación (sin detalle ni cambio de estado).
 
-### `/boxes` — Cajas y contenedores
-- **Archivo:** `pages/inventory/Boxes.tsx` (300 líneas)
+### `/boxes` — Cajas y contenedores 📱
+- **Archivo:** `pages/inventory/Boxes.tsx` (294 líneas)
+- **Responsivo:** kit `ui/`; tabla en escritorio y `TarjetaFila` bajo 768 (`useEsTelefono`); diálogos en `ui/Modal`. Está en `PAGINAS_OLA3` de `responsivoOla3.test.ts`.
 - **Propósito:** Catálogo de tipos de contenedor (dim. internas) y de caja (dim. externas) para empaque/logística.
 - **Quién la ve:** módulo `logistics`.
 - **Datos/API:** `client.get/post('/logistics/containers' | '/logistics/boxes')`.
@@ -389,14 +393,16 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Componentes clave:** `MovementModal`, `CloseModal` (esperado vs contado).
 - **Notas:** "Corte Parcial" deshabilitado (sin handler). **Gotcha:** hooks tras early-return.
 
-### `/expenses` — Gastos
-- **Archivo:** `pages/finance/Expenses.tsx` (214 líneas)
+### `/expenses` — Gastos 📱
+- **Archivo:** `pages/finance/Expenses.tsx` (235 líneas)
+- **Responsivo:** kit `ui/`; tabla en escritorio y `TarjetaFila` bajo 768 (`useEsTelefono`); diálogos en `ui/Modal`. Está en `PAGINAS_OLA3` de `responsivoOla3.test.ts`.
 - **Propósito:** Registrar/consultar gastos con KPIs (mes/semana/prom. diario) y desglose por categoría.
 - **Quién la ve:** Admin, Dueño — módulo `payments`.
 - **Datos/API:** `expensesApi.list/getStats/getCategories/create/delete`. `alert()`/`confirm()`.
 
-### `/purchases` — Órdenes de compra
-- **Archivo:** `pages/finance/Purchases.tsx` (281 líneas)
+### `/purchases` — Órdenes de compra 📱
+- **Archivo:** `pages/finance/Purchases.tsx` (298 líneas)
+- **Responsivo:** kit `ui/`; tabla en escritorio y `TarjetaFila` bajo 768 (`useEsTelefono`); diálogos en `ui/Modal`. Está en `PAGINAS_OLA3` de `responsivoOla3.test.ts`.
 - **Propósito:** Crear y dar seguimiento a OC (borrador→enviada→parcial/recibida→cancelada) + recepción (impacta inventario).
 - **Quién la ve:** Admin, Dueño — módulo `payments`.
 - **Datos/API:** `purchasesApi.list/getStats/create/updateStatus/getById/receive`.
@@ -415,8 +421,9 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Datos/API:** `customersApi.getAll/getStats/getStatement/pay`.
 - **Notas:** Búsqueda debounce 400ms. Botón pago solo si `current_balance < 0` (deuda).
 
-### `/hr` — Recursos Humanos
-- **Archivo:** `pages/hr/HR.tsx` (202 líneas)
+### `/hr` — Recursos Humanos 📱
+- **Archivo:** `pages/hr/HR.tsx` (214 líneas)
+- **Responsivo:** kit `ui/`; tabla en escritorio y `TarjetaFila` bajo 768 (`useEsTelefono`); diálogos en `ui/Modal`. Está en `PAGINAS_OLA3` de `responsivoOla3.test.ts`.
 - **Propósito:** Alta/edición de empleados (nombre, tipo, sucursal base, ingreso, contacto).
 - **Quién la ve:** Admin.
 - **Datos/API:** `hrApi.getAll/create/update`, `organizationApi.getBranches`. Búsqueda en cliente.

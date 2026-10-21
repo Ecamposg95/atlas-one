@@ -130,9 +130,7 @@ export function Expenses() {
       )}
 
       {/* Filtros */}
-      <BarraFiltros accion={<button onClick={() => load(startDate, endDate, filterCat)} className="dax-btn-primary text-xs">
-        <i className="fa-solid fa-search" /> Filtrar
-      </button>}>
+      <BarraFiltros className="sm:items-center">
         <select value={filterCat} onChange={(e) => setFilterCat(e.target.value)} className="dax-input text-xs max-w-[160px]">
           <option value="">Todas las categorías</option>
           {categories.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -141,6 +139,9 @@ export function Expenses() {
           <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="dax-input w-36 text-xs" />
           <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="dax-input w-36 text-xs" />
         </ParFechas>
+        <button onClick={() => load(startDate, endDate, filterCat)} className="dax-btn-primary text-xs max-md:min-h-[44px]">
+          <i className="fa-solid fa-search" /> Filtrar
+        </button>
       </BarraFiltros>
 
       {/* Lista */}

@@ -370,7 +370,7 @@ export function AdminCatalog() {
                 <button
                   key={a}
                   onClick={() => setApproval(a)}
-                  className={`flex-1 sm:flex-none min-h-[44px] min-w-[44px] sm:min-h-0 px-3 py-1.5 rounded-md text-[11px] font-bold uppercase tracking-wider transition ${
+                  className={`flex-1 sm:flex-none min-h-[44px] max-md:min-w-[44px] sm:min-h-0 px-3 py-1.5 rounded-md text-[11px] font-bold uppercase tracking-wider transition ${
                     approval === a ? 'bg-indigo-500 text-white' : 'text-slate-500 hover:text-white'
                   }`}
                 >
