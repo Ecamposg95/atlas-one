@@ -30,11 +30,11 @@ plan). El `PUT /api/organization/` de la tienda lo descarta. La tienda lo ve al 
 | Dónde | Básico | Dónde vive la lista |
 |---|---|---|
 | Menú de cajera/gerente | Devoluciones, Etiquetas, Escáner, Clientes, Mi expediente, Reportes, Valor de la tienda | `components/layout/navPerfilBasico.ts` (`OCULTAS_BASICO_SUCURSAL`) |
-| Menú de la dueña | Control, Catálogo, Departamentos, Marcas, Etiquetas, Escáner, Clientes, Sucursales, Inventario, Existencias, Ventas HQ, Devoluciones HQ, Valor de la tienda, Resumen móvil, Mi expediente, IA, Cotizaciones, Pedidos, Compras, Gastos | `navPerfilBasico.ts` (`OCULTAS_BASICO_HQ`) |
+| Menú de la dueña | Catálogo, Departamentos, Marcas, Etiquetas, Escáner, Clientes, Sucursales, Inventario, Existencias, Ventas HQ, Devoluciones HQ, Valor de la tienda, Mi expediente, IA, Cotizaciones, Pedidos, Compras, Gastos (Control y Resumen móvil ya no existen en ningún menú desde SP6) | `navPerfilBasico.ts` (`OCULTAS_BASICO_HQ`) |
 | POS | descuentos, botón Cliente, dólares, editar producto, forzar precio por pieza; el alta rápida usa el formulario corto | `pages/pos/opcionesPos.ts` |
 | Formulario de producto | marca, descripción, unidad, foto, tasa de IVA, empaques, tallas (y la matriz con una sola sucursal) | `app/modules/products/campos.py` (`OCULTOS_BASICO`) |
 | Productos | importador, plantilla, etiquetas CSV, generar códigos, rejilla | `pages/inventory/Products.tsx`, `components/branch/ProductsBranchView.tsx` |
-| Inicio y Reportes de la dueña | `/hq/operations` → `InicioBasico`; `/hq/reports-hub` → `finance/Reports` | `App.tsx` (`<PorPerfil>`) |
+| Inicio y Reportes de la dueña | `/hq/operations` → `hq/Inicio` con solo las secciones de hoy (pide `completo=false`: no se mueve, pendientes, sucursales y utilidad no se consultan); `/hq/reports-hub` → `finance/Reports` | `pages/hq/Inicio.tsx` (`perfilUi`), `App.tsx` (`<PorPerfil>`) |
 | Empresa | logo, dólares, comisión y lo boutique del ticket bajo "Más opciones"; aparece el tope de "Se está acabando" | `pages/core/Organization.tsx` (`<MasOpciones>`) |
 
 Un dato que ya existe (una marca, un descuento de un ticket pausado) se sigue viendo.

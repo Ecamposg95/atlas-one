@@ -165,8 +165,8 @@ nombre y pregunta, en este orden, cada una un `DaxCard` con `<Titulo pregunta="�
 7. **Lo más vendido** (¿qué se vendió más?): top 10.
 
 Se quita "Alertas de stock bajo" (es la pregunta 4 y vive en el Inicio y en Existencias) y la
-etiqueta "Ultra". Sin `style={{` (alturas por clase `h-60`, barras de porcentaje con una
-clase de ancho por décimas), sin `hidden sm:block`/`hidden md:block` (render condicional con
+etiqueta "Ultra". Sin `style={{` (alturas por clase `h-60`; la barra de porcentaje del top, cuyo ancho es
+el dato, lleva el comentario `estilo dinámico` que el guard acepta), sin `hidden sm:block`/`hidden md:block` (render condicional con
 `useEsTelefono()`), top 10 con `TarjetaFila` en teléfono.
 
 ## 7. Ventas y Devoluciones
