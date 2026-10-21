@@ -30,7 +30,6 @@ const HQSalesLog      = lazy(() => import('./pages/hq/HQSalesLog').then(m => ({ 
 const HQReturns       = lazy(() => import('./pages/hq/HQReturns').then(m => ({ default: m.HQReturns })))
 const HQInventory     = lazy(() => import('./pages/hq/HQInventory').then(m => ({ default: m.HQInventory })))
 const HQBranches      = lazy(() => import('./pages/hq/HQBranches').then(m => ({ default: m.HQBranches })))
-const HQBranchDetail  = lazy(() => import('./pages/hq/HQBranchDetail').then(m => ({ default: m.HQBranchDetail })))
 const HQValorInventario = lazy(() => import('./pages/hq/HQValorInventario').then(m => ({ default: m.HQValorInventario })))
 // Inicio del dueño (SP6): chunk propio sin chart.js; básico y completo son la misma pantalla.
 const Inicio          = lazy(() => import('./pages/hq/Inicio').then(m => ({ default: m.Inicio })))
@@ -280,7 +279,7 @@ export default function App() {
             <Route path="inventory" element={<RutaPorRol url="/hq/inventory"><Suspense fallback={<PageLoader />}><HQInventory /></Suspense></RutaPorRol>} />
             <Route path="valor-inventario" element={<RutaPorRol url="/hq/valor-inventario"><Suspense fallback={<PageLoader />}><HQValorInventario /></Suspense></RutaPorRol>} />
             <Route path="branches" element={<RutaPorRol url="/hq/branches"><Suspense fallback={<PageLoader />}><HQBranches /></Suspense></RutaPorRol>} />
-            <Route path="branches/:branchId" element={<RutaPorRol url="/hq/branches"><Suspense fallback={<PageLoader />}><HQBranchDetail /></Suspense></RutaPorRol>} />
+            <Route path="branches/:branchId" element={<RutaPorRol url="/hq/branches"><Suspense fallback={<PageLoader />}><HQBranches /></Suspense></RutaPorRol>} />
           </Route>
 
           {/* Admin / Core — Track 3 (POS bug-fix): cajero tiene control
