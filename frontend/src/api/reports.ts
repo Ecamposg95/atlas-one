@@ -209,8 +209,10 @@ export interface Inicio {
   pendientes: { devoluciones: number; turnos_abiertos: number; diferencias_caja: DiferenciaCaja[] } | null
   /** null = una sola sucursal que vende, o se pidió una sucursal. */
   sucursales: SucursalInicio[] | null
-  /** null = sin `completo` o rol que no ve costos. */
+  /** null = sin `completo` o rol que no ve costos. Solo renglones con costo. */
   utilidad_bruta_hoy: number | null
+  /** Lo vendido hoy en renglones sin costo (fuera de la utilidad). */
+  venta_sin_costo_hoy: number | null
 }
 
 export const reportsApi = {

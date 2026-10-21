@@ -20,7 +20,7 @@ const DATOS = {
   top_semana: [{ nombre: 'Blusa roja', cantidad: 14, total: 1400 }],
   poca_existencia: { umbral: 3, productos: [{ variant_id: 'v1', nombre: 'Falda negra', sku: 'FAL-1', existencia: 1 }] },
   corte: { estado: 'abierto', cajera: 'Mirna', abierto_en: '2026-10-19T15:00:00+00:00', cerrado_en: null, efectivo_esperado: 1500, efectivo_contado: null },
-  sin_movimiento: null, pendientes: null, sucursales: null, utilidad_bruta_hoy: null,
+  sin_movimiento: null, pendientes: null, sucursales: null, utilidad_bruta_hoy: null, venta_sin_costo_hoy: null,
 }
 // Lo que trae `completo=true` para una org de paga con dos sucursales.
 const COMPLETO = {
@@ -34,7 +34,7 @@ const COMPLETO = {
     { branch_id: 1, nombre: 'Roma', ventas_hoy: 1000, tickets_hoy: 9, corte: DATOS.corte, poca_existencia: 2 },
     { branch_id: 2, nombre: 'Condesa', ventas_hoy: 234.5, tickets_hoy: 3, corte: { ...DATOS.corte, estado: 'sin_turno' }, poca_existencia: 0 },
   ],
-  utilidad_bruta_hoy: 400,
+  utilidad_bruta_hoy: 400, venta_sin_costo_hoy: 234.5,
 }
 const VALUACION = {
   agrupar: 'sucursal', branch_id: null, ve_costo: true, grupos: [],
@@ -54,7 +54,7 @@ describe('Inicio', () => {
   it('los enlaces de las tarjetas miden 44px en teléfono', async () => {
     pintar()
     await screen.findByTestId('cifra-hoy')
-    for (const texto of ['Ver corte →', 'Ver existencias →', 'Ver desglose →']) {
+    for (const texto of ['Ver corte →', 'Ver productos →', 'Ver desglose →']) {
       expect(screen.getByText(texto).className).toContain('max-md:min-h-[44px]')
     }
   })
@@ -122,6 +122,7 @@ describe('Inicio', () => {
     await screen.findByTestId('cifra-hoy')
     expect(inicio).toHaveBeenCalledWith({ completo: true })
     expect(screen.getByTestId('cifra-utilidad').textContent).toContain('$400.00')
+    expect(screen.getByTestId('cifra-utilidad').textContent).toContain('sobre $1,000.00 con costo · $234.50 vendidos sin costo')
     expect(screen.getByText(/No se mueve \(sin venta en 30 días\)/)).toBeTruthy()
     expect(screen.getByText('Abrigo largo').closest('a')?.getAttribute('href')).toBe('/hq/inventory?q=ABR-1&variant=v9')
     expect(screen.getByText('2 devoluciones por aprobar →').getAttribute('href')).toBe('/hq/returns')
@@ -150,5 +151,24 @@ describe('Inicio', () => {
     perfil('basico')
     await screen.findByTestId('cifra-hoy')
     expect(inicio).toHaveBeenCalledWith({ completo: false })
+  })
+
+  it('en básico los enlaces van a Productos y Mis ventas, nunca a pantallas HQ escondidas', async () => {
+    pintar()
+    await screen.findByTestId('cifra-hoy')
+    const hrefs = Array.from(document.querySelectorAll('a')).map((a) => a.getAttribute('href'))
+    expect(hrefs).toContain('/products')
+    expect(hrefs).toContain('/sales')
+    expect(hrefs.some((h) => h?.startsWith('/hq/inventory') || h?.startsWith('/hq/sales'))).toBe(false)
+    expect(screen.getByText('Falda negra').closest('a')?.getAttribute('href')).toBe('/products')
+  })
+
+  it('en completo los mismos enlaces abren Existencias y Ventas HQ', async () => {
+    perfil('completo')
+    inicio.mockResolvedValue(COMPLETO)
+    pintar()
+    await screen.findByTestId('cifra-hoy')
+    expect(screen.getByText('Falda negra').closest('a')?.getAttribute('href')).toBe('/hq/inventory?q=FAL-1&variant=v1')
+    expect(screen.getByText('Ver ventas →').getAttribute('href')).toBe('/hq/sales')
   })
 })

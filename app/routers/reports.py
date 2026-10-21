@@ -419,7 +419,10 @@ def get_dashboard_stats(
     ).join(SalesDocument).filter(*sales_filters).group_by(SalesLineItem.description).order_by(desc(func.sum(SalesLineItem.quantity))).limit(5).all()
 
     # 6. Alertas de Inventario — el tope es el de la empresa (SP6, umbral único).
-    # Non-admins (CAJERO/GERENTE) see only their branch's low-stock alerts (A2-17).
+    # Mismo ámbito que el resto del endpoint: `target_branch_id` (None = toda la
+    # org con branch_id=0 para roles de oficina; la propia para los demás).
+    # Antes el admin veía las alertas de TODA la org aunque pidiera una sucursal
+    # y el detalle de Sucursales no cuadraba con su tarjeta.
     umbral = umbral_poca_existencia(db, org_id)
     _low_stock_q = db.query(
         Product.name,
@@ -430,11 +433,15 @@ def get_dashboard_stats(
      .join(StockOnHand, ProductVariant.id == StockOnHand.variant_id)\
      .filter(
         Product.organization_id == org_id,
+        StockOnHand.organization_id == org_id,
         StockOnHand.qty_on_hand <= umbral,
-        Product.is_active == True
+        StockOnHand.is_active.is_(True),
+        Product.is_active == True,
+        Product.deleted_at.is_(None),
+        ProductVariant.deleted_at.is_(None),
     )
-    if not _is_admin(current_user) and current_user.branch_id:
-        _low_stock_q = _low_stock_q.filter(StockOnHand.branch_id == current_user.branch_id)
+    if target_branch_id is not None:
+        _low_stock_q = _low_stock_q.filter(StockOnHand.branch_id == target_branch_id)
     low_stock_query = _low_stock_q.order_by(StockOnHand.qty_on_hand.asc()).limit(10).all()
 
     # 7. Ventas Recientes (Limit 10)

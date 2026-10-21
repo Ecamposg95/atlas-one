@@ -36,6 +36,7 @@ def _variante(db, org, branch, nombre, sku, existencia):
                        organization_id=org.id)
     db.add(v)
     db.flush()
+    v.created_at = _instante(400)   # catálogo viejo: "no se mueve" excluye lo recién dado de alta
     db.add(StockOnHand(variant_id=v.id, branch_id=branch.id, organization_id=org.id,
                        qty_on_hand=Decimal(str(existencia)), is_active=True))
     db.flush()
@@ -242,7 +243,10 @@ def test_alias_inicio_basico_sigue_respondiendo(client, db, org, branch_a, admin
     _venta(db, org, branch_a, admin_user, v, "100")
     a = client.get(URL, headers=auth_admin).json()
     b = client.get(INICIO, headers=auth_admin).json()
-    assert a["hoy"] == b["hoy"] and a["hoy"]["total"] == 100.0
+    assert a == b
+    assert a["hoy"]["total"] == 100.0
+    assert set(a) == {"branch_id", "hoy", "ayer", "semana", "por_metodo_hoy", "top_semana", "poca_existencia", "corte",
+                      "sin_movimiento", "pendientes", "sucursales", "utilidad_bruta_hoy", "venta_sin_costo_hoy"}
 
 
 def test_sin_completo_las_secciones_nuevas_son_null(client, db, org, branch_a, admin_user, auth_admin):
@@ -307,8 +311,37 @@ def test_utilidad_bruta_hoy_admin_si_gerente_null(client, db, org, branch_a, adm
     v = _variante(db, org, branch_a, "Blusa", "BLU-1", 50)
     _venta(db, org, branch_a, admin_user, v, "100", cantidad=2)   # unit_cost 10 × 2 = 20
     _venta(db, org, branch_a, admin_user, v, "999", dias_atras=1)
-    assert client.get(f"{INICIO}?completo=true", headers=auth_admin).json()["utilidad_bruta_hoy"] == 80.0
-    assert client.get(f"{INICIO}?completo=true", headers=auth_gerente_a).json()["utilidad_bruta_hoy"] is None
+    d = client.get(f"{INICIO}?completo=true", headers=auth_admin).json()
+    assert (d["utilidad_bruta_hoy"], d["venta_sin_costo_hoy"]) == (80.0, 0.0)
+    g = client.get(f"{INICIO}?completo=true", headers=auth_gerente_a).json()
+    assert (g["utilidad_bruta_hoy"], g["venta_sin_costo_hoy"]) == (None, None)
+
+
+def test_utilidad_bruta_solo_sobre_renglones_con_costo(client, db, org, branch_a, admin_user, auth_admin):
+    v = _variante(db, org, branch_a, "Blusa", "BLU-1", 50)
+    _venta(db, org, branch_a, admin_user, v, "100", cantidad=2)   # con costo: 100 − 20 = 80
+    sin = _venta(db, org, branch_a, admin_user, v, "500")         # sin costo: fuera de la utilidad
+    for r in sin.lines if hasattr(sin, "lines") else db.query(SalesLineItem).filter(SalesLineItem.document_id == sin.id).all():
+        r.unit_cost = None
+    db.commit()
+    d = client.get(f"{INICIO}?completo=true", headers=auth_admin).json()
+    assert (d["utilidad_bruta_hoy"], d["venta_sin_costo_hoy"], d["hoy"]["total"]) == (80.0, 500.0, 600.0)
+
+
+def test_sin_movimiento_no_lista_variantes_recien_dadas_de_alta(client, db, org, branch_a, admin_user, auth_admin):
+    vieja = _variante(db, org, branch_a, "Vieja", "VIE-1", 2)
+    vieja.created_at = _instante(40)
+    nueva = _variante(db, org, branch_a, "Nueva", "NUE-1", 9)
+    nueva.created_at = _instante(5)
+    db.commit()
+    d = client.get(f"{INICIO}?completo=true", headers=auth_admin).json()["sin_movimiento"]["productos"]
+    assert [p["sku"] for p in d] == ["VIE-1"]
+    d = client.get(f"{INICIO}?completo=true&dias_sin_movimiento=3", headers=auth_admin).json()["sin_movimiento"]["productos"]
+    assert sorted(p["sku"] for p in d) == ["NUE-1", "VIE-1"]
+
+
+def test_cajera_tampoco_con_completo(client, auth_cajero_a):
+    assert client.get(f"{INICIO}?completo=true", headers=auth_cajero_a).status_code == 403
 
 
 def _devolucion(db, org, branch, user, doc, status="PENDING"):

@@ -34,8 +34,14 @@ const piezas = (n: number) => {
   return `${r.toLocaleString('es-MX')} ${r === 1 ? 'pieza' : 'piezas'}`
 }
 const ventas = (n: number) => `${n} ${n === 1 ? 'venta' : 'ventas'}`
-const urlExistencias = (sku: string, variantId: string) =>
-  `/hq/inventory?q=${encodeURIComponent(sku)}&variant=${encodeURIComponent(variantId)}`
+/** Enlaces de detalle por perfil: en básico, a las pantallas que SÍ están en su menú
+ *  (Productos y Mis ventas); en completo, a Existencias (kardex, ajuste, costo) y Ventas HQ. */
+const ENLACES = {
+  basico:   { existencias: '/products', ventas: '/sales' },
+  completo: { existencias: '/hq/inventory', ventas: '/hq/sales' },
+} as const
+const urlExistencias = (basico: boolean, sku: string, variantId: string) =>
+  basico ? ENLACES.basico.existencias : `/hq/inventory?q=${encodeURIComponent(sku)}&variant=${encodeURIComponent(variantId)}`
 
 function Cifra({ etiqueta, total, detalle, testId }: { etiqueta: string; total: number; detalle: string; testId: string }) {
   return (
@@ -95,19 +101,20 @@ function Corte({ corte }: { corte: DatosInicio['corte'] }) {
   return <p className="text-sm text-slate-400" data-testid="corte">Nadie ha abierto turno.</p>
 }
 
-function SeAcaba({ datos, esTelefono }: { datos: DatosInicio; esTelefono: boolean }) {
+function SeAcaba({ datos, esTelefono, basico }: { datos: DatosInicio; esTelefono: boolean; basico: boolean }) {
   const navigate = useNavigate()
   const acabando = datos.poca_existencia.productos
+  const enlaces = basico ? ENLACES.basico : ENLACES.completo
   return (
     <DaxCard>
-      <Titulo enlace={{ a: '/hq/inventory', texto: 'Ver existencias →' }}>
+      <Titulo enlace={{ a: enlaces.existencias, texto: basico ? 'Ver productos →' : 'Ver existencias →' }}>
         Se está acabando (quedan {datos.poca_existencia.umbral} o menos)
       </Titulo>
       {esTelefono ? (
         <ListaTarjetas vacio={acabando.length === 0} textoVacio="Nada se está acabando.">
           {acabando.map((p) => (
             <TarjetaFila key={p.variant_id} titulo={p.nombre} subtitulo={p.sku} importe={piezas(p.existencia)}
-              onClick={() => navigate(urlExistencias(p.sku, p.variant_id))} />
+              onClick={() => navigate(urlExistencias(basico, p.sku, p.variant_id))} />
           ))}
         </ListaTarjetas>
       ) : acabando.length === 0 ? (
@@ -118,7 +125,7 @@ function SeAcaba({ datos, esTelefono }: { datos: DatosInicio; esTelefono: boolea
           <tbody>
             {acabando.map((p) => (
               <tr key={p.variant_id} className={fila}>
-                <td className="py-1.5 text-slate-200"><Link to={urlExistencias(p.sku, p.variant_id)} className="hover:underline">{p.nombre}</Link></td>
+                <td className="py-1.5 text-slate-200"><Link to={urlExistencias(basico, p.sku, p.variant_id)} className="hover:underline">{p.nombre}</Link></td>
                 <td className="py-1.5 font-mono text-xs text-slate-400">{p.sku}</td>
                 <td className="py-1.5 text-right tabular-nums font-bold text-amber-400">{piezas(p.existencia)}</td>
               </tr>
@@ -174,7 +181,7 @@ function NoSeMueve({ datos, esTelefono }: { datos: NonNullable<DatosInicio['sin_
           {lista.map((p) => (
             <TarjetaFila key={p.variant_id} titulo={p.nombre} subtitulo={p.sku}
               importe={formatCurrency(p.importe_venta)} estado={piezas(p.existencia)}
-              onClick={() => navigate(urlExistencias(p.sku, p.variant_id))} />
+              onClick={() => navigate(urlExistencias(false, p.sku, p.variant_id))} />
           ))}
         </ListaTarjetas>
       ) : lista.length === 0 ? (
@@ -185,7 +192,7 @@ function NoSeMueve({ datos, esTelefono }: { datos: NonNullable<DatosInicio['sin_
           <tbody>
             {lista.map((p) => (
               <tr key={p.variant_id} className={fila}>
-                <td className="py-1.5 text-slate-200"><Link to={urlExistencias(p.sku, p.variant_id)} className="hover:underline">{p.nombre}</Link></td>
+                <td className="py-1.5 text-slate-200"><Link to={urlExistencias(false, p.sku, p.variant_id)} className="hover:underline">{p.nombre}</Link></td>
                 <td className="py-1.5 font-mono text-xs text-slate-400">{p.sku}</td>
                 <td className="py-1.5 text-right tabular-nums text-slate-300">{piezas(p.existencia)}</td>
                 <td className="py-1.5 text-right tabular-nums font-bold text-white">{formatCurrency(p.importe_venta)}</td>
@@ -317,7 +324,10 @@ export function Inicio() {
         ...Object.keys(datos.por_metodo_hoy).filter((m) => !ORDEN_METODOS.includes(m)),
       ]
     : []
+  const basico = perfilUi === 'basico'
   const conUtilidad = datos?.utilidad_bruta_hoy != null
+  const sinCosto = datos?.venta_sin_costo_hoy ?? 0
+  const conCosto = Math.max(0, (datos?.hoy.total ?? 0) - sinCosto)
 
   return (
     <div className="space-y-5">
@@ -337,13 +347,15 @@ export function Inicio() {
             <Cifra etiqueta="Ayer" total={datos.ayer.total} detalle={ventas(datos.ayer.tickets)} testId="cifra-ayer" />
             <Cifra etiqueta="Últimos 7 días" total={datos.semana.total} detalle={ventas(datos.semana.tickets)} testId="cifra-semana" />
             {conUtilidad && (
-              <Cifra etiqueta="Utilidad bruta de hoy" total={datos.utilidad_bruta_hoy as number} detalle="venta menos costo" testId="cifra-utilidad" />
+              <Cifra etiqueta="Utilidad bruta de hoy" total={datos.utilidad_bruta_hoy as number}
+                detalle={sinCosto > 0 ? `sobre ${formatCurrency(conCosto)} con costo · ${formatCurrency(sinCosto)} vendidos sin costo` : 'sobre lo que tiene costo'}
+                testId="cifra-utilidad" />
             )}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             <DaxCard>
-              <Titulo enlace={{ a: '/hq/sales', texto: 'Ver ventas →' }}>Cómo te pagaron hoy</Titulo>
+              <Titulo enlace={{ a: basico ? ENLACES.basico.ventas : ENLACES.completo.ventas, texto: 'Ver ventas →' }}>Cómo te pagaron hoy</Titulo>
               {metodos.length === 0 ? (
                 <Vacio>Sin cobros hoy.</Vacio>
               ) : (
@@ -366,7 +378,7 @@ export function Inicio() {
           {datos.pendientes && <Pendientes datos={datos.pendientes} esTelefono={esTelefono} />}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            <SeAcaba datos={datos} esTelefono={esTelefono} />
+            <SeAcaba datos={datos} esTelefono={esTelefono} basico={basico} />
             <MasVendido datos={datos} esTelefono={esTelefono} />
           </div>
 

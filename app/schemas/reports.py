@@ -148,4 +148,5 @@ class InicioResponse(InicioBasicoResponse):
     sin_movimiento: Optional[SinMovimiento] = None
     pendientes: Optional[Pendientes] = None
     sucursales: Optional[List[SucursalInicio]] = None   # None = una sola sucursal o ámbito de una
-    utilidad_bruta_hoy: Optional[float] = None          # None = sin `completo` o rol sin costos
+    utilidad_bruta_hoy: Optional[float] = None          # None = sin `completo` o rol sin costos; SOLO renglones con costo
+    venta_sin_costo_hoy: Optional[float] = None         # lo vendido hoy en renglones sin costo (fuera de la utilidad)

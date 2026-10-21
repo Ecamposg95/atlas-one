@@ -70,10 +70,13 @@ Secciones nuevas (schemas en `app/schemas/reports.py`, todo `float`, nunca `Deci
   `branch_id`: activas que venden, como `poca_existencia`) y SIN renglón de venta
   (`sales_lines` ligado a un `sales_documents` en `SALES_REPORT_STATUSES`) con `created_at`
   dentro de los últimos `dias` días. `importe_venta = existencia × precio base de la variante`.
-  Orden: importe desc, nombre, variant_id; máx. 10. Se implementa con `NOT EXISTS` sobre
-  `sales_lines`/`sales_documents` filtrado por `organization_id` y fecha; en Postgres usa el
-  índice existente de `sales_documents(organization_id, created_at)` y el de
-  `sales_lines(variant_id)`; no hace falta índice nuevo (consulta acotada a la org y a 10 filas).
+  Variantes dadas de alta dentro de la ventana (`created_at >= ahora − dias`) quedan fuera: un lote
+  recién cargado no "está parado". Orden: importe desc, nombre, variant_id; máx. 10. Se implementa
+  con `NOT EXISTS` sobre `sales_lines`/`sales_documents` filtrado por `organization_id`, estado y
+  fecha; no hay índices dedicados (revisión integral, minor 2): Postgres lo resuelve con un
+  hash anti-join sobre las ventas de la org, suficiente para el volumen actual (≈ 3,000 ventas);
+  si en Eleven tarda, `CREATE INDEX IF NOT EXISTS ix_sales_lines_variant_id ON sales_lines (variant_id)`
+  en `railway_init.py`.
 - `pendientes: {devoluciones, turnos_abiertos, diferencias_caja: [{session_id, sucursal, cajera, cerrado_en, esperado, contado, diferencia}]} | null`.
   `devoluciones` = `SaleReturn.status == 'PENDING'` del ámbito. `turnos_abiertos` = sesiones
   `OPEN` con `opened_at` hace más de 24 h. `diferencias_caja` = cortes cerrados en los últimos
@@ -82,9 +85,10 @@ Secciones nuevas (schemas en `app/schemas/reports.py`, todo `float`, nunca `Deci
 - `sucursales: [{branch_id, nombre, ventas_hoy, tickets_hoy, corte: CorteInicio, poca_existencia}] | null`.
   Solo cuando la org tiene más de una sucursal activa que vende y no se pidió `branch_id`; si
   no, `null`. `poca_existencia` es el conteo de variantes ≤ umbral en esa sucursal.
-- `utilidad_bruta_hoy: float | null`. Ventas de hoy menos `coalesce(unit_cost, 0) × cantidad`
-  (mismo cálculo que `/daily-summary`). Solo para ADMIN/DUEÑO/SUPERADMIN; el gerente recibe
-  `null` (misma regla que el costo en la valuación).
+- `utilidad_bruta_hoy: float | null` y `venta_sin_costo_hoy: float | null`. La utilidad se calcula SOLO
+  sobre renglones con `unit_cost > 0` (venta − costo × cantidad); lo vendido en renglones sin costo
+  viaja aparte para que la tarjeta diga "sobre lo que tiene costo" y cuánto quedó fuera (revisión
+  integral, I1). Solo para ADMIN/DUEÑO/SUPERADMIN; el gerente recibe `null`.
 
 Todo filtra `organization_id` (regla de oro 5). Sin columnas nuevas: `scripts/railway_init.py`
 no cambia.

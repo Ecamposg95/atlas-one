@@ -19,7 +19,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import desc, exists, func
+from sqlalchemy import case, desc, exists, func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -223,7 +223,9 @@ def _sin_movimiento(db: Session, org_id: int, sucursal: Optional[int], dias: int
     """Variantes con existencia > 0 y SIN renglón de venta válida en los últimos `dias` días.
 
     Solo cuentan ventas en `SALES_REPORT_STATUSES` (una cancelada no "mueve" el
-    producto). Orden por importe a venta: lo que más dinero tiene parado, primero.
+    producto). Una variante dada de alta dentro de la ventana no ha tenido tiempo
+    de moverse (un lote recién cargado taparía lo que sí está parado): fuera.
+    Orden por importe a venta: lo que más dinero tiene parado, primero.
     """
     desde = datetime.now(timezone.utc) - timedelta(days=dias)
     vendida = exists().where(
@@ -237,7 +239,7 @@ def _sin_movimiento(db: Session, org_id: int, sucursal: Optional[int], dias: int
     importe = existencia * func.coalesce(ProductVariant.price, 0)
     filas = (
         _existencias_del_ambito(db, org_id, sucursal)
-        .filter(~vendida)
+        .filter(~vendida, ProductVariant.created_at < desde)
         .having(existencia > 0)
         .order_by(importe.desc(), Product.name, ProductVariant.id)
         .limit(MAX_SIN_MOVIMIENTO)
@@ -253,16 +255,24 @@ def _sin_movimiento(db: Session, org_id: int, sucursal: Optional[int], dias: int
     ])
 
 
-def _utilidad_bruta_hoy(db: Session, org_id: int, sucursal: Optional[int], hoy: date) -> float:
-    """Venta − coalesce(costo, 0) × cantidad de hoy (mismo criterio que /daily-summary)."""
-    valor = (
-        db.query(func.sum(SalesLineItem.total_line
-                          - func.coalesce(SalesLineItem.unit_cost, 0) * SalesLineItem.quantity))
+def _utilidad_bruta_hoy(db: Session, org_id: int, sucursal: Optional[int], hoy: date) -> tuple[float, float]:
+    """(utilidad bruta de hoy SOLO sobre renglones con costo, venta de hoy sin costo).
+
+    Con `coalesce(costo, 0)` una pieza sin costo capturado parecía 100 % de
+    utilidad (lotes de Eleven por WhatsApp, Imaltzin). Mejor decir "sobre lo que
+    tiene costo" y cuánto quedó fuera.
+    """
+    con_costo = SalesLineItem.unit_cost > 0
+    fila = (
+        db.query(
+            func.sum(case((con_costo, SalesLineItem.total_line - SalesLineItem.unit_cost * SalesLineItem.quantity), else_=0)),
+            func.sum(case((con_costo, 0), else_=SalesLineItem.total_line)),
+        )
         .join(SalesDocument, SalesDocument.id == SalesLineItem.document_id)
         .filter(*_filtros_venta(org_id, sucursal, hoy, hoy))
-        .scalar()
+        .one()
     )
-    return round(float(valor or 0), 2)
+    return round(float(fila[0] or 0), 2), round(float(fila[1] or 0), 2)
 
 
 def _pendientes(db: Session, org_id: int, sucursal: Optional[int]) -> Pendientes:
@@ -387,5 +397,6 @@ def inicio(
     respuesta.pendientes = _pendientes(db, org_id, sucursal)
     # El gerente ya viene fijado a su sucursal: la sección de sucursales no aplica.
     respuesta.sucursales = _sucursales(db, org_id, hoy, umbral) if sucursal is None else None
-    respuesta.utilidad_bruta_hoy = _utilidad_bruta_hoy(db, org_id, sucursal, hoy) if _ve_costos(current_user) else None
+    if _ve_costos(current_user):
+        respuesta.utilidad_bruta_hoy, respuesta.venta_sin_costo_hoy = _utilidad_bruta_hoy(db, org_id, sucursal, hoy)
     return respuesta

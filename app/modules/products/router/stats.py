@@ -197,13 +197,14 @@ def get_branch_kpis(
             .count()
         )
 
-        # Count variants con Stock Total entre 1 y 5 (Stock bajo)
+        # Variantes con stock total entre 1 y el umbral de la empresa (stock bajo, SP6)
+        umbral = umbral_poca_existencia(db, org_id)
         low_stock_count = (
             db.query(StockOnHand.variant_id)
             .join(ProductBranchStatus, _pbs_join)
             .filter(StockOnHand.organization_id == org_id)
             .group_by(StockOnHand.variant_id)
-            .having(and_(func.sum(StockOnHand.qty_on_hand) > 0, func.sum(StockOnHand.qty_on_hand) <= 5))
+            .having(and_(func.sum(StockOnHand.qty_on_hand) > 0, func.sum(StockOnHand.qty_on_hand) <= umbral))
             .count()
         )
 
@@ -243,7 +244,7 @@ def get_branch_kpis(
     low_stock = base_query.filter(
         ProductBranchStatus.is_active_pos == True,
         StockOnHand.qty_on_hand > 0,
-        StockOnHand.qty_on_hand <= 5
+        StockOnHand.qty_on_hand <= umbral_poca_existencia(db, org_id),   # SP6: umbral único
     ).count()
 
     return {

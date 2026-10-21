@@ -38,3 +38,5 @@ plan). El `PUT /api/organization/` de la tienda lo descarta. La tienda lo ve al 
 | Empresa | logo, dólares, comisión y lo boutique del ticket bajo "Más opciones"; aparece el tope de "Se está acabando" | `pages/core/Organization.tsx` (`<MasOpciones>`) |
 
 Un dato que ya existe (una marca, un descuento de un ticket pausado) se sigue viendo.
+
+> **Umbral de "se está acabando" (SP6, 2026-10-21):** el tope de Empresa (`umbral_poca_existencia`, 3 piezas si no se capturó) es el único criterio en toda la app: Inicio, `/reports/dashboard`, `/command-center/stats`, CSV y KPIs del catálogo. Antes el tablero y el centro de mando marcaban ≤ 5 fijo; una tienda que quiera ese comportamiento captura 5 en Empresa.
