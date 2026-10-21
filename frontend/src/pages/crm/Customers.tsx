@@ -56,7 +56,10 @@ export function Customers() {
   // El detalle es un overlay propio (cabecera con editar/eliminar): no pasa por ui/Modal, así que Escape se escucha aquí.
   useEffect(() => {
     if (!selected) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSelected(null) }
+    const onKey = (e: KeyboardEvent) => {
+      // Con un diálogo del kit encima (pago, formulario, confirmación) Escape es de ese diálogo, no del detalle.
+      if (e.key === 'Escape' && !document.querySelector('[role="dialog"]')) setSelected(null)
+    }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [selected])

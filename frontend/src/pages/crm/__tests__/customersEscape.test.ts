@@ -12,6 +12,9 @@ describe('detalle del cliente (overlay propio)', () => {
     expect(s).toMatch(/addEventListener\('keydown'/)
     expect(s).toMatch(/removeEventListener\('keydown'/)
   })
+  it('Escape no cierra el detalle si encima hay un diálogo del kit (pago, formulario, confirmación)', () => {
+    expect(s).toMatch(/querySelector\('\[role="dialog"\]'\)/)
+  })
   it('el RFC no se sale de su tarjeta a 390', () => {
     expect(s).toMatch(/font-mono text-sm text-slate-400 break-all/)
   })
