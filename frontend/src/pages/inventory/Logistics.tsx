@@ -4,6 +4,11 @@ import { organizationApi } from '../../api/organization'
 import { productsApi } from '../../api/products'
 import { DaxCard } from '../../components/ui/DaxCard'
 import { Spinner } from '../../components/ui/Spinner'
+import { Modal } from '../../components/ui/Modal'
+import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
+import { ListaTarjetas } from '../../components/ui/ListaTarjetas'
+import { TarjetaFila } from '../../components/ui/TarjetaFila'
+import { useEsTelefono } from '../../hooks/useIsMobile'
 import { toast } from '../../store/toastStore'
 import type { Branch } from '../../types/auth'
 import type { Product } from '../../types/products'
@@ -18,7 +23,7 @@ interface TransferOrder {
   status: TransferStatus
   notes: string | null
   created_at: string
-  updated_at: string
+  updated_at: string | null
 }
 
 interface TransferLine { product_id: string; sku: string; name: string; qty: number }
@@ -45,6 +50,10 @@ function fmtDate(s: string) {
   return new Date(s).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
+const chipEstado = (s: TransferStatus) => (
+  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${STATUS_CLASS[s]}`}>{STATUS_LABEL[s]}</span>
+)
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function Logistics() {
@@ -53,6 +62,7 @@ export function Logistics() {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [saving, setSaving] = useState(false)
+  const esTelefono = useEsTelefono()
 
   // Form state
   const [toBranchId, setToBranchId] = useState<number | ''>('')
@@ -115,19 +125,30 @@ export function Logistics() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
+      <CabeceraPagina
+        titulo={<div className="flex items-center gap-3">
           <i className="fa-solid fa-truck-loading text-indigo-400 text-xl" />
           <h1 className="text-2xl font-black text-white">Logística</h1>
-        </div>
-        <button onClick={openModal} className="dax-btn-primary text-xs">
+        </div>}
+        accionPrincipal={<button onClick={openModal} className="dax-btn-primary text-xs">
           <i className="fa-solid fa-plus" /> Nueva Solicitud
-        </button>
-      </div>
+        </button>}
+      />
 
-      {/* Tabla */}
+      {/* Lista */}
       <DaxCard padding={false}>
-        {loading ? <Spinner text="Cargando transferencias..." /> : orders.length === 0 ? (
+        {esTelefono ? (
+          <ListaTarjetas cargando={loading} vacio={orders.length === 0} textoVacio="Sin solicitudes de transferencia" className="p-3">
+            {orders.map((o) => (
+              <TarjetaFila key={o.id}
+                titulo={`TR-${o.id}`}
+                subtitulo={branchName(o.requesting_branch_id)}
+                estado={chipEstado(o.status)}
+                datos={[{ etiqueta: 'Fecha', valor: fmtDate(o.created_at) }, { etiqueta: 'Notas', valor: o.notes ?? '—' }]}
+              />
+            ))}
+          </ListaTarjetas>
+        ) : loading ? <Spinner text="Cargando transferencias..." /> : orders.length === 0 ? (
           <div className="p-12 text-center text-slate-600">
             <i className="fa-solid fa-truck text-4xl mb-3 block" />
             Sin solicitudes de transferencia
@@ -149,11 +170,7 @@ export function Logistics() {
                   <tr key={o.id}>
                     <td className="font-mono text-slate-400 text-xs">TR-{o.id}</td>
                     <td className="font-medium text-white">{branchName(o.requesting_branch_id)}</td>
-                    <td>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${STATUS_CLASS[o.status]}`}>
-                        {STATUS_LABEL[o.status]}
-                      </span>
-                    </td>
+                    <td>{chipEstado(o.status)}</td>
                     <td className="text-slate-400 text-xs">{fmtDate(o.created_at)}</td>
                     <td className="text-slate-500 text-xs max-w-[200px] truncate">{o.notes ?? '—'}</td>
                   </tr>
@@ -164,108 +181,95 @@ export function Logistics() {
         )}
       </DaxCard>
 
-      {/* Modal nueva solicitud */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
-          onClick={() => setShowModal(false)}>
-          <div className="dax-card p-6 w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-lg font-black text-white">Nueva Solicitud de Transferencia</h3>
-              <button onClick={() => setShowModal(false)} className="text-slate-500 hover:text-white">
-                <i className="fa-solid fa-xmark text-lg" />
-              </button>
-            </div>
+      {/* Modal nueva solicitud: las líneas capturadas no se pierden por un clic en el fondo */}
+      <Modal open={showModal} onClose={() => setShowModal(false)} title="Nueva Solicitud de Transferencia" size="lg" closeOnBackdrop={false}
+        footer={<>
+          <button onClick={() => setShowModal(false)} className="dax-btn-secondary flex-1">Cancelar</button>
+          <button onClick={handleSave}
+            disabled={saving || !toBranchId || lines.length === 0}
+            className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
+            {saving
+              ? <i className="fa-solid fa-spinner fa-spin" />
+              : <><i className="fa-solid fa-paper-plane" /> Enviar Solicitud</>}
+          </button>
+        </>}>
+        <div className="space-y-4">
+          {/* Sucursal destino */}
+          <div>
+            <label className="dax-label">Sucursal que solicita</label>
+            <select value={toBranchId} onChange={(e) => setToBranchId(Number(e.target.value))}
+              className="dax-input w-full">
+              <option value="">Seleccionar sucursal...</option>
+              {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </div>
 
-            <div className="space-y-4">
-              {/* Sucursal destino */}
-              <div>
-                <label className="dax-label">Sucursal que solicita</label>
-                <select value={toBranchId} onChange={(e) => setToBranchId(Number(e.target.value))}
-                  className="dax-input w-full">
-                  <option value="">Seleccionar sucursal...</option>
-                  {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                </select>
-              </div>
-
-              {/* Buscar producto */}
-              <div>
-                <label className="dax-label">Agregar producto</label>
-                <div className="relative">
-                  <input type="text" placeholder="Nombre o SKU..."
-                    value={productSearch}
-                    onChange={(e) => {
-                      setProductSearch(e.target.value)
-                      if (searchTimer.current) clearTimeout(searchTimer.current)
-                      searchTimer.current = setTimeout(async () => {
-                        if (!e.target.value.trim()) { setSearchResults([]); return }
-                        try {
-                          const r = await productsApi.search(e.target.value, 0, 8)
-                          setSearchResults(r.items)
-                        } catch { setSearchResults([]) }
-                      }, 300)
-                    }}
-                    className="dax-input w-full text-sm" />
-                  {searchResults.length > 0 && (
-                    <div className="absolute z-30 top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-xl overflow-hidden">
-                      {searchResults.map((p) => (
-                        <button key={p.id} onClick={() => addLine(p)}
-                          className="w-full flex items-center justify-between px-3 py-2 hover:bg-slate-700/60 text-left text-sm border-b border-slate-700/40 last:border-0">
-                          <span className="text-white font-medium">{p.name}</span>
-                          <span className="text-slate-500 text-xs font-mono">{p.sku}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Líneas */}
-              {lines.length > 0 && (
-                <div className="border border-slate-700/50 rounded-lg overflow-hidden">
-                  {lines.map((l) => (
-                    <div key={l.product_id} className="flex items-center justify-between px-3 py-2 border-b border-slate-700/40 last:border-0">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-white text-sm font-medium truncate">{l.name}</p>
-                        <p className="text-slate-500 text-xs font-mono">{l.sku}</p>
-                      </div>
-                      <div className="flex items-center gap-2 ml-3">
-                        <button onClick={() => updateQty(l.product_id, l.qty - 1)}
-                          className="w-6 h-6 bg-slate-700 rounded text-xs hover:bg-slate-600">−</button>
-                        <span className="w-8 text-center font-bold text-white text-sm">{l.qty}</span>
-                        <button onClick={() => updateQty(l.product_id, l.qty + 1)}
-                          className="w-6 h-6 bg-slate-700 rounded text-xs hover:bg-slate-600">+</button>
-                        <button onClick={() => setLines((p) => p.filter((i) => i.product_id !== l.product_id))}
-                          className="text-slate-600 hover:text-red-400 ml-1">
-                          <i className="fa-solid fa-xmark text-xs" />
-                        </button>
-                      </div>
-                    </div>
+          {/* Buscar producto */}
+          <div>
+            <label className="dax-label">Agregar producto</label>
+            <div className="relative">
+              <input type="text" placeholder="Nombre o SKU..."
+                value={productSearch}
+                onChange={(e) => {
+                  setProductSearch(e.target.value)
+                  if (searchTimer.current) clearTimeout(searchTimer.current)
+                  searchTimer.current = setTimeout(async () => {
+                    if (!e.target.value.trim()) { setSearchResults([]); return }
+                    try {
+                      const r = await productsApi.search(e.target.value, 0, 8)
+                      setSearchResults(r.items)
+                    } catch { setSearchResults([]) }
+                  }, 300)
+                }}
+                className="dax-input w-full text-sm" />
+              {searchResults.length > 0 && (
+                <div className="absolute z-30 top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-xl overflow-hidden">
+                  {searchResults.map((p) => (
+                    <button key={p.id} onClick={() => addLine(p)}
+                      className="w-full flex items-center justify-between px-3 py-2 hover:bg-slate-700/60 text-left text-sm border-b border-slate-700/40 last:border-0 max-md:min-h-[44px]">
+                      <span className="text-white font-medium">{p.name}</span>
+                      <span className="text-slate-500 text-xs font-mono">{p.sku}</span>
+                    </button>
                   ))}
                 </div>
               )}
-
-              {/* Notas */}
-              <div>
-                <label className="dax-label">Notas (opcional)</label>
-                <textarea value={notes} onChange={(e) => setNotes(e.target.value)}
-                  rows={2} className="dax-input w-full text-sm resize-none"
-                  placeholder="Motivo, urgencia, observaciones..." />
-              </div>
-            </div>
-
-            <div className="flex gap-2 mt-5">
-              <button onClick={() => setShowModal(false)} className="dax-btn-secondary flex-1">Cancelar</button>
-              <button onClick={handleSave}
-                disabled={saving || !toBranchId || lines.length === 0}
-                className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
-                {saving
-                  ? <i className="fa-solid fa-spinner fa-spin" />
-                  : <><i className="fa-solid fa-paper-plane" /> Enviar Solicitud</>}
-              </button>
             </div>
           </div>
+
+          {/* Líneas */}
+          {lines.length > 0 && (
+            <div className="border border-slate-700/50 rounded-lg overflow-hidden">
+              {lines.map((l) => (
+                <div key={l.product_id} className="flex items-center justify-between px-3 py-2 border-b border-slate-700/40 last:border-0">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white text-sm font-medium truncate">{l.name}</p>
+                    <p className="text-slate-500 text-xs font-mono">{l.sku}</p>
+                  </div>
+                  <div className="flex items-center gap-2 ml-3">
+                    <button onClick={() => updateQty(l.product_id, l.qty - 1)} aria-label="Una menos"
+                      className="w-6 h-6 max-md:w-11 max-md:h-11 bg-slate-700 rounded text-xs hover:bg-slate-600">−</button>
+                    <span className="w-8 text-center font-bold text-white text-sm">{l.qty}</span>
+                    <button onClick={() => updateQty(l.product_id, l.qty + 1)} aria-label="Una más"
+                      className="w-6 h-6 max-md:w-11 max-md:h-11 bg-slate-700 rounded text-xs hover:bg-slate-600">+</button>
+                    <button onClick={() => setLines((p) => p.filter((i) => i.product_id !== l.product_id))} aria-label="Quitar"
+                      className="dax-btn-icon text-slate-600 hover:text-red-400 ml-1">
+                      <i className="fa-solid fa-xmark text-xs" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Notas */}
+          <div>
+            <label className="dax-label">Notas (opcional)</label>
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)}
+              rows={2} className="dax-input w-full text-sm resize-none"
+              placeholder="Motivo, urgencia, observaciones..." />
+          </div>
         </div>
-      )}
+      </Modal>
     </div>
   )
 }

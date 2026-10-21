@@ -2,6 +2,11 @@ import { useEffect, useState, useCallback } from 'react'
 import client from '../../api/client'
 import { DaxCard } from '../../components/ui/DaxCard'
 import { Spinner } from '../../components/ui/Spinner'
+import { Modal } from '../../components/ui/Modal'
+import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
+import { ListaTarjetas } from '../../components/ui/ListaTarjetas'
+import { TarjetaFila } from '../../components/ui/TarjetaFila'
+import { useEsTelefono } from '../../hooks/useIsMobile'
 import { toast } from '../../store/toastStore'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -45,6 +50,7 @@ export function Boxes() {
   const [containers, setContainers] = useState<ContainerType[]>([])
   const [boxes, setBoxes] = useState<BoxType[]>([])
   const [loading, setLoading] = useState(true)
+  const esTelefono = useEsTelefono()
 
   // Container modal
   const [showContainerModal, setShowContainerModal] = useState(false)
@@ -110,20 +116,27 @@ export function Boxes() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
+  const tablaVacia = (icono: string, texto: string) => (
+    <div className="p-12 text-center text-slate-600">
+      <i className={`fa-solid ${icono} text-4xl mb-3 block`} />
+      {texto}
+    </div>
+  )
+
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
+      <CabeceraPagina
+        titulo={<div className="flex items-center gap-3">
           <i className="fa-solid fa-box-open text-indigo-400 text-xl" />
           <h1 className="text-2xl font-black text-white">Cajas y contenedores</h1>
-        </div>
-        <button
+        </div>}
+        accionPrincipal={<button
           onClick={() => tab === 'containers' ? (setContainerForm(emptyContainerForm()), setShowContainerModal(true)) : (setBoxForm(emptyBoxForm()), setShowBoxModal(true))}
           className="dax-btn-primary text-xs"
         >
           <i className="fa-solid fa-plus" /> {tab === 'containers' ? 'Nuevo Contenedor' : 'Nuevo Tipo de Caja'}
-        </button>
-      </div>
+        </button>}
+      />
 
       {/* Tabs */}
       <div className="flex gap-1 bg-slate-900/60 p-1 rounded-xl w-fit">
@@ -131,7 +144,7 @@ export function Boxes() {
           <button
             key={key}
             onClick={() => setTab(key)}
-            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors max-md:min-h-[44px] ${
               tab === key ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -148,12 +161,13 @@ export function Boxes() {
           {/* Containers */}
           {tab === 'containers' && (
             <DaxCard padding={false}>
-              {containers.length === 0 ? (
-                <div className="p-12 text-center text-slate-600">
-                  <i className="fa-solid fa-truck-ramp-box text-4xl mb-3 block" />
-                  Sin tipos de contenedor registrados
-                </div>
-              ) : (
+              {esTelefono ? (
+                <ListaTarjetas vacio={containers.length === 0} textoVacio="Sin tipos de contenedor registrados" className="p-3">
+                  {containers.map((c) => (
+                    <TarjetaFila key={c.id} titulo={c.name} subtitulo={`#${c.id} · ${dims(c.inner_length, c.inner_width, c.inner_height)}`} />
+                  ))}
+                </ListaTarjetas>
+              ) : containers.length === 0 ? tablaVacia('fa-truck-ramp-box', 'Sin tipos de contenedor registrados') : (
                 <div className="overflow-x-auto">
                   <table className="dax-table w-full">
                     <thead>
@@ -181,12 +195,13 @@ export function Boxes() {
           {/* Boxes */}
           {tab === 'boxes' && (
             <DaxCard padding={false}>
-              {boxes.length === 0 ? (
-                <div className="p-12 text-center text-slate-600">
-                  <i className="fa-solid fa-box text-4xl mb-3 block" />
-                  Sin tipos de caja registrados
-                </div>
-              ) : (
+              {esTelefono ? (
+                <ListaTarjetas vacio={boxes.length === 0} textoVacio="Sin tipos de caja registrados" className="p-3">
+                  {boxes.map((b) => (
+                    <TarjetaFila key={b.id} titulo={b.name} subtitulo={`#${b.id} · ${dims(b.outer_length, b.outer_width, b.outer_height)}`} />
+                  ))}
+                </ListaTarjetas>
+              ) : boxes.length === 0 ? tablaVacia('fa-box', 'Sin tipos de caja registrados') : (
                 <div className="overflow-x-auto">
                   <table className="dax-table w-full">
                     <thead>
@@ -214,88 +229,66 @@ export function Boxes() {
       )}
 
       {/* Modal — Nuevo Contenedor */}
-      {showContainerModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
-          onClick={() => setShowContainerModal(false)}>
-          <div className="dax-card p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-lg font-black text-white">Nuevo Contenedor</h3>
-              <button onClick={() => setShowContainerModal(false)} className="text-slate-500 hover:text-white">
-                <i className="fa-solid fa-xmark text-lg" />
-              </button>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="dax-label">Nombre</label>
-                <input type="text" value={containerForm.name}
-                  onChange={(e) => setContainerForm((f) => ({ ...f, name: e.target.value }))}
-                  className="dax-input w-full" placeholder="Ej. Contenedor 40 pies" />
+      <Modal open={showContainerModal} onClose={() => setShowContainerModal(false)} title="Nuevo Contenedor" size="md"
+        footer={<>
+          <button onClick={() => setShowContainerModal(false)} className="dax-btn-secondary flex-1">Cancelar</button>
+          <button onClick={handleSaveContainer}
+            disabled={savingContainer || !containerForm.name || !containerForm.inner_length}
+            className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
+            {savingContainer ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-floppy-disk" /> Guardar</>}
+          </button>
+        </>}>
+        <div className="space-y-3">
+          <div>
+            <label className="dax-label">Nombre</label>
+            <input type="text" value={containerForm.name}
+              onChange={(e) => setContainerForm((f) => ({ ...f, name: e.target.value }))}
+              className="dax-input w-full" placeholder="Ej. Contenedor 40 pies" />
+          </div>
+          <div className="grid grid-cols-3 gap-3"> {/* rejilla fija: 3 números cortos caben a 390 */}
+            {(['inner_length', 'inner_width', 'inner_height'] as const).map((field, i) => (
+              <div key={field}>
+                <label className="dax-label">{['Largo', 'Ancho', 'Alto'][i]} (cm)</label>
+                <input type="number" min="0" step="0.01"
+                  value={containerForm[field]}
+                  onChange={(e) => setContainerForm((f) => ({ ...f, [field]: e.target.value }))}
+                  className="dax-input w-full" placeholder="0" />
               </div>
-              <div className="grid grid-cols-3 gap-3">
-                {(['inner_length', 'inner_width', 'inner_height'] as const).map((field, i) => (
-                  <div key={field}>
-                    <label className="dax-label">{['Largo', 'Ancho', 'Alto'][i]} (cm)</label>
-                    <input type="number" min="0" step="0.01"
-                      value={containerForm[field]}
-                      onChange={(e) => setContainerForm((f) => ({ ...f, [field]: e.target.value }))}
-                      className="dax-input w-full" placeholder="0" />
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="flex gap-2 mt-5">
-              <button onClick={() => setShowContainerModal(false)} className="dax-btn-secondary flex-1">Cancelar</button>
-              <button onClick={handleSaveContainer}
-                disabled={savingContainer || !containerForm.name || !containerForm.inner_length}
-                className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
-                {savingContainer ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-floppy-disk" /> Guardar</>}
-              </button>
-            </div>
+            ))}
           </div>
         </div>
-      )}
+      </Modal>
 
       {/* Modal — Nuevo Tipo de Caja */}
-      {showBoxModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
-          onClick={() => setShowBoxModal(false)}>
-          <div className="dax-card p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-lg font-black text-white">Nuevo Tipo de Caja</h3>
-              <button onClick={() => setShowBoxModal(false)} className="text-slate-500 hover:text-white">
-                <i className="fa-solid fa-xmark text-lg" />
-              </button>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="dax-label">Nombre</label>
-                <input type="text" value={boxForm.name}
-                  onChange={(e) => setBoxForm((f) => ({ ...f, name: e.target.value }))}
-                  className="dax-input w-full" placeholder="Ej. Caja chica 30×20" />
+      <Modal open={showBoxModal} onClose={() => setShowBoxModal(false)} title="Nuevo Tipo de Caja" size="md"
+        footer={<>
+          <button onClick={() => setShowBoxModal(false)} className="dax-btn-secondary flex-1">Cancelar</button>
+          <button onClick={handleSaveBox}
+            disabled={savingBox || !boxForm.name || !boxForm.outer_length}
+            className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
+            {savingBox ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-floppy-disk" /> Guardar</>}
+          </button>
+        </>}>
+        <div className="space-y-3">
+          <div>
+            <label className="dax-label">Nombre</label>
+            <input type="text" value={boxForm.name}
+              onChange={(e) => setBoxForm((f) => ({ ...f, name: e.target.value }))}
+              className="dax-input w-full" placeholder="Ej. Caja chica 30×20" />
+          </div>
+          <div className="grid grid-cols-3 gap-3"> {/* rejilla fija: 3 números cortos caben a 390 */}
+            {(['outer_length', 'outer_width', 'outer_height'] as const).map((field, i) => (
+              <div key={field}>
+                <label className="dax-label">{['Largo', 'Ancho', 'Alto'][i]} (cm)</label>
+                <input type="number" min="0" step="0.01"
+                  value={boxForm[field]}
+                  onChange={(e) => setBoxForm((f) => ({ ...f, [field]: e.target.value }))}
+                  className="dax-input w-full" placeholder="0" />
               </div>
-              <div className="grid grid-cols-3 gap-3">
-                {(['outer_length', 'outer_width', 'outer_height'] as const).map((field, i) => (
-                  <div key={field}>
-                    <label className="dax-label">{['Largo', 'Ancho', 'Alto'][i]} (cm)</label>
-                    <input type="number" min="0" step="0.01"
-                      value={boxForm[field]}
-                      onChange={(e) => setBoxForm((f) => ({ ...f, [field]: e.target.value }))}
-                      className="dax-input w-full" placeholder="0" />
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="flex gap-2 mt-5">
-              <button onClick={() => setShowBoxModal(false)} className="dax-btn-secondary flex-1">Cancelar</button>
-              <button onClick={handleSaveBox}
-                disabled={savingBox || !boxForm.name || !boxForm.outer_length}
-                className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
-                {savingBox ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-floppy-disk" /> Guardar</>}
-              </button>
-            </div>
+            ))}
           </div>
         </div>
-      )}
+      </Modal>
     </div>
   )
 }
