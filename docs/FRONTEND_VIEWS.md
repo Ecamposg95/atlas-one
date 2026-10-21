@@ -38,7 +38,7 @@ Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.l
 - `toastStore` — toasts globales (varias vistas viejas aún usan `alert()`/`confirm()` nativos).
 
 ### Componentes base compartidos
-`DaxCard` (tarjeta tokenizada), `StatusChip`/`Badge` (estados), `Button` (`dax-btn-*`), `Spinner`, `.dax-input`, `.dax-table`. Gráficas: `components/atlas-one/*` (BarChart, Sparkline, Donut, LineChart) y Chart.js en varias vistas HQ/reportes.
+`DaxCard` (tarjeta tokenizada), `StatusChip`/`Badge` (estados), botones: las clases `dax-btn-primary` / `dax-btn-secondary` / `dax-btn-danger` / `dax-btn-ghost` (+ `dax-btn-icon` para solo-icono en teléfono) son la API oficial y `ui/Button` es solo un envoltorio de esas clases (lo usa gastro); guardia `src/__tests__/botonesDelKit.test.ts`, `Spinner`, `.dax-input`, `.dax-table`. Gráficas: `components/atlas-one/*` (BarChart, Sparkline, Donut, LineChart) y Chart.js en varias vistas HQ/reportes.
 
 Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (`TarjetaFila`, `ListaTarjetas`, `BarraFiltros`, `CabeceraPagina`, `Modal` con `.dax-modal`); patrón en `docs/superpowers/specs/2026-09-30-responsivo-admin-design.md §4` y guardia en `src/pages/__tests__/responsivoOla2.test.ts` y `src/__tests__/overlaysFueraDelKit.test.ts`.
 

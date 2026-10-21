@@ -525,6 +525,24 @@
   }
   .dax-btn-danger:disabled { opacity: 0.45; cursor: not-allowed; }
 
+  /* ─── Botón fantasma (sin fondo; solo texto + hover) ── */
+  .dax-btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: transparent;
+    color: var(--dax-text-muted);
+    font-weight: 600;
+    font-size: 0.75rem;
+    padding: 0.5rem 1.1rem;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .dax-btn-ghost:hover:not(:disabled) { background: var(--dax-surface); color: var(--dax-text); }
+  .dax-btn-ghost:disabled { opacity: 0.45; cursor: not-allowed; }
+
   /* ─── Input ─────────────────────────────────────── */
   .dax-input {
     width: 100%;

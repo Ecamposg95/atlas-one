@@ -13,13 +13,14 @@ const variantMap: Record<Variant, string> = {
   primary: 'dax-btn-primary',
   secondary: 'dax-btn-secondary',
   danger: 'dax-btn-danger',
-  ghost: 'text-slate-400 hover:text-white hover:bg-slate-700/40 px-3 py-2 rounded-lg transition-colors',
+  ghost: 'dax-btn-ghost',
 }
 
+// El padding y el tamaño base los ponen las clases dax-btn-*; `md` no añade nada.
 const sizeMap = {
-  sm: 'text-xs px-3 py-1.5',
-  md: 'text-sm px-4 py-2',
-  lg: 'text-base px-6 py-3',
+  sm: 'text-xs',
+  md: '',
+  lg: 'text-sm px-6 py-3',
 }
 
 export function Button({
