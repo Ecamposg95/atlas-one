@@ -2,12 +2,21 @@ import { useEffect, useState, useCallback } from 'react'
 import { expensesApi, type Expense, type ExpenseStats, type ExpenseCreate } from '../../api/expenses'
 import { DaxCard } from '../../components/ui/DaxCard'
 import { Spinner } from '../../components/ui/Spinner'
+import { Modal } from '../../components/ui/Modal'
+import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
+import { BarraFiltros, ParFechas } from '../../components/ui/BarraFiltros'
+import { ListaTarjetas } from '../../components/ui/ListaTarjetas'
+import { TarjetaFila } from '../../components/ui/TarjetaFila'
+import { useEsTelefono } from '../../hooks/useIsMobile'
 import { toast } from '../../store/toastStore'
 import { confirm as confirmDialog } from '../../components/ui/ConfirmDialog'
 import { formatCurrency } from '../../utils/currency'
 import { todayStr, daysAgoStr } from '../../utils/dates'
 
 const EMPTY_FORM: ExpenseCreate = { amount: 0, category: '', description: '' }
+const CATEGORIAS_BASE = ['ALQUILER', 'SERVICIOS', 'SUMINISTROS', 'NÓMINA', 'MANTENIMIENTO', 'MARKETING', 'LOGÍSTICA', 'OTRO']
+
+const fecha = (s: string) => new Date(s).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })
 
 export function Expenses() {
   const [expenses, setExpenses] = useState<Expense[]>([])
@@ -20,6 +29,7 @@ export function Expenses() {
   const [modal, setModal] = useState(false)
   const [form, setForm] = useState<ExpenseCreate>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
+  const esTelefono = useEsTelefono()
 
   const load = useCallback(async (start: string, end: string, cat: string) => {
     setLoading(true)
@@ -66,15 +76,15 @@ export function Expenses() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
+      <CabeceraPagina
+        titulo={<div className="flex items-center gap-3">
           <i className="fa-solid fa-money-bill-wave text-indigo-400 text-xl" />
           <h1 className="text-2xl font-black text-white">Gastos</h1>
-        </div>
-        <button onClick={() => setModal(true)} className="dax-btn-primary text-xs">
+        </div>}
+        accionPrincipal={<button onClick={() => setModal(true)} className="dax-btn-primary text-xs">
           <i className="fa-solid fa-plus" /> Registrar Gasto
-        </button>
-      </div>
+        </button>}
+      />
 
       {/* KPIs */}
       {stats && (
@@ -120,21 +130,36 @@ export function Expenses() {
       )}
 
       {/* Filtros */}
-      <div className="flex flex-wrap gap-2 items-center">
+      <BarraFiltros accion={<button onClick={() => load(startDate, endDate, filterCat)} className="dax-btn-primary text-xs">
+        <i className="fa-solid fa-search" /> Filtrar
+      </button>}>
         <select value={filterCat} onChange={(e) => setFilterCat(e.target.value)} className="dax-input text-xs max-w-[160px]">
           <option value="">Todas las categorías</option>
           {categories.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
-        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="dax-input w-36 text-xs" />
-        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="dax-input w-36 text-xs" />
-        <button onClick={() => load(startDate, endDate, filterCat)} className="dax-btn-primary text-xs">
-          <i className="fa-solid fa-search" /> Filtrar
-        </button>
-      </div>
+        <ParFechas>
+          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="dax-input w-36 text-xs" />
+          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="dax-input w-36 text-xs" />
+        </ParFechas>
+      </BarraFiltros>
 
-      {/* Tabla */}
+      {/* Lista */}
       <DaxCard padding={false}>
-        {loading ? <Spinner text="Cargando gastos..." /> : expenses.length === 0 ? (
+        {esTelefono ? (
+          <ListaTarjetas cargando={loading} vacio={expenses.length === 0} textoVacio="Sin gastos en este período" className="p-3">
+            {expenses.map((e) => (
+              <TarjetaFila key={e.id}
+                titulo={e.description ?? e.category}
+                subtitulo={`${fecha(e.created_at)} · ${e.branch_name ?? '—'} · ${e.user_name ?? '—'}`}
+                importe={<span className="text-red-400">{formatCurrency(e.amount)}</span>}
+                estado={<span className="dax-badge dax-badge-slate">{e.category}</span>}
+                acciones={<button onClick={() => handleDelete(e)} aria-label={`Eliminar gasto de ${formatCurrency(e.amount)}`} className="dax-btn-danger text-xs">
+                  <i className="fa-solid fa-trash" /> Eliminar
+                </button>}
+              />
+            ))}
+          </ListaTarjetas>
+        ) : loading ? <Spinner text="Cargando gastos..." /> : expenses.length === 0 ? (
           <div className="p-12 text-center text-slate-600">Sin gastos en este período</div>
         ) : (
           <div className="overflow-x-auto">
@@ -153,9 +178,7 @@ export function Expenses() {
               <tbody>
                 {expenses.map((e) => (
                   <tr key={e.id}>
-                    <td className="text-xs text-slate-400">
-                      {new Date(e.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}
-                    </td>
+                    <td className="text-xs text-slate-400">{fecha(e.created_at)}</td>
                     <td>
                       <span className="dax-badge dax-badge-slate">{e.category}</span>
                     </td>
@@ -164,7 +187,7 @@ export function Expenses() {
                     <td className="text-slate-500 text-xs">{e.user_name ?? '—'}</td>
                     <td className="text-right font-semibold text-red-400 tabular-nums">{formatCurrency(e.amount)}</td>
                     <td>
-                      <button onClick={() => handleDelete(e)} className="text-slate-600 hover:text-red-400 text-xs">
+                      <button onClick={() => handleDelete(e)} aria-label={`Eliminar gasto de ${formatCurrency(e.amount)}`} className="dax-btn-icon text-slate-600 hover:text-red-400 text-xs">
                         <i className="fa-solid fa-trash" />
                       </button>
                     </td>
@@ -177,46 +200,35 @@ export function Expenses() {
       </DaxCard>
 
       {/* Modal nuevo gasto */}
-      {modal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setModal(false)}>
-          <div className="dax-card p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-lg font-black text-white">Nuevo Gasto</h3>
-              <button onClick={() => setModal(false)} className="text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="dax-label">Monto</label>
-                <input type="number" step="0.01" value={form.amount || ''} onChange={(e) => setForm((p) => ({ ...p, amount: parseFloat(e.target.value) || 0 }))}
-                  className="dax-input w-full text-lg font-bold" placeholder="0.00" autoFocus />
-              </div>
-              <div>
-                <label className="dax-label">Categoría</label>
-                <select value={form.category}
-                  onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))}
-                  className="dax-input w-full">
-                  <option value="">Seleccionar...</option>
-                  {categories.length > 0
-                    ? categories.map((c) => <option key={c} value={c}>{c}</option>)
-                    : ['ALQUILER', 'SERVICIOS', 'SUMINISTROS', 'NÓMINA', 'MANTENIMIENTO', 'MARKETING', 'LOGÍSTICA', 'OTRO'].map((c) => <option key={c} value={c}>{c}</option>)
-                  }
-                </select>
-              </div>
-              <div>
-                <label className="dax-label">Descripción (opcional)</label>
-                <input value={form.description ?? ''} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
-                  className="dax-input w-full" placeholder="Detalle del gasto" />
-              </div>
-            </div>
-            <div className="flex gap-2 mt-5">
-              <button onClick={() => setModal(false)} className="dax-btn-secondary flex-1">Cancelar</button>
-              <button onClick={handleCreate} disabled={saving || !form.amount || !form.category} className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
-                {saving ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Registrar</>}
-              </button>
-            </div>
+      <Modal open={modal} onClose={() => setModal(false)} title="Nuevo Gasto" size="sm"
+        footer={<>
+          <button onClick={() => setModal(false)} className="dax-btn-secondary flex-1">Cancelar</button>
+          <button onClick={handleCreate} disabled={saving || !form.amount || !form.category} className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
+            {saving ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Registrar</>}
+          </button>
+        </>}>
+        <div className="space-y-3">
+          <div>
+            <label className="dax-label">Monto</label>
+            <input type="number" step="0.01" value={form.amount || ''} onChange={(e) => setForm((p) => ({ ...p, amount: parseFloat(e.target.value) || 0 }))}
+              className="dax-input w-full text-lg font-bold" placeholder="0.00" autoFocus />
+          </div>
+          <div>
+            <label className="dax-label">Categoría</label>
+            <select value={form.category}
+              onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))}
+              className="dax-input w-full">
+              <option value="">Seleccionar...</option>
+              {(categories.length > 0 ? categories : CATEGORIAS_BASE).map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="dax-label">Descripción (opcional)</label>
+            <input value={form.description ?? ''} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
+              className="dax-input w-full" placeholder="Detalle del gasto" />
           </div>
         </div>
-      )}
+      </Modal>
     </div>
   )
 }

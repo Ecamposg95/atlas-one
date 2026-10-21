@@ -44,8 +44,6 @@ const CONOCIDOS: Record<string, number> = {
   '/pages/core/Users.tsx': 1,
   '/pages/crm/Customers.tsx': 1,
   '/pages/finance/CashHistory.tsx': 2,
-  '/pages/finance/Expenses.tsx': 1,
-  '/pages/finance/Purchases.tsx': 2,
   '/pages/hq/HQInventory.tsx': 1,
   '/pages/hq/HQReturns.tsx': 2,
   '/pages/hq/HQSalesLog.tsx': 1,
