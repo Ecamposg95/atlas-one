@@ -14,6 +14,9 @@ import { Gauge } from '../../components/reports/Gauge'
 import { BranchLeaderboard } from '../../components/reports/Leaderboard'
 import { BarraFiltros, ParFechas } from '../../components/ui/BarraFiltros'
 import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
+import { ListaTarjetas } from '../../components/ui/ListaTarjetas'
+import { TarjetaFila } from '../../components/ui/TarjetaFila'
+import { useEsTelefono } from '../../hooks/useIsMobile'
 import { Sparkline } from '../../components/reports/Sparkline'
 import { useTheme } from '../../context/ThemeContext'
 import {
@@ -33,20 +36,25 @@ ChartJS.register(
 )
 
 /**
- * HQReportsHub — ultra redesign.
- *
- * Eight premium visualizations wired to /api/reports/dashboard +
- * /api/reports/command-center/stats + /api/reports/sales-by-hour:
- *
- *   1. KPI cards with count-up animation, sparkline, and Δ vs. previous period
- *   2. Payment methods doughnut with center-total
- *   3. Weekday × hour sales heatmap
- *   4. Achievement gauge vs. previous-period benchmark
- *   5. Dual trend line (this period vs. previous)
- *   6. Branch leaderboard with podium + progressive bars
- *   7. Top products table with per-row sparklines
- *   8. Realtime velocimeter for the current hour (auto-refresh 30s)
+ * Reportes (SP6 §6): cada sección es un reporte con nombre y la pregunta del
+ * dueño que responde, en este orden: Resumen del periodo · Ritmo de hoy ·
+ * Tendencia · Cómo me pagan · Día y hora · Sucursales (solo si hay > 1) ·
+ * Lo más vendido. Datos de /reports/dashboard, /command-center/stats y
+ * /sales-by-hour. Es la única pantalla HQ con gráficas (chart.js). "Poca
+ * existencia" ya no vive aquí: es la pregunta 4 del Inicio y de Existencias.
  */
+
+/** Título de sección: el nombre del reporte y la pregunta que responde. */
+function Titulo({ icono, color, children, pregunta }: { icono: string; color: string; children: React.ReactNode; pregunta: string }) {
+  return (
+    <div className="mb-3">
+      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+        <i className={`fa-solid ${icono} ${color}`} /> {children}
+      </p>
+      <p className="text-xs text-slate-400">{pregunta}</p>
+    </div>
+  )
+}
 
 const PRESETS = [
   { label: 'Hoy', start: () => todayStr(), end: () => todayStr() },
@@ -70,6 +78,7 @@ function payColor(method: string): string {
 
 export function HQReportsHub() {
   const { theme } = useTheme()
+  const esTelefono = useEsTelefono()
   const chartGrid = theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(99,102,241,0.08)'
   const chartTicks = theme === 'dark' ? '#64748b' : '#94a3b8'
 
@@ -293,6 +302,9 @@ export function HQReportsHub() {
 
   // --- Render ---------------------------------------------------------------
 
+  const variasSucursales = (ccStats?.branches?.length ?? 0) > 1
+  const topProductos = data?.top_products?.slice(0, 10) ?? []
+
   return (
     <div className="space-y-5">
       {/* Cabecera: en telefono el botón de exportar pasa arriba a todo lo ancho */}
@@ -301,16 +313,14 @@ export function HQReportsHub() {
           <div className="flex items-center gap-3">
             <i className="fa-solid fa-chart-line text-indigo-400 text-xl" />
             <h1 className="text-2xl font-black text-white">Reportes</h1>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-violet-400/80 bg-violet-500/10 px-2 py-0.5 rounded-full border border-violet-500/20">
-              Ultra
-            </span>
           </div>
         }
+        descripcion="Cada reporte responde una pregunta. Elige el periodo y la sucursal."
         accionPrincipal={
           <button
             onClick={handleExport}
             disabled={exporting || loading}
-            className="text-xs font-bold text-violet-400 bg-violet-500/10 px-3 py-2 rounded-lg border border-violet-500/20 hover:bg-violet-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="text-xs font-bold text-violet-400 bg-violet-500/10 px-3 py-2 rounded-lg border border-violet-500/20 hover:bg-violet-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed max-md:min-h-[44px]"
           >
             <i className={`fa-solid ${exporting ? 'fa-spinner fa-spin' : 'fa-file-arrow-down'}`} />
             {exporting ? 'Exportando...' : 'Exportar CSV'}
@@ -360,115 +370,107 @@ export function HQReportsHub() {
         <DaxCard><div className="p-12 text-center text-slate-600">Sin datos</div></DaxCard>
       ) : (
         <>
-          {/* ═══════════════════════════════════════════════════════════════
-              Row: Velocimeter + Gauge — the "hero" row
-          ════════════════════════════════════════════════════════════════ */}
+          {/* 1 · Resumen del periodo */}
+          <DaxCard>
+            <Titulo icono="fa-coins" color="text-emerald-400" pregunta="¿Cuánto vendí en el periodo y cómo va contra el anterior?">Resumen del periodo</Titulo>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              <KPICard
+                label="Total ventas"
+                value={data.kpis?.sales ?? 0}
+                previous={data.kpis?.prev_sales}
+                icon="fa-coins"
+                tone="emerald"
+                trend={sparkTrend}
+                format={(n) => formatCurrency(n)}
+              />
+              <KPICard
+                label="Transacciones"
+                value={data.kpis?.orders ?? 0}
+                previous={data.kpis?.prev_orders}
+                icon="fa-receipt"
+                tone="indigo"
+                trend={sparkTrend.map((v) => Math.round(v / 50))}
+              />
+              <KPICard
+                label="Ticket promedio"
+                value={data.kpis?.avg_ticket ?? 0}
+                previous={data.kpis?.prev_avg_ticket}
+                icon="fa-chart-bar"
+                tone="violet"
+                format={(n) => formatCurrency(n)}
+              />
+              <KPICard
+                label="Productos vendidos"
+                value={uniqueSkusSold}
+                icon="fa-box-open"
+                tone="amber"
+              />
+              <KPICard
+                label="En tránsito"
+                value={transitShipments}
+                icon="fa-truck"
+                tone="sky"
+              />
+              <MethodKPICard method={topMethod} />
+            </div>
+          </DaxCard>
+
+          {/* 2 · Ritmo de hoy */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <DaxCard className="lg:col-span-2 relative overflow-hidden">
               <div className="absolute top-0 right-0 w-48 h-48 bg-sky-500/10 blur-3xl rounded-full pointer-events-none" />
-              <div className="relative flex items-center justify-between flex-wrap gap-4">
-                <div>
-                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2 mb-1">
-                    <i className="fa-solid fa-gauge-high text-sky-400" /> Velocidad
-                    <span className={`inline-block w-1.5 h-1.5 rounded-full ${veloOpen ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
-                  </p>
-                  {veloOpen ? (
-                    <>
-                      <p className="text-4xl sm:text-5xl font-black text-sky-400 tabular-nums">
-                        {formatCurrency(velo?.current_hour_amount ?? 0)}
-                      </p>
-                      <p className="text-xs text-slate-500 mt-1">
-                        Ventas de las {veloHour}:00 · {velo?.current_hour_tickets ?? 0} tickets
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-4xl sm:text-5xl font-black text-slate-600 tabular-nums">Cerrado</p>
-                      <p className="text-xs text-slate-500 mt-1">Fuera de horario laboral (8:00 — 22:00)</p>
-                    </>
-                  )}
+              <div className="relative">
+                <Titulo icono="fa-gauge-high" color="text-sky-400" pregunta="¿Cómo va el día a esta hora?">Ritmo de hoy</Titulo>
+                <div className="flex items-center justify-between flex-wrap gap-4">
+                  <div>
+                    {veloOpen ? (
+                      <>
+                        <p className="text-4xl sm:text-5xl font-black text-sky-400 tabular-nums">
+                          {formatCurrency(velo?.current_hour_amount ?? 0)}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Ventas de las {veloHour}:00 · {velo?.current_hour_tickets ?? 0} tickets
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-4xl sm:text-5xl font-black text-slate-600 tabular-nums">Cerrado</p>
+                        <p className="text-xs text-slate-500 mt-1">Fuera de horario laboral (8:00 — 22:00)</p>
+                      </>
+                    )}
+                  </div>
+                  <Gauge
+                    current={velo?.current_hour_amount ?? 0}
+                    benchmark={veloBenchmark || 1}
+                    label="Ritmo actual"
+                    subtitle="vs. promedio del día"
+                    size={180}
+                  />
                 </div>
-                <Gauge
-                  current={velo?.current_hour_amount ?? 0}
-                  benchmark={veloBenchmark || 1}
-                  label="Ritmo actual"
-                  subtitle="vs. promedio del día"
-                  size={180}
-                />
               </div>
             </DaxCard>
 
-            <DaxCard className="flex flex-col items-center justify-center relative overflow-hidden">
+            <DaxCard className="relative overflow-hidden">
               <div className="absolute -top-10 -right-10 w-40 h-40 bg-emerald-500/10 blur-3xl rounded-full pointer-events-none" />
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2 mb-2 self-start">
-                <i className="fa-solid fa-bullseye text-emerald-400" /> Cumplimiento
-              </p>
-              <Gauge
-                current={currentTotal}
-                benchmark={gaugeBenchmark || 1}
-                label="vs. período anterior"
-                subtitle={prevTotal > 0 ? formatCurrency(prevTotal) : 'sin referencia'}
-                size={200}
-              />
+              <Titulo icono="fa-bullseye" color="text-emerald-400" pregunta="¿Voy mejor que el periodo anterior?">Cumplimiento</Titulo>
+              <div className="flex justify-center">
+                <Gauge
+                  current={currentTotal}
+                  benchmark={gaugeBenchmark || 1}
+                  label="vs. período anterior"
+                  subtitle={prevTotal > 0 ? formatCurrency(prevTotal) : 'sin referencia'}
+                  size={200}
+                />
+              </div>
             </DaxCard>
           </div>
 
-          {/* ═══════════════════════════════════════════════════════════════
-              Row: 6 KPI cards
-          ════════════════════════════════════════════════════════════════ */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            <KPICard
-              label="Total ventas"
-              value={data.kpis?.sales ?? 0}
-              previous={data.kpis?.prev_sales}
-              icon="fa-coins"
-              tone="emerald"
-              trend={sparkTrend}
-              format={(n) => formatCurrency(n)}
-            />
-            <KPICard
-              label="Transacciones"
-              value={data.kpis?.orders ?? 0}
-              previous={data.kpis?.prev_orders}
-              icon="fa-receipt"
-              tone="indigo"
-              trend={sparkTrend.map((v) => Math.round(v / 50))}
-            />
-            <KPICard
-              label="Ticket promedio"
-              value={data.kpis?.avg_ticket ?? 0}
-              previous={data.kpis?.prev_avg_ticket}
-              icon="fa-chart-bar"
-              tone="violet"
-              format={(n) => formatCurrency(n)}
-            />
-            <KPICard
-              label="Productos vendidos"
-              value={uniqueSkusSold}
-              icon="fa-box-open"
-              tone="amber"
-            />
-            <KPICard
-              label="En tránsito"
-              value={transitShipments}
-              icon="fa-truck"
-              tone="sky"
-            />
-            <MethodKPICard method={topMethod} />
-          </div>
-
-          {/* ═══════════════════════════════════════════════════════════════
-              Row: Trend dual + Payments donut
-          ════════════════════════════════════════════════════════════════ */}
+          {/* 3 · Tendencia + 4 · Cómo me pagan */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {trendValues.length > 0 && (
               <DaxCard className="lg:col-span-2">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                    <i className="fa-solid fa-chart-area text-emerald-400" /> Tendencia vs. Período Anterior
-                  </p>
-                </div>
-                <div style={{ height: 240 }}>
+                <Titulo icono="fa-chart-area" color="text-emerald-400" pregunta="¿Cómo fue cada día comparado con el periodo anterior?">Tendencia</Titulo>
+                <div className="h-60">
                   <Line data={trendChartData} options={trendChartOpts as never} />
                 </div>
               </DaxCard>
@@ -476,12 +478,10 @@ export function HQReportsHub() {
 
             {paymentMethods.length > 0 && (
               <DaxCard>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
-                  <i className="fa-solid fa-credit-card text-indigo-400" /> Métodos de Pago
-                </p>
-                <div className="relative" style={{ height: 240 }}>
+                <Titulo icono="fa-credit-card" color="text-indigo-400" pregunta="¿Cómo me pagaron?">Cómo me pagan</Titulo>
+                <div className="relative h-60">
                   <Doughnut data={doughnutData} options={doughnutOpts as never} />
-                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none" style={{ marginRight: '40%' }}>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none mr-[40%]">
                     <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Total</p>
                     <p className="text-base font-black text-white tabular-nums">{formatCurrency(totalPayments)}</p>
                   </div>
@@ -490,15 +490,9 @@ export function HQReportsHub() {
             )}
           </div>
 
-          {/* ═══════════════════════════════════════════════════════════════
-              Row: Heatmap
-          ════════════════════════════════════════════════════════════════ */}
+          {/* 5 · Día y hora */}
           <DaxCard>
-            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                <i className="fa-solid fa-table-cells text-emerald-400" /> Heatmap — Día × Hora
-              </p>
-            </div>
+            <Titulo icono="fa-table-cells" color="text-emerald-400" pregunta="¿Qué días y a qué horas vendo más?">Día y hora</Titulo>
             {heatmapData.length > 0 ? (
               <SalesHeatmap data={heatmapData} />
             ) : (
@@ -508,94 +502,59 @@ export function HQReportsHub() {
             )}
           </DaxCard>
 
-          {/* ═══════════════════════════════════════════════════════════════
-              Row: Leaderboard (wide) + Low stock alerts
-          ════════════════════════════════════════════════════════════════ */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {ccStats?.branches && ccStats.branches.length > 0 && (
-              <DaxCard className="lg:col-span-2">
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2 mb-4">
-                  <i className="fa-solid fa-ranking-star text-amber-300" /> Leaderboard — Sucursales
-                </p>
-                <BranchLeaderboard
-                  branches={ccStats.branches.map((b) => ({
-                    id: b.id,
-                    name: b.name,
-                    total_sales: b.total_sales ?? 0,
-                  }))}
-                />
-              </DaxCard>
-            )}
-
+          {/* 6 · Sucursales (solo con más de una) */}
+          {variasSucursales && ccStats?.branches && (
             <DaxCard>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
-                <i className="fa-solid fa-triangle-exclamation text-amber-400" /> Alertas de Stock Bajo
-              </p>
-              {data.low_stock && data.low_stock.length > 0 ? (
-                <div className="space-y-1.5 max-h-[420px] overflow-y-auto pr-1">
-                  {data.low_stock.slice(0, 12).map((p, i) => (
-                    <div
-                      key={`${p.sku}-${i}`}
-                      className="flex justify-between items-center p-2 bg-slate-950/50 rounded border border-slate-800/50 hover:border-amber-500/30 transition-colors"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-bold text-slate-300 truncate">{p.name}</p>
-                        <p className="text-[10px] text-slate-500 font-mono truncate">{p.sku || '—'}</p>
-                      </div>
-                      <div className="text-right pl-2">
-                        <span className="block text-sm font-black text-amber-400 tabular-nums">{p.stock}</span>
-                        <span className="text-[9px] text-slate-500 uppercase">Disp.</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-emerald-500 italic flex items-center gap-1">
-                  <i className="fa-solid fa-circle-check" /> Inventario saludable.
-                </p>
-              )}
+              <Titulo icono="fa-ranking-star" color="text-amber-300" pregunta="¿Cómo va cada sucursal en el periodo?">Sucursales</Titulo>
+              <BranchLeaderboard
+                branches={ccStats.branches.map((b) => ({
+                  id: b.id,
+                  name: b.name,
+                  total_sales: b.total_sales ?? 0,
+                }))}
+              />
             </DaxCard>
-          </div>
+          )}
 
-          {/* ═══════════════════════════════════════════════════════════════
-              Row: Top products with sparklines
-          ════════════════════════════════════════════════════════════════ */}
-          {data.top_products && data.top_products.length > 0 && (
+          {/* 7 · Lo más vendido */}
+          {topProductos.length > 0 && (
             <DaxCard>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-                <i className="fa-solid fa-fire text-orange-400" /> Top Productos — Tendencia por Producto
-              </p>
-              <div className="space-y-1.5">
-                {data.top_products.slice(0, 10).map((p, i) => {
-                  const maxQty = Math.max(...(p.trend ?? [0]), p.qty)
-                  const relPct = maxQty > 0 ? (p.qty / maxQty) * 100 : 0
-                  // Solo datos reales: sin `trend` del backend no hay sparkline.
-                  const trendArr = (p.trend && p.trend.length >= 2) ? p.trend : null
-                  return (
-                    <div
-                      key={i}
-                      className="flex items-center gap-3 px-2 py-2 rounded-md hover:bg-slate-800/30 transition-colors"
-                    >
-                      <span className="text-[10px] font-mono font-bold text-slate-500 w-6 text-right">#{i + 1}</span>
-                      <span className="text-xs font-bold text-slate-200 flex-1 truncate" title={p.name}>{p.name}</span>
-                      {trendArr && (
-                        <div className="hidden sm:block">
-                          <Sparkline data={trendArr} />
+              <Titulo icono="fa-fire" color="text-orange-400" pregunta="¿Qué se vendió más en el periodo?">Lo más vendido</Titulo>
+              {esTelefono ? (
+                <ListaTarjetas>
+                  {topProductos.map((p, i) => (
+                    <TarjetaFila key={i} titulo={`#${i + 1} ${p.name}`} importe={`${p.qty} pz`} />
+                  ))}
+                </ListaTarjetas>
+              ) : (
+                <div className="space-y-1.5">
+                  {topProductos.map((p, i) => {
+                    const maxQty = Math.max(...(p.trend ?? [0]), p.qty)
+                    const relPct = maxQty > 0 ? (p.qty / maxQty) * 100 : 0
+                    // Solo datos reales: sin `trend` del backend no hay sparkline.
+                    const trendArr = (p.trend && p.trend.length >= 2) ? p.trend : null
+                    return (
+                      <div
+                        key={i}
+                        className="flex items-center gap-3 px-2 py-2 rounded-md hover:bg-slate-800/30 transition-colors"
+                      >
+                        <span className="text-[10px] font-mono font-bold text-slate-500 w-6 text-right">#{i + 1}</span>
+                        <span className="text-xs font-bold text-slate-200 flex-1 truncate" title={p.name}>{p.name}</span>
+                        {trendArr && <Sparkline data={trendArr} />}
+                        <div className="w-20 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-orange-500 to-amber-400 rounded-full transition-all duration-500"
+                            style={{ width: `${relPct}%` }} /* estilo dinámico: el ancho es el dato */
+                          />
                         </div>
-                      )}
-                      <div className="w-20 h-1.5 bg-slate-800 rounded-full overflow-hidden hidden md:block">
-                        <div
-                          className="h-full bg-gradient-to-r from-orange-500 to-amber-400 rounded-full transition-all duration-500"
-                          style={{ width: `${relPct}%` }}
-                        />
+                        <span className="text-xs font-mono font-bold text-emerald-400 tabular-nums w-16 text-right">
+                          {p.qty}u
+                        </span>
                       </div>
-                      <span className="text-xs font-mono font-bold text-emerald-400 tabular-nums w-16 text-right">
-                        {p.qty}u
-                      </span>
-                    </div>
-                  )
-                })}
-              </div>
+                    )
+                  })}
+                </div>
+              )}
             </DaxCard>
           )}
         </>
@@ -610,10 +569,7 @@ export function HQReportsHub() {
  */
 function MethodKPICard({ method }: { method: string }) {
   return (
-    <div
-      className="group relative overflow-hidden rounded-xl border border-slate-700/40 bg-gradient-to-br from-slate-500/10 via-slate-500/5 to-transparent p-3 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:border-slate-400/40"
-      style={{ backdropFilter: 'blur(6px)' }}
-    >
+    <div className="group relative overflow-hidden rounded-xl border border-slate-700/40 bg-gradient-to-br from-slate-500/10 via-slate-500/5 to-transparent p-3 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:border-slate-400/40 backdrop-blur-sm">
       <div className="mb-1 flex items-center gap-1.5">
         <i className="fa-solid fa-credit-card text-slate-200 text-[11px]" />
         <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500">Método top</p>
@@ -625,4 +581,3 @@ function MethodKPICard({ method }: { method: string }) {
     </div>
   )
 }
-

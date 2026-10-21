@@ -2,8 +2,12 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-/** Pantallas de la ola 2 del responsivo (catálogo y personas). Cada tarea añade la suya. */
-export const PAGINAS = ['core/Brands.tsx', 'core/Departments.tsx', 'core/Users.tsx', 'crm/Customers.tsx', 'inventory/Inventory.tsx', 'hq/HQInventory.tsx', 'inventory/Products.tsx', 'core/AdminCatalog.tsx', 'hq/Inicio.tsx']
+/** Pantallas de la ola 2 del responsivo (catálogo y personas) y, desde SP6, todo el grupo HQ. */
+export const PAGINAS = [
+  'core/Brands.tsx', 'core/Departments.tsx', 'core/Users.tsx', 'crm/Customers.tsx', 'inventory/Inventory.tsx',
+  'hq/HQInventory.tsx', 'inventory/Products.tsx', 'core/AdminCatalog.tsx', 'hq/Inicio.tsx',
+  'hq/HQReportsHub.tsx', 'hq/HQSalesLog.tsx', 'hq/HQReturns.tsx', 'hq/HQBranches.tsx', 'hq/HQValorInventario.tsx',
+]
 /** Tienen tarjetas propias y no usan TarjetaFila. */
 export const SIN_TARJETA_FILA: string[] = ['core/AdminCatalog.tsx']
 
