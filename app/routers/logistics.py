@@ -92,10 +92,12 @@ def calculate_fit_simple(cont_l, cont_w, cont_h, box_l, box_w, box_h):
 def calculate_load(
     req: LoadCalcRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    org_id: int = Depends(get_current_active_organization),
 ):
-    container = db.query(ContainerType).get(req.container_type_id)
-    box = db.query(BoxType).get(req.box_type_id)
+    # Solo contenedores y cajas de la organización activa (regla de oro 5).
+    container = db.query(ContainerType).filter(ContainerType.id == req.container_type_id, ContainerType.organization_id == org_id).first()
+    box = db.query(BoxType).filter(BoxType.id == req.box_type_id, BoxType.organization_id == org_id).first()
     
     if not container or not box:
         raise HTTPException(404, "Contenedor o Caja no encontrados")
@@ -151,6 +153,7 @@ def calculate_load(
         
     # Save History
     calc_record = ContainerLoadCalc(
+        organization_id=org_id,
         container_type_id=container.id,
         box_type_id=box.id,
         total_boxes_fit=best_fit,
@@ -177,6 +180,15 @@ def calculate_load(
 # SHIPMENTS CURD (Entradas de Mercancía)
 # --------------------------------------------------------------------------
 
+def _validar_contenedor(db: Session, container_type_id: Optional[int], org_id: int) -> None:
+    """El contenedor de una entrada debe ser de la organización activa."""
+    if container_type_id is None:
+        return
+    ok = db.query(ContainerType.id).filter(ContainerType.id == container_type_id, ContainerType.organization_id == org_id).first()
+    if not ok:
+        raise HTTPException(404, "Contenedor no encontrado")
+
+
 def _get_shipment_or_404(db: Session, shipment_id: int, org_id: int) -> InboundShipment:
     s = db.query(InboundShipment).filter(
         InboundShipment.id == shipment_id,
@@ -193,6 +205,7 @@ def create_shipment(
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization),
 ):
+    _validar_contenedor(db, s.container_type_id, org_id)
     data = s.dict()
     data["organization_id"] = org_id
     new_s = InboundShipment(**data)
@@ -236,6 +249,7 @@ def update_shipment(
     s = _get_shipment_or_404(db, id, org_id)
     if s.status == "RECEIVED":
         raise HTTPException(400, "No se puede editar una entrada ya recibida")
+    _validar_contenedor(db, up.container_type_id, org_id)
     s.reference = up.reference
     s.notes = up.notes
     s.container_type_id = up.container_type_id

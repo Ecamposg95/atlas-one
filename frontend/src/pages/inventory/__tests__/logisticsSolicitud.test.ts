@@ -10,6 +10,11 @@ describe('Logística · Nueva solicitud', () => {
     expect(s).toMatch(/variant_id: l\.variant_id/)
     expect(s).not.toMatch(/variant_sku/)
   })
+  it('agrupa y edita las líneas por variante, no por producto (dos tallas = dos líneas)', () => {
+    expect(s).toMatch(/prev\.find\(\(l\) => l\.variant_id === variantId\)/)
+    expect(s).not.toMatch(/l\.product_id === p\.id/)
+    expect(s).toMatch(/updateQty = \(variant_id: string/)
+  })
   it('Escape no tira lo capturado y los resultados del buscador van en flujo (no absolute)', () => {
     expect(s).toMatch(/closeOnEscape=\{false\}/)
     expect(s).not.toMatch(/absolute z-30 top-full/)

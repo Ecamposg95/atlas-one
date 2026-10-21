@@ -98,16 +98,17 @@ export function Logistics() {
     const variantId = p.matched_variant_id ?? p.variants?.[0]?.id
     if (!variantId) { toast.error('Este producto no tiene talla o variante que transferir'); return }
     setLines((prev) => {
-      const existing = prev.find((l) => l.product_id === p.id)
-      if (existing) return prev.map((l) => l.product_id === p.id ? { ...l, qty: l.qty + 1 } : l)
+      // Se agrupa por variante: dos tallas del mismo producto son dos líneas.
+      const existing = prev.find((l) => l.variant_id === variantId)
+      if (existing) return prev.map((l) => l.variant_id === variantId ? { ...l, qty: l.qty + 1 } : l)
       return [...prev, { product_id: p.id, variant_id: variantId, sku: p.sku, name: p.name, qty: 1 }]
     })
     setProductSearch(''); setSearchResults([])
   }
 
-  const updateQty = (product_id: string, qty: number) => {
-    if (qty <= 0) { setLines((p) => p.filter((l) => l.product_id !== product_id)); return }
-    setLines((p) => p.map((l) => l.product_id === product_id ? { ...l, qty } : l))
+  const updateQty = (variant_id: string, qty: number) => {
+    if (qty <= 0) { setLines((p) => p.filter((l) => l.variant_id !== variant_id)); return }
+    setLines((p) => p.map((l) => l.variant_id === variant_id ? { ...l, qty } : l))
   }
 
   const handleSave = async () => {
@@ -245,18 +246,18 @@ export function Logistics() {
           {lines.length > 0 && (
             <div className="border border-slate-700/50 rounded-lg overflow-hidden">
               {lines.map((l) => (
-                <div key={l.product_id} className="flex items-center justify-between px-3 py-2 border-b border-slate-700/40 last:border-0">
+                <div key={l.variant_id} className="flex items-center justify-between px-3 py-2 border-b border-slate-700/40 last:border-0">
                   <div className="flex-1 min-w-0">
                     <p className="text-white text-sm font-medium truncate">{l.name}</p>
                     <p className="text-slate-500 text-xs font-mono">{l.sku}</p>
                   </div>
                   <div className="flex items-center gap-2 ml-3">
-                    <button onClick={() => updateQty(l.product_id, l.qty - 1)} aria-label="Una menos"
+                    <button onClick={() => updateQty(l.variant_id, l.qty - 1)} aria-label="Una menos"
                       className="w-6 h-6 max-md:w-11 max-md:h-11 bg-slate-700 rounded text-xs hover:bg-slate-600">−</button>
                     <span className="w-8 text-center font-bold text-white text-sm">{l.qty}</span>
-                    <button onClick={() => updateQty(l.product_id, l.qty + 1)} aria-label="Una más"
+                    <button onClick={() => updateQty(l.variant_id, l.qty + 1)} aria-label="Una más"
                       className="w-6 h-6 max-md:w-11 max-md:h-11 bg-slate-700 rounded text-xs hover:bg-slate-600">+</button>
-                    <button onClick={() => setLines((p) => p.filter((i) => i.product_id !== l.product_id))} aria-label="Quitar"
+                    <button onClick={() => setLines((p) => p.filter((i) => i.variant_id !== l.variant_id))} aria-label="Quitar"
                       className="dax-btn-icon text-slate-600 hover:text-red-400 ml-1">
                       <i className="fa-solid fa-xmark text-xs" />
                     </button>
