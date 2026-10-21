@@ -133,7 +133,7 @@ export interface ValuacionInventario {
   grupos: ValuacionGrupo[]
 }
 
-// --- Inicio básico (GET /reports/inicio-basico, modo básico 2026-10) ------
+// --- Inicio del dueño (GET /reports/inicio; modo básico 2026-10 + SP6) ----
 export interface PeriodoVentas {
   desde: string
   hasta: string
@@ -165,7 +165,37 @@ export interface CorteInicio {
   efectivo_contado: number | null
 }
 
-export interface InicioBasico {
+export interface ProductoSinMovimiento {
+  variant_id: string
+  nombre: string
+  sku: string
+  existencia: number
+  /** existencia × precio base. */
+  importe_venta: number
+}
+
+export interface DiferenciaCaja {
+  session_id: number
+  sucursal: string
+  cajera: string | null
+  cerrado_en: string | null
+  esperado: number
+  contado: number
+  /** contado − esperado. */
+  diferencia: number
+}
+
+export interface SucursalInicio {
+  branch_id: number
+  nombre: string
+  ventas_hoy: number
+  tickets_hoy: number
+  corte: CorteInicio
+  poca_existencia: number
+}
+
+/** GET /reports/inicio (SP6). Las secciones nuevas solo llegan con `completo: true`; en básico son null. */
+export interface Inicio {
   /** null = todas las sucursales de la org. */
   branch_id: number | null
   hoy: PeriodoVentas
@@ -175,6 +205,12 @@ export interface InicioBasico {
   top_semana: ProductoTop[]
   poca_existencia: { umbral: number; productos: ProductoPocaExistencia[] }
   corte: CorteInicio
+  sin_movimiento: { dias: number; productos: ProductoSinMovimiento[] } | null
+  pendientes: { devoluciones: number; turnos_abiertos: number; diferencias_caja: DiferenciaCaja[] } | null
+  /** null = una sola sucursal que vende, o se pidió una sucursal. */
+  sucursales: SucursalInicio[] | null
+  /** null = sin `completo` o rol que no ve costos. */
+  utilidad_bruta_hoy: number | null
 }
 
 export const reportsApi = {
@@ -246,9 +282,8 @@ export const reportsApi = {
     return data
   },
 
-  inicioBasico: async (branchId?: number): Promise<InicioBasico> => {
-    const params = branchId != null ? { branch_id: branchId } : {}
-    const { data } = await client.get<InicioBasico>('/reports/inicio-basico', { params })
+  inicio: async (params: { branch_id?: number; completo?: boolean; dias_sin_movimiento?: number } = {}): Promise<Inicio> => {
+    const { data } = await client.get<Inicio>('/reports/inicio', { params })
     return data
   },
 }
