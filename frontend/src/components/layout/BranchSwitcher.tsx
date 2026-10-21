@@ -69,6 +69,7 @@ export function BranchSwitcher() {
     <div ref={ref} style={{ position: 'relative' }}>
       <button
         onClick={toggle}
+        className="max-md:min-h-[44px]"
         style={{
           display: 'flex',
           alignItems: 'center',

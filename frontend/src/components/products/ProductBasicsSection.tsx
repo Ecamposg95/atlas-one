@@ -35,7 +35,7 @@ export function ProductBasicsSection({ value, onChange, errors, onSuggestSku, su
             {onSuggestSku && (
               // La sugerencia NUNCA se aplica sola: el botón pregunta antes de
               // pisar lo que el usuario escribió (ver ProductForm).
-              <button type="button" className="dax-btn-secondary text-[11px] whitespace-nowrap"
+              <button type="button" className="dax-btn-secondary text-[11px] whitespace-nowrap max-md:min-h-[44px]"
                 onClick={onSuggestSku} disabled={suggestingSku}>
                 {suggestingSku
                   ? <i className="fa-solid fa-spinner fa-spin" />

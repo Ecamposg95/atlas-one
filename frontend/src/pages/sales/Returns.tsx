@@ -129,7 +129,7 @@ function ReturnsAdminView() {
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-colors ${
+            className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-colors max-md:min-h-[44px] ${
               tab === t ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
             }`}
           >
