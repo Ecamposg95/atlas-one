@@ -229,3 +229,166 @@ def test_corte_sin_turno_y_cerrado(client, db, org, branch_a, cajero_a, admin_us
     assert c["efectivo_contado"] == 850.0
     assert c["efectivo_esperado"] is None
     assert c["cerrado_en"] is not None
+
+
+# ── SP6: /inicio, alias, completo, sin_movimiento, utilidad, pendientes, sucursales ──
+from app.models.returns import SaleReturn  # noqa: E402
+
+INICIO = "/api/reports/inicio"
+
+
+def test_alias_inicio_basico_sigue_respondiendo(client, db, org, branch_a, admin_user, auth_admin):
+    v = _variante(db, org, branch_a, "Blusa", "BLU-1", 50)
+    _venta(db, org, branch_a, admin_user, v, "100")
+    a = client.get(URL, headers=auth_admin).json()
+    b = client.get(INICIO, headers=auth_admin).json()
+    assert a["hoy"] == b["hoy"] and a["hoy"]["total"] == 100.0
+
+
+def test_sin_completo_las_secciones_nuevas_son_null(client, db, org, branch_a, admin_user, auth_admin):
+    _variante(db, org, branch_a, "Blusa", "BLU-1", 50)
+    db.commit()
+    d = client.get(INICIO, headers=auth_admin).json()
+    assert d["sin_movimiento"] is None
+    assert d["pendientes"] is None
+    assert d["sucursales"] is None
+    assert d["utilidad_bruta_hoy"] is None
+
+
+def test_sin_movimiento_vendido_hace_diez_dias_sale_con_treinta_no_con_cinco(client, db, org, branch_a, admin_user, auth_admin):
+    v = _variante(db, org, branch_a, "Blusa", "BLU-1", 4)
+    _venta(db, org, branch_a, admin_user, v, "100", dias_atras=10)
+    nunca = _variante(db, org, branch_a, "Nunca vendida", "NUN-1", 2)
+    db.commit()
+
+    con30 = client.get(f"{INICIO}?completo=true", headers=auth_admin).json()["sin_movimiento"]
+    assert con30["dias"] == 30
+    assert [p["sku"] for p in con30["productos"]] == ["NUN-1"]
+    assert con30["productos"][0] == {"variant_id": str(nunca.id), "nombre": "Nunca vendida", "sku": "NUN-1",
+                                      "existencia": 2.0, "importe_venta": 200.0}
+
+    con5 = client.get(f"{INICIO}?completo=true&dias_sin_movimiento=5", headers=auth_admin).json()["sin_movimiento"]
+    assert con5["dias"] == 5
+    assert sorted(p["sku"] for p in con5["productos"]) == ["BLU-1", "NUN-1"]
+
+
+def test_sin_movimiento_cancelada_no_cuenta_como_venta(client, db, org, branch_a, admin_user, auth_admin):
+    v = _variante(db, org, branch_a, "Blusa", "BLU-1", 4)
+    _venta(db, org, branch_a, admin_user, v, "100", dias_atras=1, status=DocumentStatus.CANCELLED)
+    db.commit()
+    d = client.get(f"{INICIO}?completo=true", headers=auth_admin).json()["sin_movimiento"]
+    assert [p["sku"] for p in d["productos"]] == ["BLU-1"]
+
+
+def test_sin_movimiento_sin_existencia_no_sale_y_otra_org_no_se_mezcla(client, db, org, branch_a, admin_user, auth_admin):
+    _variante(db, org, branch_a, "Agotada", "AGO-1", 0)
+    otra = Organization(name="Otra", status="ACTIVE")
+    db.add(otra)
+    db.flush()
+    ajena = Branch(name="Ajena", branch_type=BranchType.STORE, can_sell=True, is_active=True, organization_id=otra.id)
+    db.add(ajena)
+    db.flush()
+    _variante(db, otra, ajena, "Ajena", "AJ-1", 9)
+    db.commit()
+    d = client.get(f"{INICIO}?completo=true", headers=auth_admin).json()["sin_movimiento"]
+    assert d["productos"] == []
+
+
+def test_sin_movimiento_orden_por_importe_y_tope_diez(client, db, org, branch_a, admin_user, auth_admin):
+    for n in range(12):
+        _variante(db, org, branch_a, f"P{n:02d}", f"P-{n:02d}", n + 1)   # importe = (n+1) × 100
+    db.commit()
+    d = client.get(f"{INICIO}?completo=true", headers=auth_admin).json()["sin_movimiento"]["productos"]
+    assert len(d) == 10
+    assert [p["importe_venta"] for p in d] == [1200.0, 1100.0, 1000.0, 900.0, 800.0, 700.0, 600.0, 500.0, 400.0, 300.0]
+
+
+def test_utilidad_bruta_hoy_admin_si_gerente_null(client, db, org, branch_a, admin_user, gerente_a, auth_admin, auth_gerente_a):
+    v = _variante(db, org, branch_a, "Blusa", "BLU-1", 50)
+    _venta(db, org, branch_a, admin_user, v, "100", cantidad=2)   # unit_cost 10 × 2 = 20
+    _venta(db, org, branch_a, admin_user, v, "999", dias_atras=1)
+    assert client.get(f"{INICIO}?completo=true", headers=auth_admin).json()["utilidad_bruta_hoy"] == 80.0
+    assert client.get(f"{INICIO}?completo=true", headers=auth_gerente_a).json()["utilidad_bruta_hoy"] is None
+
+
+def _devolucion(db, org, branch, user, doc, status="PENDING"):
+    db.add(SaleReturn(organization_id=org.id, sale_id=doc.id, user_id=user.id, branch_id=branch.id,
+                      total_refunded=Decimal("10"), reason="Defecto", status=status))
+    db.commit()
+
+
+def test_pendientes_devolucion_pending_turno_viejo_y_diferencia(client, db, org, branch_a, cajero_a, admin_user, auth_admin):
+    v = _variante(db, org, branch_a, "Blusa", "BLU-1", 50)
+    doc = _venta(db, org, branch_a, admin_user, v, "100")
+    _devolucion(db, org, branch_a, cajero_a, doc)
+    _devolucion(db, org, branch_a, cajero_a, doc, status="APPROVED")
+    db.add(CashSession(user_id=cajero_a.id, branch_id=branch_a.id, organization_id=org.id,
+                       opening_balance=Decimal("500"), status="OPEN", opened_at=_instante(2)))
+    # Un turno abierto hoy (otra persona: solo cabe un turno abierto por cajera y sucursal) no cuenta.
+    db.add(CashSession(user_id=admin_user.id, branch_id=branch_a.id, organization_id=org.id,
+                       opening_balance=Decimal("500"), status="OPEN", opened_at=_instante(0, hora=9)))
+    # Cerrado ayer: esperado 500 (solo fondo), contado 480 → diferencia -20.
+    db.add(CashSession(user_id=cajero_a.id, branch_id=branch_a.id, organization_id=org.id,
+                       opening_balance=Decimal("500"), closing_balance=Decimal("480"), status="CLOSED",
+                       opened_at=_instante(1, hora=9), closed_at=_instante(1, hora=20)))
+    db.commit()
+
+    p = client.get(f"{INICIO}?completo=true", headers=auth_admin).json()["pendientes"]
+
+    assert p["devoluciones"] == 1
+    assert p["turnos_abiertos"] == 1
+    assert len(p["diferencias_caja"]) == 1
+    dif = p["diferencias_caja"][0]
+    assert (dif["sucursal"], dif["cajera"], dif["esperado"], dif["contado"], dif["diferencia"]) == \
+        ("Sucursal A", "cajero_a", 500.0, 480.0, -20.0)
+
+
+def test_pendientes_corte_cuadrado_o_viejo_no_cuenta(client, db, org, branch_a, cajero_a, auth_admin):
+    db.add(CashSession(user_id=cajero_a.id, branch_id=branch_a.id, organization_id=org.id,
+                       opening_balance=Decimal("500"), closing_balance=Decimal("500"), status="CLOSED",
+                       opened_at=_instante(1, hora=9), closed_at=_instante(1, hora=20)))
+    db.add(CashSession(user_id=cajero_a.id, branch_id=branch_a.id, organization_id=org.id,
+                       opening_balance=Decimal("500"), closing_balance=Decimal("100"), status="CLOSED",
+                       opened_at=_instante(9, hora=9), closed_at=_instante(9, hora=20)))
+    db.commit()
+    p = client.get(f"{INICIO}?completo=true", headers=auth_admin).json()["pendientes"]
+    assert p == {"devoluciones": 0, "turnos_abiertos": 0, "diferencias_caja": []}
+
+
+def test_sucursales_null_con_una_sola_que_vende(client, db, org, branch_a, hq_branch, auth_admin):
+    _variante(db, org, branch_a, "Blusa", "BLU-1", 50)
+    db.commit()
+    assert client.get(f"{INICIO}?completo=true", headers=auth_admin).json()["sucursales"] is None
+
+
+def test_sucursales_con_dos_que_venden(client, db, org, branch_a, branch_b, cajero_a, admin_user, auth_admin):
+    v = _variante(db, org, branch_a, "Blusa", "BLU-1", 1)
+    _venta(db, org, branch_a, admin_user, v, "100")
+    _venta(db, org, branch_b, admin_user, v, "700")
+    _venta(db, org, branch_b, admin_user, v, "50")
+    db.add(CashSession(user_id=cajero_a.id, branch_id=branch_b.id, organization_id=org.id,
+                       opening_balance=Decimal("300"), status="OPEN"))
+    db.commit()
+
+    s = client.get(f"{INICIO}?completo=true", headers=auth_admin).json()["sucursales"]
+
+    assert [x["nombre"] for x in s] == ["Sucursal A", "Sucursal B"]
+    a, b = s
+    assert (a["branch_id"], a["ventas_hoy"], a["tickets_hoy"], a["corte"]["estado"], a["poca_existencia"]) == \
+        (branch_a.id, 100.0, 1, "sin_turno", 1)
+    assert (b["ventas_hoy"], b["tickets_hoy"], b["corte"]["estado"], b["corte"]["efectivo_esperado"], b["poca_existencia"]) == \
+        (750.0, 2, "abierto", 300.0, 0)
+
+
+def test_sucursales_null_al_pedir_una_sucursal_y_para_el_gerente(client, db, org, branch_a, branch_b, gerente_a, auth_admin, auth_gerente_a):
+    _variante(db, org, branch_a, "Blusa", "BLU-1", 50)
+    db.commit()
+    assert client.get(f"{INICIO}?completo=true&branch_id={branch_a.id}", headers=auth_admin).json()["sucursales"] is None
+    g = client.get(f"{INICIO}?completo=true", headers=auth_gerente_a).json()
+    assert g["sucursales"] is None
+    assert g["sin_movimiento"] is not None
+
+
+def test_dias_sin_movimiento_fuera_de_rango_es_422(client, auth_admin):
+    assert client.get(f"{INICIO}?completo=true&dias_sin_movimiento=0", headers=auth_admin).status_code == 422
+    assert client.get(f"{INICIO}?completo=true&dias_sin_movimiento=400", headers=auth_admin).status_code == 422

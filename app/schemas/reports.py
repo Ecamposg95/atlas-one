@@ -101,3 +101,51 @@ class InicioBasicoResponse(BaseModel):
     top_semana: List[ProductoTop]
     poca_existencia: PocaExistencia
     corte: CorteInicio
+
+
+# --- Inicio del dueño (GET /api/reports/inicio, SP6 2026-10) ----------------
+# Las secciones nuevas solo viajan con `completo=true`; en básico van en None.
+
+class ProductoSinMovimiento(BaseModel):
+    variant_id: str
+    nombre: str
+    sku: str
+    existencia: float
+    importe_venta: float   # existencia × precio base de la variante
+
+
+class SinMovimiento(BaseModel):
+    dias: int
+    productos: List[ProductoSinMovimiento]
+
+
+class DiferenciaCaja(BaseModel):
+    session_id: int
+    sucursal: str
+    cajera: Optional[str] = None
+    cerrado_en: Optional[datetime] = None
+    esperado: float
+    contado: float
+    diferencia: float   # contado − esperado (recalculado, no el persistido)
+
+
+class Pendientes(BaseModel):
+    devoluciones: int        # SaleReturn PENDING
+    turnos_abiertos: int     # sesiones OPEN con más de 24 h
+    diferencias_caja: List[DiferenciaCaja]   # cortes de 7 días con diferencia ≠ 0
+
+
+class SucursalInicio(BaseModel):
+    branch_id: int
+    nombre: str
+    ventas_hoy: float
+    tickets_hoy: int
+    corte: CorteInicio
+    poca_existencia: int     # variantes ≤ umbral en esa sucursal
+
+
+class InicioResponse(InicioBasicoResponse):
+    sin_movimiento: Optional[SinMovimiento] = None
+    pendientes: Optional[Pendientes] = None
+    sucursales: Optional[List[SucursalInicio]] = None   # None = una sola sucursal o ámbito de una
+    utilidad_bruta_hoy: Optional[float] = None          # None = sin `completo` o rol sin costos
