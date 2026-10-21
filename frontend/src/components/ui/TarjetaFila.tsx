@@ -105,7 +105,7 @@ export function TarjetaFila({
         <button
           type="button"
           onClick={onClick}
-          className="block w-full text-left rounded-md transition-opacity active:opacity-70"
+          className="block w-full text-left rounded-md transition-opacity active:opacity-70 max-md:min-h-[44px]"
         >
           {contenido}
         </button>
