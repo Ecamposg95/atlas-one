@@ -90,7 +90,7 @@ export function HQValorInventario() {
       />
 
       <BarraFiltros accion={<button type="button" onClick={load} className="dax-btn-primary">Actualizar</button>}>
-        <label className="flex flex-col text-xs" style={{ color: 'var(--dax-text-muted)' }}>
+        <label className="flex flex-col text-xs text-dax-muted">
           Agrupar por
           <select className="dax-input w-44" value={agrupar} onChange={(e) => setAgrupar(e.target.value as AgruparValuacion)}>
             <option value="sucursal">Sucursal</option>
@@ -99,7 +99,7 @@ export function HQValorInventario() {
           </select>
         </label>
         {!esGerente && (
-          <label className="flex flex-col text-xs" style={{ color: 'var(--dax-text-muted)' }}>
+          <label className="flex flex-col text-xs text-dax-muted">
             Sucursal
             <select
               className="dax-input w-52"
@@ -128,12 +128,12 @@ export function HQValorInventario() {
       {t && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="dax-card p-4">
-            <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--dax-text-muted)' }}>Valor a precio de venta</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-dax-muted">Valor a precio de venta</p>
             <p className="text-xl font-bold tabular-nums">{formatCurrency(t.valor_venta)}</p>
           </div>
           {veCosto && (
             <div className="dax-card p-4">
-              <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--dax-text-muted)' }}>Valor a costo</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-dax-muted">Valor a costo</p>
               <p className="text-xl font-bold tabular-nums">{formatCurrency(t.valor_costo ?? 0)}</p>
               {costoIncompleto && (
                 <p className="text-[10px] font-bold text-amber-400">incompleto: faltan costos</p>
@@ -141,11 +141,11 @@ export function HQValorInventario() {
             </div>
           )}
           <div className="dax-card p-4">
-            <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--dax-text-muted)' }}>Piezas · SKUs</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-dax-muted">Piezas · SKUs</p>
             <p className="text-xl font-bold tabular-nums">{piezasTxt(t.piezas)} · {t.skus}</p>
           </div>
           <div className="dax-card p-4">
-            <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--dax-text-muted)' }}>Sin costo</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-dax-muted">Sin costo</p>
             <p className={`text-xl font-bold tabular-nums ${costoIncompleto ? 'text-amber-400' : ''}`}>
               {piezasTxt(t.piezas_sin_costo)} pz · {t.skus_sin_costo} SKU{t.skus_sin_costo === 1 ? '' : 's'}
             </p>
@@ -175,7 +175,7 @@ export function HQValorInventario() {
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-xs uppercase tracking-wider" style={{ color: 'var(--dax-text-muted)' }}>
+                <tr className="text-left text-xs uppercase tracking-wider text-dax-muted">
                   <th className="p-3">{ETIQUETA_GRUPO[data?.agrupar ?? agrupar]}</th>
                   <th className="p-3 text-right">Piezas</th>
                   <th className="p-3 text-right">SKUs</th>
@@ -186,10 +186,10 @@ export function HQValorInventario() {
               </thead>
               <tbody>
                 {grupos.length === 0 && (
-                  <tr><td colSpan={veCosto ? 6 : 5} className="p-8 text-center" style={{ color: 'var(--dax-text-muted)' }}>Sin existencias que valuar</td></tr>
+                  <tr><td colSpan={veCosto ? 6 : 5} className="p-8 text-center text-dax-muted">Sin existencias que valuar</td></tr>
                 )}
                 {grupos.map((g) => (
-                  <tr key={g.clave || 'sin'} style={{ borderTop: '1px solid var(--dax-border-dim)' }}>
+                  <tr key={g.clave || 'sin'} className="border-t border-dax-border-dim">
                     <td className="p-3 font-medium">{g.nombre}</td>
                     <td className="p-3 text-right tabular-nums">{piezasTxt(g.piezas)}</td>
                     <td className="p-3 text-right tabular-nums">{g.skus}</td>
@@ -201,7 +201,7 @@ export function HQValorInventario() {
               </tbody>
               {t && grupos.length > 0 && (
                 <tfoot>
-                  <tr className="font-bold" style={{ borderTop: '2px solid var(--dax-border-dim)' }}>
+                  <tr className="font-bold border-t-2 border-dax-border-dim">
                     <td className="p-3">Total</td>
                     <td className="p-3 text-right tabular-nums">{piezasTxt(t.piezas)}</td>
                     <td className="p-3 text-right tabular-nums">{t.skus}</td>

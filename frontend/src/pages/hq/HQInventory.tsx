@@ -4,6 +4,8 @@ import { productsApi } from '../../api/products'
 import { inventoryApi } from '../../api/inventory'
 import { organizationApi, type Branch } from '../../api/organization'
 import { DaxCard } from '../../components/ui/DaxCard'
+import { Modal } from '../../components/ui/Modal'
+import { useAuthStore } from '../../store/authStore'
 import { Spinner } from '../../components/ui/Spinner'
 import { useEsTelefono } from '../../hooks/useIsMobile'
 import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
@@ -17,9 +19,15 @@ import { useEffect } from 'react'
 import { formatCurrency } from '../../utils/currency'
 import { expandVariantRows, initialInventoryQuery, type InventoryRow } from '../inventory/variantRows'
 
+const ADMIN_ROLES = new Set(['ADMINISTRADOR', 'DUEÑO'])
+const sinCosto = (r: InventoryRow) => !(Number(r.variant.cost) > 0)
+
 export function HQInventory() {
   const location = useLocation()
   const esTelefono = useEsTelefono()
+  // SP6: costo e importe a costo solo para quien ve costos (misma regla que la valuación).
+  const veCosto = ADMIN_ROLES.has(useAuthStore((s) => s.user?.role ?? ''))
+  const [soloSinCosto, setSoloSinCosto] = useState(false)
   const [search, setSearch] = useState('')
   const [products, setProducts] = useState<Product[]>([])
   const [branches, setBranches] = useState<Branch[]>([])
@@ -49,7 +57,16 @@ export function HQInventory() {
   }, [])
 
   // Un renglón por variante — con varias tallas, kardex y ajuste van a la que se eligió, no a la primera.
-  const rows = expandVariantRows(products)
+  // "Solo sin costo" filtra lo buscado (máx. 30 productos): es para corregir mientras se busca; el
+  // conteo completo de piezas sin costo vive en Valor de la tienda.
+  const todas = expandVariantRows(products)
+  const rows = soloSinCosto ? todas.filter(sinCosto) : todas
+  const importeVenta = (r: InventoryRow) => r.qty * Number(r.variant.price ?? 0)
+  const importeCosto = (r: InventoryRow) => r.qty * Number(r.variant.cost ?? 0)
+  const totales = rows.reduce(
+    (t, r) => ({ piezas: t.piezas + r.qty, venta: t.venta + importeVenta(r), costo: t.costo + importeCosto(r) }),
+    { piezas: 0, venta: 0, costo: 0 },
+  )
 
   const openDetail = async (row: InventoryRow) => {
     setSelected(row)
@@ -115,12 +132,16 @@ export function HQInventory() {
         }
       />
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2 items-center">
         <input
           type="text" placeholder="Buscar producto por nombre o SKU..."
           value={search}
           onChange={(e) => { setSearch(e.target.value); doSearch(e.target.value) }}
-          className="dax-input flex-1 text-sm" />
+          className="dax-input flex-1 min-w-[12rem] text-sm" />
+        <label className="flex items-center gap-2 text-xs text-slate-300 max-md:min-h-[44px] cursor-pointer">
+          <input type="checkbox" checked={soloSinCosto} onChange={(e) => setSoloSinCosto(e.target.checked)} />
+          Solo sin costo
+        </label>
       </div>
 
       {loading && <Spinner text="Buscando..." />}
@@ -133,8 +154,15 @@ export function HQInventory() {
                 <TarjetaFila key={row.variant.id}
                   titulo={row.label}
                   subtitulo={<span className="font-mono text-indigo-400">{row.sku}</span>}
-                  importe={formatCurrency(row.variant.price ?? 0)}
+                  importe={formatCurrency(importeVenta(row))}
                   estado={<span className={`font-bold tabular-nums ${row.qty <= 0 ? 'text-red-400' : 'text-emerald-400'}`}>{row.qty} en stock</span>}
+                  datos={[
+                    { etiqueta: 'Precio', valor: formatCurrency(row.variant.price ?? 0) },
+                    ...(veCosto ? [
+                      { etiqueta: 'Costo', valor: sinCosto(row) ? <span className="text-amber-400">sin costo</span> : formatCurrency(row.variant.cost ?? 0) },
+                      { etiqueta: 'A costo', valor: formatCurrency(importeCosto(row)) },
+                    ] : []),
+                  ]}
                   acciones={<button onClick={() => openDetail(row)} className="dax-btn-secondary text-xs"><i className="fa-solid fa-chart-line" /> Kardex</button>}
                 />
               ))}
@@ -147,7 +175,10 @@ export function HQInventory() {
                   <th>SKU</th>
                   <th>Producto</th>
                   <th className="text-right">Precio</th>
+                  {veCosto && <th className="text-right">Costo</th>}
                   <th className="text-right">Stock</th>
+                  <th className="text-right">Importe venta</th>
+                  {veCosto && <th className="text-right">Importe costo</th>}
                   <th></th>
                 </tr>
               </thead>
@@ -158,9 +189,16 @@ export function HQInventory() {
                     <td className="text-white font-semibold">{row.label}</td>
                     {/* Precio de ESTA talla: `product.price` es el aplanado de la principal. */}
                     <td className="text-right text-slate-300">{formatCurrency(row.variant.price ?? 0)}</td>
+                    {veCosto && (
+                      <td className="text-right text-slate-300">
+                        {sinCosto(row) ? <span className="text-amber-400 text-xs font-bold">sin costo</span> : formatCurrency(row.variant.cost ?? 0)}
+                      </td>
+                    )}
                     <td className={`text-right font-bold ${row.qty <= 0 ? 'text-red-400' : 'text-emerald-400'}`}>
                       {row.qty}
                     </td>
+                    <td className="text-right text-slate-300 tabular-nums">{formatCurrency(importeVenta(row))}</td>
+                    {veCosto && <td className="text-right text-slate-300 tabular-nums">{formatCurrency(importeCosto(row))}</td>}
                     <td>
                       <button onClick={() => openDetail(row)} className="dax-btn-secondary text-xs">
                         <i className="fa-solid fa-chart-line" /> Kardex
@@ -169,6 +207,15 @@ export function HQInventory() {
                   </tr>
                 ))}
               </tbody>
+              <tfoot>
+                <tr className="font-bold text-white" data-testid="totales">
+                  <td colSpan={veCosto ? 4 : 3}>Total de lo listado</td>
+                  <td className="text-right tabular-nums">{totales.piezas}</td>
+                  <td className="text-right tabular-nums">{formatCurrency(totales.venta)}</td>
+                  {veCosto && <td className="text-right tabular-nums">{formatCurrency(totales.costo)}</td>}
+                  <td></td>
+                </tr>
+              </tfoot>
             </table>
           </div>
           )}
@@ -256,14 +303,22 @@ export function HQInventory() {
         <DaxCard><div className="p-12 text-center text-slate-600">Busca un producto para ver su kardex</div></DaxCard>
       )}
 
-      {/* Modal ajuste */}
+      {/* Ajuste de existencia: Modal del kit. */}
       {adjustModal && selected && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setAdjustModal(false)}>
-          <div className="dax-card dax-modal p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-black text-white">Ajuste de Inventario</h3>
-              <button onClick={() => setAdjustModal(false)} className="dax-btn-icon text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
-            </div>
+        <Modal
+          open
+          onClose={() => setAdjustModal(false)}
+          size="sm"
+          title="Ajuste de inventario"
+          footer={
+            <>
+              <button onClick={() => setAdjustModal(false)} className="dax-btn-secondary flex-1">Cancelar</button>
+              <button onClick={handleAdjust} disabled={adjSaving || !adjQty || !adjReason || !adjBranch} className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
+                {adjSaving ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Ajustar</>}
+              </button>
+            </>
+          }
+        >
             <p className="text-slate-400 text-sm mb-4">{selected.label}</p>
             <div className="space-y-3">
               <div>
@@ -284,14 +339,7 @@ export function HQInventory() {
                   placeholder="Conteo físico, merma, etc." className="dax-input w-full" />
               </div>
             </div>
-            <div className="dax-modal-footer -mx-6 px-6 flex gap-2 mt-4">
-              <button onClick={() => setAdjustModal(false)} className="dax-btn-secondary flex-1">Cancelar</button>
-              <button onClick={handleAdjust} disabled={adjSaving || !adjQty || !adjReason || !adjBranch} className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
-                {adjSaving ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Ajustar</>}
-              </button>
-            </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   )
