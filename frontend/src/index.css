@@ -452,7 +452,9 @@
     box-shadow: var(--dax-shadow-lg);
   }
 
-  /* ─── Botón primario ────────────────────────────── */
+  /* ─── Botones: `dax-btn-primary` / `-secondary` / `-danger` / `-ghost` son
+     la API oficial del kit (+ `dax-btn-icon` para solo-icono en teléfono).
+     `components/ui/Button` solo envuelve estas clases. ─── */
   .dax-btn-primary {
     display: inline-flex;
     align-items: center;
@@ -525,22 +527,22 @@
   }
   .dax-btn-danger:disabled { opacity: 0.45; cursor: not-allowed; }
 
-  /* ─── Botón fantasma (sin fondo; solo texto + hover) ── */
+  /* ─── Botón fantasma: el aspecto que tenía la variante `ghost` inline de
+     ui/Button (text-slate-400 hover:text-white hover:bg-slate-700/40 px-4
+     py-2 rounded-lg transition-colors). Letra y peso heredados. ── */
   .dax-btn-ghost {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
     background: transparent;
-    color: var(--dax-text-muted);
-    font-weight: 600;
-    font-size: 0.75rem;
-    padding: 0.5rem 1.1rem;
-    border-radius: 10px;
-    border: 1px solid transparent;
+    color: #94a3b8;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    border: none;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: color 0.15s ease, background-color 0.15s ease;
   }
-  .dax-btn-ghost:hover:not(:disabled) { background: var(--dax-surface); color: var(--dax-text); }
+  .dax-btn-ghost:hover:not(:disabled) { background: rgba(51, 65, 85, 0.4); color: #ffffff; }
   .dax-btn-ghost:disabled { opacity: 0.45; cursor: not-allowed; }
 
   /* ─── Input ─────────────────────────────────────── */

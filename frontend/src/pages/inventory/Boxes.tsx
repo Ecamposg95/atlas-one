@@ -37,11 +37,12 @@ function dims(l: number, w: number, h: number) {
 
 // ── Forms ─────────────────────────────────────────────────────────────────────
 
-interface ContainerForm { name: string; inner_length: string; inner_width: string; inner_height: string }
-interface BoxForm { name: string; outer_length: string; outer_width: string; outer_height: string }
+interface ContainerForm { name: string; inner_length: string; inner_width: string; inner_height: string; max_weight_kg: string }
+interface BoxForm { name: string; outer_length: string; outer_width: string; outer_height: string; weight_empty_kg: string }
 
-const emptyContainerForm = (): ContainerForm => ({ name: '', inner_length: '', inner_width: '', inner_height: '' })
-const emptyBoxForm = (): BoxForm => ({ name: '', outer_length: '', outer_width: '', outer_height: '' })
+// El backend exige los pesos (ContainerTypeCreate / BoxTypeCreate); valores por defecto sensatos.
+const emptyContainerForm = (): ContainerForm => ({ name: '', inner_length: '', inner_width: '', inner_height: '', max_weight_kg: '1000' })
+const emptyBoxForm = (): BoxForm => ({ name: '', outer_length: '', outer_width: '', outer_height: '', weight_empty_kg: '0.5' })
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -79,7 +80,7 @@ export function Boxes() {
   // ── Container submit ────────────────────────────────────────────────────────
 
   const handleSaveContainer = async () => {
-    const { name, inner_length, inner_width, inner_height } = containerForm
+    const { name, inner_length, inner_width, inner_height, max_weight_kg } = containerForm
     if (!name || !inner_length || !inner_width || !inner_height) return
     setSavingContainer(true)
     try {
@@ -88,6 +89,7 @@ export function Boxes() {
         inner_length: Number(inner_length),
         inner_width: Number(inner_width),
         inner_height: Number(inner_height),
+        max_weight_kg: Number(max_weight_kg) || 0,
       })
       setShowContainerModal(false)
       setContainerForm(emptyContainerForm())
@@ -98,7 +100,7 @@ export function Boxes() {
   // ── Box submit ──────────────────────────────────────────────────────────────
 
   const handleSaveBox = async () => {
-    const { name, outer_length, outer_width, outer_height } = boxForm
+    const { name, outer_length, outer_width, outer_height, weight_empty_kg } = boxForm
     if (!name || !outer_length || !outer_width || !outer_height) return
     setSavingBox(true)
     try {
@@ -107,6 +109,7 @@ export function Boxes() {
         outer_length: Number(outer_length),
         outer_width: Number(outer_width),
         outer_height: Number(outer_height),
+        weight_empty_kg: Number(weight_empty_kg) || 0,
       })
       setShowBoxModal(false)
       setBoxForm(emptyBoxForm())
@@ -245,6 +248,12 @@ export function Boxes() {
               onChange={(e) => setContainerForm((f) => ({ ...f, name: e.target.value }))}
               className="dax-input w-full" placeholder="Ej. Contenedor 40 pies" />
           </div>
+          <div>
+            <label className="dax-label">Peso máximo (kg)</label>
+            <input type="number" min="0" step="1" value={containerForm.max_weight_kg}
+              onChange={(e) => setContainerForm((f) => ({ ...f, max_weight_kg: e.target.value }))}
+              className="dax-input w-full" placeholder="1000" />
+          </div>
           <div className="grid grid-cols-3 gap-3"> {/* rejilla fija: 3 números cortos caben a 390 */}
             {(['inner_length', 'inner_width', 'inner_height'] as const).map((field, i) => (
               <div key={field}>
@@ -275,6 +284,12 @@ export function Boxes() {
             <input type="text" value={boxForm.name}
               onChange={(e) => setBoxForm((f) => ({ ...f, name: e.target.value }))}
               className="dax-input w-full" placeholder="Ej. Caja chica 30×20" />
+          </div>
+          <div>
+            <label className="dax-label">Peso de la caja vacía (kg)</label>
+            <input type="number" min="0" step="0.1" value={boxForm.weight_empty_kg}
+              onChange={(e) => setBoxForm((f) => ({ ...f, weight_empty_kg: e.target.value }))}
+              className="dax-input w-full" placeholder="0.5" />
           </div>
           <div className="grid grid-cols-3 gap-3"> {/* rejilla fija: 3 números cortos caben a 390 */}
             {(['outer_length', 'outer_width', 'outer_height'] as const).map((field, i) => (

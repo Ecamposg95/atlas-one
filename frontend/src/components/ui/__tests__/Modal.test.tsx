@@ -79,3 +79,74 @@ describe('Modal', () => {
     expect(screen.getByLabelText('Cerrar').classList.contains('dax-btn-icon')).toBe(true)
   })
 })
+
+// Dos modales apilados (la ficha del POS con el editor encima): solo el de
+// arriba atiende Escape, y el scroll del body se libera cuando cierra el último.
+function Apilados({ onCerrarAbajo, onCerrarArriba, arriba }: { onCerrarAbajo: () => void; onCerrarArriba: () => void; arriba: boolean }) {
+  return (
+    <Modal open onClose={onCerrarAbajo} title="Abajo">
+      <p>contenido de abajo</p>
+      {arriba && (
+        <Modal open onClose={onCerrarArriba} title="Arriba" closeOnEscape={false}>
+          <p>contenido de arriba</p>
+        </Modal>
+      )}
+    </Modal>
+  )
+}
+
+describe('modales apilados', () => {
+  it('Escape solo lo atiende el de arriba: con closeOnEscape={false} arriba, no cierra ninguno', () => {
+    let abajo = 0, arriba = 0
+    render(<Apilados onCerrarAbajo={() => abajo++} onCerrarArriba={() => arriba++} arriba />)
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(abajo).toBe(0)
+    expect(arriba).toBe(0)
+  })
+
+  it('cerrado el de arriba, Escape vuelve a cerrar el de abajo', () => {
+    let abajo = 0
+    const { rerender } = render(<Apilados onCerrarAbajo={() => abajo++} onCerrarArriba={() => {}} arriba />)
+    rerender(<Apilados onCerrarAbajo={() => abajo++} onCerrarArriba={() => {}} arriba={false} />)
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(abajo).toBe(1)
+  })
+
+  it('el scroll del body se bloquea con el primero y se libera con el último, también al desmontarse juntos', () => {
+    document.body.style.overflow = ''
+    const { rerender, unmount } = render(<Apilados onCerrarAbajo={() => {}} onCerrarArriba={() => {}} arriba />)
+    expect(document.body.style.overflow).toBe('hidden')
+    rerender(<Apilados onCerrarAbajo={() => {}} onCerrarArriba={() => {}} arriba={false} />)
+    expect(document.body.style.overflow).toBe('hidden')   // el de abajo sigue abierto
+    unmount()
+    expect(document.body.style.overflow).toBe('')
+    const r2 = render(<Apilados onCerrarAbajo={() => {}} onCerrarArriba={() => {}} arriba />)
+    r2.unmount()                                            // padre e hijo a la vez (el caso del bug)
+    expect(document.body.style.overflow).toBe('')
+  })
+})
+
+// ConfirmDialog encima de un Modal (detalle de cotización → Eliminar → Esc):
+// Escape cancela solo la confirmación; el detalle sigue abierto.
+import { ConfirmDialogProvider, confirm } from '../ConfirmDialog'
+describe('ConfirmDialog encima de un Modal', () => {
+  it('Escape cancela la confirmación y no cierra el Modal de abajo', async () => {
+    let cerrados = 0
+    let resultado: Promise<boolean> | undefined
+    render(
+      <ConfirmDialogProvider>
+        <Modal open onClose={() => cerrados++} title="Cotización Q-0001">
+          <button onClick={() => { resultado = confirm({ title: 'Eliminar cotización', variant: 'danger' }) }}>Eliminar</button>
+        </Modal>
+      </ConfirmDialogProvider>,
+    )
+    fireEvent.click(screen.getByText('Eliminar'))
+    await screen.findByText('Eliminar cotización')
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await expect(resultado!).resolves.toBe(false)
+    expect(cerrados).toBe(0)
+    // Sin la confirmación encima, Escape vuelve a cerrar el detalle.
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(cerrados).toBe(1)
+  })
+})

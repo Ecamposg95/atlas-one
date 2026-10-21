@@ -9,6 +9,7 @@ import { ListaTarjetas } from '../../components/ui/ListaTarjetas'
 import { TarjetaFila } from '../../components/ui/TarjetaFila'
 import { useEsTelefono } from '../../hooks/useIsMobile'
 import { toast } from '../../store/toastStore'
+import { confirm as confirmDialog } from '../../components/ui/ConfirmDialog'
 import { formatCurrency } from '../../utils/currency'
 
 const statusVariant = (s: POStatus) =>
@@ -35,6 +36,7 @@ export function Purchases() {
   const [notes, setNotes] = useState('')
   const [poItems, setPoItems] = useState<POFormItem[]>([{ ...ITEM_VACIO }])
   const [saving, setSaving] = useState(false)
+  const [cancelando, setCancelando] = useState(false)
   const esTelefono = useEsTelefono()
 
   const load = useCallback(async (status?: POStatus | '') => {
@@ -78,6 +80,20 @@ export function Purchases() {
         setSelected(updated)
       }
     } catch { toast.error('Error al cambiar el estado de la orden') }
+  }
+
+  // Cancelar la orden es destructivo: pide confirmación y bloquea el botón mientras corre.
+  const handleCancelOrder = async (po: PurchaseOrder) => {
+    const ok = await confirmDialog({
+      title: `Cancelar la orden ${folioDe(po)}`,
+      message: `La orden de compra a ${po.supplier_name} por ${formatCurrency(po.total)} quedará cancelada. Esta acción no se puede deshacer.`,
+      variant: 'danger',
+      confirmText: 'Cancelar orden',
+      cancelText: 'Volver',
+    })
+    if (!ok) return
+    setCancelando(true)
+    try { await handleStatusChange(po.id, 'CANCELLED') } finally { setCancelando(false) }
   }
 
   const handleReceive = async (po: PurchaseOrder) => {
@@ -203,9 +219,10 @@ export function Purchases() {
                 <i className="fa-solid fa-box-open" /> Recibir mercancía
               </button>
             )}
-            <button onClick={() => handleStatusChange(selected.id, 'CANCELLED')} className="dax-btn-danger text-xs">
-              <i className="fa-solid fa-xmark" /> Cancelar
+            <button onClick={() => handleCancelOrder(selected)} disabled={cancelando} className="dax-btn-danger text-xs disabled:opacity-40">
+              <i className="fa-solid fa-ban" /> Cancelar orden
             </button>
+            <button onClick={() => setSelected(null)} className="dax-btn-secondary text-xs ml-auto">Cerrar</button>
           </div>
         ) : undefined}>
         {selected && (
@@ -222,7 +239,7 @@ export function Purchases() {
                   <li key={line.id} className="py-2 flex justify-between gap-3">
                     <span className="min-w-0">
                       <span className="block font-semibold text-white truncate">{line.product_name}</span>
-                      <span className="block font-mono text-slate-500">{line.sku ?? '—'} · {line.qty_received}/{line.qty_ordered} recibidas</span>
+                      <span className="block font-mono text-slate-500">{line.sku ?? '—'} · <span className={line.qty_received >= line.qty_ordered ? 'text-emerald-400' : 'text-amber-400'}>{line.qty_received}/{line.qty_ordered} recibidas</span></span>
                     </span>
                     <span className="tabular-nums shrink-0">{formatCurrency(line.unit_cost)}</span>
                   </li>

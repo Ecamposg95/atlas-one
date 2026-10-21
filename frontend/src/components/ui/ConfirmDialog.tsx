@@ -88,7 +88,8 @@ function DialogView({ options, onConfirm, onCancel }: DialogViewProps) {
     target?.focus()
   }, [variant])
 
-  // Focus trap + teclado.
+  // Focus trap + teclado. `data-modal-kit` en la raíz lo mete a la pila de
+  // ui/Modal: con una confirmación encima, el Modal de abajo no atiende Escape.
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
       if (e.key === 'Escape') {
@@ -125,6 +126,7 @@ function DialogView({ options, onConfirm, onCancel }: DialogViewProps) {
       className="fixed inset-0 z-[1000] flex items-center justify-center p-4 backdrop-blur-sm transition-opacity"
       style={{ background: 'var(--dax-modal-backdrop)' }}
       role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title"
+      data-modal-kit=""
       onClick={(e) => { if (e.target === e.currentTarget) onCancel() }}
     >
       {/* `.dax-modal`: tope de alto y hoja inferior bajo `sm` (index.css §2). Colores del tema, no fijos. */}

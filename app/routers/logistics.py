@@ -25,45 +25,50 @@ from app.core.permissions import require_module
 router = APIRouter(dependencies=[Depends(require_module("warehouse"))])
 
 # --- CRUD Container ---
+# Catálogo por organización (regla de oro 5): antes era global y sin usuario, y
+# el GET sembraba filas sin organization_id la primera vez. Ya no se siembra nada.
 @router.post("/containers", response_model=ContainerTypeRead)
-def create_container(c: ContainerTypeCreate, db: Session = Depends(get_db)):
-    new_c = ContainerType(**c.dict())
+def create_container(
+    c: ContainerTypeCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    org_id: int = Depends(get_current_active_organization),
+):
+    new_c = ContainerType(**c.dict(), organization_id=org_id)
     db.add(new_c)
     db.commit()
     db.refresh(new_c)
     return new_c
 
 @router.get("/containers", response_model=List[ContainerTypeRead])
-def list_containers(db: Session = Depends(get_db)):
-    # Seed common containers if empty
-    if db.query(ContainerType).count() == 0:
-        db.add_all([
-            ContainerType(name="20ft Standard", inner_length=5898, inner_width=2352, inner_height=2393, max_weight_kg=28200),
-            ContainerType(name="40ft High Cube", inner_length=12032, inner_width=2352, inner_height=2698, max_weight_kg=28600),
-            ContainerType(name="Camioneta 3.5 Ton", inner_length=3000, inner_width=2000, inner_height=2000, max_weight_kg=3500)
-        ])
-        db.commit()
-    return db.query(ContainerType).all()
+def list_containers(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    org_id: int = Depends(get_current_active_organization),
+):
+    return db.query(ContainerType).filter(ContainerType.organization_id == org_id).order_by(ContainerType.id).all()
 
 # --- CRUD Boxes ---
 @router.post("/boxes", response_model=BoxTypeRead)
-def create_box(b: BoxTypeCreate, db: Session = Depends(get_db)):
-    new_b = BoxType(**b.dict())
+def create_box(
+    b: BoxTypeCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    org_id: int = Depends(get_current_active_organization),
+):
+    new_b = BoxType(**b.dict(), organization_id=org_id)
     db.add(new_b)
     db.commit()
     db.refresh(new_b)
     return new_b
 
 @router.get("/boxes", response_model=List[BoxTypeRead])
-def list_boxes(db: Session = Depends(get_db)):
-    # Seed common boxes if empty
-    if db.query(BoxType).count() == 0:
-        db.add_all([
-            BoxType(name="Caja Estándar A", outer_length=400, outer_width=300, outer_height=300, weight_empty_kg=0.5),
-            BoxType(name="Caja Grande B", outer_length=600, outer_width=400, outer_height=400, weight_empty_kg=1.0)
-        ])
-        db.commit()
-    return db.query(BoxType).all()
+def list_boxes(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    org_id: int = Depends(get_current_active_organization),
+):
+    return db.query(BoxType).filter(BoxType.organization_id == org_id).order_by(BoxType.id).all()
 
 # --- Calculation Logic ---
 

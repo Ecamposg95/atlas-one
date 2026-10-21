@@ -28,7 +28,7 @@ describe('botones del kit: dax-btn-* es la API', () => {
   it('ui/Button mapea a las clases y no duplica el padding en md', () => {
     const s = readFileSync(join(raiz, 'components/ui/Button.tsx'), 'utf8')
     expect(s).toMatch(/ghost: 'dax-btn-ghost'/)
-    expect(s).toMatch(/md: ''/)
+    expect(s).toMatch(/md: 'text-sm'/)
   })
   it('ningún archivo usa la clase `dax-btn` a secas (no existe en CSS)', () => {
     const culpables = archivos(raiz)
@@ -39,7 +39,7 @@ describe('botones del kit: dax-btn-* es la API', () => {
   it('las pantallas de la ola 3 no estilizan botones con style={{', () => {
     for (const p of PAGINAS_OLA3) {
       const s = readFileSync(join(raiz, p), 'utf8')
-      expect(s, p).not.toMatch(/<(button|a)\b[^>]*style=\{\{/s)
+      expect(s, p).not.toMatch(/<(button|a)\b(?:=>|[^>])*style=\{\{/s)
     }
   })
 })

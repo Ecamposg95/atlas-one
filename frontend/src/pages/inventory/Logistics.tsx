@@ -26,7 +26,7 @@ interface TransferOrder {
   updated_at: string | null
 }
 
-interface TransferLine { product_id: string; sku: string; name: string; qty: number }
+interface TransferLine { product_id: string; variant_id: string; sku: string; name: string; qty: number }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -94,10 +94,13 @@ export function Logistics() {
   }
 
   const addLine = (p: Product) => {
+    // El backend transfiere por variante (talla): la que empató la búsqueda o la primera.
+    const variantId = p.matched_variant_id ?? p.variants?.[0]?.id
+    if (!variantId) { toast.error('Este producto no tiene talla o variante que transferir'); return }
     setLines((prev) => {
       const existing = prev.find((l) => l.product_id === p.id)
       if (existing) return prev.map((l) => l.product_id === p.id ? { ...l, qty: l.qty + 1 } : l)
-      return [...prev, { product_id: p.id, sku: p.sku, name: p.name, qty: 1 }]
+      return [...prev, { product_id: p.id, variant_id: variantId, sku: p.sku, name: p.name, qty: 1 }]
     })
     setProductSearch(''); setSearchResults([])
   }
@@ -114,7 +117,7 @@ export function Logistics() {
       await client.post('/transfers/', {
         requesting_branch_id: toBranchId,
         notes: notes || null,
-        lines: lines.map((l) => ({ variant_sku: l.sku, qty_requested: l.qty })),
+        lines: lines.map((l) => ({ variant_id: l.variant_id, qty_requested: l.qty })),
       })
       setShowModal(false)
       load()
@@ -181,8 +184,8 @@ export function Logistics() {
         )}
       </DaxCard>
 
-      {/* Modal nueva solicitud: las líneas capturadas no se pierden por un clic en el fondo */}
-      <Modal open={showModal} onClose={() => setShowModal(false)} title="Nueva Solicitud de Transferencia" size="lg" closeOnBackdrop={false}
+      {/* Modal nueva solicitud: las líneas capturadas no se pierden por un clic en el fondo ni por Escape */}
+      <Modal open={showModal} onClose={() => setShowModal(false)} title="Nueva Solicitud de Transferencia" size="lg" closeOnBackdrop={false} closeOnEscape={false}
         footer={<>
           <button onClick={() => setShowModal(false)} className="dax-btn-secondary flex-1">Cancelar</button>
           <button onClick={handleSave}
@@ -207,9 +210,10 @@ export function Logistics() {
           {/* Buscar producto */}
           <div>
             <label className="dax-label">Agregar producto</label>
-            <div className="relative">
+            <div>
               <input type="text" placeholder="Nombre o SKU..."
                 value={productSearch}
+                onKeyDown={(e) => { if (e.key === 'Escape') setSearchResults([]) }}
                 onChange={(e) => {
                   setProductSearch(e.target.value)
                   if (searchTimer.current) clearTimeout(searchTimer.current)
@@ -222,8 +226,9 @@ export function Logistics() {
                   }, 300)
                 }}
                 className="dax-input w-full text-sm" />
+              {/* En flujo (no absolute): dentro del cuerpo con scroll de ui/Modal un desplegable flotante se recorta. */}
               {searchResults.length > 0 && (
-                <div className="absolute z-30 top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-xl overflow-hidden">
+                <div className="mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-xl overflow-hidden">
                   {searchResults.map((p) => (
                     <button key={p.id} onClick={() => addLine(p)}
                       className="w-full flex items-center justify-between px-3 py-2 hover:bg-slate-700/60 text-left text-sm border-b border-slate-700/40 last:border-0 max-md:min-h-[44px]">

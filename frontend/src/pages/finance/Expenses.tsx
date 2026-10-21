@@ -150,7 +150,7 @@ export function Expenses() {
           <ListaTarjetas cargando={loading} vacio={expenses.length === 0} textoVacio="Sin gastos en este período" className="p-3">
             {expenses.map((e) => (
               <TarjetaFila key={e.id}
-                titulo={e.description ?? e.category}
+                titulo={e.description || e.category}
                 subtitulo={`${fecha(e.created_at)} · ${e.branch_name ?? '—'} · ${e.user_name ?? '—'}`}
                 importe={<span className="text-red-400">{formatCurrency(e.amount)}</span>}
                 estado={<span className="dax-badge dax-badge-slate">{e.category}</span>}
