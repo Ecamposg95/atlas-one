@@ -26,7 +26,6 @@ const NotFoundPage = lazy(() => import('./pages/NotFound').then(m => ({ default:
 
 // HQ / Admin
 const HQReportsHub    = lazy(() => import('./pages/hq/HQReportsHub').then(m => ({ default: m.HQReportsHub })))
-const HQControl       = lazy(() => import('./pages/hq/HQControl').then(m => ({ default: m.HQControl })))
 const HQSalesLog      = lazy(() => import('./pages/hq/HQSalesLog').then(m => ({ default: m.HQSalesLog })))
 const HQReturns       = lazy(() => import('./pages/hq/HQReturns').then(m => ({ default: m.HQReturns })))
 const HQInventory     = lazy(() => import('./pages/hq/HQInventory').then(m => ({ default: m.HQInventory })))
@@ -276,7 +275,6 @@ export default function App() {
             {/* Modo básico (FREE): Inicio corto y los Reportes de la cajera; las de paga, lo de siempre. */}
             <Route path="operations" element={<RutaPorRol url="/hq/operations"><Suspense fallback={<PageLoader />}><Inicio /></Suspense></RutaPorRol>} />
             <Route path="reports-hub" element={<RutaPorRol url="/hq/reports-hub"><Suspense fallback={<PageLoader />}><PorPerfil basico={<Reports />} completo={<HQReportsHub />} /></Suspense></RutaPorRol>} />
-            <Route path="control" element={<RutaPorRol url="/hq/control"><Suspense fallback={<PageLoader />}><HQControl /></Suspense></RutaPorRol>} />
             <Route path="sales" element={<RutaPorRol url="/hq/sales"><Suspense fallback={<PageLoader />}><HQSalesLog /></Suspense></RutaPorRol>} />
             <Route path="returns" element={<RutaPorRol url="/hq/returns"><Suspense fallback={<PageLoader />}><HQReturns /></Suspense></RutaPorRol>} />
             <Route path="inventory" element={<RutaPorRol url="/hq/inventory"><Suspense fallback={<PageLoader />}><HQInventory /></Suspense></RutaPorRol>} />

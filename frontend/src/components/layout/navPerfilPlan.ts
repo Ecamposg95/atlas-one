@@ -16,10 +16,8 @@ import type { NavItem } from './navVisibility'
  */
 export const PERFIL_POR_PLAN: Record<string, readonly string[]> = {
   FREE: [
-    '/hq/control',
     '/hr/me',
-    // Armazón móvil de VENDEDOR/SOPORTE; /mobile/owner (Resumen móvil) se queda: es
-    // la vuelta del dueño en teléfono (rutaInicioPorRol).
+    // Armazón móvil de VENDEDOR/SOPORTE (Resumen móvil ya no está en ningún menú: SP6).
     '/mobile/dashboard', '/mobile/query', '/mobile/sales', '/mobile/profile',
     '/ai',
     '/quotes', '/quotes/new', '/seguimiento',

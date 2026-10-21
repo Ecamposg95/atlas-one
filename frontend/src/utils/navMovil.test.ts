@@ -9,7 +9,7 @@ describe('navMovilPorRol', () => {
     // justo para el rol al que iba dirigido.
     for (const rol of ['DUEÑO', 'ADMINISTRADOR']) {
       const destinos = navMovilPorRol(rol, 'ATLAS_ONE_RETAIL').map((i) => i.to)
-      expect(destinos).toContain('/mobile/owner')
+      expect(destinos).not.toContain('/mobile/owner')   // SP6: el Resumen es el Inicio del dueño
       expect(destinos).toContain('/home')
       expect(destinos).not.toContain('/')
     }

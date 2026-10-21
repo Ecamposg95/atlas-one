@@ -33,17 +33,17 @@ describe('perfil FREE', () => {
     expect(menu('ADMINISTRADOR', FREE)).toEqual(expect.arrayContaining(DIARIO_ADMIN))
   })
 
-  it('la administradora no ve Control, IA, cotizaciones ni el armazón móvil de vendedor', () => {
+  it('la administradora no ve IA, cotizaciones ni el armazón móvil de vendedor', () => {
     const urls = menu('ADMINISTRADOR', FREE)
-    for (const u of ['/hq/control', '/ai', '/quotes', '/quotes/new', '/seguimiento']) {
+    for (const u of ['/ai', '/quotes', '/quotes/new', '/seguimiento']) {
       expect(urls).not.toContain(u)
     }
   })
 
-  it('la administradora conserva Clientes y Resumen móvil (su vuelta en teléfono)', () => {
+  it('la administradora conserva Clientes (Resumen móvil salió del menú en SP6)', () => {
     const urls = menu('ADMINISTRADOR', FREE)
     expect(urls).toContain('/customers')
-    expect(urls).toContain('/mobile/owner')
+    expect(urls).not.toContain('/mobile/owner')
   })
 
   it('las cuatro URLs móviles de vendedor/soporte quedan ocultas en FREE', () => {
@@ -65,17 +65,19 @@ describe('perfil FREE', () => {
   })
 
   it('ULTRA+ con los mismos módulos ve todo lo de FREE y además lo recortado', () => {
-    const free = menu('ADMINISTRADOR', FREE)
-    const ultra = menu('ADMINISTRADOR', ULTRA)
+    // Con el módulo hr encendido: FREE esconde Mi expediente; ULTRA+ lo ve (SP6 quitó Control del menú de todos).
+    const free = menu('ADMINISTRADOR', FREE, [...ATLAS_POS, 'hr'])
+    const ultra = menu('ADMINISTRADOR', ULTRA, [...ATLAS_POS, 'hr'])
     for (const u of free) expect(ultra).toContain(u)
-    expect(ultra).toEqual(expect.arrayContaining(['/hq/control']))
+    expect(free).not.toContain('/hr/me')
+    expect(ultra).toEqual(expect.arrayContaining(['/hr/me']))
     // IA y cotizaciones dependen del módulo, no del plan: sin módulo tampoco en ULTRA+
     expect(ultra).not.toContain('/ai')
     expect(ultra).not.toContain('/quotes')
   })
 
   it('sin plan (no cargó / servidor viejo) no se recorta nada', () => {
-    expect(menu('ADMINISTRADOR', null)).toContain('/hq/control')
+    expect(menu('ADMINISTRADOR', null, [...ATLAS_POS, 'hr'])).toContain('/hr/me')
     expect(menu('ADMINISTRADOR', null)).toContain('/customers')
   })
 
@@ -84,7 +86,7 @@ describe('perfil FREE', () => {
   })
 
   it('esconder no quita acceso: el guard de ruta no depende del plan', () => {
-    expect(rolesConAcceso('/hq/control')).toContain('ADMINISTRADOR')
+    expect(rolesConAcceso('/hq/inventory')).toContain('ADMINISTRADOR')
     expect(rolesConAcceso('/hr/me')).toContain('CAJERO')
   })
 
