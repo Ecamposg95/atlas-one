@@ -18,11 +18,11 @@ describe('un solo formulario de producto', () => {
     return n > 0 ? [[f.replace(raiz, ''), n] as const] : []
   })
   it('solo FormularioProducto llama a productsApi.create/update', () => {
-    // Excepciones legítimas (no son el formulario de la lista/página de productos):
-    //  - pos/modals/ProductDetailModal.tsx: ficha de producto dentro del POS (alta/edición rápida)
+    // Excepción legítima (no es el formulario de la lista/página de productos):
     //  - scanner/StoreScanner.tsx: ediciones parciales (código de barras, escalones de precio)
+    // La ficha del POS (pos/modals/ProductDetailModal.tsx) es solo consulta desde SP1-c:
+    // edita y da de alta con FormularioProducto (EditarProductoPos / AltaRapidaProducto).
     expect(llamadas).toEqual([
-      ['/components/pos/modals/ProductDetailModal.tsx', 2],
       ['/components/products/FormularioProducto.tsx', 2],
       ['/pages/scanner/StoreScanner.tsx', 3],
     ])

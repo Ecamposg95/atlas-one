@@ -30,7 +30,6 @@ const CONOCIDOS: Record<string, number> = {
   '/components/pos/modals/CloseSessionModal.tsx': 1,
   '/components/pos/modals/CustomerModal.tsx': 1,
   '/components/pos/modals/MixedPaymentModal.tsx': 1,
-  '/components/pos/modals/ProductDetailModal.tsx': 1,
   '/components/pos/modals/ReprintPinModal.tsx': 1,
   '/components/pos/modals/ReturnModal.tsx': 1,
   '/components/pos/modals/SaleSuccessModal.tsx': 1,
