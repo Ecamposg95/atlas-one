@@ -22,7 +22,7 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.core.tenant_context import get_current_active_organization
 from app.models import (
-    Branch, Organization, Product, ProductVariant, SalesDocument, SalesLineItem,
+    Branch, Product, ProductVariant, SalesDocument, SalesLineItem,
     StockOnHand, User,
 )
 from app.models.cash import CashSession, CashSessionStatus
@@ -33,10 +33,10 @@ from app.schemas.reports import (
     ProductoPocaExistencia, ProductoTop,
 )
 from app.services.cash_reconciliation import SALES_REPORT_STATUSES, compute_expected_cash
+from app.services.existencias import umbral_poca_existencia
 
 router = APIRouter()
 
-UMBRAL_POCA_EXISTENCIA = 3   # piezas, si la empresa no capturó otro tope
 MAX_POCA_EXISTENCIA = 10
 MAX_TOP = 5
 DIAS_SEMANA = 7
@@ -202,8 +202,7 @@ def inicio_basico(
     )
     por_metodo = {str(getattr(m, "value", m)): round(float(v), 2) for m, v in resumen["payments"].items()}
 
-    org = db.query(Organization).filter(Organization.id == org_id).first()
-    umbral = org.umbral_poca_existencia if org and org.umbral_poca_existencia is not None else UMBRAL_POCA_EXISTENCIA
+    umbral = umbral_poca_existencia(db, org_id)
 
     return InicioBasicoResponse(
         branch_id=sucursal,

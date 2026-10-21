@@ -15,7 +15,7 @@ from app.models import (
 from app.core.security import get_current_user
 from app.crud.products import query_visible_products, _is_admin
 
-from ._shared import CRITICAL_STOCK_THRESHOLD
+from app.services.existencias import umbral_poca_existencia
 
 router = APIRouter()
 
@@ -131,10 +131,11 @@ def get_catalog_kpis(
     if branch_override:
         stock_base = stock_base.filter(StockOnHand.branch_id == branch_override)
 
+    umbral = umbral_poca_existencia(db, org_id)   # SP6: el tope de la empresa
     zero_stock = stock_base.filter(StockOnHand.qty_on_hand <= 0).distinct().count()
     critical_stock = stock_base.filter(
         StockOnHand.qty_on_hand > 0,
-        StockOnHand.qty_on_hand <= CRITICAL_STOCK_THRESHOLD,
+        StockOnHand.qty_on_hand <= umbral,
     ).distinct().count()
 
     return {
@@ -144,7 +145,7 @@ def get_catalog_kpis(
         "no_branch": int(no_branch),
         "critical_stock": int(critical_stock),
         "zero_stock": int(zero_stock),
-        "threshold": CRITICAL_STOCK_THRESHOLD,
+        "threshold": umbral,
     }
 
 

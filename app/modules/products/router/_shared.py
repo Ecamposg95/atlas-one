@@ -66,7 +66,6 @@ from app.modules.products.services.comun import (  # noqa: E402
     variantes_vivas,
 )
 
-CRITICAL_STOCK_THRESHOLD = 5
 
 
 def aplanar_sale_name(p_read: ProductRead, p: Product) -> None:
