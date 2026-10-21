@@ -29,7 +29,6 @@ import { MixedPaymentModal } from '../../components/pos/modals/MixedPaymentModal
 import { ReturnModal } from '../../components/pos/modals/ReturnModal'
 import { CashMovementModal } from '../../components/pos/modals/CashMovementModal'
 import { CloseSessionModal } from '../../components/pos/modals/CloseSessionModal'
-import { ProductDetailModal } from '../../components/pos/modals/ProductDetailModal'
 import { formatCurrency } from '../../utils/currency'
 import { errorDetailText } from '../../utils/errorDetail'
 import {
@@ -39,11 +38,10 @@ import {
   isNetworkError,
   type PendingSale,
 } from '../../utils/offlineQueue'
-import { opcionesPorPerfil } from './opcionesPos'
 import { LimiteDeError } from '../../components/ui/LimiteDeError'
 import { toast as toastGlobal } from '../../store/toastStore'
 
-// Alta corta del modo básico: chunk propio, no viaja en POS-*.js.
+// Alta con el formulario único (SP1-c): chunk propio, no viaja en POS-*.js.
 const AltaRapidaProducto = lazy(() => import('../../components/pos/AltaRapidaProducto'))
 
 type PayMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'MIXED'
@@ -62,9 +60,6 @@ export function POS() {
   const savedPrinterName = usePOSStore((s) => s.printerName)
   const hayPropina = useCapacidad('propina')
   const hayFactura = useCapacidad('factura')
-  const opciones = opcionesPorPerfil(useEnabledModulesStore((s) => s.perfilUi))
-  // Precarga del alta corta: si el chunk quedó viejo tras un deploy, falla aquí y no al abrirla.
-  useEffect(() => { if (opciones.altaCorta) void import('../../components/pos/AltaRapidaProducto').catch(() => {}) }, [opciones.altaCorta])
   // `capacidades` arranca vacia y se llena cuando responde /users/me/context. Sin
   // esta bandera, "todavia no se" es indistinguible de "no lo tiene contratado", y
   // todo lo que decide con esa respuesta se equivoca en la primera carga.
@@ -107,6 +102,13 @@ export function POS() {
   const barraInferiorRef = useRef<HTMLDivElement>(null)
 
   const canEditProducts = !!user?.role && ['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO'].includes(user.role)
+  // Precarga de los chunks de alta y edición (formulario único): si quedaron
+  // viejos tras un deploy, fallan aquí y no al abrirlos con el carrito lleno.
+  useEffect(() => {
+    if (!canEditProducts) return
+    void import('../../components/pos/AltaRapidaProducto').catch(() => {})
+    void import('../../components/pos/EditarProductoPos').catch(() => {})
+  }, [canEditProducts])
   const { branch } = useAuthStore()
   const isBranch = !!branch && branch.branch_type !== 'HQ'
 
@@ -942,7 +944,7 @@ export function POS() {
           }}
         />
       )}
-      {createProductOpen && (opciones.altaCorta ? (
+      {createProductOpen && (
         <LimiteDeError onError={() => {
           setCreateProductOpen(false)
           toastGlobal.error('No se pudo abrir el alta de producto. Termina la venta y recarga la página.')
@@ -957,19 +959,7 @@ export function POS() {
             />
           </Suspense>
         </LimiteDeError>
-      ) : (
-        <ProductDetailModal
-          product={null}
-          mode="create"
-          canEdit={canEditProducts}
-          onClose={() => setCreateProductOpen(false)}
-          onSaved={() => {
-            setCreateProductOpen(false)
-            setProductRefreshKey(k => k + 1)
-            showToast('Producto creado')
-          }}
-        />
-      ))}
+      )}
       {showOfflineModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setShowOfflineModal(false)}>
           <div

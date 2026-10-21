@@ -27,9 +27,10 @@ describe('modo básico: carga y render condicional', () => {
     expect(src('pages/hq/InicioBasico.tsx')).not.toMatch(/chart\.js|react-chartjs-2/)
   })
 
-  it('el alta corta se precarga y va dentro de un límite de error (el carrito no se pierde)', () => {
+  it('el alta se precarga y va dentro de un límite de error (el carrito no se pierde)', () => {
     const pos = src('pages/pos/POS.tsx')
-    expect(pos).toMatch(/if \(opciones\.altaCorta\) void import\('\.\.\/\.\.\/components\/pos\/AltaRapidaProducto'\)/)
+    // SP1-c: el alta usa el formulario único en todos los perfiles; se precarga cuando el usuario puede dar de alta.
+    expect(pos).toMatch(/void import\('\.\.\/\.\.\/components\/pos\/AltaRapidaProducto'\)/)
     expect(pos).toMatch(/<LimiteDeError[\s\S]*<Suspense[\s\S]*<AltaRapidaProducto[\s\S]*<\/LimiteDeError>/)
   })
 
