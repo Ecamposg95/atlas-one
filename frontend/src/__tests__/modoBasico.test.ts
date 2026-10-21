@@ -12,7 +12,7 @@ const NUEVOS = [
 ]
 
 describe('modo básico: carga y render condicional', () => {
-  it('el POS carga el alta corta con lazy(), sin import estático del formulario', () => {
+  it('el POS carga el alta (formulario único) con lazy(), sin import estático del formulario', () => {
     const pos = src('pages/pos/POS.tsx')
     expect(pos).toMatch(/lazy\(\(\) => import\('\.\.\/\.\.\/components\/pos\/AltaRapidaProducto'\)\)/)
     expect(pos).not.toMatch(/from '\.\.\/\.\.\/components\/products\/FormularioProducto'/)

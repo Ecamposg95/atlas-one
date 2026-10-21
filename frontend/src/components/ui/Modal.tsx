@@ -15,7 +15,7 @@
  *   </Modal>
  */
 import { createPortal } from 'react-dom'
-import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
 
 const SIZES = {
   sm: 'max-w-sm',
@@ -40,9 +40,48 @@ export interface ModalProps {
 const FOCUSABLE =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
+// Modales apilados (p. ej. la ficha del POS con el editor encima): solo el de
+// arriba atiende Escape y Tab, y el scroll del body se libera cuando cierra el
+// ÚLTIMO. Antes cada modal restauraba "el overflow previo": al desmontarse
+// padre e hijo juntos, el hijo devolvía `hidden` y la página quedaba sin scroll.
+let candadosScroll = 0
+let overflowPrevio = ''
+// Un modal con otro modal del kit abierto DENTRO (en su árbol de React) no es el
+// de arriba; entre los que no tienen hijos, el de arriba es el último en el DOM
+// (los portales se añaden al body en el orden en que se abren).
+const ContextoModal = createContext<(() => () => void) | null>(null)
+// Raíz de cada modal abierto → cuántos modales del kit tiene abiertos dentro.
+const hijosDe = new WeakMap<Element, () => number>()
+function esElDeArriba(raiz: HTMLElement | null): boolean {
+  if (!raiz) return false
+  const libres = Array.from(document.querySelectorAll('[data-modal-kit]')).filter(r => (hijosDe.get(r)?.() ?? 0) === 0)
+  return libres[libres.length - 1] === raiz
+}
+
 export function Modal({ open, onClose, title, children, footer, size = 'md', closeOnBackdrop = true, closeOnEscape = true }: ModalProps) {
   const panelRef = useRef<HTMLDivElement | null>(null)
   const restoreFocusRef = useRef<HTMLElement | null>(null)
+  const raizRef = useRef<HTMLDivElement | null>(null)
+  const hijosAbiertos = useRef(0)
+  const registrarEnPadre = useContext(ContextoModal)
+
+  // Un modal anidado se registra en el que lo contiene mientras esté abierto.
+  useLayoutEffect(() => {
+    if (!open || !registrarEnPadre) return
+    return registrarEnPadre()
+  }, [open, registrarEnPadre])
+  const registrarHijo = useCallback(() => {
+    hijosAbiertos.current++
+    return () => { hijosAbiertos.current-- }
+  }, [])
+  // Se publica cuando la raíz ya existe (efecto pasivo: los refs ya están puestos).
+  useEffect(() => {
+    if (!open) return
+    const raiz = raizRef.current
+    if (!raiz) return
+    hijosDe.set(raiz, () => hijosAbiertos.current)
+    return () => { hijosDe.delete(raiz) }
+  }, [open])
 
   // Foco inicial al abrir + retorno del foco al cerrar.
   useLayoutEffect(() => {
@@ -57,6 +96,7 @@ export function Modal({ open, onClose, title, children, footer, size = 'md', clo
   useEffect(() => {
     if (!open) return
     function handleKey(e: KeyboardEvent) {
+      if (!esElDeArriba(raizRef.current)) return
       if (e.key === 'Escape') {
         if (!closeOnEscape) return
         e.preventDefault()
@@ -78,18 +118,27 @@ export function Modal({ open, onClose, title, children, footer, size = 'md', clo
     return () => document.removeEventListener('keydown', handleKey)
   }, [open, onClose, closeOnEscape])
 
-  // Scroll-lock del body mientras el modal está abierto.
+  // Scroll-lock del body mientras haya algún modal abierto (contador).
   useEffect(() => {
     if (!open) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = prev }
+    if (candadosScroll === 0) {
+      overflowPrevio = document.body.style.overflow
+      document.body.style.overflow = 'hidden'
+    }
+    candadosScroll++
+    return () => {
+      candadosScroll--
+      if (candadosScroll === 0) document.body.style.overflow = overflowPrevio
+    }
   }, [open])
 
   if (!open || typeof document === 'undefined') return null
 
   return createPortal(
+    <ContextoModal.Provider value={registrarHijo}>
     <div
+      ref={raizRef}
+      data-modal-kit=""
       className="fixed inset-0 z-[900] flex items-center justify-center p-4"
       style={{ background: 'var(--dax-modal-backdrop)', backdropFilter: 'blur(4px)' }}
       role="dialog"
@@ -139,7 +188,8 @@ export function Modal({ open, onClose, title, children, footer, size = 'md', clo
           </div>
         )}
       </div>
-    </div>,
+    </div>
+    </ContextoModal.Provider>,
     document.body,
   )
 }

@@ -166,8 +166,10 @@ export function ProductDetailModal({ product, onClose, onAddToCart, onSaved, can
     </>
   )
 
+  // Con el editor encima, ni Escape ni el fondo cierran la ficha: cerrarla
+  // desmontaría el editor y tiraría lo capturado.
   return (
-    <Modal open onClose={onClose} title={titulo} size="md" footer={pie}>
+    <Modal open onClose={onClose} title={titulo} size="md" footer={pie} closeOnEscape={!editando} closeOnBackdrop={!editando}>
       <div className="space-y-4">
         {/* Foto */}
         <div className="-mx-5 -mt-4 h-40 flex items-center justify-center" style={{ background: 'var(--dax-elevated)' }}>

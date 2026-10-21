@@ -14,6 +14,7 @@ vi.mock('../../products/FormularioProducto', () => ({
 }))
 
 const { default: EditarProductoPos } = await import('../EditarProductoPos')
+const { Modal } = await import('../../ui/Modal')
 afterEach(cleanup)
 
 describe('EditarProductoPos', () => {
@@ -43,5 +44,22 @@ describe('EditarProductoPos', () => {
     fireEvent.keyDown(document, { key: 'Escape' })
     fireEvent.click(screen.getByRole('dialog'))
     expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('apilado sobre la ficha (otro Modal del kit): Escape no cierra ninguno de los dos y el scroll queda bloqueado', () => {
+    const cerrarFicha = vi.fn(); const cerrarEditor = vi.fn()
+    document.body.style.overflow = ''
+    const { unmount } = render(
+      <Modal open onClose={cerrarFicha} title="Blusa" closeOnEscape={false}>
+        <p>ficha</p>
+        <EditarProductoPos productId="p1" onClose={cerrarEditor} onGuardado={() => {}} />
+      </Modal>,
+    )
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(cerrarEditor).not.toHaveBeenCalled()
+    expect(cerrarFicha).not.toHaveBeenCalled()
+    expect(document.body.style.overflow).toBe('hidden')
+    unmount()
+    expect(document.body.style.overflow).toBe('')
   })
 })
