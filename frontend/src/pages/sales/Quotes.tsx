@@ -3,6 +3,11 @@ import { quotesApi, type Quote, type QuoteStats } from '../../api/quotes'
 import { DaxCard } from '../../components/ui/DaxCard'
 import { Spinner } from '../../components/ui/Spinner'
 import { Badge } from '../../components/ui/Badge'
+import { Modal } from '../../components/ui/Modal'
+import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
+import { ListaTarjetas } from '../../components/ui/ListaTarjetas'
+import { TarjetaFila } from '../../components/ui/TarjetaFila'
+import { useEsTelefono } from '../../hooks/useIsMobile'
 import { Link } from 'react-router-dom'
 import { formatCurrency } from '../../utils/currency'
 import { toast } from '../../store/toastStore'
@@ -14,11 +19,13 @@ const apiErrorMessage = (err: unknown, fallback: string) => {
   return typeof detail === 'string' && detail.trim() ? detail : fallback
 }
 
-const statusVariant = (s: string) =>
+type Variante = 'green' | 'red' | 'blue' | 'yellow'
+const statusVariant = (s: string): Variante =>
   s === 'PAID' ? 'green' : s === 'CANCELLED' ? 'red' : s === 'PENDING' ? 'blue' : 'yellow'
 
 const quoteLabel = (q: Quote) =>
   q.series && q.folio ? `${q.series}-${String(q.folio).padStart(4, '0')}` : q.id.slice(0, 8)
+const fecha = (s: string) => new Date(s).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })
 
 export function Quotes() {
   const [quotes, setQuotes] = useState<Quote[]>([])
@@ -27,6 +34,7 @@ export function Quotes() {
   const [selected, setSelected] = useState<Quote | null>(null)
   const [converting, setConverting] = useState<string | null>(null)
   const [loadError, setLoadError] = useState(false)
+  const esTelefono = useEsTelefono()
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -78,15 +86,15 @@ export function Quotes() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
+      <CabeceraPagina
+        titulo={<div className="flex items-center gap-3">
           <i className="fa-solid fa-file-invoice text-indigo-400 text-xl" />
           <h1 className="text-2xl font-black text-white">Cotizaciones</h1>
-        </div>
-        <Link to="/quotes/new" className="dax-btn-primary text-xs">
+        </div>}
+        accionPrincipal={<Link to="/quotes/new" className="dax-btn-primary text-xs">
           <i className="fa-solid fa-plus" /> Nueva Cotización
-        </Link>
-      </div>
+        </Link>}
+      />
 
       {/* KPIs */}
       {stats && (
@@ -108,11 +116,23 @@ export function Quotes() {
         </div>
       )}
 
-      {/* Tabla */}
+      {/* Lista */}
       <DaxCard padding={false}>
-        {loading ? <Spinner text="Cargando cotizaciones..." /> : loadError ? (
+        {loadError ? (
           <ErrorState onRetry={load} />
-        ) : quotes.length === 0 ? (
+        ) : esTelefono ? (
+          <ListaTarjetas cargando={loading} vacio={quotes.length === 0} textoVacio="Sin cotizaciones" className="p-3">
+            {quotes.map((q) => (
+              <TarjetaFila key={q.id}
+                titulo={quoteLabel(q)}
+                subtitulo={`${fecha(q.created_at)} · ${q.customer_name ?? 'Sin cliente'}`}
+                importe={formatCurrency(q.total_amount)}
+                estado={<Badge variant={statusVariant(q.status)}>{q.status}</Badge>}
+                onClick={() => setSelected(q)}
+              />
+            ))}
+          </ListaTarjetas>
+        ) : loading ? <Spinner text="Cargando cotizaciones..." /> : quotes.length === 0 ? (
           <div className="p-12 text-center text-slate-600">Sin cotizaciones</div>
         ) : (
           <div className="overflow-x-auto">
@@ -131,14 +151,12 @@ export function Quotes() {
                 {quotes.map((q) => (
                   <tr key={q.id}>
                     <td className="font-mono text-indigo-400 text-xs">{quoteLabel(q)}</td>
-                    <td className="text-xs text-slate-400">
-                      {new Date(q.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}
-                    </td>
+                    <td className="text-xs text-slate-400">{fecha(q.created_at)}</td>
                     <td className="text-sm text-slate-300">{q.customer_name ?? <span className="text-slate-600 italic">Sin cliente</span>}</td>
                     <td className="text-right font-semibold text-indigo-400 tabular-nums">{formatCurrency(q.total_amount)}</td>
-                    <td><Badge variant={statusVariant(q.status) as 'green' | 'red' | 'blue' | 'yellow'}>{q.status}</Badge></td>
+                    <td><Badge variant={statusVariant(q.status)}>{q.status}</Badge></td>
                     <td>
-                      <button onClick={() => setSelected(q)} className="text-slate-500 hover:text-white text-xs">
+                      <button onClick={() => setSelected(q)} aria-label={`Ver ${quoteLabel(q)}`} className="dax-btn-icon text-slate-500 hover:text-white text-xs">
                         <i className="fa-solid fa-eye" />
                       </button>
                     </td>
@@ -150,60 +168,66 @@ export function Quotes() {
         )}
       </DaxCard>
 
-      {/* Modal detalle */}
-      {selected && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setSelected(null)}>
-          <div className="dax-card p-6 w-full max-w-lg max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <p className="text-[10px] text-slate-500 uppercase tracking-widest">Cotización</p>
-                <p className="text-xl font-black text-indigo-400 font-mono">{quoteLabel(selected)}</p>
-              </div>
-              <button onClick={() => setSelected(null)} className="text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
-            </div>
-
+      {/* Detalle */}
+      <Modal open={!!selected} onClose={() => setSelected(null)} size="lg"
+        title={<span>Cotización <span className="font-mono text-indigo-400">{selected ? quoteLabel(selected) : ''}</span></span>}
+        footer={selected?.status === 'PENDING' ? (
+          <>
+            <button
+              onClick={() => handleConvert(selected)}
+              disabled={converting === selected.id}
+              className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
+              {converting === selected.id ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-cash-register" /> Convertir a Venta</>}
+            </button>
+            <button onClick={() => handleDelete(selected)} aria-label="Eliminar cotización" className="dax-btn-danger text-xs">
+              <i className="fa-solid fa-trash" />
+            </button>
+          </>
+        ) : undefined}>
+        {selected && (
+          <>
             <div className="space-y-2 text-sm mb-4">
               <div className="flex justify-between"><span className="text-slate-500">Cliente</span><span>{selected.customer_name ?? 'Sin cliente'}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Fecha</span><span>{new Date(selected.created_at).toLocaleString('es-MX')}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Estado</span><Badge variant={statusVariant(selected.status) as 'green' | 'red' | 'blue' | 'yellow'}>{selected.status}</Badge></div>
+              <div className="flex justify-between"><span className="text-slate-500">Estado</span><Badge variant={statusVariant(selected.status)}>{selected.status}</Badge></div>
             </div>
 
-            <table className="dax-table w-full text-xs mb-4">
-              <thead><tr><th>Producto</th><th className="text-right">Cant.</th><th className="text-right">Precio</th><th className="text-right">Total</th></tr></thead>
-              <tbody>
+            {esTelefono ? (
+              <ul className="divide-y divide-slate-700/40 text-xs mb-4">
                 {(selected.lines ?? []).map((item) => (
-                  <tr key={item.id}>
-                    <td>{item.description ?? item.sku ?? '—'}</td>
-                    <td className="text-right">{item.quantity}</td>
-                    <td className="text-right">{formatCurrency(item.unit_price)}</td>
-                    <td className="text-right font-semibold">{formatCurrency(item.total_line)}</td>
-                  </tr>
+                  <li key={item.id} className="py-2 flex justify-between gap-3">
+                    <span className="min-w-0">
+                      <span className="block font-semibold text-white truncate">{item.description ?? item.sku ?? '—'}</span>
+                      <span className="block text-slate-500 tabular-nums">{item.quantity} × {formatCurrency(item.unit_price)}</span>
+                    </span>
+                    <span className="font-semibold tabular-nums shrink-0">{formatCurrency(item.total_line)}</span>
+                  </li>
                 ))}
-              </tbody>
-            </table>
+              </ul>
+            ) : (
+              <table className="dax-table w-full text-xs mb-4">
+                <thead><tr><th>Producto</th><th className="text-right">Cant.</th><th className="text-right">Precio</th><th className="text-right">Total</th></tr></thead>
+                <tbody>
+                  {(selected.lines ?? []).map((item) => (
+                    <tr key={item.id}>
+                      <td>{item.description ?? item.sku ?? '—'}</td>
+                      <td className="text-right">{item.quantity}</td>
+                      <td className="text-right">{formatCurrency(item.unit_price)}</td>
+                      <td className="text-right font-semibold">{formatCurrency(item.total_line)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
 
-            <div className="space-y-1 text-sm border-t border-slate-700/50 pt-3 mb-4">
+            <div className="space-y-1 text-sm border-t border-slate-700/50 pt-3">
               <div className="flex justify-between text-slate-400"><span>Subtotal</span><span>{formatCurrency(selected.subtotal)}</span></div>
               {selected.tax_amount > 0 && <div className="flex justify-between text-slate-400"><span>IVA</span><span>{formatCurrency(selected.tax_amount)}</span></div>}
               <div className="flex justify-between font-black text-white text-base"><span>Total</span><span>{formatCurrency(selected.total_amount)}</span></div>
             </div>
-
-            {selected.status === 'PENDING' && (
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleConvert(selected)}
-                  disabled={converting === selected.id}
-                  className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
-                  {converting === selected.id ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-cash-register" /> Convertir a Venta</>}
-                </button>
-                <button onClick={() => handleDelete(selected)} className="dax-btn-danger text-xs">
-                  <i className="fa-solid fa-trash" />
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Modal>
     </div>
   )
 }
