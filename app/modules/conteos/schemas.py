@@ -3,7 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, List, Literal, Optional
 
-from pydantic import BaseModel, Field, PlainSerializer
+from pydantic import BaseModel, Field, PlainSerializer, model_validator
 
 # Cantidades en JSON sin ceros de relleno (Numeric(.,2) devuelve '3.00'): '3', '2.5'.
 Cant = Annotated[Decimal, PlainSerializer(lambda d: format(d.normalize(), 'f'), return_type=str, when_used='json')]
@@ -11,8 +11,13 @@ Cant = Annotated[Decimal, PlainSerializer(lambda d: format(d.normalize(), 'f'), 
 
 class ProductoResumen(BaseModel):
     variant_id: str
+    product_id: str
     nombre: str
     marca: Optional[str] = None
+    marca_id: Optional[str] = None
+    modelo: Optional[str] = None
+    descripcion: Optional[str] = None
+    precio: Optional[Cant] = None
     talla: Optional[str] = None
     color: Optional[str] = None
     sku: Optional[str] = None
@@ -28,6 +33,7 @@ class LineaRead(BaseModel):
     qty_contada: Cant
     qty_sistema: Optional[Cant] = None
     producto: Optional[ProductoResumen] = None
+    corregida: bool = False
     updated_at: Optional[datetime] = None
 
 
@@ -69,7 +75,15 @@ class LineaCreate(BaseModel):
 
 
 class LineaPatch(BaseModel):
-    qty_contada: Decimal = Field(ge=0)
+    """Al menos uno de los dos: cantidad (0 borra) o la marca de ficha corregida."""
+    qty_contada: Optional[Decimal] = Field(default=None, ge=0)
+    corregida: Optional[bool] = None
+
+    @model_validator(mode="after")
+    def _algo_que_cambiar(self):
+        if self.qty_contada is None and self.corregida is None:
+            raise ValueError("Manda qty_contada o corregida")
+        return self
 
 
 class ScanRequest(BaseModel):
@@ -96,6 +110,7 @@ class FilaReporte(BaseModel):
     sistema: Cant
     contado: Cant
     diferencia: Cant
+    corregida: bool = False
 
 
 class FilaDesconocido(BaseModel):
@@ -112,3 +127,20 @@ class Reporte(BaseModel):
     sobrantes: List[FilaReporte] = []
     fuera_de_alcance: List[FilaReporte] = []
     desconocidos: List[FilaDesconocido] = []
+
+
+EstadoFila = Literal["pendiente", "revisado", "diferencia"]
+
+
+class FilaLista(BaseModel):
+    producto: ProductoResumen
+    sistema: Cant
+    contado: Cant
+    estado: EstadoFila
+    corregida: bool = False
+    line_id: Optional[int] = None
+
+
+class Lista(BaseModel):
+    filas: List[FilaLista]
+    totales: dict

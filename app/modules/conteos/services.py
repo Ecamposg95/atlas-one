@@ -18,8 +18,8 @@ from sqlalchemy.orm import Session, joinedload
 from app.models.inventory import StockOnHand
 from app.modules.conteos.models import ABIERTO, CERRADO, InventoryCount, InventoryCountLine
 from app.modules.conteos.schemas import (
-    Avance, ConteoDetalle, ConteoRead, FilaDesconocido, FilaReporte, LineaRead,
-    ProductoResumen, Reporte, ScanResult,
+    Avance, ConteoDetalle, ConteoRead, FilaDesconocido, FilaLista, FilaReporte, LineaRead,
+    Lista, ProductoResumen, Reporte, ScanResult,
 )
 from app.modules.products.models import PackagingUnit, Product, ProductVariant
 from app.modules.products.sale_name import variant_sale_name
@@ -65,9 +65,10 @@ def resumen_producto(v: ProductVariant) -> ProductoResumen:
     p = v.product
     marca = p.brand.name if getattr(p, "brand", None) else None
     return ProductoResumen(
-        variant_id=v.id,
+        variant_id=v.id, product_id=p.id,
         nombre=variant_sale_name(marca, p.name, p.model, v.color, v.size, v.variant_name),
-        marca=marca, talla=v.size, color=v.color, sku=v.sku, barcode=v.barcode,
+        marca=marca, marca_id=p.brand_id, modelo=p.model, descripcion=p.description,
+        precio=v.price, talla=v.size, color=v.color, sku=v.sku, barcode=v.barcode,
         foto=p.image_url,
         departamento=p.department.name if getattr(p, "department", None) else None,
     )
@@ -212,12 +213,52 @@ def fijar_linea(db: Session, conteo: InventoryCount, linea: InventoryCountLine,
     return linea
 
 
+def marcar_corregida(db: Session, conteo: InventoryCount, linea: InventoryCountLine,
+                     valor: bool) -> InventoryCountLine:
+    _exigir_abierto(conteo)
+    if linea.count_id != conteo.id or linea.organization_id != conteo.organization_id:
+        raise HTTPException(404, "Línea no encontrada")
+    linea.corregida = bool(valor)
+    db.commit()
+    db.refresh(linea)
+    return linea
+
+
+def lista(db: Session, conteo: InventoryCount) -> Lista:
+    """Todo el catálogo del departamento (también existencia 0) con su estado:
+    pendiente (nada contado), revisado (contado == sistema), diferencia."""
+    stock = existencias(db, conteo)
+    lineas = {l.variant_id: l for l in conteo.lineas if l.variant_id}
+    filas: List[FilaLista] = []
+    orden = lambda x: ((x.product.name or "").lower(), x.size or "", x.color or "")  # noqa: E731
+    for v in sorted(_alcance(db, conteo), key=orden):
+        sistema = stock.get(v.id, CERO)
+        l = lineas.get(v.id)
+        contado = Decimal(l.qty_contada or 0) if l else CERO
+        if l is None:
+            estado = "pendiente"
+        elif contado == sistema:
+            estado = "revisado"
+        else:
+            estado = "diferencia"
+        filas.append(FilaLista(producto=resumen_producto(v), sistema=sistema, contado=contado,
+                               estado=estado, corregida=bool(l.corregida) if l else False,
+                               line_id=l.id if l else None))
+    return Lista(filas=filas, totales={
+        "total": len(filas),
+        "revisados": sum(1 for f in filas if f.estado == "revisado"),
+        "pendientes": sum(1 for f in filas if f.estado == "pendiente"),
+        "con_diferencia": sum(1 for f in filas if f.estado == "diferencia"),
+        "corregidas": sum(1 for f in filas if f.corregida),
+    })
+
+
 # ── Reporte ──────────────────────────────────────────────────────────────────
-def _fila(v: ProductVariant, sistema: Decimal, contado: Decimal) -> FilaReporte:
+def _fila(v: ProductVariant, sistema: Decimal, contado: Decimal, corregida: bool = False) -> FilaReporte:
     r = resumen_producto(v)
     return FilaReporte(variant_id=v.id, sku=v.sku, nombre=r.nombre, marca=r.marca, talla=r.talla,
                        color=r.color, departamento=r.departamento, sistema=sistema,
-                       contado=contado, diferencia=contado - sistema)
+                       contado=contado, diferencia=contado - sistema, corregida=corregida)
 
 
 def _calcular(db: Session, conteo: InventoryCount) -> Reporte:
@@ -226,6 +267,7 @@ def _calcular(db: Session, conteo: InventoryCount) -> Reporte:
     ids_alcance = {v.id for v in alcance}
     contadas = {l.variant_id: Decimal(l.qty_contada or 0) for l in conteo.lineas if l.variant_id}
 
+    corregidas = {l.variant_id: bool(l.corregida) for l in conteo.lineas if l.variant_id}
     faltantes: List[FilaReporte] = []
     sobrantes: List[FilaReporte] = []
     cuadradas = 0
@@ -238,16 +280,17 @@ def _calcular(db: Session, conteo: InventoryCount) -> Reporte:
             esperadas_variantes += 1
             esperadas_piezas += sistema
         if sistema > 0 and contado < sistema:
-            faltantes.append(_fila(v, sistema, contado))
+            faltantes.append(_fila(v, sistema, contado, corregidas.get(v.id, False)))
         elif contado > sistema:
-            sobrantes.append(_fila(v, sistema, contado))
+            sobrantes.append(_fila(v, sistema, contado, corregidas.get(v.id, False)))
         elif sistema > 0 and contado == sistema:
             cuadradas += 1
 
     fuera: List[FilaReporte] = []
     for l in conteo.lineas:
         if l.variant_id and l.variant_id not in ids_alcance and l.variant is not None:
-            fuera.append(_fila(l.variant, stock.get(l.variant_id, CERO), Decimal(l.qty_contada or 0)))
+            fuera.append(_fila(l.variant, stock.get(l.variant_id, CERO), Decimal(l.qty_contada or 0),
+                              bool(l.corregida)))
     desconocidos = [FilaDesconocido(codigo=l.codigo or "", contado=Decimal(l.qty_contada or 0))
                     for l in conteo.lineas if l.variant_id is None]
 
@@ -274,6 +317,7 @@ def _calcular(db: Session, conteo: InventoryCount) -> Reporte:
             "sobrantes_piezas": sum((s.diferencia for s in sobrantes), CERO),
             "fuera_de_alcance_piezas": sum((f.contado for f in fuera), CERO),
             "desconocidos": len(desconocidos),
+            "corregidas": sum(1 for l in conteo.lineas if l.corregida),
         },
         faltantes=faltantes, sobrantes=sobrantes, fuera_de_alcance=fuera, desconocidos=desconocidos,
     )
@@ -321,7 +365,7 @@ def a_linea_read(linea: InventoryCountLine) -> LineaRead:
         id=linea.id, variant_id=linea.variant_id, codigo=linea.codigo,
         qty_contada=Decimal(linea.qty_contada or 0), qty_sistema=linea.qty_sistema,
         producto=resumen_producto(linea.variant) if linea.variant is not None else None,
-        updated_at=linea.updated_at,
+        corregida=bool(linea.corregida), updated_at=linea.updated_at,
     )
 
 

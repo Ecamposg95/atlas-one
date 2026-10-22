@@ -23,7 +23,7 @@ from app.modules.conteos import services
 from app.modules.conteos.models import ABIERTO, InventoryCount, InventoryCountLine
 from app.modules.conteos.schemas import (
     ConteoCreate, ConteoDetalle, ConteoRead, LineaCreate, LineaPatch, LineaRead,
-    Reporte, ScanRequest, ScanResult,
+    Lista, Reporte, ScanRequest, ScanResult,
 )
 from app.modules.products.models import Department
 
@@ -134,7 +134,11 @@ def agregar_linea(conteo_id: int, body: LineaCreate, db: Session = Depends(get_d
 def fijar_linea(conteo_id: int, line_id: int, body: LineaPatch, db: Session = Depends(get_db),
                 _: User = Depends(_admin), org_id: int = Depends(get_current_active_organization)):
     c = _conteo_o_404(db, org_id, conteo_id)
-    l = services.fijar_linea(db, c, _linea_o_404(c, line_id), body.qty_contada)
+    l = _linea_o_404(c, line_id)
+    if body.corregida is not None:
+        l = services.marcar_corregida(db, c, l, body.corregida)
+    if body.qty_contada is not None:
+        l = services.fijar_linea(db, c, l, body.qty_contada)
     return services.a_linea_read(l) if l is not None else None
 
 
@@ -158,3 +162,9 @@ def cerrar_conteo(conteo_id: int, db: Session = Depends(get_db), user: User = De
 def reporte_conteo(conteo_id: int, db: Session = Depends(get_db), _: User = Depends(_admin),
                    org_id: int = Depends(get_current_active_organization)):
     return services.reporte(db, _conteo_o_404(db, org_id, conteo_id))
+
+
+@router.get("/{conteo_id}/lista", response_model=Lista)
+def lista_conteo(conteo_id: int, db: Session = Depends(get_db), _: User = Depends(_admin),
+                 org_id: int = Depends(get_current_active_organization)):
+    return services.lista(db, _conteo_o_404(db, org_id, conteo_id))

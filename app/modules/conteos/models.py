@@ -8,7 +8,7 @@ el conteo lee la existencia y la congela en `qty_sistema` al cerrar.
 Diseño: docs/superpowers/specs/2026-10-22-conteo-inventario-design.md §2.
 """
 from sqlalchemy import (
-    Column, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint,
+    Boolean, Column, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -56,6 +56,9 @@ class InventoryCountLine(Base, TenantMixin):
     qty_contada = Column(Numeric(10, 2), nullable=False, default=0)
     # Existencia al CERRAR; NULL mientras el conteo está abierto.
     qty_sistema = Column(Numeric(10, 2), nullable=True)
+    # La ficha del producto se corrigió desde el conteo (nombre/marca/modelo/
+    # descripción): el reporte lo lista para saber qué se tocó.
+    corregida = Column(Boolean, nullable=False, default=False, server_default="false")
     created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
