@@ -12,6 +12,7 @@ from typing import Dict, List, Optional
 
 from fastapi import HTTPException
 from sqlalchemy import func, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.inventory import StockOnHand
@@ -119,18 +120,51 @@ def _exigir_abierto(conteo: InventoryCount) -> None:
         raise HTTPException(409, "Este conteo ya está cerrado.")
 
 
-def _sumar(db: Session, conteo: InventoryCount, v: ProductVariant, qty: Decimal,
-           user_id: Optional[int]) -> InventoryCountLine:
-    linea = next((l for l in conteo.lineas if l.variant_id == v.id), None)
+def _sumar_linea(db: Session, conteo: InventoryCount, qty: Decimal, user_id: Optional[int],
+                 variant_id: Optional[str] = None, codigo: Optional[str] = None) -> InventoryCountLine:
+    """Suma `qty` a la línea de la variante (o del código desconocido), creándola si
+    no existe. Sin leer-sumar-escribir en Python: la línea existente se incrementa
+    con un UPDATE atómico, y si dos primeros escaneos chocan contra el índice único
+    el perdedor reintenta contra la línea que ganó, sin perder la pieza."""
+    def buscar() -> Optional[InventoryCountLine]:
+        q = db.query(InventoryCountLine).filter(
+            InventoryCountLine.organization_id == conteo.organization_id,
+            InventoryCountLine.count_id == conteo.id)
+        if variant_id is not None:
+            q = q.filter(InventoryCountLine.variant_id == variant_id)
+        else:
+            q = q.filter(InventoryCountLine.variant_id.is_(None),
+                         InventoryCountLine.codigo == codigo)
+        return q.first()
+
+    linea = buscar()
     if linea is None:
-        linea = InventoryCountLine(organization_id=conteo.organization_id, count_id=conteo.id,
-                                   variant_id=v.id, qty_contada=CERO,
+        nueva = InventoryCountLine(organization_id=conteo.organization_id, count_id=conteo.id,
+                                   variant_id=variant_id, codigo=codigo, qty_contada=qty,
                                    created_by_user_id=user_id)
-        conteo.lineas.append(linea)
-    linea.qty_contada = Decimal(linea.qty_contada or 0) + qty
+        db.add(nueva)
+        try:
+            db.commit()
+            db.expire(conteo, ["lineas"])
+            db.refresh(nueva)
+            return nueva
+        except IntegrityError:
+            db.rollback()
+            linea = buscar()
+            if linea is None:
+                raise
+    db.query(InventoryCountLine).filter(InventoryCountLine.id == linea.id).update(
+        {InventoryCountLine.qty_contada: InventoryCountLine.qty_contada + qty},
+        synchronize_session=False)
     db.commit()
+    db.expire(conteo, ["lineas"])
     db.refresh(linea)
     return linea
+
+
+def _sumar(db: Session, conteo: InventoryCount, v: ProductVariant, qty: Decimal,
+           user_id: Optional[int]) -> InventoryCountLine:
+    return _sumar_linea(db, conteo, qty, user_id, variant_id=v.id)
 
 
 def escanear(db: Session, conteo: InventoryCount, code: str, user_id: Optional[int]) -> ScanResult:
@@ -149,14 +183,7 @@ def escanear(db: Session, conteo: InventoryCount, code: str, user_id: Optional[i
         )
     if len(hits) > 1:
         return ScanResult(resultado="ambiguo", candidatos=[resumen_producto(v) for v in hits])
-    linea = next((l for l in conteo.lineas if l.variant_id is None and l.codigo == code), None)
-    if linea is None:
-        linea = InventoryCountLine(organization_id=conteo.organization_id, count_id=conteo.id,
-                                   codigo=code, qty_contada=CERO, created_by_user_id=user_id)
-        conteo.lineas.append(linea)
-    linea.qty_contada = Decimal(linea.qty_contada or 0) + 1
-    db.commit()
-    db.refresh(linea)
+    linea = _sumar_linea(db, conteo, Decimal("1"), user_id, codigo=code)
     return ScanResult(resultado="desconocido", linea=a_linea_read(linea))
 
 
@@ -172,6 +199,8 @@ def agregar_linea(db: Session, conteo: InventoryCount, variant_id: str, qty: Dec
 def fijar_linea(db: Session, conteo: InventoryCount, linea: InventoryCountLine,
                 qty: Decimal) -> Optional[InventoryCountLine]:
     _exigir_abierto(conteo)
+    if linea.count_id != conteo.id or linea.organization_id != conteo.organization_id:
+        raise HTTPException(404, "Línea no encontrada")
     if Decimal(qty) <= 0:
         conteo.lineas.remove(linea)
         db.delete(linea)

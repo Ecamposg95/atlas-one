@@ -195,3 +195,50 @@ def test_avance(db, tienda):
     a = services.avance(db, c)
     assert (a.esperadas_variantes, a.esperadas_piezas) == (2, Decimal("5"))
     assert (a.contadas_variantes, a.contadas_piezas, a.desconocidos) == (1, Decimal("1"), 1)
+
+
+def test_fijar_linea_de_otro_conteo_es_404(db, org, branch_a, tienda):
+    otro = InventoryCount(organization_id=org.id, branch_id=branch_a.id, status=ABIERTO)
+    db.add(otro)
+    db.commit()
+    ajena = services.agregar_linea(db, otro, tienda["azul"].id, Decimal("2"), None)
+    with pytest.raises(HTTPException) as e:
+        services.fijar_linea(db, tienda["conteo"], ajena, Decimal("0"))
+    assert e.value.status_code == 404
+    db.refresh(ajena)
+    assert ajena.qty_contada == Decimal("2")
+
+
+@pytest.mark.parametrize("codigo,esperado", [("2017000000013", "contado"), ("9999", "desconocido")])
+def test_escanear_choque_de_primer_escaneo_no_pierde_la_pieza(db, org, tienda, monkeypatch,
+                                                              codigo, esperado):
+    """Otra petición inserta la misma línea justo antes de nuestro commit: el índice
+    único revienta y el servicio debe reintentar sumando a la que ganó."""
+    from sqlalchemy.exc import IntegrityError
+    from app.modules.conteos.models import InventoryCountLine
+    c = tienda["conteo"]
+    cid, org_id = c.id, org.id
+    variant_id = services.resolver_codigo(db, org_id, codigo)[0].id if esperado == "contado" else None
+    estado = {"n": 0}
+
+    def commit_con_choque():
+        estado["n"] += 1
+        if estado["n"] == 1:
+            # La línea pendiente de este request nunca llegó a la base; la de la otra sí.
+            for pendiente in list(db.new):
+                db.expunge(pendiente)
+            db.add(InventoryCountLine(organization_id=org_id, count_id=cid, variant_id=variant_id,
+                                      codigo=None if variant_id else codigo,
+                                      qty_contada=Decimal("1")))
+            db.flush()
+            raise IntegrityError("insert", {}, Exception("uq_count_line"))
+
+    # La fixture `db` corre dentro de una transacción externa: un rollback real
+    # borraría los datos de la prueba, así que aquí el rollback no hace nada.
+    monkeypatch.setattr(db, "commit", commit_con_choque)
+    monkeypatch.setattr(db, "rollback", lambda: None)
+    r = services.escanear(db, c, codigo, None)
+    monkeypatch.undo()
+    assert r.resultado == esperado
+    assert r.linea.qty_contada == Decimal("2")   # la de la otra petición + la nuestra
+    assert db.query(InventoryCountLine).filter_by(count_id=cid).count() == 1
