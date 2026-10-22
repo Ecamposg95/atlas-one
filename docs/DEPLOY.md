@@ -25,8 +25,13 @@ al primero en vez de cancelarlo, para no dejar el contenedor a medias.
 Pasos (todos por SSH con una llave de despliegue dedicada, secretos `IONOS_SSH_KEY` /
 `IONOS_KNOWN_HOSTS` / `IONOS_HOST` — huella fijada, sin `ssh-keyscan` en caliente):
 
-1. **Envía el código.** `tar` del working tree (sin `.git`, sin `node_modules`) por SSH
-   a `/srv/apps/atlas-one-prod/src`. El commit desplegado viaja dentro del árbol como
+1. **Envía el código.** Primero vacía el código fuente del `src/` del servidor
+   (`frontend/src`, `frontend/public`, `scripts` y todo `app/` menos `app/static`, donde
+   pueden vivir fotos anteriores a Cloudinary) y luego extrae el `tar` del working tree
+   (sin `.git`, sin `node_modules`) por SSH a `/srv/apps/atlas-one-prod/src`. Sin ese
+   vaciado, un archivo borrado en `main` sobrevive en el servidor: el 2026-10-21
+   `InicioBasico.tsx` quedó huérfano, `tsc` lo compiló contra una API que ya no existía y
+   el build de la imagen falló. El commit desplegado viaja dentro del árbol como
    `.commit_desplegado`, para poder verificarlo después DENTRO del contenedor.
 2. **Construye y levanta.** `docker compose build && docker compose up -d` en
    `/srv/apps/atlas-one-prod` (el `docker-compose.yml` vive en el servidor, con

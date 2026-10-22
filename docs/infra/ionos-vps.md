@@ -70,6 +70,9 @@ runner de CI, no por `git pull` local.
 **Manual (rollback o depuración), mismo destino que usa CI:**
 
 ```bash
+# Vaciar el código fuente antes (app/static se respeta): tar -x no borra lo que
+# el repo dejó de tener y un archivo huérfano puede tirar el build de tsc.
+ssh ionos 'cd /srv/apps/atlas-one-prod/src && rm -rf frontend/src frontend/public scripts && find app -mindepth 1 -maxdepth 1 ! -name static -exec rm -rf {} +'
 git archive --format=tar HEAD | ssh ionos 'tar -x -C /srv/apps/atlas-one-prod/src'
 ssh ionos 'cd /srv/apps/atlas-one-prod && docker compose build && docker compose up -d'
 ```

@@ -157,6 +157,17 @@ jobs:
           # El commit desplegado viaja dentro del árbol para poder verificarlo
           # después DENTRO del contenedor. Sin esto, "se desplegó" es un acto de fe.
           echo "${{ github.sha }}" > .commit_desplegado
+          # `tar -x` encima del src/ anterior nunca borra lo que el repo dejó de
+          # tener. El 2026-10-21 un .tsx eliminado en main siguió en el servidor,
+          # tsc lo compiló contra una API que ya no existía y el build cayó.
+          # Se vacía el código fuente antes de extraer; app/static se respeta
+          # porque ahí pueden vivir fotos subidas antes de Cloudinary.
+          ssh -i ~/.ssh/id_deploy -o BatchMode=yes "$DESTINO" '
+            set -e
+            cd /srv/apps/atlas-one-prod/src
+            rm -rf frontend/src frontend/public scripts
+            find app -mindepth 1 -maxdepth 1 ! -name static -exec rm -rf {} +
+          '
           tar --exclude=.git --exclude=node_modules -cf - . \
             | ssh -i ~/.ssh/id_deploy -o BatchMode=yes "$DESTINO" \
                 'tar -x -C /srv/apps/atlas-one-prod/src'
