@@ -59,7 +59,7 @@ export function ConteoSesion() {
 
   const lector = useLectorCodigos({ onCodigo: procesar, pausado })
 
-  const siguiente = () => { setUltimo(null); setCandidatos(null); setPausado(false) }
+  const siguiente = () => { setUltimo(null); setCandidatos(null); setLigarCodigo(null); setPausado(false) }
 
   const masUno = async () => {
     const vid = ultimo?.producto?.variant_id
@@ -69,22 +69,23 @@ export function ConteoSesion() {
     } catch (e: any) { toast.error(errorDetailText(e?.response?.data?.detail, 'No se pudo sumar')) }
   }
 
-  const elegido = async (p: ProductoResumen) => {
+  // `codigoALigar` llega explícito desde el buscador; el modal de candidatos pasa null.
+  // Así un código viejo en el estado nunca se escribe en una variante ajena.
+  const elegido = async (p: ProductoResumen, codigoALigar: string | null) => {
     try {
-      if (ligarCodigo) {
+      if (codigoALigar) {
         // Reemplaza el código interno por el de la pieza (igual que el Escáner) y
         // quita la línea de desconocido: la próxima lectura ya empata.
-        await productsApi.updateVariant(p.variant_id, { barcode: ligarCodigo })
-        const desconocida = conteo?.lineas.find((l) => l.variant_id === null && l.codigo === ligarCodigo)
+        await productsApi.updateVariant(p.variant_id, { barcode: codigoALigar })
+        const desconocida = conteo?.lineas.find((l) => l.variant_id === null && l.codigo === codigoALigar)
         if (desconocida) await conteosApi.borrarLinea(conteoId, desconocida.id)
-        setLigarCodigo(null)
       }
       await conteosApi.agregarLinea(conteoId, p.variant_id, 1)
       vibrar('ok')
       setUltimo({ resultado: 'contado', linea: null, producto: p, qty_sistema: null, fuera_de_alcance: false, candidatos: [] })
       setCandidatos(null)
-      await recargar()
     } catch (e: any) { toast.error(errorDetailText(e?.response?.data?.detail, 'No se pudo registrar la pieza')) }
+    finally { setLigarCodigo(null); await recargar() }   // la lista siempre refleja al servidor, aun si algo falló a medias
   }
 
   const fijar = async (l: Linea, qty: number) => {
@@ -189,20 +190,21 @@ export function ConteoSesion() {
               </div>
               <input type="number" min={0} inputMode="numeric" className="dax-input w-16 text-center"
                 defaultValue={num(l.qty_contada)} key={`${l.id}-${l.qty_contada}`}
-                onBlur={(e) => { const n = Number(e.target.value); if (Number.isFinite(n) && n >= 0 && n !== num(l.qty_contada)) void fijar(l, n) }} />
+                onBlur={(e) => { if (e.target.value.trim() === '') { e.target.value = String(num(l.qty_contada)); return }
+                  const n = Number(e.target.value); if (Number.isFinite(n) && n >= 0 && n !== num(l.qty_contada)) void fijar(l, n) }} />
               <button aria-label="Quitar" onClick={() => void fijar(l, 0)} className="dax-btn-icon dax-btn-ghost"><i className="fa-solid fa-trash" /></button>
             </li>
           ))}
         </ul>
       </DaxCard>
 
-      <BuscadorVariante open={buscar} onClose={() => setBuscar(false)} onElegir={elegido}
+      <BuscadorVariante open={buscar} onClose={() => { setBuscar(false); setLigarCodigo(null) }} onElegir={(p) => elegido(p, ligarCodigo)}
         titulo={ligarCodigo ? `Ligar el código ${ligarCodigo} a…` : 'Buscar pieza'} />
 
       <Modal open={candidatos !== null} onClose={() => setCandidatos(null)} title="¿Cuál es?" size="sm">
         <div className="space-y-2">
           {(candidatos ?? []).map((p) => (
-            <button key={p.variant_id} className="dax-btn-secondary w-full justify-start text-left" onClick={() => void elegido(p)}>
+            <button key={p.variant_id} className="dax-btn-secondary w-full justify-start text-left" onClick={() => void elegido(p, null)}>
               {p.nombre} <span className="text-xs text-slate-400">· {p.sku}</span>
             </button>
           ))}

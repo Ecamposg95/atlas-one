@@ -18,6 +18,7 @@ export function useLectorCodigos({ onCodigo, pausado }: { onCodigo: (code: strin
   const lastCodeRef = useRef('')
   const pausadoRef = useRef(pausado)
   const cancelledRef = useRef(false)
+  const startingRef = useRef(false)
   const onCodigoRef = useRef(onCodigo)
   const [camOn, setCamOn] = useState(false)
   const [camError, setCamError] = useState<string | null>(null)
@@ -38,6 +39,9 @@ export function useLectorCodigos({ onCodigo, pausado }: { onCodigo: (code: strin
   }, [])
 
   const start = useCallback(async () => {
+    // Dos toques rápidos no deben abrir dos flujos: el primero quedaría sin liberar.
+    if (startingRef.current || streamRef.current) return
+    startingRef.current = true
     setCamError(null)
     cancelledRef.current = false
     try {
@@ -75,6 +79,8 @@ export function useLectorCodigos({ onCodigo, pausado }: { onCodigo: (code: strin
     } catch {
       setCamError('No se pudo abrir la cámara. Revisa el permiso del navegador para este sitio, o teclea el código a mano.')
       setCamOn(false)
+    } finally {
+      startingRef.current = false
     }
   }, [stop])
 
