@@ -2391,3 +2391,664 @@ git commit -m "docs(conteos): vistas, API, modelo de datos y modo básico del co
 - [ ] **Step 4: Reporte al usuario (sin push)**
 
 Una tabla: rama, HEAD, qué cambia, cómo probarlo en el teléfono (abrir `/inventory/conteos`, elegir Playeras, encender cámara), y lo que el usuario decide después: fusionar y desplegar, y con el primer reporte de Eleven en mano la limpieza del catálogo (`scratchpad/eleven-diagnostico-2026-10-22.md`).
+
+---
+
+## Ajuste del 2026-10-22 (proceso real de la tienda): lista primero
+
+El usuario aclaró el proceso: **se lista el departamento completo, se escanea con pistola USB producto por producto, cada lectura palomea la fila (existe en físico) y ahí mismo se verifica y corrige la descripción**. Decisiones confirmadas: lista con palomas y la cámara como alternativa; la lista trae **todo el catálogo del departamento** (también existencia 0); al palomear se ve la ficha y se corrige ahí mismo (nombre, marca, modelo, descripción) y la fila queda marcada como corregida en el reporte. Lo construido en las Tareas 1-8 se conserva; las Tareas 9-11 lo extienden.
+
+### Task 9: Lista del departamento y marca de ficha corregida (backend)
+
+**Files:**
+- Modify: `app/modules/conteos/models.py` (columna `corregida` en `InventoryCountLine`), `app/modules/conteos/schemas.py`, `app/modules/conteos/services.py`, `app/modules/conteos/router.py`
+- Test: `tests/test_conteos_lista.py`
+
+**Interfaces:**
+- Consumes: `_alcance`, `existencias`, `resumen_producto`, `a_linea_read` de services (Task 2).
+- Produces: `ProductoResumen` gana `product_id: str`, `marca_id: Optional[str]`, `modelo: Optional[str]`, `descripcion: Optional[str]`, `precio: Optional[Decimal]`; `LineaRead.corregida: bool`; `LineaPatch` pasa a `{qty_contada?: Decimal ≥ 0, corregida?: bool}` (al menos uno); `FilaLista`, `Lista`; `services.lista(db, conteo) -> Lista`; `services.marcar_corregida(db, conteo, linea, valor: bool) -> InventoryCountLine`; `GET /{id}/lista`; `FilaReporte.corregida: bool` y `totales["corregidas"]`.
+
+- [ ] **Step 1: Pruebas que fallan**
+
+```python
+# tests/test_conteos_lista.py
+"""Lista del departamento con palomas y marca de ficha corregida."""
+from decimal import Decimal
+
+import pytest
+
+from app.models.inventory import StockOnHand
+from app.models.products import Brand, Department, Product, ProductVariant
+from app.modules.conteos import services
+from app.modules.conteos.models import ABIERTO, InventoryCount
+
+
+def _prenda(db, org, branch, *, name, sku, barcode, depto, stock, size="M", brand=None,
+            model=None, description=None):
+    p = Product(name=name, organization_id=org.id, is_active=True, department_id=depto.id,
+                brand_id=brand.id if brand else None, model=model, description=description)
+    db.add(p)
+    db.flush()
+    v = ProductVariant(product_id=p.id, sku=sku, barcode=barcode, organization_id=org.id,
+                       price=Decimal("1800"), cost=Decimal("900"), size=size, color="Negro")
+    db.add(v)
+    db.flush()
+    if stock is not None:
+        db.add(StockOnHand(variant_id=v.id, branch_id=branch.id, organization_id=org.id,
+                           qty_on_hand=Decimal(stock), is_active=True))
+    db.flush()
+    return v
+
+
+@pytest.fixture()
+def tienda(db, org, branch_a):
+    marca = Brand(name="Zegna", organization_id=org.id)
+    playeras = Department(name="Playeras", organization_id=org.id)
+    db.add_all([marca, playeras])
+    db.flush()
+    a = _prenda(db, org, branch_a, name="Playera", sku="A", barcode="1", depto=playeras,
+                stock="2", brand=marca, model="Slim", description="Algodón pima")
+    b = _prenda(db, org, branch_a, name="Camisa", sku="B", barcode="2", depto=playeras, stock="1")
+    c = _prenda(db, org, branch_a, name="Vieja", sku="C", barcode="3", depto=playeras, stock="0")
+    d = _prenda(db, org, branch_a, name="Sin fila", sku="D", barcode="4", depto=playeras, stock=None)
+    conteo = InventoryCount(organization_id=org.id, branch_id=branch_a.id,
+                            department_id=playeras.id, status=ABIERTO)
+    db.add(conteo)
+    db.commit()
+    return {"a": a, "b": b, "c": c, "d": d, "conteo": conteo}
+
+
+def test_lista_trae_todo_el_departamento_con_estado(db, tienda):
+    c = tienda["conteo"]
+    services.escanear(db, c, "1", None)            # a: 1 de 2 → diferencia
+    services.escanear(db, c, "2", None)            # b: 1 de 1 → revisado
+    lista = services.lista(db, c)
+    por_sku = {f.producto.sku: f for f in lista.filas}
+    assert set(por_sku) == {"A", "B", "C", "D"}    # también existencia 0 y sin fila de stock
+    assert por_sku["A"].estado == "diferencia" and por_sku["A"].contado == Decimal("1")
+    assert por_sku["B"].estado == "revisado" and por_sku["B"].line_id is not None
+    assert por_sku["C"].estado == "pendiente" and por_sku["C"].sistema == Decimal("0")
+    assert por_sku["D"].estado == "pendiente" and por_sku["D"].line_id is None
+    assert por_sku["A"].producto.product_id == tienda["a"].product_id
+    assert por_sku["A"].producto.modelo == "Slim"
+    assert por_sku["A"].producto.descripcion == "Algodón pima"
+    assert por_sku["A"].producto.precio == Decimal("1800")
+    assert por_sku["A"].producto.marca_id is not None
+    assert lista.totales == {"total": 4, "revisados": 1, "pendientes": 2, "con_diferencia": 1, "corregidas": 0}
+    # Orden: por nombre de producto y luego talla.
+    assert [f.producto.sku for f in lista.filas] == ["B", "A", "D", "C"]
+
+
+def test_marcar_corregida_y_reporte(db, tienda):
+    c = tienda["conteo"]
+    r = services.escanear(db, c, "1", None)
+    linea = next(l for l in c.lineas if l.id == r.linea.id)
+    linea = services.marcar_corregida(db, c, linea, True)
+    assert linea.corregida is True
+    assert services.a_linea_read(linea).corregida is True
+    lista = services.lista(db, c)
+    assert next(f for f in lista.filas if f.producto.sku == "A").corregida is True
+    assert lista.totales["corregidas"] == 1
+    rep = services.reporte(db, c)
+    assert next(f for f in rep.faltantes if f.sku == "A").corregida is True
+    assert rep.totales["corregidas"] == 1
+    assert services.marcar_corregida(db, c, linea, False).corregida is False
+
+
+def test_lista_api_y_patch_corregida(client, db, org, branch_a, auth_admin, tienda):
+    h = {**auth_admin, "X-Organization-ID": str(org.id)}
+    cid = tienda["conteo"].id
+    r = client.post(f"/api/inventory/counts/{cid}/scan", headers=h, json={"code": "2"})
+    lid = r.json()["linea"]["id"]
+    assert r.json()["linea"]["corregida"] is False
+    r = client.patch(f"/api/inventory/counts/{cid}/lines/{lid}", headers=h, json={"corregida": True})
+    assert r.status_code == 200 and r.json()["corregida"] is True and r.json()["qty_contada"] == "1"
+    r = client.patch(f"/api/inventory/counts/{cid}/lines/{lid}", headers=h, json={})
+    assert r.status_code == 422
+    r = client.get(f"/api/inventory/counts/{cid}/lista", headers=h)
+    assert r.status_code == 200
+    assert r.json()["totales"]["total"] == 4 and r.json()["totales"]["corregidas"] == 1
+    fila_b = next(f for f in r.json()["filas"] if f["producto"]["sku"] == "B")
+    assert fila_b["estado"] == "revisado" and fila_b["corregida"] is True
+```
+
+- [ ] **Step 2: Correr y ver que fallan**
+
+Run: `python3 -m pytest -q --ignore=tests/test_cash_complete.py tests/test_conteos_lista.py`
+Expected: FAIL (`AttributeError: module ... has no attribute 'lista'`, `corregida` inexistente).
+
+- [ ] **Step 3: Modelo**
+
+En `InventoryCountLine` (models.py), después de `qty_sistema`:
+
+```python
+    # La ficha del producto se corrigió desde el conteo (nombre/marca/modelo/
+    # descripción): el reporte lo lista para saber qué se tocó.
+    corregida = Column(Boolean, nullable=False, default=False, server_default="false")
+```
+
+(importa `Boolean` de sqlalchemy). La tabla aún no existe en producción: `create_all` la crea con la columna; no hace falta ALTER.
+
+- [ ] **Step 4: Schemas**
+
+```python
+class ProductoResumen(BaseModel):
+    variant_id: str
+    product_id: str
+    nombre: str
+    marca: Optional[str] = None
+    marca_id: Optional[str] = None
+    modelo: Optional[str] = None
+    descripcion: Optional[str] = None
+    precio: Optional[Cant] = None
+    talla: Optional[str] = None
+    color: Optional[str] = None
+    sku: Optional[str] = None
+    barcode: Optional[str] = None
+    foto: Optional[str] = None
+    departamento: Optional[str] = None
+```
+
+`LineaRead`: añade `corregida: bool = False`. `FilaReporte`: añade `corregida: bool = False`.
+
+```python
+class LineaPatch(BaseModel):
+    """Al menos uno de los dos: cantidad (0 borra) o la marca de ficha corregida."""
+    qty_contada: Optional[Decimal] = Field(default=None, ge=0)
+    corregida: Optional[bool] = None
+
+    @model_validator(mode="after")
+    def _algo_que_cambiar(self):
+        if self.qty_contada is None and self.corregida is None:
+            raise ValueError("Manda qty_contada o corregida")
+        return self
+
+
+EstadoFila = Literal["pendiente", "revisado", "diferencia"]
+
+
+class FilaLista(BaseModel):
+    producto: ProductoResumen
+    sistema: Cant
+    contado: Cant
+    estado: EstadoFila
+    corregida: bool = False
+    line_id: Optional[int] = None
+
+
+class Lista(BaseModel):
+    filas: List[FilaLista]
+    totales: dict
+```
+
+(`from pydantic import model_validator`; `Cant` es el tipo que ya existe en el archivo.)
+
+- [ ] **Step 5: Servicios**
+
+`resumen_producto` devuelve los campos nuevos:
+
+```python
+    return ProductoResumen(
+        variant_id=v.id, product_id=p.id,
+        nombre=variant_sale_name(marca, p.name, p.model, v.color, v.size, v.variant_name),
+        marca=marca, marca_id=p.brand_id, modelo=p.model, descripcion=p.description,
+        precio=v.price, talla=v.size, color=v.color, sku=v.sku, barcode=v.barcode,
+        foto=p.image_url,
+        departamento=p.department.name if getattr(p, "department", None) else None,
+    )
+```
+
+`a_linea_read` incluye `corregida=bool(linea.corregida)`. En `_fila(v, sistema, contado, corregida=False)` añade el parámetro y pásalo en `_calcular`: `corregidas = {l.variant_id: bool(l.corregida) for l in conteo.lineas if l.variant_id}` y `_fila(v, sistema, contado, corregidas.get(v.id, False))` en faltantes/sobrantes/fuera; `totales["corregidas"] = sum(1 for l in conteo.lineas if l.corregida)`.
+
+```python
+def marcar_corregida(db: Session, conteo: InventoryCount, linea: InventoryCountLine,
+                     valor: bool) -> InventoryCountLine:
+    _exigir_abierto(conteo)
+    if linea.count_id != conteo.id or linea.organization_id != conteo.organization_id:
+        raise HTTPException(404, "Línea no encontrada")
+    linea.corregida = bool(valor)
+    db.commit()
+    db.refresh(linea)
+    return linea
+
+
+def lista(db: Session, conteo: InventoryCount) -> Lista:
+    """Todo el catálogo del departamento (también existencia 0) con su estado:
+    pendiente (nada contado), revisado (contado == sistema), diferencia."""
+    stock = existencias(db, conteo)
+    lineas = {l.variant_id: l for l in conteo.lineas if l.variant_id}
+    filas: List[FilaLista] = []
+    for v in sorted(_alcance(db, conteo), key=lambda x: ((x.product.name or "").lower(), x.size or "", x.color or "")):
+        sistema = stock.get(v.id, CERO)
+        l = lineas.get(v.id)
+        contado = Decimal(l.qty_contada or 0) if l else CERO
+        if contado == 0 and l is None:
+            estado = "pendiente"
+        elif contado == sistema:
+            estado = "revisado"
+        else:
+            estado = "diferencia"
+        filas.append(FilaLista(producto=resumen_producto(v), sistema=sistema, contado=contado,
+                               estado=estado, corregida=bool(l.corregida) if l else False,
+                               line_id=l.id if l else None))
+    return Lista(filas=filas, totales={
+        "total": len(filas),
+        "revisados": sum(1 for f in filas if f.estado == "revisado"),
+        "pendientes": sum(1 for f in filas if f.estado == "pendiente"),
+        "con_diferencia": sum(1 for f in filas if f.estado == "diferencia"),
+        "corregidas": sum(1 for f in filas if f.corregida),
+    })
+```
+
+Nota: una variante con existencia 0 escaneada una vez queda en `diferencia` (sobrante), como en el reporte. Una línea con qty 0 no existe (PATCH 0 la borra), así que `contado == 0 and l is None` equivale a "nunca escaneada".
+
+- [ ] **Step 6: Router**
+
+```python
+@router.patch("/{conteo_id}/lines/{line_id}", response_model=Optional[LineaRead])
+def fijar_linea(conteo_id: int, line_id: int, body: LineaPatch, db: Session = Depends(get_db),
+                _: User = Depends(_admin), org_id: int = Depends(get_current_active_organization)):
+    c = _conteo_o_404(db, org_id, conteo_id)
+    l = _linea_o_404(c, line_id)
+    if body.corregida is not None:
+        l = services.marcar_corregida(db, c, l, body.corregida)
+    if body.qty_contada is not None:
+        l = services.fijar_linea(db, c, l, body.qty_contada)
+    return services.a_linea_read(l) if l is not None else None
+
+
+@router.get("/{conteo_id}/lista", response_model=Lista)
+def lista_conteo(conteo_id: int, db: Session = Depends(get_db), _: User = Depends(_admin),
+                 org_id: int = Depends(get_current_active_organization)):
+    return services.lista(db, _conteo_o_404(db, org_id, conteo_id))
+```
+
+- [ ] **Step 7: Correr pruebas (nuevas + las del módulo) y suite**
+
+Run: `python3 -m pytest -q --ignore=tests/test_cash_complete.py tests/test_conteos_lista.py tests/test_conteos_api.py tests/test_conteos_services.py tests/test_conteos_models.py`
+Expected: todas en verde (las pruebas viejas de PATCH siguen mandando solo `qty_contada`). Luego la suite completa con los dos `--ignore` de integración: `0 failed`.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add app/modules/conteos tests/test_conteos_lista.py
+git commit -m "feat(conteos): lista del departamento con estado por fila y marca de ficha corregida"
+```
+
+### Task 10: Componentes de la lista con palomas y de la ficha corregible (frontend)
+
+**Files:**
+- Modify: `frontend/src/api/conteos.ts` (tipos nuevos, `lista`, `patchLinea`)
+- Create: `frontend/src/pages/inventory/conteos/lista.ts`, `frontend/src/pages/inventory/conteos/ListaDepartamento.tsx`, `frontend/src/pages/inventory/conteos/FichaProducto.tsx`
+- Test: `frontend/src/pages/inventory/conteos/__tests__/lista.test.ts`
+
+**Interfaces:**
+- Consumes: `GET /{id}/lista` y `PATCH /{id}/lines/{line_id}` con `{qty_contada?, corregida?}` (Task 9); `productsApi.update(id, {name, brand_id, model, description})` y `productsApi.getBrands()`; kit `Modal`, `ListaTarjetas`, `TarjetaFila`; `useEsTelefono`; `num`.
+- Produces: tipos `FilaLista`, `Lista`, `EstadoFila`; `conteosApi.lista(id)`, `conteosApi.patchLinea(id, lineId, body)`; helpers `filtrarLista(filas, filtro, busqueda)`, `contarPorEstado(filas)`, `iconoEstado(estado)`; componentes `ListaDepartamento` y `FichaProducto` (Task 11 los monta en `ConteoSesion`).
+
+- [ ] **Step 1: Prueba del helper que falla**
+
+```ts
+// frontend/src/pages/inventory/conteos/__tests__/lista.test.ts
+import { describe, it, expect } from 'vitest'
+
+import { contarPorEstado, filtrarLista, iconoEstado } from '../lista'
+import type { FilaLista } from '../../../../api/conteos'
+
+const fila = (sku: string, nombre: string, estado: FilaLista['estado'], marca: string | null = null): FilaLista => ({
+  producto: { variant_id: sku, product_id: 'p-' + sku, nombre, marca, marca_id: null, modelo: null, descripcion: null,
+    precio: '100', talla: 'M', color: null, sku, barcode: sku, foto: null, departamento: 'Playeras' },
+  sistema: '1', contado: estado === 'pendiente' ? '0' : '1', estado, corregida: false, line_id: estado === 'pendiente' ? null : 1,
+})
+const filas = [fila('A', 'Zegna · Playera', 'revisado', 'Zegna'), fila('B', 'Camisa', 'pendiente'), fila('C', 'Gorra', 'diferencia')]
+
+describe('filtrarLista', () => {
+  it('filtra por estado y "todos" deja todo', () => {
+    expect(filtrarLista(filas, 'pendientes', '').map((f) => f.producto.sku)).toEqual(['B'])
+    expect(filtrarLista(filas, 'revisados', '').map((f) => f.producto.sku)).toEqual(['A', 'C'])
+    expect(filtrarLista(filas, 'todos', '')).toHaveLength(3)
+  })
+  it('busca por nombre, marca, SKU o código sin importar mayúsculas ni acentos', () => {
+    expect(filtrarLista(filas, 'todos', 'zegna').map((f) => f.producto.sku)).toEqual(['A'])
+    expect(filtrarLista(filas, 'todos', 'c').map((f) => f.producto.sku)).toEqual(['B', 'C'])
+    expect(filtrarLista(filas, 'pendientes', 'gorra')).toEqual([])
+  })
+})
+
+describe('contarPorEstado', () => {
+  it('cuenta pendientes, revisados (incluye diferencia) y total', () => {
+    expect(contarPorEstado(filas)).toEqual({ pendientes: 1, revisados: 2, total: 3 })
+  })
+})
+
+describe('iconoEstado', () => {
+  it('da paloma verde, alerta ámbar o círculo gris', () => {
+    expect(iconoEstado('revisado')).toEqual({ icono: 'fa-circle-check', clase: 'text-emerald-400', texto: 'Revisado' })
+    expect(iconoEstado('diferencia')).toEqual({ icono: 'fa-triangle-exclamation', clase: 'text-amber-400', texto: 'Con diferencia' })
+    expect(iconoEstado('pendiente')).toEqual({ icono: 'fa-circle', clase: 'text-slate-500', texto: 'Pendiente' })
+  })
+})
+```
+
+- [ ] **Step 2: Correr y ver que falla**
+
+Run: `cd frontend && npx vitest run src/pages/inventory/conteos/__tests__/lista.test.ts`
+Expected: FAIL, no existe `../lista`
+
+- [ ] **Step 3: Tipos y cliente**
+
+En `frontend/src/api/conteos.ts`: `ProductoResumen` gana `product_id: string`, `marca_id: string | null`, `modelo: string | null`, `descripcion: string | null`, `precio: string | null`; `Linea` y `FilaReporte` ganan `corregida: boolean`. Añade:
+
+```ts
+export type EstadoFila = 'pendiente' | 'revisado' | 'diferencia'
+
+export interface FilaLista {
+  producto: ProductoResumen
+  sistema: string
+  contado: string
+  estado: EstadoFila
+  corregida: boolean
+  line_id: number | null
+}
+
+export interface Lista {
+  filas: FilaLista[]
+  totales: { total: number; revisados: number; pendientes: number; con_diferencia: number; corregidas: number }
+}
+```
+
+y en `conteosApi`:
+
+```ts
+  lista: async (id: number): Promise<Lista> => {
+    const { data } = await client.get<Lista>(`/inventory/counts/${id}/lista`)
+    return data
+  },
+  patchLinea: async (id: number, lineId: number, body: { qty_contada?: number; corregida?: boolean }): Promise<Linea | null> => {
+    const { data } = await client.patch<Linea | null>(`/inventory/counts/${id}/lines/${lineId}`, {
+      ...(body.qty_contada !== undefined ? { qty_contada: String(body.qty_contada) } : {}),
+      ...(body.corregida !== undefined ? { corregida: body.corregida } : {}),
+    })
+    return data
+  },
+```
+
+`fijarLinea` se queda como envoltura: `fijarLinea: (id, lineId, qty) => conteosApi.patchLinea(id, lineId, { qty_contada: qty })`.
+
+- [ ] **Step 4: Helpers puros**
+
+```ts
+// frontend/src/pages/inventory/conteos/lista.ts
+import type { EstadoFila, FilaLista } from '../../../api/conteos'
+
+export type FiltroLista = 'pendientes' | 'revisados' | 'todos'
+
+const plano = (s: string | null | undefined) =>
+  (s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+
+/** "Revisados" incluye las filas con diferencia: ya se escanearon, solo no cuadran. */
+export function filtrarLista(filas: FilaLista[], filtro: FiltroLista, busqueda: string): FilaLista[] {
+  const q = plano(busqueda.trim())
+  return filas.filter((f) => {
+    if (filtro === 'pendientes' && f.estado !== 'pendiente') return false
+    if (filtro === 'revisados' && f.estado === 'pendiente') return false
+    if (!q) return true
+    const p = f.producto
+    return [p.nombre, p.marca, p.sku, p.barcode, p.modelo].some((c) => plano(c).includes(q))
+  })
+}
+
+export function contarPorEstado(filas: FilaLista[]): { pendientes: number; revisados: number; total: number } {
+  const pendientes = filas.filter((f) => f.estado === 'pendiente').length
+  return { pendientes, revisados: filas.length - pendientes, total: filas.length }
+}
+
+export function iconoEstado(estado: EstadoFila): { icono: string; clase: string; texto: string } {
+  if (estado === 'revisado') return { icono: 'fa-circle-check', clase: 'text-emerald-400', texto: 'Revisado' }
+  if (estado === 'diferencia') return { icono: 'fa-triangle-exclamation', clase: 'text-amber-400', texto: 'Con diferencia' }
+  return { icono: 'fa-circle', clase: 'text-slate-500', texto: 'Pendiente' }
+}
+```
+
+- [ ] **Step 5: Lista del departamento**
+
+```tsx
+// frontend/src/pages/inventory/conteos/ListaDepartamento.tsx
+import { useEffect, useMemo, useState } from 'react'
+
+import type { FilaLista } from '../../../api/conteos'
+import { ListaTarjetas } from '../../../components/ui/ListaTarjetas'
+import { TarjetaFila } from '../../../components/ui/TarjetaFila'
+import { useEsTelefono } from '../../../hooks/useIsMobile'
+import { num } from './avance'
+import { contarPorEstado, filtrarLista, iconoEstado, type FiltroLista } from './lista'
+
+/**
+ * Checklist del departamento: todas las tallas del catálogo con su paloma.
+ * La pistola palomea desde la pantalla (ConteoSesion); aquí solo se muestra,
+ * se filtra y se deja corregir la cantidad de las filas ya escaneadas. La
+ * fila recién leída se resalta y se trae a la vista.
+ */
+export function ListaDepartamento({ filas, resaltada, onCantidad, onFicha }: {
+  filas: FilaLista[]
+  /** variant_id de la última lectura, para resaltar y hacer scroll. */
+  resaltada: string | null
+  onCantidad: (fila: FilaLista, qty: number) => void
+  onFicha: (fila: FilaLista) => void
+}) {
+  const esTelefono = useEsTelefono()
+  const [filtro, setFiltro] = useState<FiltroLista>('pendientes')
+  const [busqueda, setBusqueda] = useState('')
+  const visibles = useMemo(() => filtrarLista(filas, filtro, busqueda), [filas, filtro, busqueda])
+  const n = contarPorEstado(filas)
+
+  useEffect(() => {
+    if (!resaltada) return
+    document.getElementById(`fila-${resaltada}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [resaltada, filtro])
+
+  const chip = (valor: FiltroLista, etiqueta: string, cuenta: number) => (
+    <button type="button" onClick={() => setFiltro(valor)}
+      className={filtro === valor ? 'dax-btn-primary text-xs' : 'dax-btn-secondary text-xs'}>
+      {etiqueta} <span className="opacity-70">{cuenta}</span>
+    </button>
+  )
+
+  const cantidad = (f: FilaLista) => f.line_id === null ? (
+    <span className="text-slate-500">{num(f.contado)}</span>
+  ) : (
+    <input type="number" min={0} inputMode="numeric" className="dax-input w-16 text-center"
+      defaultValue={num(f.contado)} key={`${f.line_id}-${f.contado}`}
+      onBlur={(e) => {
+        if (e.target.value.trim() === '') { e.target.value = String(num(f.contado)); return }
+        const v = Number(e.target.value)
+        if (Number.isFinite(v) && v >= 0 && v !== num(f.contado)) onCantidad(f, v)
+      }} />
+  )
+
+  const estadoDe = (f: FilaLista) => {
+    const e = iconoEstado(f.estado)
+    return <span className={e.clase} title={e.texto}><i className={`fa-solid ${e.icono}`} /> {f.corregida && <i className="fa-solid fa-pen text-indigo-400" title="Ficha corregida" />}</span>
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-2">
+        {chip('pendientes', 'Pendientes', n.pendientes)}
+        {chip('revisados', 'Revisados', n.revisados)}
+        {chip('todos', 'Todos', n.total)}
+      </div>
+      <input className="dax-input w-full" placeholder="Buscar en el departamento…" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
+
+      {esTelefono ? (
+        <ListaTarjetas vacio={visibles.length === 0} textoVacio={filtro === 'pendientes' ? 'No queda nada pendiente.' : 'Sin filas.'}>
+          {visibles.map((f) => (
+            <div key={f.producto.variant_id} id={`fila-${f.producto.variant_id}`}
+              className={f.producto.variant_id === resaltada ? 'ring-2 ring-indigo-400 rounded-md' : ''}>
+              <TarjetaFila
+                titulo={f.producto.nombre}
+                subtitulo={[f.producto.sku, f.producto.talla, f.producto.color].filter(Boolean).join(' · ')}
+                estado={estadoDe(f)}
+                datos={[{ etiqueta: 'Sistema', valor: num(f.sistema) }, { etiqueta: 'Contado', valor: cantidad(f) }]}
+                acciones={<button type="button" className="dax-btn-ghost text-xs" onClick={() => onFicha(f)}><i className="fa-solid fa-id-card" /> Ficha</button>}
+              />
+            </div>
+          ))}
+        </ListaTarjetas>
+      ) : (
+        <table className="w-full text-sm">
+          <thead className="text-xs text-slate-400 uppercase">
+            <tr><th className="p-2" /><th className="text-left p-2">Pieza</th><th className="text-left p-2">SKU</th><th className="text-right p-2">Sistema</th><th className="text-right p-2">Contado</th><th className="p-2" /></tr>
+          </thead>
+          <tbody>
+            {visibles.length === 0 && <tr><td colSpan={6} className="p-4 text-center text-slate-500">{filtro === 'pendientes' ? 'No queda nada pendiente.' : 'Sin filas.'}</td></tr>}
+            {visibles.map((f) => (
+              <tr key={f.producto.variant_id} id={`fila-${f.producto.variant_id}`}
+                className={`border-t border-slate-800 ${f.producto.variant_id === resaltada ? 'bg-indigo-500/10' : ''}`}>
+                <td className="p-2 text-center">{estadoDe(f)}</td>
+                <td className="p-2 text-white">{f.producto.nombre}</td>
+                <td className="p-2 text-slate-400">{[f.producto.sku, f.producto.talla].filter(Boolean).join(' · ')}</td>
+                <td className="p-2 text-right text-slate-300">{num(f.sistema)}</td>
+                <td className="p-2 text-right">{cantidad(f)}</td>
+                <td className="p-2 text-right"><button type="button" className="dax-btn-ghost text-xs" onClick={() => onFicha(f)}><i className="fa-solid fa-id-card" /> Ficha</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  )
+}
+```
+
+Si `TarjetaFila` no admite un nodo en `valor` de `datos` (revisa `DatoTarjeta.valor: ReactNode` en `components/ui/TarjetaFila.tsx`; sí lo admite), mantenlo; si no, pon el input en `acciones`.
+
+- [ ] **Step 6: Ficha corregible**
+
+```tsx
+// frontend/src/pages/inventory/conteos/FichaProducto.tsx
+import { useEffect, useState } from 'react'
+
+import type { ProductoResumen } from '../../../api/conteos'
+import { productsApi } from '../../../api/products'
+import { Modal } from '../../../components/ui/Modal'
+import { toast } from '../../../store/toastStore'
+import type { Brand } from '../../../types/products'
+import { errorDetailText } from '../../../utils/errorDetail'
+import { num } from './avance'
+
+/**
+ * Ficha de la pieza recién palomeada, para verificar que la descripción es la
+ * correcta, y un formulario corto para corregirla ahí mismo (nombre, marca,
+ * modelo, descripción: lo que se lee en la etiqueta y el ticket). Guarda con
+ * `PUT /products/{id}` y avisa al conteo para marcar la fila como corregida.
+ */
+export function FichaProducto({ producto, open, onClose, onCorregida }: {
+  producto: ProductoResumen | null
+  open: boolean
+  onClose: () => void
+  /** Se llama tras guardar; el padre marca la línea como corregida y recarga. */
+  onCorregida: (producto: ProductoResumen) => Promise<void> | void
+}) {
+  const [editando, setEditando] = useState(false)
+  const [marcas, setMarcas] = useState<Brand[]>([])
+  const [form, setForm] = useState({ name: '', brand_id: '', model: '', description: '' })
+  const [guardando, setGuardando] = useState(false)
+
+  useEffect(() => {
+    if (!open || !producto) return
+    setEditando(false)
+    setForm({
+      name: producto.nombre.includes(' · ') ? '' : producto.nombre,   // se rellena abajo con el nombre base
+      brand_id: producto.marca_id ?? '', model: producto.modelo ?? '', description: producto.descripcion ?? '',
+    })
+    // El nombre base del producto no viaja en el resumen (viene el nombre de venta);
+    // se lee del catálogo al abrir el editor para no adivinarlo.
+  }, [open, producto])
+
+  const abrirEditor = async () => {
+    if (!producto) return
+    try {
+      const [p, bs] = await Promise.all([productsApi.getById(producto.product_id), productsApi.getBrands()])
+      setMarcas(bs)
+      setForm({ name: p.name ?? '', brand_id: p.brand_id ?? '', model: p.model ?? '', description: p.description ?? '' })
+      setEditando(true)
+    } catch (e: any) {
+      toast.error(errorDetailText(e?.response?.data?.detail, 'No se pudo abrir la ficha'))
+    }
+  }
+
+  const guardar = async () => {
+    if (!producto || !form.name.trim()) { toast.warning('El nombre no puede quedar vacío'); return }
+    setGuardando(true)
+    try {
+      await productsApi.update(producto.product_id, {
+        name: form.name.trim(), brand_id: form.brand_id || null, model: form.model.trim() || null,
+        description: form.description.trim() || null,
+      })
+      await onCorregida(producto)
+      toast.success('Ficha corregida')
+      onClose()
+    } catch (e: any) {
+      toast.error(errorDetailText(e?.response?.data?.detail, 'No se pudo guardar la ficha'))
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  if (!producto) return null
+  return (
+    <Modal open={open} onClose={onClose} title={editando ? 'Corregir ficha' : 'Ficha de la pieza'} size="md"
+      footer={editando ? (<>
+        <button type="button" onClick={() => setEditando(false)} className="dax-btn-secondary flex-1">Cancelar</button>
+        <button type="button" onClick={guardar} disabled={guardando} className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
+          {guardando ? <i className="fa-solid fa-spinner fa-spin" /> : 'Guardar'}
+        </button>
+      </>) : (<>
+        <button type="button" onClick={onClose} className="dax-btn-secondary flex-1">Está bien</button>
+        <button type="button" onClick={abrirEditor} className="dax-btn-primary flex-1 justify-center"><i className="fa-solid fa-pen" /> Corregir</button>
+      </>)}>
+      {!editando ? (
+        <div className="flex gap-3">
+          {producto.foto && <img src={producto.foto} alt="" className="h-24 w-24 rounded object-cover" />}
+          <dl className="text-sm space-y-1 flex-1">
+            <div><dt className="text-xs text-slate-400">Nombre de venta</dt><dd className="text-white font-bold">{producto.nombre}</dd></div>
+            <div><dt className="text-xs text-slate-400">Marca · modelo</dt><dd className="text-slate-200">{[producto.marca, producto.modelo].filter(Boolean).join(' · ') || '—'}</dd></div>
+            <div><dt className="text-xs text-slate-400">Talla · color</dt><dd className="text-slate-200">{[producto.talla, producto.color].filter(Boolean).join(' · ') || '—'}</dd></div>
+            <div><dt className="text-xs text-slate-400">Descripción</dt><dd className="text-slate-200 whitespace-pre-wrap">{producto.descripcion || '—'}</dd></div>
+            <div><dt className="text-xs text-slate-400">SKU · código · precio</dt><dd className="text-slate-200">{producto.sku} · {producto.barcode ?? 'sin código'} · ${num(producto.precio).toLocaleString('es-MX')}</dd></div>
+          </dl>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <label className="block"><span className="text-xs text-slate-400">Nombre</span>
+            <input className="dax-input w-full" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
+          <label className="block"><span className="text-xs text-slate-400">Marca</span>
+            <select className="dax-input w-full" value={form.brand_id} onChange={(e) => setForm({ ...form, brand_id: e.target.value })}>
+              <option value="">Sin marca</option>
+              {marcas.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select></label>
+          <label className="block"><span className="text-xs text-slate-400">Modelo</span>
+            <input className="dax-input w-full" value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} /></label>
+          <label className="block"><span className="text-xs text-slate-400">Descripción</span>
+            <textarea className="dax-input w-full" rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></label>
+        </div>
+      )}
+    </Modal>
+  )
+}
+```
+
+Verifica el nombre real del método que lee un producto por id en `frontend/src/api/products.ts` (`getById`, `get` o `getProduct`) y úsalo; si `ProductUpdate` no admite `null` en `brand_id`/`model`/`description`, manda `undefined` en su lugar y anota la diferencia en el reporte.
+
+- [ ] **Step 7: Correr pruebas y tsc**
+
+Run: `cd frontend && npx vitest run src/pages/inventory/conteos src/__tests__ && npx tsc --noEmit -p .`
+Expected: verde (los componentes nuevos aún no se montan; `tsc` los compila igual).
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add frontend/src/api/conteos.ts frontend/src/pages/inventory/conteos
+git commit -m "feat(conteos): lista del departamento con palomas y ficha corregible (componentes)"
+```

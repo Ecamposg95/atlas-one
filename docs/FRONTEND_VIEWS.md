@@ -303,19 +303,19 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Archivo:** `pages/inventory/conteos/Conteos.tsx`
 - **Propósito:** Lista de conteos físicos de la organización (abiertos y cerrados) con su avance; botón para iniciar uno (sucursal, recordada en el teléfono, + departamento opcional; vacío = toda la tienda). Un 409 del servidor avisa que ya hay uno abierto de esa sucursal y departamento.
 - **Quién la ve:** Admin y Dueño — módulo `inventory`. Menú "Conteo" (grupo Inventario); **oculto en modo básico** (`OCULTAS_BASICO_HQ`).
-- **Datos/API:** `conteosApi.list/create` (`GET`/`POST /api/inventory/counts/`), `organizationApi.getBranches`, `productsApi.getDepartments`. Cliente en `api/conteos.ts`.
+- **Datos/API:** `conteosApi.listar/crear` (`GET`/`POST /api/inventory/counts/`), `organizationApi.getBranches`, `productsApi.getDepartments`. Cliente en `api/conteos.ts`.
 
 ### `/inventory/conteos/:id` — Sesión de conteo 📱
 - **Archivo:** `pages/inventory/conteos/ConteoSesion.tsx`
 - **Propósito:** Contar con el teléfono: cámara encendida, cada lectura suma +1 a la misma línea de la variante (escanear la misma talla dos veces = 2); también teclear/lector USB, buscador por nombre o SKU y "ligar código" para los desconocidos. Muestra la última pieza leída, avance y lista de líneas editable (PATCH; 0 borra). La lista siempre se relee del servidor: recargar o cambiar de teléfono no pierde nada.
-- **Datos/API:** `conteosApi.get/scan/addLine/setLine/removeLine/close`; `productsApi` para el buscador y para ligar un código a una variante.
+- **Datos/API:** `conteosApi.ver/escanear/agregarLinea/fijarLinea/borrarLinea/cerrar`; `productsApi` para el buscador y para ligar un código a una variante.
 - **Componentes clave:** `useLectorCodigos.ts` (**reutiliza** `pages/scanner/barcodeReader.ts`: detector nativo con respaldo ZXing, mismo módulo que usa `/scanner`), `BuscadorVariante.tsx`, helpers `avance.ts` y `sesion.ts`.
 - **Notas:** Un código con varias variantes devuelve `ambiguo` y se elige de la lista; una pieza fuera del departamento se cuenta pero marca `fuera_de_alcance`. Cerrar congela el conteo y lleva al reporte.
 
 ### `/inventory/conteos/:id/reporte` — Reporte del conteo 📱
 - **Archivo:** `pages/inventory/conteos/ConteoReporte.tsx`
 - **Propósito:** Reporte en pantalla: totales, faltantes, sobrantes, fuera de departamento y códigos desconocidos. Abierto se recalcula en vivo; cerrado muestra el JSON congelado. No ajusta existencias.
-- **Datos/API:** `conteosApi.report` (`GET /api/inventory/counts/{id}/report`).
+- **Datos/API:** `conteosApi.reporte` (`GET /api/inventory/counts/{id}/report`).
 
 ### `/logistics` — Logística / transferencias 📱
 - **Archivo:** `pages/inventory/Logistics.tsx` (275 líneas)
