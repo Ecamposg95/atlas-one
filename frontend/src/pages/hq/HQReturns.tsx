@@ -5,6 +5,7 @@ import { useAuthStore } from '../../store/authStore'
 import { toast } from '../../store/toastStore'
 import { confirm } from '../../components/ui/ConfirmDialog'
 import { DaxCard } from '../../components/ui/DaxCard'
+import { Modal } from '../../components/ui/Modal'
 import { TablaDesplazable } from '../../components/ui/TablaDesplazable'
 import { Badge } from '../../components/ui/Badge'
 import { Spinner } from '../../components/ui/Spinner'
@@ -227,15 +228,24 @@ export function HQReturns() {
       </DaxCard>
       )}
 
-      {/* Modal detalle */}
+      {/* Detalle: Modal del kit con Aprobar/Rechazar en el pie. */}
       {selected && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setSelected(null)}>
-          <div className="dax-card dax-modal p-6 w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-black text-white">Detalle de Devolución</h3>
-              <button onClick={() => setSelected(null)} className="dax-btn-icon text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
-            </div>
-
+        <Modal
+          open
+          onClose={() => setSelected(null)}
+          size="lg"
+          title="Detalle de devolución"
+          footer={canApprove && selected.status === 'PENDING' ? (
+            <>
+              <button onClick={() => handleApprove(selected.id)} disabled={actionLoading} className="dax-btn-primary flex-1 justify-center">
+                {actionLoading ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Aprobar</>}
+              </button>
+              <button onClick={() => { setRejectingId(selected.id); setRejectReason('') }} disabled={actionLoading} className="dax-btn-danger flex-1 justify-center">
+                <i className="fa-solid fa-xmark" /> Rechazar
+              </button>
+            </>
+          ) : undefined}
+        >
             <div className="space-y-2 text-sm mb-4">
               <div className="flex justify-between"><span className="text-slate-500">Ticket</span><span className="font-mono text-indigo-400">{returnLabel(selected)}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Sucursal</span><span>{returnBranchName(selected) ?? '—'}</span></div>
@@ -270,41 +280,18 @@ export function HQReturns() {
             <div className="flex justify-between font-black text-white border-t border-slate-700/50 pt-3">
               <span>Total reembolso</span><span className="text-red-400">{formatCurrency(selected.total_refunded)}</span>
             </div>
-
-            {canApprove && selected.status === 'PENDING' && (
-              <div className="dax-modal-footer -mx-6 px-6 flex gap-2 mt-4">
-                <button onClick={() => handleApprove(selected.id)} disabled={actionLoading} className="dax-btn-primary flex-1 justify-center">
-                  {actionLoading ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Aprobar</>}
-                </button>
-                <button onClick={() => { setRejectingId(selected.id); setRejectReason('') }} disabled={actionLoading} className="dax-btn-danger flex-1 justify-center">
-                  <i className="fa-solid fa-xmark" /> Rechazar
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+        </Modal>
       )}
 
-      {/* Modal de rechazo con motivo */}
+      {/* Rechazo con motivo. */}
       {rejectingId && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setRejectingId(null)}>
-          <div className="dax-card dax-modal p-5 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-base font-black mb-3" style={{ color: 'var(--dax-text)' }}>
-              <i className="fa-solid fa-circle-exclamation mr-2 text-red-500" />
-              Rechazar devolución
-            </h3>
-            <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: 'var(--dax-text-muted)' }}>
-              Motivo (opcional)
-            </label>
-            <textarea
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              className="dax-input w-full"
-              rows={3}
-              placeholder="Ej: Producto fuera de plazo de devolución, ticket duplicado..."
-              autoFocus
-            />
-            <div className="dax-modal-footer -mx-5 px-5 flex gap-2 mt-4">
+        <Modal
+          open
+          onClose={() => setRejectingId(null)}
+          size="sm"
+          title={<span><i className="fa-solid fa-circle-exclamation mr-2 text-red-500" />Rechazar devolución</span>}
+          footer={
+            <>
               <button onClick={() => setRejectingId(null)} className="dax-btn-secondary flex-1" disabled={actionLoading}>
                 Cancelar
               </button>
@@ -315,9 +302,21 @@ export function HQReturns() {
               >
                 {actionLoading ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-xmark" /> Confirmar rechazo</>}
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        >
+            <label className="text-[10px] font-bold uppercase tracking-wider block mb-1 text-dax-muted">
+              Motivo (opcional)
+            </label>
+            <textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              className="dax-input w-full"
+              rows={3}
+              placeholder="Ej: Producto fuera de plazo de devolución, ticket duplicado..."
+              autoFocus
+            />
+        </Modal>
       )}
     </div>
   )

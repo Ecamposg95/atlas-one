@@ -22,11 +22,11 @@ export const OCULTAS_BASICO_SUCURSAL: readonly string[] = [
 
 /** Dueña: Inicio · Mis ventas · Corte · Productos · Reportes · Empresa · Usuarios · Impresora. */
 export const OCULTAS_BASICO_HQ: readonly string[] = [
-  '/hq/control', '/admin/catalog', '/departments', '/brands', '/labels', '/scanner',
+  '/admin/catalog', '/departments', '/brands', '/labels', '/scanner',
   '/customers', '/hq/branches', '/inventory', '/hq/inventory',
   '/hq/sales', '/hq/returns',          // Mis ventas (/sales) es global para la dueña y devuelve por ticket
   '/hq/valor-inventario',              // entra como tarjeta en el Inicio básico
-  '/mobile/owner', '/hr/me', '/ai',
+  '/hr/me', '/ai',
   '/quotes', '/quotes/new', '/seguimiento', '/purchases', '/expenses', '/purchasing',
 ]
 

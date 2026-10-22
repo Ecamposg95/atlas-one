@@ -193,10 +193,19 @@ describe('los ítems que recibieron `module:` en SP2', () => {
     expect(conModulo['/mobile/query']).toBe('catalog')
   })
 
-  it('Reportes HQ, Control y los paneles móviles NO exigen módulo (nada se apaga)', () => {
-    for (const u of ['/hq/reports-hub', '/hq/control', '/mobile/owner', '/mobile/dashboard']) {
+  it('Reportes HQ y el panel móvil de vendedor NO exigen módulo (nada se apaga)', () => {
+    for (const u of ['/hq/reports-hub', '/mobile/dashboard']) {
       expect(conModulo[u], u).toBeUndefined()
     }
+  })
+
+  it('SP6: Control y Resumen móvil ya no están en el menú; /mobile/owner sigue abriendo por URL', () => {
+    const urls = ALL_NAV.map((n) => n.url)
+    expect(urls).not.toContain('/hq/control')
+    expect(urls).not.toContain('/mobile/owner')
+    expect(HQ_NAV_GROUPS.some((g) => g.header === 'Móvil')).toBe(false)
+    expect(ROLE_ROUTES.ADMINISTRADOR).not.toContain('/hq/control')
+    expect(ROLE_ROUTES.ADMINISTRADOR).toContain('/mobile/owner')
   })
 
   it('la operación diaria sigue sin `module:` (no hay vía nueva para esconderle la caja a una tienda)', () => {

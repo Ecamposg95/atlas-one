@@ -35,7 +35,7 @@ export const HQ_NAV_GROUPS: { header: string; urls: string[] }[] = [
   { header: 'Mi tienda',    urls: ['/sales', '/products', '/labels', '/printer-settings'] },
   { header: 'Caja',         urls: ['/cash-history'] },
   { header: 'Restaurante',  urls: ['/menu', '/tables', '/mobile/comanda', '/kitchen', '/recipes', '/meseros', '/bar/bottles'] },
-  { header: 'Operación',    urls: ['/hq/operations', '/hq/reports-hub', '/hq/valor-inventario', '/hq/control'] },
+  { header: 'Operación',    urls: ['/hq/operations', '/hq/reports-hub', '/hq/valor-inventario'] },
   { header: 'Catálogo',     urls: ['/admin/catalog', '/departments', '/brands'] },
   { header: 'Inventario',   urls: ['/inventory', '/hq/inventory', '/boxes', '/logistics', '/scanner'] },
   { header: 'Ventas',       urls: ['/hq/sales', '/hq/returns', '/quotes', '/quotes/new', '/seguimiento'] },
@@ -43,7 +43,6 @@ export const HQ_NAV_GROUPS: { header: string; urls: string[] }[] = [
   { header: 'Clientes',     urls: ['/customers', '/appointments', '/commissions', '/memberships'] },
   { header: 'Organización', urls: ['/organization', '/hq/branches', '/users', '/hr'] },
   { header: 'Inteligencia', urls: ['/ai'] },
-  { header: 'Móvil',        urls: ['/mobile/owner'] },
 ]
 
 // Color de acento por grupo — identidad de módulo en el sidebar. El ícono se
@@ -81,7 +80,6 @@ export const ALL_NAV: NavItem[] = [
   { label: 'Inicio',            short: 'OPS', icon: 'fa-gauge-high',          url: '/hq/operations',    group: 'hq',   sort: 0  },
   { label: 'Reportes',          short: 'REP', icon: 'fa-chart-line',          url: '/hq/reports-hub',   group: 'hq',   sort: 1  },
   { label: 'Valor de la tienda', short: 'VAL', icon: 'fa-sack-dollar',       url: '/hq/valor-inventario', group: 'hq', sort: 1.5, module: 'reports' },
-  { label: 'Control',           short: 'CTL', icon: 'fa-sliders',             url: '/hq/control',       group: 'hq',   sort: 2  },
   { label: 'Catálogo',          short: 'CAT', icon: 'fa-book',                url: '/admin/catalog',    group: 'hq',   sort: 3,  module: 'catalog' },
   { label: 'Departamentos',     short: 'DEP', icon: 'fa-layer-group',         url: '/departments',      group: 'hq',   sort: 4,  module: 'catalog', hideForGastro: true },
   { label: 'Marcas',            short: 'MRC', icon: 'fa-tags',                url: '/brands',           group: 'hq',   sort: 5,  module: 'catalog', hideForGastro: true },
@@ -131,7 +129,6 @@ export const ALL_NAV: NavItem[] = [
   // Vuelta al armazón móvil para dueño/admin. Sin este enlace, quien entra
   // al escritorio desde la pestaña «Más» del móvil se queda sin camino de
   // regreso salvo escribiendo la URL (admin-findings I-10).
-  { label: 'Resumen móvil',     short: 'RSM', icon: 'fa-mobile-screen-button', url: '/mobile/owner',    group: 'mob',  sort: -1 },
   { label: 'Dashboard móvil',   short: 'DSH', icon: 'fa-mobile-screen',       url: '/mobile/dashboard', group: 'mob',  sort: 0 },
   { label: 'Consulta móvil',    short: 'QRY', icon: 'fa-mobile-alt',          url: '/mobile/query',     group: 'mob',  sort: 1, module: 'catalog' },
   // La "cotización móvil" crea cotizaciones (POST /api/quotes): es el módulo quotes.
@@ -149,8 +146,8 @@ export const ROLE_ROUTES: Record<Role, string[]> = {
   // admin, no en la de quien está en el mostrador, y hubo que mover ventas a
   // mano por eso. El backend sigue aceptando al admin en `create_sale` (se usa
   // para capturar ventas históricas por API); esto es solo la navegación.
-  ADMINISTRADOR:    ['/sales','/products','/printer-settings','/labels','/mobile/owner','/cash-history','/hq/operations','/hq/reports-hub','/hq/valor-inventario','/hq/control','/admin/catalog','/scanner','/departments','/organization','/users','/customers','/hq/branches','/hq/inventory','/hq/sales','/hq/returns','/brands','/hr','/hr/me','/logistics','/boxes','/quotes','/quotes/new','/seguimiento','/purchases','/expenses','/appointments','/commissions','/memberships','/recipes','/ai','/purchasing','/tables','/kitchen','/meseros','/bar/bottles','/menu','/mobile/comanda'],
-  DUEÑO:            ['/pos','/sales','/products','/printer-settings','/labels','/mobile/owner','/cash-history','/hq/operations','/hq/reports-hub','/hq/valor-inventario','/hq/control','/admin/catalog','/scanner','/customers','/hq/sales','/hq/returns','/hr/me','/logistics','/boxes','/quotes','/quotes/new','/seguimiento','/purchases','/expenses','/appointments','/commissions','/memberships','/recipes','/ai','/purchasing','/tables','/kitchen','/meseros','/bar/bottles','/menu','/mobile/comanda'],
+  ADMINISTRADOR:    ['/sales','/products','/printer-settings','/labels','/mobile/owner','/cash-history','/hq/operations','/hq/reports-hub','/hq/valor-inventario','/admin/catalog','/scanner','/departments','/organization','/users','/customers','/hq/branches','/hq/inventory','/hq/sales','/hq/returns','/brands','/hr','/hr/me','/logistics','/boxes','/quotes','/quotes/new','/seguimiento','/purchases','/expenses','/appointments','/commissions','/memberships','/recipes','/ai','/purchasing','/tables','/kitchen','/meseros','/bar/bottles','/menu','/mobile/comanda'],
+  DUEÑO:            ['/pos','/sales','/products','/printer-settings','/labels','/mobile/owner','/cash-history','/hq/operations','/hq/reports-hub','/hq/valor-inventario','/admin/catalog','/scanner','/customers','/hq/sales','/hq/returns','/hr/me','/logistics','/boxes','/quotes','/quotes/new','/seguimiento','/purchases','/expenses','/appointments','/commissions','/memberships','/recipes','/ai','/purchasing','/tables','/kitchen','/meseros','/bar/bottles','/menu','/mobile/comanda'],
   GERENTE:          ['/labels','/cash-history','/reports','/hq/valor-inventario','/hr/me','/products','/scanner','/pos','/sales','/customers','/returns','/atlas-pos','/tables','/kitchen','/recipes','/meseros','/bar/bottles','/menu','/mobile/comanda'],
   CAJERO:           ['/labels','/pos','/cash-history','/hr/me','/products','/scanner','/printer-settings','/sales','/customers','/returns','/atlas-pos','/tables','/kitchen','/bar/bottles','/menu','/mobile/comanda'],
   VENDEDOR:         ['/mobile/dashboard','/mobile/query','/mobile/sales','/mobile/profile','/hr/me','/atlas-pos'],

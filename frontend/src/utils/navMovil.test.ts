@@ -9,8 +9,9 @@ describe('navMovilPorRol', () => {
     // justo para el rol al que iba dirigido.
     for (const rol of ['DUEÑO', 'ADMINISTRADOR']) {
       const destinos = navMovilPorRol(rol, 'ATLAS_ONE_RETAIL').map((i) => i.to)
-      expect(destinos).toContain('/mobile/owner')
+      expect(destinos).not.toContain('/mobile/owner')   // SP6: "Inicio" es el Inicio del dueño
       expect(destinos).toContain('/home')
+      expect(new Set(destinos).size).toBe(destinos.length)   // sin pestañas repetidas (key y activo duplicados)
       expect(destinos).not.toContain('/')
     }
   })
@@ -41,7 +42,7 @@ describe('los módulos de la organización mandan sobre la barra', () => {
   })
   it('sin mesas, el administrador ve Consultar en vez de Comanda', () => {
     const items = navMovilPorRol('ADMINISTRADOR', 'ATLAS_POS_BOUTIQUE', ['core', 'pos'])
-    expect(items.map((i) => i.label)).toEqual(['Resumen', 'Más', 'Consultar', 'Perfil'])
+    expect(items.map((i) => i.label)).toEqual(['Inicio', 'Consultar', 'Perfil'])
   })
   it('con mesas sigue la comanda', () => {
     expect(navMovilPorRol('CAJERO', 'ATLAS_ONE_RESTAURANT', ['pos', 'tables']).map((i) => i.to)).toContain('/mobile/comanda')

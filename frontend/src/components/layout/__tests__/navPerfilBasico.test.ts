@@ -46,7 +46,7 @@ describe('menú en modo básico', () => {
   })
 
   it('una de paga forzada a básico también se recorta', () => {
-    expect(menu('ADMINISTRADOR', 'basico', ULTRA)).not.toContain('/hq/control')
+    expect(menu('ADMINISTRADOR', 'basico', ULTRA)).not.toContain('/hq/inventory')
     expect(menu('ADMINISTRADOR', 'basico', ULTRA)).not.toContain('/customers')
   })
 
@@ -58,7 +58,7 @@ describe('menú en modo básico', () => {
 
   it('esconder no es quitar acceso: rolesConAcceso no depende del perfil', () => {
     expect(rolesConAcceso('/customers')).toContain('CAJERO')
-    expect(rolesConAcceso('/hq/control')).toContain('ADMINISTRADOR')
+    expect(rolesConAcceso('/hq/inventory')).toContain('ADMINISTRADOR')
   })
 
   it('sin perfil o completo no se esconde nada; sucursal y HQ tienen su lista', () => {

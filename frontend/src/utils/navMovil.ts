@@ -43,15 +43,13 @@ export function navMovilPorRol(rol?: string | null, preset?: string | null, modu
       ]
     case 'DUEÑO':
     case 'ADMINISTRADOR':
-      // "Inicio → /" era un callejón sin salida: `/` resuelve al panel para
-      // estos dos roles en móvil, así que la pestaña devolvía a la pantalla en
-      // la que ya estaban y no quedaba ninguna vía hacia el armazón de
-      // escritorio —donde vive el cajón lateral y las demás vistas—. "Más"
-      // apunta al inicio de ese armazón (el mismo destino que en escritorio,
-      // que depende del preset).
+      // "Inicio" es el Inicio del dueño (SP6: cabe en teléfono y responde sus
+      // preguntas; en presets ATLAS_ONE_* es /home). Abre el armazón de escritorio,
+      // donde vive el cajón lateral, así que ya no hace falta una pestaña "Más"
+      // con el mismo destino (dos pestañas iguales se marcaban activas a la vez).
+      // /mobile/owner sigue existiendo por URL pero ya no es destino.
       return [
-        { label: 'Resumen', icon: 'fa-chart-line', to: '/mobile/owner' },
-        { label: 'Más', icon: 'fa-bars', to: rutaInicioPorRol(rol, false, preset) },
+        { label: 'Inicio', icon: 'fa-house', to: rutaInicioPorRol(rol, false, preset) },
         tieneMesas ? COMANDA : CONSULTAR,
         PERFIL,
       ]

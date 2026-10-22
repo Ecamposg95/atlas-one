@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { salesApi } from '../../api/sales'
 import { organizationApi, type Branch } from '../../api/organization'
-import client from '../../api/client'
+import { Modal } from '../../components/ui/Modal'
 import { DaxCard } from '../../components/ui/DaxCard'
 import { TablaDesplazable } from '../../components/ui/TablaDesplazable'
 import { Spinner } from '../../components/ui/Spinner'
@@ -64,7 +64,7 @@ export function HQSalesLog() {
       if (bid) params.branch_id = bid
       const [res, statsRes] = await Promise.allSettled([
         salesApi.list(params),
-        client.get<SalesStats>('/sales/stats', { params: { start_date: start, end_date: end, ...(bid ? { branch_id: bid } : {}) } }),
+        salesApi.getStats({ start_date: start, end_date: end, ...(bid ? { branch_id: bid } : {}) }),
       ])
       if (res.status === 'fulfilled') {
         setSales(res.value.items ?? [])
@@ -72,7 +72,7 @@ export function HQSalesLog() {
       } else {
         setSales([])
       }
-      setSalesStats(statsRes.status === 'fulfilled' ? statsRes.value.data : null)
+      setSalesStats(statsRes.status === 'fulfilled' ? statsRes.value : null)
     } catch {
       setSales([])
     } finally {
@@ -271,18 +271,19 @@ export function HQSalesLog() {
       </DaxCard>
       )}
 
-      {/* Modal detalle */}
+      {/* Detalle de la venta: Modal del kit (Escape, foco, hoja inferior en teléfono). */}
       {selected && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setSel(null)}>
-          <div className="dax-card dax-modal p-6 w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <p className="text-[10px] text-slate-500 uppercase tracking-widest">Folio</p>
-                <p className="text-xl font-black text-indigo-400 font-mono">{saleLabel(selected)}</p>
-              </div>
-              <button onClick={() => setSel(null)} className="dax-btn-icon text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
-            </div>
-
+        <Modal
+          open
+          onClose={() => setSel(null)}
+          size="lg"
+          title={
+            <span>
+              <span className="block text-[10px] text-slate-500 uppercase tracking-widest">Folio</span>
+              <span className="text-xl font-black text-indigo-400 font-mono">{saleLabel(selected)}</span>
+            </span>
+          }
+        >
             <div className="space-y-3 text-sm">
               <div className="flex justify-between"><span className="text-slate-500">Sucursal</span><span>{selected.branch_name ?? '—'}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Cliente</span><span>{selected.customer_name ?? 'Público general'}</span></div>
@@ -327,8 +328,7 @@ export function HQSalesLog() {
                 </>
               )}
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   )

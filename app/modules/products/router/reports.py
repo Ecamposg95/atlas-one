@@ -16,6 +16,7 @@ from app.core.security import get_current_user
 from app.crud.products import _is_admin
 
 from ._shared import _compute_product_read
+from app.services.existencias import umbral_poca_existencia
 
 router = APIRouter()
 
@@ -97,12 +98,13 @@ def hq_inventory_list(
                 .subquery()
             )
         query = query.outerjoin(stock_agg, ProductVariant.id == stock_agg.c.variant_id)
+        umbral = umbral_poca_existencia(db, org_id)   # SP6: umbral único de "stock bajo"
         if stock_status == "no_stock":
             query = query.filter(or_(stock_agg.c.qty == None, stock_agg.c.qty <= 0))
         elif stock_status == "low_stock":
-            query = query.filter(stock_agg.c.qty > 0, stock_agg.c.qty <= 5)
+            query = query.filter(stock_agg.c.qty > 0, stock_agg.c.qty <= umbral)
         elif stock_status == "in_stock":
-            query = query.filter(stock_agg.c.qty > 5)
+            query = query.filter(stock_agg.c.qty > umbral)
 
     # ── Total count (before pagination) ──────────────────────────────────
     total = query.count()
@@ -134,8 +136,9 @@ def hq_inventory_list(
         .all()
     )
 
+    umbral_kpi = umbral_poca_existencia(db, org_id)
     zero_stock_count = sum(1 for _, s in kpi_rows if float(s or 0) <= 0)
-    low_stock_count  = sum(1 for _, s in kpi_rows if 0 < float(s or 0) <= 5)
+    low_stock_count  = sum(1 for _, s in kpi_rows if 0 < float(s or 0) <= umbral_kpi)
     inventory_value  = sum(float(c or 0) * float(s or 0) for c, s in kpi_rows)
 
     kpis = HQInventoryKPIs(

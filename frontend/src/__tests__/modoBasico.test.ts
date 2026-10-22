@@ -7,7 +7,7 @@ const src = (p: string) => readFileSync(resolve(__dirname, '..', p), 'utf8')
 /** Archivos nuevos del modo básico: render condicional, nunca `hidden`. Cada tarea añade los suyos. */
 const NUEVOS = [
   'pages/pos/opcionesPos.ts', 'components/pos/AltaRapidaProducto.tsx', 'components/layout/navPerfilBasico.ts',
-  'pages/hq/InicioBasico.tsx', 'components/layout/PorPerfil.tsx',
+  'pages/hq/Inicio.tsx', 'components/layout/PorPerfil.tsx',
   'components/ui/MasOpciones.tsx', 'pages/platform/SelectorPerfilUi.tsx',
 ]
 
@@ -19,12 +19,13 @@ describe('modo básico: carga y render condicional', () => {
     expect(pos).not.toMatch(/from '\.\.\/\.\.\/components\/pos\/AltaRapidaProducto'/)
   })
 
-  it('Inicio y Reportes cambian de pantalla por perfil; InicioBasico es chunk propio sin chart.js', () => {
+  it('el Inicio es una sola pantalla por perfil (SP6) en chunk propio sin chart.js; Reportes sigue por PorPerfil', () => {
     const app = src('App.tsx')
-    expect(app).toMatch(/const InicioBasico\s+= lazy\(\(\) => import\('\.\/pages\/hq\/InicioBasico'\)/)
-    expect(app).toMatch(/<PorPerfil basico=\{<InicioBasico \/>\} completo=\{<HQOperations \/>\} \/>/)
+    expect(app).toMatch(/const Inicio\s+= lazy\(\(\) => import\('\.\/pages\/hq\/Inicio'\)/)
+    expect(app).toMatch(/path="operations"[^\n]*<Inicio \/>/)
+    expect(app).not.toMatch(/HQOperations|InicioBasico/)
     expect(app).toMatch(/<PorPerfil basico=\{<Reports \/>\} completo=\{<HQReportsHub \/>\} \/>/)
-    expect(src('pages/hq/InicioBasico.tsx')).not.toMatch(/chart\.js|react-chartjs-2/)
+    expect(src('pages/hq/Inicio.tsx')).not.toMatch(/chart\.js|react-chartjs-2/)
   })
 
   it('el alta se precarga y va dentro de un límite de error (el carrito no se pierde)', () => {

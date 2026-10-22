@@ -25,17 +25,14 @@ const MobileLayout = lazy(() => import('./components/layout/MobileLayout').then(
 const NotFoundPage = lazy(() => import('./pages/NotFound').then(m => ({ default: m.NotFoundPage })))
 
 // HQ / Admin
-const HQOperations    = lazy(() => import('./pages/hq/HQOperations').then(m => ({ default: m.HQOperations })))
 const HQReportsHub    = lazy(() => import('./pages/hq/HQReportsHub').then(m => ({ default: m.HQReportsHub })))
-const HQControl       = lazy(() => import('./pages/hq/HQControl').then(m => ({ default: m.HQControl })))
 const HQSalesLog      = lazy(() => import('./pages/hq/HQSalesLog').then(m => ({ default: m.HQSalesLog })))
 const HQReturns       = lazy(() => import('./pages/hq/HQReturns').then(m => ({ default: m.HQReturns })))
 const HQInventory     = lazy(() => import('./pages/hq/HQInventory').then(m => ({ default: m.HQInventory })))
 const HQBranches      = lazy(() => import('./pages/hq/HQBranches').then(m => ({ default: m.HQBranches })))
-const HQBranchDetail  = lazy(() => import('./pages/hq/HQBranchDetail').then(m => ({ default: m.HQBranchDetail })))
 const HQValorInventario = lazy(() => import('./pages/hq/HQValorInventario').then(m => ({ default: m.HQValorInventario })))
-// Modo básico: chunk propio (sin chart.js); lo monta PorPerfil en /hq/operations.
-const InicioBasico    = lazy(() => import('./pages/hq/InicioBasico').then(m => ({ default: m.InicioBasico })))
+// Inicio del dueño (SP6): chunk propio sin chart.js; básico y completo son la misma pantalla.
+const Inicio          = lazy(() => import('./pages/hq/Inicio').then(m => ({ default: m.Inicio })))
 
 // Catalog / Core
 const AdminCatalog    = lazy(() => import('./pages/core/AdminCatalog').then(m => ({ default: m.AdminCatalog })))
@@ -275,15 +272,14 @@ export default function App() {
           {/* HQ */}
           <Route path="hq">
             {/* Modo básico (FREE): Inicio corto y los Reportes de la cajera; las de paga, lo de siempre. */}
-            <Route path="operations" element={<RutaPorRol url="/hq/operations"><Suspense fallback={<PageLoader />}><PorPerfil basico={<InicioBasico />} completo={<HQOperations />} /></Suspense></RutaPorRol>} />
+            <Route path="operations" element={<RutaPorRol url="/hq/operations"><Suspense fallback={<PageLoader />}><Inicio /></Suspense></RutaPorRol>} />
             <Route path="reports-hub" element={<RutaPorRol url="/hq/reports-hub"><Suspense fallback={<PageLoader />}><PorPerfil basico={<Reports />} completo={<HQReportsHub />} /></Suspense></RutaPorRol>} />
-            <Route path="control" element={<RutaPorRol url="/hq/control"><Suspense fallback={<PageLoader />}><HQControl /></Suspense></RutaPorRol>} />
             <Route path="sales" element={<RutaPorRol url="/hq/sales"><Suspense fallback={<PageLoader />}><HQSalesLog /></Suspense></RutaPorRol>} />
             <Route path="returns" element={<RutaPorRol url="/hq/returns"><Suspense fallback={<PageLoader />}><HQReturns /></Suspense></RutaPorRol>} />
             <Route path="inventory" element={<RutaPorRol url="/hq/inventory"><Suspense fallback={<PageLoader />}><HQInventory /></Suspense></RutaPorRol>} />
             <Route path="valor-inventario" element={<RutaPorRol url="/hq/valor-inventario"><Suspense fallback={<PageLoader />}><HQValorInventario /></Suspense></RutaPorRol>} />
             <Route path="branches" element={<RutaPorRol url="/hq/branches"><Suspense fallback={<PageLoader />}><HQBranches /></Suspense></RutaPorRol>} />
-            <Route path="branches/:branchId" element={<RutaPorRol url="/hq/branches"><Suspense fallback={<PageLoader />}><HQBranchDetail /></Suspense></RutaPorRol>} />
+            <Route path="branches/:branchId" element={<RutaPorRol url="/hq/branches"><Suspense fallback={<PageLoader />}><HQBranches /></Suspense></RutaPorRol>} />
           </Route>
 
           {/* Admin / Core — Track 3 (POS bug-fix): cajero tiene control

@@ -55,14 +55,13 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 | `/quotes`, `/quotes/new` | `sales/Quotes`, `QuoteMaker` | Admin, Dueño | quotes |
 | `/returns` | `sales/Returns` | Gerente, Cajero | returns |
 | `/seguimiento` | `sales/Seguimiento` | Admin, Dueño | quotes |
-| `/hq/operations` | `hq/HQOperations` · en modo básico `hq/InicioBasico` | Admin, Dueño | pos |
+| `/hq/operations` | `hq/Inicio` (básico y completo: misma pantalla, menos secciones en básico) | Admin, Dueño | pos |
 | `/hq/reports-hub` | `hq/HQReportsHub` · en modo básico `finance/Reports` | Admin, Dueño | pos |
-| `/hq/control` | `hq/HQControl` | Admin, Dueño | pos |
 | `/hq/sales` | `hq/HQSalesLog` | Admin, Dueño | pos |
 | `/hq/returns` | `hq/HQReturns` | Admin, Dueño | returns |
 | `/hq/inventory` | `hq/HQInventory` | Admin | inventory |
 | `/hq/valor-inventario` | `hq/HQValorInventario` | Admin, Dueño, Gerente | reports |
-| `/hq/branches`, `/:id` | `hq/HQBranches`, `HQBranchDetail` | Admin (detail: +Dueño) | inventory/pos |
+| `/hq/branches`, `/:branchId` | `hq/HQBranches` (la ruta hija abre esa sucursal en la misma pantalla) | Admin | inventory |
 | `/labels` | `labels/Labels` | Admin, Dueño, Gerente, Cajero | labels |
 | `/products`, `/new`, `/:id/edit` | `inventory/Products`, `products/ProductForm` | Admin, Dueño, Gerente, Cajero | catalog |
 | `/inventory` | `inventory/Inventory` | — | inventory |
@@ -236,77 +235,47 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 
 ## 4. HQ (multisucursal)
 
-> **Solapamiento fuerte:** HQOperations, HQReportsHub y HQControl consumen `reportsApi.commandCenterStats` y repiten el "strip de KPIs del día", métodos de pago (doughnut), ranking de sucursales y top productos, con `PAYMENT_COLORS`/rangos reimplementados en cada archivo. Diferenciadores reales abajo.
+> **SP6 (2026-10-21, `docs/superpowers/specs/2026-10-21-sp6-vista-dueno-design.md`):** el grupo HQ se rediseñó a partir de las 8 preguntas del dueño; cada pantalla responde a una. Las pantallas Operaciones, Control y Detalle de sucursal desaparecieron. Guardias: `pages/__tests__/hqSinEstilosInline.test.ts` (sin `style={{` en `pages/hq`, salvo líneas `estilo dinámico`), `responsivoOla2.test.ts` (todo HQ con `useEsTelefono`, `CabeceraPagina`, `TarjetaFila`), `overlaysFueraDelKit.test.ts` (cero overlays a mano en HQ).
 
-### `/hq/operations` — Operaciones (command center) 📱
-- **Archivo:** `pages/hq/HQOperations.tsx` (664 líneas)
-- **Propósito:** "War room" en vivo: revenue/tickets/métodos, velocidad por hora, estado de cada sucursal, top productos, feed de alertas. Auto-refresh 60s.
-- **Quién la ve:** Admin, Dueño — módulo `pos`.
-- **Datos/API:** `reportsApi.commandCenterStats/exportCsv`, `reportsApi.valorInventario` (tarjeta "Valor de la tienda"). Alertas leídas en `localStorage`.
-- **Componentes clave:** `KPICard`, `Bar`/`Doughnut` (chart.js), `useKeyboardShortcuts` (1/2/3/r).
-- **Notas:** Auto-refresh se pausa con `document.hidden`. Errores solo a consola. Tema oscuro fijo. **Diferenciador:** es el "live monitor".
+### `/hq/operations` — Inicio ("¿Cómo voy?") 📱
+- **Archivo:** `pages/hq/Inicio.tsx` (chunk propio, sin chart.js). Es la misma pantalla en básico y en completo: espera `enabledModulesStore.loaded` y decide con `perfilUi`.
+- **Propósito:** responder las preguntas del dueño al entrar. Secciones: 1 vendido hoy/ayer/7 días y cobros de hoy (+ utilidad bruta de hoy en completo) · 2 caja · 8 pendientes (devoluciones por aprobar, turnos abiertos > 24 h, cortes que no cuadraron en 7 días) · 4 se está acabando (tope de Empresa) · 6 lo más vendido · 5 no se mueve (sin venta en 30 días, importe parado) · 7 sucursales (solo con más de una que vende) · 3 valor de la tienda (`ValorTiendaCard`). En básico solo 1, 2, 3, 4 y 6.
+- **Datos/API:** `reportsApi.inicio({ completo: !modoBasico })` (`GET /reports/inicio`) y `reportsApi.valorInventario`.
+- **Responsivo:** kit `ui/`; tablas en escritorio y `TarjetaFila` bajo 768. Filas de "se acaba"/"no se mueve" enlazan a `/hq/inventory?q=<sku>&variant=<id>`.
 
-### `/hq/operations` en modo básico — Inicio básico 📱
-- **Archivo:** `pages/hq/InicioBasico.tsx` (chunk propio, sin chart.js); lo monta `components/layout/PorPerfil.tsx` cuando `perfil_ui = basico` (ver `docs/modo-basico.md`).
-- **Propósito:** "¿Cómo voy?": vendido hoy, ayer y 7 días; cobros de hoy por método; caja (turno abierto/cerrado, quién, efectivo esperado); lo que se está acabando (tope de Empresa); lo más vendido; valor de la tienda (`ValorTiendaCard`).
-- **Datos/API:** `reportsApi.inicioBasico` (`GET /reports/inicio-basico`) y `reportsApi.valorInventario`.
-- **Responsivo:** kit `ui/`; listas con tabla en escritorio y `TarjetaFila` bajo 768 (`useEsTelefono`). Está en `PAGINAS` de `responsivoOla2.test.ts`.
+### `/hq/reports-hub` — Reportes 📱
+- **Archivo:** `pages/hq/HQReportsHub.tsx`; en modo básico `PorPerfil` monta `finance/Reports`.
+- **Propósito:** siete reportes con nombre y pregunta: Resumen del periodo · Ritmo de hoy · Tendencia · Cómo me pagan · Día y hora · Sucursales (solo con > 1) · Lo más vendido. Única pantalla HQ con gráficas (chart.js).
+- **Datos/API:** `reportsApi.dashboard/commandCenterStats/salesByHour/exportCsv`, `organizationApi.getBranches`.
+- **Notas:** respeta `useTheme`. "Poca existencia" ya no está aquí (vive en el Inicio y en Existencias).
 
-### `/hq/reports-hub` — Reportes HQ (Ultra) 📱
-- **Archivo:** `pages/hq/HQReportsHub.tsx` (655 líneas)
-- **Propósito:** Suite analítica premium: velocímetro hora actual, gauge de cumplimiento, 6 KPIs, tendencia dual, doughnut de pagos, heatmap día×hora, leaderboard, stock bajo, top con sparklines.
-- **Quién la ve:** Admin, Dueño — módulo `pos`.
-- **Datos/API:** `reportsApi.dashboard/commandCenterStats/salesByHour`, `organizationApi.getBranches`. `Promise.allSettled`.
-- **Notas:** **Único HQ que respeta `useTheme`.** **Gotcha:** dos fallbacks de datos simulados con disclaimer (`buildHeatmapFallback`, `fakeTrend`) — hay TODO para quitarlos. **Diferenciador:** análisis histórico/comparativo.
+### `/hq/sales` — Ventas 📱
+- **Archivo:** `pages/hq/HQSalesLog.tsx`
+- **Propósito:** bitácora consolidada: KPIs, filtros fecha/sucursal, búsqueda folio/cliente, paginación, detalle en `ui/Modal`.
+- **Datos/API:** `salesApi.list/getStats`, `organizationApi.getBranches`.
 
-### `/hq/control` — Control HQ
-- **Archivo:** `pages/hq/HQControl.tsx` (205 líneas)
-- **Propósito:** Gobierno: KPIs del día, accesos a configuración, auditoría de diferencias de caja y feed de actividad.
-- **Quién la ve:** Admin, Dueño — módulo `pos`.
-- **Datos/API:** `reportsApi.auditDiscrepancies/commandCenterStats`, `organizationApi.getBranches`, import dinámico `GET /platform/audit/logs`.
-- **Notas:** **Diferenciador:** lo exclusivo de gobierno (diferencias de caja, audit log, config). Navegación cruzada con Operations.
+### `/hq/returns` — Devoluciones 📱
+- **Archivo:** `pages/hq/HQReturns.tsx`
+- **Propósito:** pendientes/historial, filtro por sucursal; detalle con Aprobar/Rechazar y rechazo con motivo, ambos en `ui/Modal`.
+- **Datos/API:** `returnsApi.list/approve/reject`, `organizationApi.getBranches`, `toast`, `confirm` (reembolso en efectivo alto con `force`).
 
-### `/hq/sales` — Ventas HQ (log) 📱
-- **Archivo:** `pages/hq/HQSalesLog.tsx` (259 líneas)
-- **Propósito:** Bitácora consolidada de todas las sucursales: KPIs, filtros fecha/sucursal, búsqueda folio/cliente, paginación, detalle.
-- **Quién la ve:** Admin, Dueño — módulo `pos`.
-- **Datos/API:** `salesApi.list`, `GET /sales/stats`, `organizationApi.getBranches`.
-- **Notas:** Búsqueda de texto filtra en cliente sobre la página actual (no server-side).
-
-### `/hq/returns` — Devoluciones HQ 📱
-- **Archivo:** `pages/hq/HQReturns.tsx` (274 líneas)
-- **Propósito:** Aprobación de devoluciones multisucursal: pendientes/historial, filtro por sucursal, aprobar/rechazar.
-- **Quién la ve:** Admin, Dueño — módulo `returns` (`CAN_APPROVE` incluye Gerente).
-- **Datos/API:** `returnsApi.list/approve/reject`, `organizationApi.getBranches`, `toast`.
-- **Notas:** Misma regla de reembolso CASH alto con `force`. Única HQ que muta con toasts.
-
-### `/hq/inventory` — Inventario por sucursal 📱
-- **Archivo:** `pages/hq/HQInventory.tsx` (224 líneas)
-- **Propósito:** Búsqueda global de productos con kardex por variante y ajustes manuales de stock por sucursal.
-- **Quién la ve:** **Solo Admin** — módulo `inventory`.
+### `/hq/inventory` — Existencias 📱
+- **Archivo:** `pages/hq/HQInventory.tsx`
+- **Propósito:** buscar por nombre/SKU; un renglón por variante con precio, **costo**, existencia, **importe a venta e importe a costo** y totales de lo listado; casilla "Solo sin costo" (filtra lo buscado); kardex y ajuste por sucursal (`ui/Modal`). Acepta `?q=&variant=`.
+- **Quién la ve:** Admin y Dueño (las columnas de costo solo para quien ve costos).
 - **Datos/API:** `productsApi.search`, `inventoryApi.getKardex/createAdjustment`, `organizationApi.getBranches`.
-- **Notas:** Errores con `alert()`. Búsqueda sin debounce. Casi idéntica a `inventory/Inventory.tsx`.
 
 ### `/hq/valor-inventario` — Valor de la tienda
 - **Archivo:** `pages/hq/HQValorInventario.tsx`
 - **Propósito:** ¿Cuánto vale la existencia de hoy? Valor a precio de venta y a costo con el conteo de piezas/SKUs sin costo, desglosado por sucursal, departamento o marca; filtro por sucursal; CSV generado en el cliente (`utils/valuacionCsv.ts`).
 - **Quién la ve:** Admin, Dueño y Gerente — módulo `reports` (base). El gerente llega limitado a su sucursal por el backend (`ve_costo=false`): la página no le ofrece selector de sucursal ni columna de costo.
 - **Datos/API:** `reportsApi.valorInventario`, `organizationApi.getBranches`.
-- **Notas:** La tarjeta `components/reports/ValorTiendaCard.tsx` en `HQOperations` muestra el mismo dato; cuando hay piezas sin costo la cifra grande es la de venta y el costo baja a secundaria con el aviso "N piezas sin costo" (riesgo documentado en el mega plan 2026-10: un catálogo importado sin costos no debe leerse como "mi tienda vale $0"). Kit `ui/` (`CabeceraPagina`, `BarraFiltros`, `TarjetaFila`, `ListaTarjetas`); tabla en escritorio, tarjetas bajo `md`.
+- **Notas:** La tarjeta `components/reports/ValorTiendaCard.tsx` del Inicio muestra el mismo dato; cuando hay piezas sin costo la cifra grande es la de venta y el costo baja a secundaria con el aviso "N piezas sin costo".
 
-### `/hq/branches` — Sucursales (grid)
-- **Archivo:** `pages/hq/HQBranches.tsx` (121 líneas)
-- **Propósito:** Directorio en tarjetas: abierta/cerrada, ventas del día, sesiones abiertas, stock crítico; strip resumen.
-- **Quién la ve:** **Solo Admin** — módulo `inventory`.
-- **Datos/API:** `organizationApi.getBranches` + `reportsApi.commandCenterStats`.
-- **Notas:** **Gotcha semántico:** "online" se deriva de `pending_cuts > 0`, no de `status === 'ONLINE'` como en Operations (mismo dato, criterio distinto).
-
-### `/hq/branches/:branchId` — Detalle de sucursal
-- **Archivo:** `pages/hq/HQBranchDetail.tsx` (224 líneas)
-- **Propósito:** Ficha individual: KPIs del día, contacto, top productos, stock bajo, últimas transacciones.
-- **Quién la ve:** Admin, Dueño — módulo `pos`.
-- **Datos/API:** `client.get('/branches/')` (busca por id en el array) + `GET /reports/dashboard`.
-- **Notas:** **Único con estado de error visible completo** (+ "Sucursal no encontrada"). **Gotcha:** trae todas las sucursales para encontrar una (ineficiente).
+### `/hq/branches` y `/hq/branches/:branchId` — Sucursales 📱
+- **Archivo:** `pages/hq/HQBranches.tsx`
+- **Propósito:** rejilla de tarjetas (abierta/cerrada por `status === 'ONLINE'` del backend, ventas hoy, turnos abiertos, se está acabando) y, al tocar una (o con `:branchId` en la URL), su detalle de hoy debajo: KPIs, lo más vendido, se está acabando, últimas ventas.
+- **Datos/API:** `organizationApi.getBranches`, `reportsApi.commandCenterStats`, `reportsApi.dashboard({ branch_id })`.
 
 ---
 
@@ -482,7 +451,7 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 
 ### `/mobile/owner` — Dashboard móvil (dueño)
 - **Archivo:** `pages/mobile/MobileOwnerDashboard.tsx` (155 líneas)
-- **Propósito:** Vistazo de solo lectura del dueño: KPIs, top productos, ventas recientes.
+- **Propósito:** Vistazo de solo lectura del dueño: KPIs, top productos, ventas recientes. **Desde SP6 no está en ningún menú** (el Inicio cabe en teléfono); la ruta sigue abriendo por URL.
 - **Quién la ve:** Dueño, Admin.
 - **Datos/API:** `reportsApi.dashboard`. Fallback: si hoy=0 reconsulta 7 días.
 - **Notas:** **Soporta tema claro/oscuro.** Footer "vista de solo lectura".
@@ -653,7 +622,7 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 
 ## 10. Hallazgos transversales (para antes de refactorizar)
 
-1. **Dashboards HQ duplicados.** HQOperations / HQReportsHub / HQControl repiten KPIs-del-día, doughnut de métodos, ranking de sucursales y top productos desde `commandCenterStats`, con `PAYMENT_COLORS`/rangos reimplementados en cada archivo (y colores divergentes: CARD `#0ea5e9` vs `#6366f1`). Además el concepto "sucursal online" difiere (`status==='ONLINE'` vs `pending_cuts>0`).
+1. ~~**Dashboards HQ duplicados.**~~ Resuelto en SP6 (2026-10-21): un solo Inicio, Reportes por preguntas, Control fuera; "sucursal abierta" sale siempre de `status === 'ONLINE'`.
 
 2. **Superficies de producto.** `FormularioProducto` es el formulario único dentro y fuera del POS (SP1-c); `ProductDetailModal` es solo consulta y la única excepción es `StoreScanner` (ediciones parciales).
 
@@ -661,7 +630,7 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 
 4. **Dos sistemas de tokens en Home.** `PresetHome` (`--p-*` inline) vs `GastroHomeDay` y el resto (`--dax-*` + Tailwind). `Startup` es full-screen custom aparte.
 
-5. **Manejo de errores inconsistente.** Muchas vistas usan `alert()`/`confirm()` nativos y toasts inline propios (POS, PrinterSettings) en vez de `toastStore`. Solo HRMe y HQBranchDetail tienen estados de error/success completos.
+5. **Manejo de errores inconsistente.** Muchas vistas usan `alert()`/`confirm()` nativos y toasts inline propios (POS, PrinterSettings) en vez de `toastStore`. Solo HRMe y Sucursales (detalle) tienen estados de error/success completos.
 
 6. **Componentes repetidos por extraer** (candidatos): `<PageHeader>` (~3 patrones), `<KpiCard>/<KpiGrid>` (copiado literal en varias), `<SegmentedControl>/<FilterChips>` (4 variantes de chip), `<DocumentDetailModal>`/`<LineItemsTable>` (SalesHistory/Quotes/Returns/Seguimiento/HQSalesLog), `<SalesTable>`, `<ProductTile>` (MenuVisual ≈ ComandaOrder), `useAccent()` (3 métodos con defaults divergentes), `<AsyncState>`/`<PageSkeleton>` (elimina el layout-shift del Spinner full-screen), `useReprintTicket()`.
 

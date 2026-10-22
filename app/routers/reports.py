@@ -35,8 +35,7 @@ from app.models.organization import BranchType
 from app.schemas.reports import AgingReportResponse
 from app.core.tenant_context import get_current_active_organization
 from app.crud.products import _is_admin
-
-CRITICAL_STOCK_THRESHOLD = 5
+from app.services.existencias import umbral_poca_existencia
 
 
 def _describe_name(name: str, variant_name: Optional[str]) -> str:
@@ -419,8 +418,12 @@ def get_dashboard_stats(
         func.sum(SalesLineItem.quantity).label("qty")
     ).join(SalesDocument).filter(*sales_filters).group_by(SalesLineItem.description).order_by(desc(func.sum(SalesLineItem.quantity))).limit(5).all()
 
-    # 6. Alertas de Inventario
-    # Non-admins (CAJERO/GERENTE) see only their branch's low-stock alerts (A2-17).
+    # 6. Alertas de Inventario — el tope es el de la empresa (SP6, umbral único).
+    # Mismo ámbito que el resto del endpoint: `target_branch_id` (None = toda la
+    # org con branch_id=0 para roles de oficina; la propia para los demás).
+    # Antes el admin veía las alertas de TODA la org aunque pidiera una sucursal
+    # y el detalle de Sucursales no cuadraba con su tarjeta.
+    umbral = umbral_poca_existencia(db, org_id)
     _low_stock_q = db.query(
         Product.name,
         ProductVariant.sku,
@@ -430,11 +433,15 @@ def get_dashboard_stats(
      .join(StockOnHand, ProductVariant.id == StockOnHand.variant_id)\
      .filter(
         Product.organization_id == org_id,
-        StockOnHand.qty_on_hand <= 5,
-        Product.is_active == True
+        StockOnHand.organization_id == org_id,
+        StockOnHand.qty_on_hand <= umbral,
+        StockOnHand.is_active.is_(True),
+        Product.is_active == True,
+        Product.deleted_at.is_(None),
+        ProductVariant.deleted_at.is_(None),
     )
-    if not _is_admin(current_user) and current_user.branch_id:
-        _low_stock_q = _low_stock_q.filter(StockOnHand.branch_id == current_user.branch_id)
+    if target_branch_id is not None:
+        _low_stock_q = _low_stock_q.filter(StockOnHand.branch_id == target_branch_id)
     low_stock_query = _low_stock_q.order_by(StockOnHand.qty_on_hand.asc()).limit(10).all()
 
     # 7. Ventas Recientes (Limit 10)
@@ -831,13 +838,14 @@ def get_command_center_stats(
         for row in open_sessions_rows:
             sessions_by_branch.setdefault(row.branch_id, []).append(row)
 
+    umbral = umbral_poca_existencia(db, org_id)   # SP6: el tope de la empresa, no 5 fijo
     critical_by_branch = dict(
         db.query(
             StockOnHand.branch_id,
             func.count(StockOnHand.id),
         ).filter(
             StockOnHand.organization_id == org_id,
-            StockOnHand.qty_on_hand <= CRITICAL_STOCK_THRESHOLD,
+            StockOnHand.qty_on_hand <= umbral,
             StockOnHand.is_active == True,
         ).group_by(StockOnHand.branch_id).all()
     )
@@ -874,7 +882,7 @@ def get_command_center_stats(
      .join(Branch)\
      .filter(
         StockOnHand.organization_id == org_id,
-        StockOnHand.qty_on_hand <= CRITICAL_STOCK_THRESHOLD,
+        StockOnHand.qty_on_hand <= umbral,
         Product.is_active == True,
         StockOnHand.is_active == True
     )
@@ -1070,14 +1078,14 @@ def export_dashboard_csv(
     ).filter(*sales_filters).group_by("hour").all()
     hourly_map = {int(r.hour): float(r.total) for r in hourly_data}
 
-    # --- Low stock ---
+    # --- Low stock (tope de la empresa, SP6) ---
     _low_q = db.query(
         Product.name, ProductVariant.sku, ProductVariant.variant_name, StockOnHand.qty_on_hand
     ).join(ProductVariant, Product.id == ProductVariant.product_id)\
      .join(StockOnHand, ProductVariant.id == StockOnHand.variant_id)\
      .filter(
         Product.organization_id == org_id,
-        StockOnHand.qty_on_hand <= 5,
+        StockOnHand.qty_on_hand <= umbral_poca_existencia(db, org_id),
         Product.is_active == True,
     )
     if not _is_admin(current_user) and current_user.branch_id:

@@ -85,7 +85,7 @@ export function MobileLayout() {
       >
         {items.map((it) => (
           <NavLink
-            key={it.to}
+            key={it.label}
             to={it.to}
             end={it.end}
             className="flex-1 flex flex-col items-center justify-center gap-1 min-h-[56px] text-[11px] font-semibold"

@@ -23,8 +23,8 @@ const SHELL_BREAKPOINT = 1024 // Tailwind lg
  * Ancho de teléfono. Se mantiene en `md` (768) porque decide el render
  * condicional tabla/tarjetas (`useEsTelefono`) y los cortes de maquetación del
  * kit, no el armazón. Desde la ola 1 del responsivo el dueño y el admin ya no
- * se desvían a `/mobile/owner` en teléfono: entran al escritorio adaptado y al
- * panel móvil llegan por el ítem «Resumen móvil» del menú.
+ * se desvían a `/mobile/owner` en teléfono: entran al escritorio adaptado (el
+ * Inicio de SP6 cabe en teléfono); `/mobile/owner` solo abre por URL.
  */
 const PHONE_BREAKPOINT = 768 // Tailwind md
 
