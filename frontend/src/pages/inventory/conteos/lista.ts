@@ -6,9 +6,11 @@ const plano = (s: string | null | undefined) =>
   (s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
 
 /** "Revisados" incluye las filas con diferencia: ya se escanearon, solo no cuadran. */
-export function filtrarLista(filas: FilaLista[], filtro: FiltroLista, busqueda: string): FilaLista[] {
+export function filtrarLista(filas: FilaLista[], filtro: FiltroLista, busqueda: string, resaltada?: string | null): FilaLista[] {
   const q = plano(busqueda.trim())
   return filas.filter((f) => {
+    // La fila recién leída se queda a la vista aunque el filtro ya no la incluya (en su lugar).
+    if (resaltada && f.producto.variant_id === resaltada) return true
     if (filtro === 'pendientes' && f.estado !== 'pendiente') return false
     if (filtro === 'revisados' && f.estado === 'pendiente') return false
     if (!q) return true

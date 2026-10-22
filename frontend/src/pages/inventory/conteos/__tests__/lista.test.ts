@@ -11,6 +11,10 @@ const fila = (sku: string, nombre: string, estado: FilaLista['estado'], marca: s
 const filas = [fila('A', 'Zegna · Playera', 'revisado', 'Zegna'), fila('B', 'Camisa', 'pendiente'), fila('C', 'Gorra', 'diferencia')]
 
 describe('filtrarLista', () => {
+  it('conserva la fila resaltada aunque el filtro la excluya, en su lugar', () => {
+    expect(filtrarLista(filas, 'pendientes', '', 'A').map((f) => f.producto.sku)).toEqual(['A', 'B'])
+    expect(filtrarLista(filas, 'pendientes', 'camisa', 'C').map((f) => f.producto.sku)).toEqual(['B', 'C'])
+  })
   it('filtra por estado y "todos" deja todo', () => {
     expect(filtrarLista(filas, 'pendientes', '').map((f) => f.producto.sku)).toEqual(['B'])
     expect(filtrarLista(filas, 'revisados', '').map((f) => f.producto.sku)).toEqual(['A', 'C'])

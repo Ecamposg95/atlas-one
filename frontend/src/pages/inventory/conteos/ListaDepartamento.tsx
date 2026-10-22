@@ -23,7 +23,7 @@ export function ListaDepartamento({ filas, resaltada, onCantidad, onFicha }: {
   const esTelefono = useEsTelefono()
   const [filtro, setFiltro] = useState<FiltroLista>('pendientes')
   const [busqueda, setBusqueda] = useState('')
-  const visibles = useMemo(() => filtrarLista(filas, filtro, busqueda), [filas, filtro, busqueda])
+  const visibles = useMemo(() => filtrarLista(filas, filtro, busqueda, resaltada), [filas, filtro, busqueda, resaltada])
   const n = contarPorEstado(filas)
 
   useEffect(() => {

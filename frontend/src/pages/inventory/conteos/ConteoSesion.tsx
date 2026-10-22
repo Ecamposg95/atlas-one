@@ -15,7 +15,7 @@ import { num, porcentajeAvance } from './avance'
 import { BuscadorVariante } from './BuscadorVariante'
 import { FichaProducto } from './FichaProducto'
 import { ListaDepartamento } from './ListaDepartamento'
-import { vibrar } from './sesion'
+import { crearCola, vibrar } from './sesion'
 import { useLectorCodigos } from './useLectorCodigos'
 
 /**
@@ -42,14 +42,41 @@ export function ConteoSesion() {
   const [pausado, setPausado] = useState(false)
   const [verCamara, setVerCamara] = useState(false)
   const [tecleado, setTecleado] = useState('')
-  const [ocupado, setOcupado] = useState(false)
-  const [buscar, setBuscar] = useState(false)
+    const [buscar, setBuscar] = useState(false)
   const [ligarCodigo, setLigarCodigo] = useState<string | null>(null)
   const [candidatos, setCandidatos] = useState<ProductoResumen[] | null>(null)
   const [ficha, setFicha] = useState<ProductoResumen | null>(null)
   const entradaRef = useRef<HTMLInputElement | null>(null)
 
   const enfocarEntrada = () => entradaRef.current?.focus()
+  const sinModal = ficha === null && !buscar && candidatos === null
+
+  // El Modal del kit devuelve el foco al botón que lo abrió DESPUÉS de onClose; refocar tras
+  // el commit evita que el siguiente Enter de la pistola reabra la ficha o el buscador.
+  useEffect(() => {
+    if (!sinModal) return
+    const t = setTimeout(enfocarEntrada, 0)
+    return () => clearTimeout(t)
+  }, [sinModal])
+
+  // Red de seguridad: si el foco quedó en un botón (+1, cámara…), la pistola lo "pulsaría" con
+  // su Enter. Al primer carácter fuera de un campo y sin modal, regresamos el foco al escáner
+  // y, si ese carácter se perdería, lo anexamos al campo.
+  useEffect(() => {
+    if (!sinModal) return
+    const alTeclear = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      const entrada = entradaRef.current
+      if (!entrada) return
+      entrada.focus()
+      if (e.key.length === 1) setTecleado((v) => v + e.key)
+      if (e.key === 'Enter' || e.key.length === 1) e.preventDefault()   // el botón enfocado no debe activarse
+    }
+    document.addEventListener('keydown', alTeclear, true)
+    return () => document.removeEventListener('keydown', alTeclear, true)
+  }, [sinModal])
 
   const recargar = useCallback(async () => {
     try {
@@ -60,10 +87,8 @@ export function ConteoSesion() {
   }, [conteoId])
   useEffect(() => { void recargar() }, [recargar])
 
-  const procesar = useCallback(async (code: string) => {
-    if (ocupado) return
-    setOcupado(true)
-    setPausado(true)
+  const escanearUno = useCallback(async (code: string) => {
+    setPausado(true)   // solo detiene la cámara; la pistola no depende de esto
     try {
       const r = await conteosApi.escanear(conteoId, code)
       setUltimo(r)
@@ -73,18 +98,23 @@ export function ConteoSesion() {
     } catch (e: any) {
       toast.error(errorDetailText(e?.response?.data?.detail, 'No se registró el escaneo; vuelve a intentarlo'))
       setPausado(false)
-    } finally {
-      setOcupado(false)
-      enfocarEntrada()   // la pistola sigue disparando sin tocar la pantalla
     }
-  }, [conteoId, ocupado, recargar])
+  }, [conteoId, recargar])
+
+  // Cola FIFO: una lectura que llega mientras se guarda la anterior se encola, no se pierde.
+  const escanearRef = useRef(escanearUno)
+  escanearRef.current = escanearUno
+  const colaRef = useRef<ReturnType<typeof crearCola> | null>(null)
+  if (colaRef.current === null) colaRef.current = crearCola((c) => escanearRef.current(c), () => entradaRef.current?.focus())
+  const procesar = useCallback((code: string) => { void colaRef.current?.push(code) }, [])
 
   const lector = useLectorCodigos({ onCodigo: procesar, pausado })
 
   const siguiente = () => { setUltimo(null); setCandidatos(null); setLigarCodigo(null); setPausado(false); enfocarEntrada() }
 
   const alternarCamara = () => {
-    if (verCamara) { lector.stop(); setVerCamara(false); enfocarEntrada() } else setVerCamara(true)
+    if (verCamara) { lector.stop(); setVerCamara(false) } else { setPausado(false); setVerCamara(true) }
+    enfocarEntrada()
   }
 
   const masUno = async () => {
@@ -96,6 +126,7 @@ export function ConteoSesion() {
       await recargar()
       setUltimo((u) => u && u.linea ? { ...u, linea: { ...u.linea, qty_contada: String(num(u.linea.qty_contada) + 1) } } : u)
     } catch (e: any) { toast.error(errorDetailText(e?.response?.data?.detail, 'No se pudo sumar')) }
+    finally { enfocarEntrada() }
   }
 
   // `codigoALigar` llega explícito desde el buscador; el modal de candidatos pasa null.
@@ -128,7 +159,7 @@ export function ConteoSesion() {
 
   /** Tras guardar la ficha: marca la línea (si la pieza ya se escaneó) y recarga. */
   const fichaCorregida = async (p: ProductoResumen) => {
-    const lineId = lista?.filas.find((f) => f.producto.variant_id === p.variant_id)?.line_id ?? null
+    const lineId = conteo?.lineas.find((l) => l.variant_id === p.variant_id)?.id ?? null
     if (lineId !== null) await conteosApi.patchLinea(conteoId, lineId, { corregida: true })
     await recargar()
   }
@@ -149,6 +180,9 @@ export function ConteoSesion() {
   if (!conteo || !lista) return <Spinner />
   if (conteo.status === 'CERRADO') { navigate(`/inventory/conteos/${conteoId}/reporte`, { replace: true }); return null }
 
+  const fresco = (p: ProductoResumen | null) => (p ? lista.filas.find((f) => f.producto.variant_id === p.variant_id)?.producto ?? p : p)
+  const ultimoVista = ultimo && ultimo.producto ? { ...ultimo, producto: fresco(ultimo.producto) } : ultimo
+  const fichaVista = fresco(ficha)
   const pct = porcentajeAvance(lista.totales.revisados + lista.totales.con_diferencia, lista.totales.total)
   const ultimaLinea = ultimo?.linea ?? conteo.lineas.find((l) => l.variant_id === ultimo?.producto?.variant_id) ?? null
   const desconocidos = conteo.lineas.filter((l) => l.variant_id === null)
@@ -200,34 +234,34 @@ export function ConteoSesion() {
         )}
       </DaxCard>
 
-      {ultimo && (
-        <DaxCard className={ultimo.resultado === 'contado' ? 'border border-emerald-700' : 'border border-amber-700'}>
-          {ultimo.resultado === 'contado' && ultimo.producto && (
+      {ultimoVista && (
+        <DaxCard className={ultimoVista.resultado === 'contado' ? 'border border-emerald-700' : 'border border-amber-700'}>
+          {ultimoVista.resultado === 'contado' && ultimoVista.producto && (
             <div className="flex gap-3">
-              {ultimo.producto.foto && <img src={ultimo.producto.foto} alt="" className="h-20 w-20 rounded object-cover" />}
+              {ultimoVista.producto.foto && <img src={ultimoVista.producto.foto} alt="" className="h-20 w-20 rounded object-cover" />}
               <div className="flex-1">
-                <div className="text-white font-bold"><i className="fa-solid fa-circle-check text-emerald-400" /> {ultimo.producto.nombre}</div>
-                <div className="text-xs text-slate-400">{ultimo.producto.sku}{ultimo.producto.departamento ? ` · ${ultimo.producto.departamento}` : ''}</div>
-                {ultimo.producto.descripcion && <div className="text-xs text-slate-300 mt-1 line-clamp-2">{ultimo.producto.descripcion}</div>}
+                <div className="text-white font-bold"><i className="fa-solid fa-circle-check text-emerald-400" /> {ultimoVista.producto.nombre}</div>
+                <div className="text-xs text-slate-400">{ultimoVista.producto.sku}{ultimoVista.producto.departamento ? ` · ${ultimoVista.producto.departamento}` : ''}</div>
+                {ultimoVista.producto.descripcion && <div className="text-xs text-slate-300 mt-1 line-clamp-2">{ultimoVista.producto.descripcion}</div>}
                 <div className="mt-1 text-sm text-emerald-300">
-                  Contadas <b>{num(ultimaLinea?.qty_contada)}</b>{ultimo.qty_sistema != null && <> · sistema <b>{num(ultimo.qty_sistema)}</b></>}
+                  Contadas <b>{num(ultimaLinea?.qty_contada)}</b>{ultimoVista.qty_sistema != null && <> · sistema <b>{num(ultimoVista.qty_sistema)}</b></>}
                 </div>
-                {ultimo.fuera_de_alcance && <div className="text-xs text-amber-400">Esta pieza no es de este departamento; se cuenta y el reporte la separa.</div>}
+                {ultimoVista.fuera_de_alcance && <div className="text-xs text-amber-400">Esta pieza no es de este departamento; se cuenta y el reporte la separa.</div>}
               </div>
             </div>
           )}
-          {ultimo.resultado === 'desconocido' && ultimo.linea && (
+          {ultimoVista.resultado === 'desconocido' && ultimoVista.linea && (
             <div>
-              <div className="text-white font-bold">Código desconocido: {ultimo.linea.codigo}</div>
+              <div className="text-white font-bold">Código desconocido: {ultimoVista.linea.codigo}</div>
               <p className="text-xs text-slate-400 mt-1">No existe en el sistema. Puedes buscar la pieza y ligarle este código, o dejarla como desconocida en el reporte.</p>
-              <button onClick={() => { setLigarCodigo(ultimo.linea?.codigo ?? null); setBuscar(true) }} className="dax-btn-secondary mt-2 text-xs"><i className="fa-solid fa-link" /> Buscar y ligar código</button>
+              <button onClick={() => { setLigarCodigo(ultimoVista.linea?.codigo ?? null); setBuscar(true) }} className="dax-btn-secondary mt-2 text-xs"><i className="fa-solid fa-link" /> Buscar y ligar código</button>
             </div>
           )}
-          {ultimo.resultado === 'ambiguo' && <div className="text-white font-bold">Varias tallas comparten ese código: elige una.</div>}
+          {ultimoVista.resultado === 'ambiguo' && <div className="text-white font-bold">Varias tallas comparten ese código: elige una.</div>}
           <div className="mt-3 flex flex-wrap gap-2">
             {verCamara && <button onClick={siguiente} className="dax-btn-primary flex-1 justify-center"><i className="fa-solid fa-forward" /> Siguiente</button>}
-            {ultimo.resultado === 'contado' && <button onClick={masUno} className="dax-btn-secondary flex-1 justify-center">+1 igual</button>}
-            {ultimo.resultado === 'contado' && ultimo.producto && <button onClick={() => setFicha(ultimo.producto)} className="dax-btn-secondary flex-1 justify-center"><i className="fa-solid fa-id-card" /> Ver ficha</button>}
+            {ultimoVista.resultado === 'contado' && <button onClick={masUno} className="dax-btn-secondary flex-1 justify-center">+1 igual</button>}
+            {ultimoVista.resultado === 'contado' && ultimoVista.producto && <button onClick={() => setFicha(ultimoVista.producto)} className="dax-btn-secondary flex-1 justify-center"><i className="fa-solid fa-id-card" /> Ver ficha</button>}
           </div>
         </DaxCard>
       )}
@@ -260,7 +294,7 @@ export function ConteoSesion() {
       <BuscadorVariante open={buscar} onClose={() => { setBuscar(false); setLigarCodigo(null); enfocarEntrada() }} onElegir={(p) => elegido(p, ligarCodigo)}
         titulo={ligarCodigo ? `Ligar el código ${ligarCodigo} a…` : 'Buscar pieza'} />
 
-      <FichaProducto producto={ficha} open={ficha !== null} onClose={() => { setFicha(null); enfocarEntrada() }} onCorregida={fichaCorregida} />
+      <FichaProducto producto={fichaVista} open={ficha !== null} onClose={() => { setFicha(null); enfocarEntrada() }} onCorregida={fichaCorregida} />
 
       <Modal open={candidatos !== null} onClose={() => setCandidatos(null)} title="¿Cuál es?" size="sm">
         <div className="space-y-2">

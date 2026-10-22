@@ -36,3 +36,24 @@ export function resumenDesdeProducto(p: Product, v: ProductVariant): ProductoRes
 export function olvidarUltimoCodigo(sinCodigoConsecutivos: number): boolean {
   return sinCodigoConsecutivos >= 2
 }
+
+/**
+ * Cola FIFO de un solo vuelo para las lecturas: la pistola puede disparar otra
+ * pieza mientras la anterior aún se guarda; en vez de tirarla, se encola y se
+ * procesa en orden. `alTerminar` corre cuando la cola se vacía.
+ */
+export function crearCola(procesar: (codigo: string) => Promise<void>, alTerminar?: () => void) {
+  const cola: string[] = []
+  let procesando = false
+  const drenar = async () => {
+    if (procesando) return
+    procesando = true
+    try {
+      while (cola.length) {
+        const c = cola.shift() as string
+        try { await procesar(c) } catch { /* procesar maneja sus errores; la cola sigue */ }
+      }
+    } finally { procesando = false; alTerminar?.() }
+  }
+  return { push: (codigo: string) => { cola.push(codigo); return drenar() }, pendientes: () => cola.length }
+}

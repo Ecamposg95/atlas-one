@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 
-import { olvidarUltimoCodigo, resumenDesdeProducto, vibrar } from '../sesion'
+import { crearCola, olvidarUltimoCodigo, resumenDesdeProducto, vibrar } from '../sesion'
 
 describe('vibrar', () => {
   afterEach(() => { vi.unstubAllGlobals() })
@@ -34,5 +34,23 @@ describe('olvidarUltimoCodigo', () => {
     expect(olvidarUltimoCodigo(1)).toBe(false)
     expect(olvidarUltimoCodigo(2)).toBe(true)
     expect(olvidarUltimoCodigo(5)).toBe(true)
+  })
+})
+
+describe('crearCola', () => {
+  it('procesa en orden y de a uno aunque lleguen mientras se guarda', async () => {
+    const orden: string[] = []
+    let enVuelo = 0, maximo = 0
+    const fin = vi.fn()
+    const cola = crearCola(async (c) => {
+      enVuelo++; maximo = Math.max(maximo, enVuelo)
+      await new Promise((r) => setTimeout(r, 5))
+      orden.push(c); enVuelo--
+    }, fin)
+    const a = cola.push('1'); cola.push('2'); cola.push('3')
+    await a
+    expect(orden).toEqual(['1', '2', '3'])
+    expect(maximo).toBe(1)
+    expect(fin).toHaveBeenCalledTimes(1)
   })
 })
