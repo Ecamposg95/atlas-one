@@ -20,6 +20,14 @@ const BOUTIQUE = [
 ]
 
 describe('el menú de la boutique', () => {
+  it('Conteo entra al menú del admin y del dueño con el módulo inventory, no al de la cajera', () => {
+    expect(menu('ADMINISTRADOR', BOUTIQUE)).toContain('/inventory/conteos')
+    expect(menu('DUEÑO', BOUTIQUE)).toContain('/inventory/conteos')
+    expect(menu('CAJERO', BOUTIQUE)).not.toContain('/inventory/conteos')
+    expect(menu('ADMINISTRADOR', BOUTIQUE.filter((m) => m !== 'inventory'))).not.toContain('/inventory/conteos')
+    expect(HQ_NAV_GROUPS.find((g) => g.header === 'Inventario')?.urls).toContain('/inventory/conteos')
+  })
+
   it('le da a la administradora camino para reimprimir, etiquetar y configurar la impresora', () => {
     const urls = menu('ADMINISTRADOR', BOUTIQUE)
     expect(urls).toEqual(expect.arrayContaining([

@@ -37,6 +37,9 @@ const Inicio          = lazy(() => import('./pages/hq/Inicio').then(m => ({ defa
 // Catalog / Core
 const AdminCatalog    = lazy(() => import('./pages/core/AdminCatalog').then(m => ({ default: m.AdminCatalog })))
 const StoreScanner    = lazy(() => import('./pages/scanner/StoreScanner').then(m => ({ default: m.StoreScanner })))
+const Conteos       = lazy(() => import('./pages/inventory/conteos/Conteos').then(m => ({ default: m.Conteos })))
+const ConteoSesion  = lazy(() => import('./pages/inventory/conteos/ConteoSesion').then(m => ({ default: m.ConteoSesion })))
+const ConteoReporte = lazy(() => import('./pages/inventory/conteos/ConteoReporte').then(m => ({ default: m.ConteoReporte })))
 const Labels          = lazy(() => import('./pages/labels/Labels').then(m => ({ default: m.Labels })))
 const Departments     = lazy(() => import('./pages/core/Departments').then(m => ({ default: m.Departments })))
 const Brands          = lazy(() => import('./pages/core/Brands').then(m => ({ default: m.Brands })))
@@ -338,6 +341,11 @@ export default function App() {
           <Route path="cash-history" element={<RutaPorRol url="/cash-history"><Suspense fallback={<PageLoader />}><CashHistory /></Suspense></RutaPorRol>} />
 
           {/* Inventario */}
+          {/* Conteo físico con escáner — sesiones por departamento, solo reporte
+              (spec 2026-10-22). Admin/dueño; el módulo `inventory` gatea en el backend. */}
+          <Route path="inventory/conteos" element={<RutaPorRol url="/inventory/conteos"><Suspense fallback={<PageLoader />}><Conteos /></Suspense></RutaPorRol>} />
+          <Route path="inventory/conteos/:id" element={<RutaPorRol url="/inventory/conteos"><Suspense fallback={<PageLoader />}><ConteoSesion /></Suspense></RutaPorRol>} />
+          <Route path="inventory/conteos/:id/reporte" element={<RutaPorRol url="/inventory/conteos"><Suspense fallback={<PageLoader />}><ConteoReporte /></Suspense></RutaPorRol>} />
           <Route path="inventory" element={<Suspense fallback={<PageLoader />}><Inventory /></Suspense>} />
           <Route path="logistics" element={<RutaPorRol url="/logistics"><Suspense fallback={<PageLoader />}><Logistics /></Suspense></RutaPorRol>} />
           <Route path="boxes"     element={<RutaPorRol url="/boxes"><Suspense fallback={<PageLoader />}><Boxes /></Suspense></RutaPorRol>} />
