@@ -170,8 +170,9 @@ Conteo físico de una sucursal (y opcionalmente un departamento) con escáner. S
 | GET | `/{id}` | — | `ConteoDetalle` (`ConteoRead` + `lineas`) | 404 cross-org |
 | POST | `/{id}/scan` | `{code}` | `{resultado: contado\|ambiguo\|desconocido, linea?, producto?, qty_sistema?, fuera_de_alcance, candidatos}` | +1 a la línea de la variante; varias coincidencias → `ambiguo` sin contar; sin coincidencia → línea por código (`desconocido`). 422 código vacío; 409 si está cerrado |
 | POST | `/{id}/lines` | `{variant_id, qty=1}` (qty > 0) | `LineaRead` | Suma `qty` a la línea (la crea si no existe). 404 variante ajena; 409 cerrado |
-| PATCH | `/{id}/lines/{line_id}` | `{qty_contada}` (>= 0) | `LineaRead`, o `null` si quedó en 0 | **0 borra la línea.** 409 cerrado |
+| PATCH | `/{id}/lines/{line_id}` | `{qty_contada?, corregida?}` (al menos uno; qty >= 0) | `LineaRead`, o `null` si quedó en 0 | **0 borra la línea.** `corregida` marca que la ficha de la pieza se corrigió durante el conteo. 422 si no manda ninguno; 409 cerrado |
 | DELETE | `/{id}/lines/{line_id}` | — | 204 | Equivale a fijar 0 |
+| GET | `/{id}/lista` | — | `{filas: [{producto, sistema, contado, estado: pendiente\|revisado\|diferencia, corregida, line_id}], totales: {total, revisados, pendientes, con_diferencia, corregidas}}` | Lista completa del alcance (departamento o tienda) con su estado de paloma, para la sesión "lista primero". 404 cross-org |
 | POST | `/{id}/close` | — | `ConteoDetalle` | **Congela**: guarda `qty_sistema` en cada línea, `status=CERRADO`, `closed_at` y el reporte en `resumen`. Cerrado ya no admite escaneos ni ediciones (409) |
 | GET | `/{id}/report` | — | `{estado, generado_en, alcance, totales, faltantes, sobrantes, fuera_de_alcance, desconocidos}` | Abierto: se calcula con la existencia actual; cerrado: sobre las líneas congeladas. Filas ordenadas por diferencia absoluta |
 

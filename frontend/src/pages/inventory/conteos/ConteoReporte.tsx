@@ -60,12 +60,13 @@ export function ConteoReporte() {
           : undefined}
       />
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         {[
           ['Esperadas', `${t.esperadas_variantes} tallas · ${num(t.esperadas_piezas)} pzas`],
           ['Contadas', `${t.contadas_variantes} tallas · ${num(t.contadas_piezas)} pzas`],
           ['Cuadradas', `${t.cuadradas_variantes} tallas`],
           ['Diferencia', `−${num(t.faltantes_piezas)} / +${num(t.sobrantes_piezas)} pzas`],
+          ['Fichas corregidas', `${num(t.corregidas)} tallas`],
         ].map(([k, v]) => <DaxCard key={k}><div className="text-xs text-slate-400">{k}</div><div className="text-sm text-white font-bold">{v}</div></DaxCard>)}
       </div>
 
@@ -78,7 +79,7 @@ export function ConteoReporte() {
           {abiertas[s.clave] && (filas(s).length === 0 ? <p className="px-3 pb-3 text-xs text-slate-500">Nada aquí.</p> : esTelefono ? (
             <div className="px-3 pb-3"><ListaTarjetas>
               {filas(s).map((f) => (
-                <TarjetaFila key={f.variant_id} titulo={f.nombre} subtitulo={[f.sku, f.departamento].filter(Boolean).join(' · ')}
+                <TarjetaFila key={f.variant_id} titulo={<>{f.nombre} {f.corregida && <i className="fa-solid fa-pen text-indigo-400" title="Ficha corregida" />}</>} subtitulo={[f.sku, f.departamento].filter(Boolean).join(' · ')}
                   importe={<span className={num(f.diferencia) < 0 ? 'text-rose-400' : num(f.diferencia) > 0 ? 'text-amber-400' : 'text-slate-300'}>{textoDiferencia(num(f.diferencia))}</span>}
                   datos={[{ etiqueta: 'Sistema', valor: num(f.sistema) }, { etiqueta: 'Contado', valor: num(f.contado) }]} />
               ))}
@@ -89,7 +90,7 @@ export function ConteoReporte() {
               <tbody>
                 {filas(s).map((f) => (
                   <tr key={f.variant_id} className="border-t border-slate-800">
-                    <td className="px-3 py-2 text-white">{f.nombre}{f.departamento && s.clave === 'fuera_de_alcance' ? <span className="text-xs text-slate-400"> · {f.departamento}</span> : null}</td>
+                    <td className="px-3 py-2 text-white">{f.nombre} {f.corregida && <i className="fa-solid fa-pen text-indigo-400" title="Ficha corregida" />}{f.departamento && s.clave === 'fuera_de_alcance' ? <span className="text-xs text-slate-400"> · {f.departamento}</span> : null}</td>
                     <td className="px-3 py-2 text-slate-400">{f.sku}</td>
                     <td className="px-3 py-2 text-right text-slate-300">{num(f.sistema)}</td>
                     <td className="px-3 py-2 text-right text-slate-300">{num(f.contado)}</td>
