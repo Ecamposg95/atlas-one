@@ -25,45 +25,50 @@ from app.core.permissions import require_module
 router = APIRouter(dependencies=[Depends(require_module("warehouse"))])
 
 # --- CRUD Container ---
+# Catálogo por organización (regla de oro 5): antes era global y sin usuario, y
+# el GET sembraba filas sin organization_id la primera vez. Ya no se siembra nada.
 @router.post("/containers", response_model=ContainerTypeRead)
-def create_container(c: ContainerTypeCreate, db: Session = Depends(get_db)):
-    new_c = ContainerType(**c.dict())
+def create_container(
+    c: ContainerTypeCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    org_id: int = Depends(get_current_active_organization),
+):
+    new_c = ContainerType(**c.dict(), organization_id=org_id)
     db.add(new_c)
     db.commit()
     db.refresh(new_c)
     return new_c
 
 @router.get("/containers", response_model=List[ContainerTypeRead])
-def list_containers(db: Session = Depends(get_db)):
-    # Seed common containers if empty
-    if db.query(ContainerType).count() == 0:
-        db.add_all([
-            ContainerType(name="20ft Standard", inner_length=5898, inner_width=2352, inner_height=2393, max_weight_kg=28200),
-            ContainerType(name="40ft High Cube", inner_length=12032, inner_width=2352, inner_height=2698, max_weight_kg=28600),
-            ContainerType(name="Camioneta 3.5 Ton", inner_length=3000, inner_width=2000, inner_height=2000, max_weight_kg=3500)
-        ])
-        db.commit()
-    return db.query(ContainerType).all()
+def list_containers(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    org_id: int = Depends(get_current_active_organization),
+):
+    return db.query(ContainerType).filter(ContainerType.organization_id == org_id).order_by(ContainerType.id).all()
 
 # --- CRUD Boxes ---
 @router.post("/boxes", response_model=BoxTypeRead)
-def create_box(b: BoxTypeCreate, db: Session = Depends(get_db)):
-    new_b = BoxType(**b.dict())
+def create_box(
+    b: BoxTypeCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    org_id: int = Depends(get_current_active_organization),
+):
+    new_b = BoxType(**b.dict(), organization_id=org_id)
     db.add(new_b)
     db.commit()
     db.refresh(new_b)
     return new_b
 
 @router.get("/boxes", response_model=List[BoxTypeRead])
-def list_boxes(db: Session = Depends(get_db)):
-    # Seed common boxes if empty
-    if db.query(BoxType).count() == 0:
-        db.add_all([
-            BoxType(name="Caja Estándar A", outer_length=400, outer_width=300, outer_height=300, weight_empty_kg=0.5),
-            BoxType(name="Caja Grande B", outer_length=600, outer_width=400, outer_height=400, weight_empty_kg=1.0)
-        ])
-        db.commit()
-    return db.query(BoxType).all()
+def list_boxes(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    org_id: int = Depends(get_current_active_organization),
+):
+    return db.query(BoxType).filter(BoxType.organization_id == org_id).order_by(BoxType.id).all()
 
 # --- Calculation Logic ---
 
@@ -87,10 +92,12 @@ def calculate_fit_simple(cont_l, cont_w, cont_h, box_l, box_w, box_h):
 def calculate_load(
     req: LoadCalcRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    org_id: int = Depends(get_current_active_organization),
 ):
-    container = db.query(ContainerType).get(req.container_type_id)
-    box = db.query(BoxType).get(req.box_type_id)
+    # Solo contenedores y cajas de la organización activa (regla de oro 5).
+    container = db.query(ContainerType).filter(ContainerType.id == req.container_type_id, ContainerType.organization_id == org_id).first()
+    box = db.query(BoxType).filter(BoxType.id == req.box_type_id, BoxType.organization_id == org_id).first()
     
     if not container or not box:
         raise HTTPException(404, "Contenedor o Caja no encontrados")
@@ -146,6 +153,7 @@ def calculate_load(
         
     # Save History
     calc_record = ContainerLoadCalc(
+        organization_id=org_id,
         container_type_id=container.id,
         box_type_id=box.id,
         total_boxes_fit=best_fit,
@@ -172,6 +180,15 @@ def calculate_load(
 # SHIPMENTS CURD (Entradas de Mercancía)
 # --------------------------------------------------------------------------
 
+def _validar_contenedor(db: Session, container_type_id: Optional[int], org_id: int) -> None:
+    """El contenedor de una entrada debe ser de la organización activa."""
+    if container_type_id is None:
+        return
+    ok = db.query(ContainerType.id).filter(ContainerType.id == container_type_id, ContainerType.organization_id == org_id).first()
+    if not ok:
+        raise HTTPException(404, "Contenedor no encontrado")
+
+
 def _get_shipment_or_404(db: Session, shipment_id: int, org_id: int) -> InboundShipment:
     s = db.query(InboundShipment).filter(
         InboundShipment.id == shipment_id,
@@ -188,6 +205,7 @@ def create_shipment(
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization),
 ):
+    _validar_contenedor(db, s.container_type_id, org_id)
     data = s.dict()
     data["organization_id"] = org_id
     new_s = InboundShipment(**data)
@@ -231,6 +249,7 @@ def update_shipment(
     s = _get_shipment_or_404(db, id, org_id)
     if s.status == "RECEIVED":
         raise HTTPException(400, "No se puede editar una entrada ya recibida")
+    _validar_contenedor(db, up.container_type_id, org_id)
     s.reference = up.reference
     s.notes = up.notes
     s.container_type_id = up.container_type_id

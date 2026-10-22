@@ -736,7 +736,7 @@ export function HQOperations() {
                 </h3>
                 {unreadAlertsCount > 0 && (
                   <button onClick={markAllRead}
-                    className="text-[10px] font-bold uppercase text-slate-500 hover:text-emerald-400 transition">
+                    className="text-[10px] font-bold uppercase text-slate-500 hover:text-emerald-400 transition max-md:min-h-[44px] max-md:px-2">
                     Marcar leídas
                   </button>
                 )}

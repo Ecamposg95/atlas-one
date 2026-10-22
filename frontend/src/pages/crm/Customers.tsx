@@ -52,6 +52,17 @@ export function Customers() {
   useEffect(() => { if (payAbierto) payInputRef.current?.focus() }, [payAbierto])
   const [formModal, setFormModal] = useState<{ open: boolean; customer: Customer | null }>({ open: false, customer: null })
   const [deleting, setDeleting] = useState(false)
+
+  // El detalle es un overlay propio (cabecera con editar/eliminar): no pasa por ui/Modal, así que Escape se escucha aquí.
+  useEffect(() => {
+    if (!selected) return
+    const onKey = (e: KeyboardEvent) => {
+      // Con un diálogo del kit encima (pago, formulario, confirmación) Escape es de ese diálogo, no del detalle.
+      if (e.key === 'Escape' && !document.querySelector('[role="dialog"]')) setSelected(null)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [selected])
   const [sharing, setSharing] = useState(false)
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [loadError, setLoadError] = useState(false)
@@ -305,7 +316,7 @@ export function Customers() {
               </div>
               <div className="dax-card p-3 text-center">
                 <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-0.5">RFC</p>
-                <p className="font-mono text-sm text-slate-400">{selected.tax_id ?? '—'}</p>
+                <p className="font-mono text-sm text-slate-400 break-all">{selected.tax_id ?? '—'}</p>
               </div>
             </div>
 

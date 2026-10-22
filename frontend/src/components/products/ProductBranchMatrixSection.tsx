@@ -20,10 +20,10 @@ export function ProductBranchMatrixSection({ branches, activation, onToggle, onS
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wide">Activación por sucursal</h2>
         <div className="flex gap-2">
-          <button type="button" className="dax-btn-secondary text-[11px]" onClick={() => onSetAll(true)}>
+          <button type="button" className="dax-btn-secondary text-[11px] max-md:min-h-[44px]" onClick={() => onSetAll(true)}>
             Seleccionar todas
           </button>
-          <button type="button" className="dax-btn-secondary text-[11px]" onClick={() => onSetAll(false)}>
+          <button type="button" className="dax-btn-secondary text-[11px] max-md:min-h-[44px]" onClick={() => onSetAll(false)}>
             Ninguna
           </button>
         </div>

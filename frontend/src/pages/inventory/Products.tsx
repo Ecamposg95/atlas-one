@@ -522,7 +522,7 @@ function ProductsHQView() {
                   <button
                     onClick={handleNewProductClick}
                     aria-label="Nuevo producto"
-                    className="dax-btn dax-btn-icon text-xs flex items-center gap-1.5 whitespace-nowrap"
+                    className="dax-btn-primary dax-btn-icon text-xs flex items-center gap-1.5 whitespace-nowrap"
                   >
                     <i className="fa-solid fa-plus" /> <span className="hidden sm:inline">Nuevo producto</span>
                   </button>

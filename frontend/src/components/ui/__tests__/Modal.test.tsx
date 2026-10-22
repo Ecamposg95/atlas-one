@@ -125,3 +125,28 @@ describe('modales apilados', () => {
     expect(document.body.style.overflow).toBe('')
   })
 })
+
+// ConfirmDialog encima de un Modal (detalle de cotización → Eliminar → Esc):
+// Escape cancela solo la confirmación; el detalle sigue abierto.
+import { ConfirmDialogProvider, confirm } from '../ConfirmDialog'
+describe('ConfirmDialog encima de un Modal', () => {
+  it('Escape cancela la confirmación y no cierra el Modal de abajo', async () => {
+    let cerrados = 0
+    let resultado: Promise<boolean> | undefined
+    render(
+      <ConfirmDialogProvider>
+        <Modal open onClose={() => cerrados++} title="Cotización Q-0001">
+          <button onClick={() => { resultado = confirm({ title: 'Eliminar cotización', variant: 'danger' }) }}>Eliminar</button>
+        </Modal>
+      </ConfirmDialogProvider>,
+    )
+    fireEvent.click(screen.getByText('Eliminar'))
+    await screen.findByText('Eliminar cotización')
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await expect(resultado!).resolves.toBe(false)
+    expect(cerrados).toBe(0)
+    // Sin la confirmación encima, Escape vuelve a cerrar el detalle.
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(cerrados).toBe(1)
+  })
+})

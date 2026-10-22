@@ -135,7 +135,7 @@ class TransferOrderRead(BaseModel):
     status: TransferStatus
     notes: Optional[str] = None
     created_at: datetime
-    updated_at: datetime
+    updated_at: Optional[datetime] = None  # el modelo solo lo llena en onupdate
     
     class Config:
         from_attributes = True

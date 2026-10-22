@@ -19,7 +19,7 @@ export function ProductPackagingSection({ packagings, onChange, errors = {} }: P
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wide">Empaques / Cajas</h2>
         <button type="button" onClick={() => onChange([...packagings, emptyPackagingRow()])}
-          className="flex items-center gap-1 text-[10px] font-bold text-indigo-400 hover:text-indigo-300 px-2 py-0.5 rounded hover:bg-indigo-500/10 transition-colors">
+          className="flex items-center gap-1 text-[10px] font-bold text-indigo-400 hover:text-indigo-300 px-2 py-0.5 rounded hover:bg-indigo-500/10 transition-colors max-md:min-h-[44px]">
           <i className="fa-solid fa-plus" /> Agregar empaque
         </button>
       </div>
