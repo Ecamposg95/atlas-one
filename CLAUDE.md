@@ -79,7 +79,8 @@ app/
   routers/           # routers CORE (sales, cash, inventory, reports, hr, quotes, returns, printer…)
     platform/        # 16 sub-routers SUPERADMIN (organizations, users, flags, incidents, stats…)
   modules/           # arquitectura modular (destino canónico): auth, users, tenants, products,
-                     #   customers, appointments, tables, kitchen, recipes, bar, + stubs
+                     #   customers, appointments, tables, kitchen, recipes, bar, conteos
+                     #   (conteo físico con escáner), + stubs
   models/            # 73 tablas; varios archivos son shims que re-exportan desde modules/
   schemas/           # Pydantic
   services/          # capabilities_service (presets), feature_flags, cash_reconciliation, audit

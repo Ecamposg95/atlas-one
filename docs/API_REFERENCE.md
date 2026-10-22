@@ -160,6 +160,23 @@ autoarranque en `docs/superpowers/runbooks/print-agent-autostart.md`.
 ## Etiquetas · `/api/labels` `[module:labels]`
 `GET /candidates` (filtros `search`, `department_id`, `brand_id`, `gender`, `only_with_stock`, `product_id`, `created_after` ISO 8601 = solo tallas dadas de alta desde ese instante; la pantalla manda la medianoche local) devuelve una fila por variante visible con sus campos de etiqueta, `created_at` (alta de la talla, UTC) y `copies_default` = existencia (admin/dueño suman la organización, el resto su sucursal; tope 99). Las no imprimibles NO se esconden: llegan con `printable:false` y su `reason`. `POST /preview` (`{variant_id}` o datos sueltos) devuelve el layout en dots sobre un lienzo 408×200 —`elements` con textos y el código de barras en `bits`— más el ZPL crudo, para que la pantalla dibuje exactamente lo que va a salir. `POST /jobs` (`{items:[{variant_id, copies}]}`, copias 1..99, tope de 500 etiquetas por lote) devuelve `{content_base64, labels, skipped}`; un renglón sin código de barras cae en `skipped` sin tumbar el trabajo. `GET /test` da la etiqueta de calibración. **El server no imprime**: entrega ZPL en base64 y el navegador lo manda al agente local (`POST https://localhost:9100/print`), igual que el ticket. El layout está portado byte a byte de `atlas_labels/` del repositorio del agente (51 × 25 mm a 203 dpi, Zebra GX420t) y un test lo congela contra un literal.
 
+## Conteos — `/api/inventory/counts` `[module:inventory]`
+Conteo físico de una sucursal (y opcionalmente un departamento) con escáner. **Solo admin/dueño** (403 al resto) y módulo `inventory`. Todo se filtra por organización: un conteo o línea de otra org da **404**. El conteo **nunca toca `stock_on_hand`**: lee la existencia y la congela al cerrar. Tablas en [`DATA_MODEL.md`](DATA_MODEL.md). Diseño: `docs/superpowers/specs/2026-10-22-conteo-inventario-design.md`.
+
+| Método | Ruta | Body | Respuesta | Reglas |
+|---|---|---|---|---|
+| POST | `/` | `{branch_id?, department_id?, notes?}` | 201 `ConteoRead` (con `avance`) | Sin `branch_id` usa la del usuario; 422 si no hay ninguna. **409** si ya hay un conteo ABIERTO de esa sucursal+departamento. 404 si sucursal/departamento no son de la org |
+| GET | `/` | query `status?`, `branch_id?` | lista `ConteoRead`, más reciente primero | — |
+| GET | `/{id}` | — | `ConteoDetalle` (`ConteoRead` + `lineas`) | 404 cross-org |
+| POST | `/{id}/scan` | `{code}` | `{resultado: contado\|ambiguo\|desconocido, linea?, producto?, qty_sistema?, fuera_de_alcance, candidatos}` | +1 a la línea de la variante; varias coincidencias → `ambiguo` sin contar; sin coincidencia → línea por código (`desconocido`). 422 código vacío; 409 si está cerrado |
+| POST | `/{id}/lines` | `{variant_id, qty=1}` (qty > 0) | `LineaRead` | Suma `qty` a la línea (la crea si no existe). 404 variante ajena; 409 cerrado |
+| PATCH | `/{id}/lines/{line_id}` | `{qty_contada}` (>= 0) | `LineaRead`, o `null` si quedó en 0 | **0 borra la línea.** 409 cerrado |
+| DELETE | `/{id}/lines/{line_id}` | — | 204 | Equivale a fijar 0 |
+| POST | `/{id}/close` | — | `ConteoDetalle` | **Congela**: guarda `qty_sistema` en cada línea, `status=CERRADO`, `closed_at` y el reporte en `resumen`. Cerrado ya no admite escaneos ni ediciones (409) |
+| GET | `/{id}/report` | — | `{estado, generado_en, alcance, totales, faltantes, sobrantes, fuera_de_alcance, desconocidos}` | Abierto: se calcula con la existencia actual; cerrado: sobre las líneas congeladas. Filas ordenadas por diferencia absoluta |
+
+Reporte: `faltantes` (sistema > contado), `sobrantes` (contado > sistema), `fuera_de_alcance` (variantes contadas fuera del departamento) y `desconocidos` (códigos sin variante). `totales` trae `esperadas_/contadas_variantes|piezas`, `cuadradas_variantes`, `faltantes_piezas`, `sobrantes_piezas`, `fuera_de_alcance_piezas` y `desconocidos`.
+
 ## Portal cliente · `/api/portal`
 `GET /accounts · /my-account/balance · /quotes · /my-account/transactions`. **Sin tenant scope** (cross-org por email del usuario). ⚠️ Contiene fallbacks demo y accesos a atributos posiblemente inexistentes.
 
