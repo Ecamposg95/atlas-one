@@ -15,7 +15,7 @@ import { num, porcentajeAvance } from './avance'
 import { BuscadorVariante } from './BuscadorVariante'
 import { FichaProducto } from './FichaProducto'
 import { ListaDepartamento } from './ListaDepartamento'
-import { crearCola, vibrar } from './sesion'
+import { crearCola, debeRedirigirTecla, vibrar } from './sesion'
 import { useLectorCodigos } from './useLectorCodigos'
 
 /**
@@ -42,7 +42,7 @@ export function ConteoSesion() {
   const [pausado, setPausado] = useState(false)
   const [verCamara, setVerCamara] = useState(false)
   const [tecleado, setTecleado] = useState('')
-    const [buscar, setBuscar] = useState(false)
+  const [buscar, setBuscar] = useState(false)
   const [ligarCodigo, setLigarCodigo] = useState<string | null>(null)
   const [candidatos, setCandidatos] = useState<ProductoResumen[] | null>(null)
   const [ficha, setFicha] = useState<ProductoResumen | null>(null)
@@ -59,24 +59,21 @@ export function ConteoSesion() {
     return () => clearTimeout(t)
   }, [sinModal])
 
-  // Red de seguridad: si el foco quedó en un botón (+1, cámara…), la pistola lo "pulsaría" con
-  // su Enter. Al primer carácter fuera de un campo y sin modal, regresamos el foco al escáner
-  // y, si ese carácter se perdería, lo anexamos al campo.
+  // Red de seguridad: si el foco quedó en un botón (chip, papelera…) y la pistola dispara,
+  // sus caracteres deben caer en el campo de escaneo. Solo actúa con caracteres imprimibles
+  // (nunca Enter, Espacio, Tab, Escape ni flechas: el teclado sigue siendo accesible), fuera de
+  // campos y sin ningún diálogo abierto (modales del kit o confirm). No hace preventDefault:
+  // al enfocar el campo durante keydown, el navegador inserta el carácter ahí mismo.
   useEffect(() => {
-    if (!sinModal) return
     const alTeclear = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return
-      if (e.ctrlKey || e.metaKey || e.altKey) return
-      const entrada = entradaRef.current
-      if (!entrada) return
-      entrada.focus()
-      if (e.key.length === 1) setTecleado((v) => v + e.key)
-      if (e.key === 'Enter' || e.key.length === 1) e.preventDefault()   // el botón enfocado no debe activarse
+      const enCampo = !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)
+      const hayDialogo = !!document.querySelector('[role="dialog"], [data-modal-kit]') || !!t?.closest?.('[role="dialog"], [data-modal-kit]')
+      if (debeRedirigirTecla({ key: e.key, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, enCampo, hayDialogo })) entradaRef.current?.focus()
     }
     document.addEventListener('keydown', alTeclear, true)
     return () => document.removeEventListener('keydown', alTeclear, true)
-  }, [sinModal])
+  }, [])
 
   const recargar = useCallback(async () => {
     try {

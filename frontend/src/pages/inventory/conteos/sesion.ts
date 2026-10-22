@@ -57,3 +57,9 @@ export function crearCola(procesar: (codigo: string) => Promise<void>, alTermina
   }
   return { push: (codigo: string) => { cola.push(codigo); return drenar() }, pendientes: () => cola.length }
 }
+
+/** ¿La tecla es un carácter de la pistola que debe caer en el campo de escaneo? */
+export function debeRedirigirTecla(t: { key: string; ctrlKey?: boolean; metaKey?: boolean; altKey?: boolean; enCampo: boolean; hayDialogo: boolean }): boolean {
+  if (t.enCampo || t.hayDialogo || t.ctrlKey || t.metaKey || t.altKey) return false
+  return t.key.length === 1 && t.key !== ' '
+}

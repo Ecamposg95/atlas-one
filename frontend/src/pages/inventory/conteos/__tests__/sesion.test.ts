@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 
-import { crearCola, olvidarUltimoCodigo, resumenDesdeProducto, vibrar } from '../sesion'
+import { crearCola, debeRedirigirTecla, olvidarUltimoCodigo, resumenDesdeProducto, vibrar } from '../sesion'
 
 describe('vibrar', () => {
   afterEach(() => { vi.unstubAllGlobals() })
@@ -52,5 +52,21 @@ describe('crearCola', () => {
     expect(orden).toEqual(['1', '2', '3'])
     expect(maximo).toBe(1)
     expect(fin).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('debeRedirigirTecla', () => {
+  const base = { enCampo: false, hayDialogo: false }
+  it('redirige letras y dígitos fuera de campo y sin diálogo', () => {
+    expect(debeRedirigirTecla({ ...base, key: 'a' })).toBe(true)
+    expect(debeRedirigirTecla({ ...base, key: '7' })).toBe(true)
+  })
+  it('nunca toca Enter, Espacio, Tab, Escape ni flechas', () => {
+    for (const key of ['Enter', ' ', 'Tab', 'Escape', 'ArrowDown']) expect(debeRedirigirTecla({ ...base, key })).toBe(false)
+  })
+  it('no actúa con diálogo abierto, dentro de un campo ni con ctrl', () => {
+    expect(debeRedirigirTecla({ ...base, key: 'a', hayDialogo: true })).toBe(false)
+    expect(debeRedirigirTecla({ ...base, key: 'a', enCampo: true })).toBe(false)
+    expect(debeRedirigirTecla({ ...base, key: 'a', ctrlKey: true })).toBe(false)
   })
 })
