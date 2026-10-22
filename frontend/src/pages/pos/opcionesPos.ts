@@ -18,15 +18,13 @@ export interface OpcionesPos {
   editarProducto: boolean
   /** Forzar el precio por pieza al vender por caja. */
   forzarPieza: boolean
-  /** Alta rápida con el formulario corto en vez de la ficha completa. */
-  altaCorta: boolean
 }
 
 const COMPLETO: OpcionesPos = {
-  descuentos: true, cliente: true, usd: true, editarProducto: true, forzarPieza: true, altaCorta: false,
+  descuentos: true, cliente: true, usd: true, editarProducto: true, forzarPieza: true,
 }
 const BASICO: OpcionesPos = {
-  descuentos: false, cliente: false, usd: false, editarProducto: false, forzarPieza: false, altaCorta: true,
+  descuentos: false, cliente: false, usd: false, editarProducto: false, forzarPieza: false,
 }
 
 /** Sin perfil (el contexto no ha cargado) = completo: nunca un básico a medias para una de paga. */

@@ -163,8 +163,13 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
       stock_total: item.quantity,
       image_url: null,
       is_active: true,
+      // La talla de la LÍNEA: sin esto la ficha resaltaba la primera talla y
+      // "Agregar existencia"/"Editar" caían en otra talla.
+      matched_variant_id: item.variant_id ?? null,
     })
-    productsApi.getById(item.product_id).then(setDetailProduct).catch(() => {})
+    productsApi.getById(item.product_id)
+      .then((p) => setDetailProduct({ ...p, matched_variant_id: item.variant_id ?? p.matched_variant_id }))
+      .catch(() => {})
   }
 
   // Aplica precio y lo marca como forzado (inmune a auto-tier).

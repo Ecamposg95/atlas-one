@@ -2,8 +2,8 @@ import { Modal } from '../ui/Modal'
 import { FormularioProducto } from '../products/FormularioProducto'
 
 /**
- * Alta rápida desde el POS en modo básico: el formulario único (corto por
- * `campos_producto`) dentro del Modal del kit. POS.tsx lo carga con `lazy()`
+ * Alta desde el POS, en todos los perfiles (SP1-c): el formulario único (en
+ * básico sale corto por `campos_producto`) dentro del Modal del kit. POS.tsx lo carga con `lazy()`
  * para que el formulario no viaje en `POS-*.js` (presupuesto de la ruta
  * crítica). El toast de "Producto creado." ya lo da el formulario.
  */

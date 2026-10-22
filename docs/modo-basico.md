@@ -31,7 +31,7 @@ plan). El `PUT /api/organization/` de la tienda lo descarta. La tienda lo ve al 
 |---|---|---|
 | Menú de cajera/gerente | Devoluciones, Etiquetas, Escáner, Clientes, Mi expediente, Reportes, Valor de la tienda | `components/layout/navPerfilBasico.ts` (`OCULTAS_BASICO_SUCURSAL`) |
 | Menú de la dueña | Control, Catálogo, Departamentos, Marcas, Etiquetas, Escáner, Clientes, Sucursales, Inventario, Existencias, Ventas HQ, Devoluciones HQ, Valor de la tienda, Resumen móvil, Mi expediente, IA, Cotizaciones, Pedidos, Compras, Gastos | `navPerfilBasico.ts` (`OCULTAS_BASICO_HQ`) |
-| POS | descuentos, botón Cliente, dólares, editar producto, forzar precio por pieza; el alta rápida usa el formulario corto | `pages/pos/opcionesPos.ts` |
+| POS | descuentos, botón Cliente, dólares, editar producto, forzar precio por pieza (el alta usa el formulario único en todos los perfiles; en básico sale corto por `campos_producto`) | `pages/pos/opcionesPos.ts` |
 | Formulario de producto | marca, descripción, unidad, foto, tasa de IVA, empaques, tallas (y la matriz con una sola sucursal) | `app/modules/products/campos.py` (`OCULTOS_BASICO`) |
 | Productos | importador, plantilla, etiquetas CSV, generar códigos, rejilla | `pages/inventory/Products.tsx`, `components/branch/ProductsBranchView.tsx` |
 | Inicio y Reportes de la dueña | `/hq/operations` → `InicioBasico`; `/hq/reports-hub` → `finance/Reports` | `App.tsx` (`<PorPerfil>`) |
