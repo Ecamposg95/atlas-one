@@ -245,6 +245,8 @@ from app.modules.bar.router          import router as bar_router
 from app.modules.kitchen.router      import router as kitchen_router
 # Etiquetas (2026-09-22) — ZPL para la Zebra; el agente local imprime
 from app.modules.labels.router       import router as labels_router
+# Conteo físico con escáner (2026-10-22) — sesiones por departamento, solo reporte
+from app.modules.conteos.router      import router as conteos_router
 
 app.include_router(appointments_router, prefix="/api/appointments", tags=["Agenda"])
 
@@ -264,6 +266,7 @@ app.include_router(tables_router,       prefix="/api/tables",       tags=["Mesas
 app.include_router(bar_router,          prefix="/api/bar",          tags=["Bar líquido"])
 app.include_router(kitchen_router,      prefix="/api/kitchen",      tags=["Cocina / KDS"])
 app.include_router(labels_router,       prefix="/api/labels",       tags=["Etiquetas"])
+app.include_router(conteos_router,      prefix="/api/inventory/counts", tags=["Conteos"])
 # daxpos.router eliminado en Sprint 3 (tech-debt roadmap).
 # Sus 15 rutas SSR fueron desactivadas: las que coinciden con rutas React
 # caen al catch-all de la SPA; las que necesitan cambio de destino están

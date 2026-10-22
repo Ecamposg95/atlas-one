@@ -1,9 +1,12 @@
 """Contratos de `/api/inventory/counts` (Pydantic v2)."""
 from datetime import datetime
 from decimal import Decimal
-from typing import List, Literal, Optional
+from typing import Annotated, List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PlainSerializer
+
+# Cantidades en JSON sin ceros de relleno (Numeric(.,2) devuelve '3.00'): '3', '2.5'.
+Cant = Annotated[Decimal, PlainSerializer(lambda d: format(d.normalize(), 'f'), return_type=str, when_used='json')]
 
 
 class ProductoResumen(BaseModel):
@@ -22,17 +25,17 @@ class LineaRead(BaseModel):
     id: int
     variant_id: Optional[str] = None
     codigo: Optional[str] = None
-    qty_contada: Decimal
-    qty_sistema: Optional[Decimal] = None
+    qty_contada: Cant
+    qty_sistema: Optional[Cant] = None
     producto: Optional[ProductoResumen] = None
     updated_at: Optional[datetime] = None
 
 
 class Avance(BaseModel):
     esperadas_variantes: int
-    esperadas_piezas: Decimal
+    esperadas_piezas: Cant
     contadas_variantes: int
-    contadas_piezas: Decimal
+    contadas_piezas: Cant
     desconocidos: int
 
 
@@ -77,7 +80,7 @@ class ScanResult(BaseModel):
     resultado: Literal["contado", "ambiguo", "desconocido"]
     linea: Optional[LineaRead] = None
     producto: Optional[ProductoResumen] = None
-    qty_sistema: Optional[Decimal] = None
+    qty_sistema: Optional[Cant] = None
     fuera_de_alcance: bool = False
     candidatos: List[ProductoResumen] = []
 
@@ -90,14 +93,14 @@ class FilaReporte(BaseModel):
     talla: Optional[str] = None
     color: Optional[str] = None
     departamento: Optional[str] = None
-    sistema: Decimal
-    contado: Decimal
-    diferencia: Decimal
+    sistema: Cant
+    contado: Cant
+    diferencia: Cant
 
 
 class FilaDesconocido(BaseModel):
     codigo: str
-    contado: Decimal
+    contado: Cant
 
 
 class Reporte(BaseModel):
