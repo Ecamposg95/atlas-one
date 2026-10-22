@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { createDetector, normalizeCode } from '../../scanner/barcodeReader'
+import { olvidarUltimoCodigo } from './sesion'
 
 /**
  * Cámara + detector, portado de `pages/scanner/StoreScanner.tsx` con una
  * diferencia: `pausado`. En el conteo la misma pieza quieta frente a la
  * cámara NO debe contarse una vez por cuadro, así que tras cada lectura la
  * pantalla pausa la detección y el usuario reanuda con "Siguiente". Al
- * reanudar se olvida el último código para que la pieza idéntica siguiente
- * sí cuente.
+ * reanudar NO se olvida el último código: el "+1 igual" cubre las piezas
+ * idénticas, y la cámara solo lo olvida cuando la etiqueta sale del cuadro
+ * (2 cuadros seguidos sin código), para no recontar la pieza que sigue a la vista.
  */
 export function useLectorCodigos({ onCodigo, pausado }: { onCodigo: (code: string) => void; pausado: boolean }) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -16,6 +18,7 @@ export function useLectorCodigos({ onCodigo, pausado }: { onCodigo: (code: strin
   const streamRef = useRef<MediaStream | null>(null)
   const loopRef = useRef<number | null>(null)
   const lastCodeRef = useRef('')
+  const sinCodigoRef = useRef(0)
   const pausadoRef = useRef(pausado)
   const cancelledRef = useRef(false)
   const startingRef = useRef(false)
@@ -26,7 +29,6 @@ export function useLectorCodigos({ onCodigo, pausado }: { onCodigo: (code: strin
   useEffect(() => { onCodigoRef.current = onCodigo }, [onCodigo])
   useEffect(() => {
     pausadoRef.current = pausado
-    if (!pausado) lastCodeRef.current = ''
   }, [pausado])
 
   const stop = useCallback(() => {
@@ -34,6 +36,7 @@ export function useLectorCodigos({ onCodigo, pausado }: { onCodigo: (code: strin
     streamRef.current?.getTracks().forEach((t) => t.stop())
     streamRef.current = null
     lastCodeRef.current = ''
+    sinCodigoRef.current = 0
     if (videoRef.current) videoRef.current.srcObject = null
     setCamOn(false)
   }, [])
@@ -70,11 +73,21 @@ export function useLectorCodigos({ onCodigo, pausado }: { onCodigo: (code: strin
         try {
           const hits = await detector.detect(canvas)
           const clean = normalizeCode(hits?.[0]?.rawValue)
-          if (clean && clean !== lastCodeRef.current) {
-            lastCodeRef.current = clean
-            onCodigoRef.current(clean)
+          if (clean) {
+            sinCodigoRef.current = 0
+            if (clean !== lastCodeRef.current) {
+              lastCodeRef.current = clean
+              onCodigoRef.current(clean)
+            }
+          } else {
+            sinCodigoRef.current += 1
+            if (olvidarUltimoCodigo(sinCodigoRef.current)) lastCodeRef.current = ''
           }
-        } catch { /* cuadro sin código: lo normal entre lecturas */ }
+        } catch {
+          // cuadro sin código: lo normal entre lecturas
+          sinCodigoRef.current += 1
+          if (olvidarUltimoCodigo(sinCodigoRef.current)) lastCodeRef.current = ''
+        }
       }, 400)
     } catch {
       setCamError('No se pudo abrir la cámara. Revisa el permiso del navegador para este sitio, o teclea el código a mano.')

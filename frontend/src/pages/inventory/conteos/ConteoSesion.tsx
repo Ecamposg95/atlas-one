@@ -74,13 +74,17 @@ export function ConteoSesion() {
   const elegido = async (p: ProductoResumen, codigoALigar: string | null) => {
     try {
       if (codigoALigar) {
-        // Reemplaza el código interno por el de la pieza (igual que el Escáner) y
-        // quita la línea de desconocido: la próxima lectura ya empata.
+        // Reemplaza el código interno por el de la pieza (igual que el Escáner). La línea
+        // de desconocido conserva sus piezas: se pasan a la variante y solo entonces se
+        // borra, así un fallo a medias nunca pierde lo contado.
         await productsApi.updateVariant(p.variant_id, { barcode: codigoALigar })
         const desconocida = conteo?.lineas.find((l) => l.variant_id === null && l.codigo === codigoALigar)
+        const qty = desconocida ? Math.max(1, num(desconocida.qty_contada)) : 1
+        await conteosApi.agregarLinea(conteoId, p.variant_id, qty)
         if (desconocida) await conteosApi.borrarLinea(conteoId, desconocida.id)
+      } else {
+        await conteosApi.agregarLinea(conteoId, p.variant_id, 1)
       }
-      await conteosApi.agregarLinea(conteoId, p.variant_id, 1)
       vibrar('ok')
       setUltimo({ resultado: 'contado', linea: null, producto: p, qty_sistema: null, fuera_de_alcance: false, candidatos: [] })
       setCandidatos(null)

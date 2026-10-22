@@ -22,3 +22,12 @@ export function resumenDesdeProducto(p: Product, v: ProductVariant): ProductoRes
     departamento: p.department_name ?? p.department?.name ?? null,
   }
 }
+
+/**
+ * El lector olvida el último código solo cuando la etiqueta ya salió del cuadro
+ * (2 lecturas seguidas sin código); así "Siguiente" no recuenta la pieza que
+ * sigue frente a la cámara.
+ */
+export function olvidarUltimoCodigo(sinCodigoConsecutivos: number): boolean {
+  return sinCodigoConsecutivos >= 2
+}

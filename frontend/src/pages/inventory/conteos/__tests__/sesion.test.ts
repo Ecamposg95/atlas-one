@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 
-import { resumenDesdeProducto, vibrar } from '../sesion'
+import { olvidarUltimoCodigo, resumenDesdeProducto, vibrar } from '../sesion'
 
 describe('vibrar', () => {
   afterEach(() => { vi.unstubAllGlobals() })
@@ -25,5 +25,14 @@ describe('resumenDesdeProducto', () => {
       variant_id: 'v1', nombre: 'Zegna · Playera · Rojo, Talla M', marca: 'Zegna', talla: 'M', color: 'Rojo',
       sku: 'ZEG-M', barcode: null, foto: null, departamento: 'Playeras',
     })
+  })
+})
+
+describe('olvidarUltimoCodigo', () => {
+  it('solo olvida tras 2 cuadros seguidos sin código', () => {
+    expect(olvidarUltimoCodigo(0)).toBe(false)
+    expect(olvidarUltimoCodigo(1)).toBe(false)
+    expect(olvidarUltimoCodigo(2)).toBe(true)
+    expect(olvidarUltimoCodigo(5)).toBe(true)
   })
 })

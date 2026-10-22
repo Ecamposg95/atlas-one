@@ -158,12 +158,25 @@ def delete_organization(
     from app.models.hr import Employee, BranchAssignment, Attendance
     from app.models.modules import OrganizationModule
     from app.models.print_job import PrintJob
+    from app.modules.conteos.models import InventoryCount, InventoryCountLine
 
     deleted = {}
 
     try:
         existing_tables = _existing_tables(db)
         branch_ids = [b.id for b in db.query(Branch.id).filter(Branch.organization_id == org_id).all()]
+
+        # Conteos de inventario: sus FKs apuntan a variantes, departamentos, sucursales
+        # y usuarios, así que van antes que todos ellos (primero líneas, luego cabeceras).
+        if "inventory_count_lines" in existing_tables:
+            deleted["inventory_count_lines"] = db.query(InventoryCountLine).filter(
+                InventoryCountLine.organization_id == org_id
+            ).delete(synchronize_session=False)
+        if "inventory_counts" in existing_tables:
+            deleted["inventory_counts"] = db.query(InventoryCount).filter(
+                InventoryCount.organization_id == org_id
+            ).delete(synchronize_session=False)
+        db.flush()
 
         user_ids_in_org = [r[0] for r in db.query(UserOrganization.user_id).filter(
             UserOrganization.organization_id == org_id

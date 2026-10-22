@@ -143,3 +143,38 @@ def test_conteo_de_otra_org_es_404(client, db, org, branch_a, auth_admin, tienda
     r = client.get(f"/api/inventory/counts/{cid}", headers={**auth_admin, "X-Organization-ID": str(otra.id)})
     assert r.status_code in (403, 404)
     assert client.get("/api/inventory/counts/999999", headers=_h(auth_admin, org)).status_code == 404
+
+
+def test_borrado_forzado_de_org_con_conteo(client, db, auth_superadmin):
+    """El cascade de plataforma debe llevarse conteos y líneas (FKs a variantes/sucursales)."""
+    from app.models.organization import Branch, BranchType
+    from app.modules.conteos.models import InventoryCount, InventoryCountLine
+
+    # Org aparte: la del superadmin no se puede borrar (su bitácora apunta a su usuario).
+    otra = Organization(name="Org a borrar", status="ACTIVE")
+    db.add(otra)
+    db.flush()
+    suc = Branch(name="Matriz", organization_id=otra.id, branch_type=BranchType.STORE, can_sell=True, is_active=True)
+    db.add(suc)
+    dep = Department(name="Playeras", organization_id=otra.id)
+    db.add(dep)
+    db.flush()
+    p = Product(name="Playera", organization_id=otra.id, is_active=True, department_id=dep.id)
+    db.add(p)
+    db.flush()
+    v = ProductVariant(product_id=p.id, sku="X-M", organization_id=otra.id,
+                       price=Decimal("100"), cost=Decimal("50"), size="M")
+    db.add(v)
+    db.flush()
+    c = InventoryCount(branch_id=suc.id, department_id=dep.id, organization_id=otra.id)
+    db.add(c)
+    db.flush()
+    db.add(InventoryCountLine(count_id=c.id, variant_id=v.id, qty_contada=Decimal("2"), organization_id=otra.id))
+    db.commit()
+    org_id = otra.id
+
+    r = client.delete(f"/api/platform/organizations/{org_id}?force=true", headers=auth_superadmin)
+    assert r.status_code in (200, 204), r.text
+    db.expire_all()
+    assert db.query(InventoryCount).filter_by(organization_id=org_id).count() == 0
+    assert db.query(InventoryCountLine).filter_by(organization_id=org_id).count() == 0
