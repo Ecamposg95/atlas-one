@@ -19,10 +19,15 @@ def _pdf_text(pdf_bytes: bytes) -> bytes:
     """
     chunks = []
     for m in re.finditer(rb"stream\r?\n(.*?)\r?\nendstream", pdf_bytes, re.S):
+        datos = m.group(1)
+        # Si el último byte del stream comprimido es 0x0d, el `\r?` de arriba se lo
+        # come y `zlib.decompress` revienta por "truncated stream" (1 de cada 256
+        # PDFs: el byte es parte del adler32). `decompressobj` devuelve lo que
+        # alcanzó a inflar sin exigir el cierre, que es todo el contenido.
         try:
-            chunks.append(zlib.decompress(m.group(1)))
+            chunks.append(zlib.decompressobj().decompress(datos))
         except Exception:
-            chunks.append(m.group(1))
+            chunks.append(datos)
     return b"".join(chunks)
 
 
