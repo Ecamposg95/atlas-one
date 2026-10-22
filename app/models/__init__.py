@@ -105,3 +105,7 @@ from app.modules.bar import models as _bar_models  # noqa: F401
 # 15. Tipo de cambio USD (tabla GLOBAL, sin organization_id — ver el docstring
 #     de app/models/exchange_rate.py). Registrada aqui para `create_all`.
 from .exchange_rate import ExchangeRate  # noqa: F401
+
+# 16. Conteo físico de inventario (2026-10-22) — tablas inventory_counts e
+#     inventory_count_lines; las crea `create_all`.
+from app.modules.conteos import models as _conteos_models  # noqa: F401
