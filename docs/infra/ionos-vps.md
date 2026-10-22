@@ -54,9 +54,15 @@ Acceso solo por llave pública: `PasswordAuthentication no` en
 
 El entorno demo/beta (`atlas-one-beta`, base `atlas_one_beta`) que corrió aquí hasta el
 2026-09-22 se retiró en el corte de producción — `app.atlasone.com.mx` sirve hoy
-`atlas-one-prod`, no una demo. El contenedor `atlas-one` con la copia congelada de
-Kaory del 2026-07-28 (usada como semilla de la migración) puede seguir vivo sin
-dominio apuntando; ya no es necesario para operar, solo para auditoría del corte.
+`atlas-one-prod`, no una demo. El 2026-10-22 se bajaron y borraron los contenedores
+`atlas-one` (copia congelada de Kaory del 2026-07-28, semilla de la migración) y
+`atlas-one-beta`, junto con sus imágenes y las imágenes sin contenedor (4.4 GB
+recuperados): llevaban dos meses sin una sola petición que no fuera su propio
+healthcheck y sin ruta en Caddy. Quedan en disco, por si hacen falta, sus carpetas
+`/srv/apps/atlas-one{,-beta}/` (compose + `.env` + `src/`), sus volúmenes de fotos
+(`atlas-one_*`, `atlas-one-beta_*`) y las bases `atlas_one` (26 MB) y `atlas_one_beta`
+(14 MB, cuentas QA). Para revivir un demo: `docker compose up -d --build` en esa carpeta
+y una ruta nueva en el `Caddyfile`. De Atlas One solo corre `atlas-one-prod`.
 
 ## Redesplegar
 
