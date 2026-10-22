@@ -12,8 +12,13 @@ export function vibrar(tipo: 'ok' | 'aviso'): void {
 export function resumenDesdeProducto(p: Product, v: ProductVariant): ProductoResumen {
   return {
     variant_id: v.id,
+    product_id: p.id,
     nombre: v.sale_name ?? p.sale_name ?? p.name,
     marca: p.brand_name ?? null,
+    marca_id: p.brand_id ?? null,
+    modelo: p.model ?? null,
+    descripcion: p.description ?? null,
+    precio: v.price != null ? String(v.price) : null,
     talla: v.size ?? null,
     color: v.color ?? null,
     sku: v.sku ?? null,

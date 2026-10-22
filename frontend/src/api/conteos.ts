@@ -8,8 +8,13 @@ import client from './client'
 
 export interface ProductoResumen {
   variant_id: string
+  product_id: string
   nombre: string
   marca: string | null
+  marca_id: string | null
+  modelo: string | null
+  descripcion: string | null
+  precio: string | null
   talla: string | null
   color: string | null
   sku: string | null
@@ -25,6 +30,7 @@ export interface Linea {
   qty_contada: string
   qty_sistema: string | null
   producto: ProductoResumen | null
+  corregida: boolean
   updated_at: string | null
 }
 
@@ -72,6 +78,23 @@ export interface FilaReporte {
   sistema: string
   contado: string
   diferencia: string
+  corregida: boolean
+}
+
+export type EstadoFila = 'pendiente' | 'revisado' | 'diferencia'
+
+export interface FilaLista {
+  producto: ProductoResumen
+  sistema: string
+  contado: string
+  estado: EstadoFila
+  corregida: boolean
+  line_id: number | null
+}
+
+export interface Lista {
+  filas: FilaLista[]
+  totales: { total: number; revisados: number; pendientes: number; con_diferencia: number; corregidas: number }
 }
 
 export interface Reporte {
@@ -106,10 +129,19 @@ export const conteosApi = {
     const { data } = await client.post<Linea>(`/inventory/counts/${id}/lines`, { variant_id: variantId, qty: String(qty) })
     return data
   },
-  fijarLinea: async (id: number, lineId: number, qty: number): Promise<Linea | null> => {
-    const { data } = await client.patch<Linea | null>(`/inventory/counts/${id}/lines/${lineId}`, { qty_contada: String(qty) })
+  lista: async (id: number): Promise<Lista> => {
+    const { data } = await client.get<Lista>(`/inventory/counts/${id}/lista`)
     return data
   },
+  patchLinea: async (id: number, lineId: number, body: { qty_contada?: number; corregida?: boolean }): Promise<Linea | null> => {
+    const { data } = await client.patch<Linea | null>(`/inventory/counts/${id}/lines/${lineId}`, {
+      ...(body.qty_contada !== undefined ? { qty_contada: String(body.qty_contada) } : {}),
+      ...(body.corregida !== undefined ? { corregida: body.corregida } : {}),
+    })
+    return data
+  },
+  fijarLinea: (id: number, lineId: number, qty: number): Promise<Linea | null> =>
+    conteosApi.patchLinea(id, lineId, { qty_contada: qty }),
   borrarLinea: async (id: number, lineId: number): Promise<void> => {
     await client.delete(`/inventory/counts/${id}/lines/${lineId}`)
   },

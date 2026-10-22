@@ -22,7 +22,7 @@ describe('resumenDesdeProducto', () => {
       { id: 'v1', sku: 'ZEG-M', barcode: null, size: 'M', color: 'Rojo', sale_name: 'Zegna · Playera · Rojo, Talla M' } as never,
     )
     expect(r).toEqual({
-      variant_id: 'v1', nombre: 'Zegna · Playera · Rojo, Talla M', marca: 'Zegna', talla: 'M', color: 'Rojo',
+      variant_id: 'v1', product_id: 'p', marca_id: null, modelo: null, descripcion: null, precio: null, nombre: 'Zegna · Playera · Rojo, Talla M', marca: 'Zegna', talla: 'M', color: 'Rojo',
       sku: 'ZEG-M', barcode: null, foto: null, departamento: 'Playeras',
     })
   })
