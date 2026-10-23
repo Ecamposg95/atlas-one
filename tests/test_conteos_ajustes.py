@@ -156,7 +156,7 @@ def test_aplicar_recorta_con_remanente_bajo_el_candado(db, org, branch_a, tienda
     assert _stock(db, tienda["a"], branch_a) == Decimal("0")
 
 
-def test_ajustar_linea_dos_veces_da_409(db, org, branch_a, tienda):
+def test_ajustar_linea_dos_toques_el_segundo_ya_cuadra(db, org, branch_a, tienda):
     c = tienda["conteo"]
     r = services.escanear(db, c, "3", None)             # sobrante: contado 1, sistema 0
     linea = next(l for l in c.lineas if l.id == r.linea.id)
@@ -192,3 +192,27 @@ def test_aplicar_es_atomico_si_una_fila_falla(db, org, branch_a, tienda, monkeyp
         services.aplicar(db, c, [tienda["c"].id, tienda["b"].id], None)
     assert commits == []
     assert c.resumen == resumen_antes and c.aplicado_at is None
+
+
+def test_ajustar_linea_de_nuevo_tras_contar_otra_pieza(db, org, branch_a, tienda):
+    c = tienda["conteo"]
+    r = services.escanear(db, c, "3", None)             # c: contado 1, sistema 0
+    linea = next(l for l in c.lineas if l.id == r.linea.id)
+    services.ajustar_linea(db, c, linea, None)
+    assert _stock(db, tienda["c"], branch_a) == Decimal("1")
+    services.escanear(db, c, "3", None)                 # aparece otra igual: contado 2
+    linea = next(l for l in c.lineas if l.id == r.linea.id)
+    res = services.ajustar_linea(db, c, linea, None)
+    assert _stock(db, tienda["c"], branch_a) == Decimal("2")
+    assert res.linea.ajustada is True and linea.ajustada_at is not None
+
+
+def test_aplicar_fuera_de_alcance_con_diferencia_cero_no_mueve_kardex(db, org, branch_a, tienda):
+    c = tienda["conteo"]
+    services.escanear(db, c, "4", None)                 # t: fuera de depto, contado 1 de 1
+    services.cerrar(db, c, None)
+    rep = services.aplicar(db, c, [tienda["t"].id], None)
+    aj = rep.ajustes[0]
+    assert aj.variant_id == tienda["t"].id and aj.movimiento_id is None and aj.delta == Decimal("0")
+    assert db.query(InventoryMovement).filter_by(variant_id=tienda["t"].id).count() == 0
+    assert _stock(db, tienda["t"], branch_a) == Decimal("1")

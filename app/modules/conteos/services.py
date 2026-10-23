@@ -267,11 +267,10 @@ def ajustar_linea(db: Session, conteo: InventoryCount, linea: InventoryCountLine
     _exigir_abierto(conteo)
     if linea.count_id != conteo.id or linea.organization_id != conteo.organization_id or not linea.variant_id:
         raise HTTPException(404, "Línea no encontrada")
-    # Candado de la línea ANTES de leer la existencia: dos toques seguidos no
-    # calculan el mismo delta. (En SQLite el candado es no-op: ver CLAUDE.md §2.7.)
+    # Candado de la línea ANTES de leer la existencia: el segundo toque espera,
+    # ve la existencia nueva y cae en "ya cuadra". `ajustada_at` puede volver a
+    # fijarse (se contó otra pieza después de ajustar). (En SQLite el candado es no-op: ver CLAUDE.md §2.7.)
     db.refresh(linea, with_for_update=True)
-    if linea.ajustada_at is not None:
-        raise HTTPException(409, "Esta línea ya se ajustó.")
     actual = existencias(db, conteo).get(linea.variant_id, CERO)
     delta = Decimal(linea.qty_contada or 0) - actual
     if delta == 0:
@@ -316,9 +315,11 @@ def aplicar(db: Session, conteo: InventoryCount, variant_ids: List[str],
         # Todo con commit=False: si una fila falla, nada queda a medias en el kardex
         # y un reintento no repite las anteriores. El recorte se calcula bajo el
         # candado de la existencia, no contra la foto de arriba.
-        mov = aplicar_ajuste(db, org_id=conteo.organization_id, branch_id=conteo.branch_id,
-                             variant_id=vid, user_id=user_id, quantity=delta, reason="Conteo",
-                             notes=_nota(conteo), commit=False, recortar_a_cero=True)
+        # Diferencia 0 (p. ej. fuera de alcance que cuadra): sin renglón de kardex.
+        mov = None if delta == 0 else aplicar_ajuste(
+            db, org_id=conteo.organization_id, branch_id=conteo.branch_id,
+            variant_id=vid, user_id=user_id, quantity=delta, reason="Conteo",
+            notes=_nota(conteo), commit=False, recortar_a_cero=True)
         if mov is None:
             antes = stock.get(vid, CERO)
             real, despues, mov_id = CERO, antes, None
