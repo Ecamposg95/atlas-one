@@ -31,6 +31,7 @@ export interface Linea {
   qty_sistema: string | null
   producto: ProductoResumen | null
   corregida: boolean
+  ajustada: boolean
   updated_at: string | null
 }
 
@@ -53,6 +54,8 @@ export interface Conteo {
   created_by: string | null
   created_at: string | null
   closed_at: string | null
+  aplicado_at: string | null
+  aplicado_por: string | null
   avance: Avance
 }
 
@@ -79,6 +82,7 @@ export interface FilaReporte {
   contado: string
   diferencia: string
   corregida: boolean
+  ajustada: boolean
 }
 
 export type EstadoFila = 'pendiente' | 'revisado' | 'diferencia'
@@ -89,12 +93,29 @@ export interface FilaLista {
   contado: string
   estado: EstadoFila
   corregida: boolean
+  ajustada: boolean
   line_id: number | null
 }
 
 export interface Lista {
   filas: FilaLista[]
   totales: { total: number; revisados: number; pendientes: number; con_diferencia: number; corregidas: number }
+}
+
+export interface AjusteAplicado {
+  variant_id: string
+  delta: string
+  qty_before: string
+  qty_after: string
+  movimiento_id: number | null
+  recortado: boolean
+  en: string
+}
+
+export interface AjusteLineaResult {
+  linea: Linea
+  qty_sistema: string
+  movimiento_id: number
 }
 
 export interface Reporte {
@@ -106,6 +127,8 @@ export interface Reporte {
   sobrantes: FilaReporte[]
   fuera_de_alcance: FilaReporte[]
   desconocidos: { codigo: string; contado: string }[]
+  ajustes: AjusteAplicado[]
+  aplicado_en: string | null
 }
 
 export const conteosApi = {
@@ -147,6 +170,14 @@ export const conteosApi = {
   },
   cerrar: async (id: number): Promise<ConteoDetalle> => {
     const { data } = await client.post<ConteoDetalle>(`/inventory/counts/${id}/close`)
+    return data
+  },
+  ajustarLinea: async (id: number, lineId: number): Promise<AjusteLineaResult> => {
+    const { data } = await client.post<AjusteLineaResult>(`/inventory/counts/${id}/lines/${lineId}/ajustar`)
+    return data
+  },
+  aplicar: async (id: number, variantIds: string[]): Promise<Reporte> => {
+    const { data } = await client.post<Reporte>(`/inventory/counts/${id}/apply`, { variant_ids: variantIds })
     return data
   },
   reporte: async (id: number): Promise<Reporte> => {

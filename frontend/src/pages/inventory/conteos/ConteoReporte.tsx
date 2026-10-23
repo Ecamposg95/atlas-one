@@ -44,7 +44,7 @@ export function ConteoReporte() {
 
   const filas = (s: Seccion): FilaReporte[] =>
     s.clave === 'desconocidos'
-      ? reporte.desconocidos.map((d) => ({ variant_id: d.codigo, sku: d.codigo, nombre: `Código ${d.codigo}`, marca: null, talla: null, color: null, departamento: null, sistema: '0', contado: d.contado, diferencia: d.contado, corregida: false }))
+      ? reporte.desconocidos.map((d) => ({ variant_id: d.codigo, sku: d.codigo, nombre: `Código ${d.codigo}`, marca: null, talla: null, color: null, departamento: null, sistema: '0', contado: d.contado, diferencia: d.contado, corregida: false, ajustada: false }))
       : reporte[s.clave]
 
   return (

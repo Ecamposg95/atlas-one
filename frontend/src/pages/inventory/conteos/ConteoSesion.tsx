@@ -15,6 +15,7 @@ import { num, porcentajeAvance } from './avance'
 import { BuscadorVariante } from './BuscadorVariante'
 import { FichaProducto } from './FichaProducto'
 import { ListaDepartamento } from './ListaDepartamento'
+import { textoAjuste } from './lista'
 import { crearCola, debeRedirigirTecla, vibrar } from './sesion'
 import { useLectorCodigos } from './useLectorCodigos'
 
@@ -161,6 +162,24 @@ export function ConteoSesion() {
     await recargar()
   }
 
+  const ajustar = async (lineId: number, sistema: number, contado: number) => {
+    const ok = await confirm({
+      title: 'Ajustar existencia',
+      message: `${textoAjuste(sistema, contado)}. Queda en el kardex como "Conteo".`,
+      confirmText: 'Ajustar', variant: 'warning',
+    })
+    if (!ok) { enfocarEntrada(); return }
+    try {
+      await conteosApi.ajustarLinea(conteoId, lineId)
+      vibrar('ok')
+      toast.success('Existencia ajustada')
+      await recargar()
+    } catch (e: any) {
+      if (e?.response?.status === 409) { toast.info('Ya cuadra'); await recargar() }
+      else toast.error(errorDetailText(e?.response?.data?.detail, 'No se pudo ajustar'))
+    } finally { enfocarEntrada() }
+  }
+
   const cerrar = async () => {
     if (!conteo) return
     const pendientes = lista?.totales.pendientes ?? 0
@@ -258,6 +277,11 @@ export function ConteoSesion() {
           <div className="mt-3 flex flex-wrap gap-2">
             {verCamara && <button onClick={siguiente} className="dax-btn-primary flex-1 justify-center"><i className="fa-solid fa-forward" /> Siguiente</button>}
             {ultimoVista.resultado === 'contado' && <button onClick={masUno} className="dax-btn-secondary flex-1 justify-center">+1 igual</button>}
+            {ultimoVista.resultado === 'contado' && ultimaLinea && ultimoVista.qty_sistema != null && num(ultimoVista.qty_sistema) !== num(ultimaLinea.qty_contada) && (
+              <button onClick={() => void ajustar(ultimaLinea.id, num(ultimoVista.qty_sistema), num(ultimaLinea.qty_contada))} className="dax-btn-secondary flex-1 justify-center">
+                Ajustar ahora · {textoAjuste(num(ultimoVista.qty_sistema), num(ultimaLinea.qty_contada))}
+              </button>
+            )}
             {ultimoVista.resultado === 'contado' && ultimoVista.producto && <button onClick={() => setFicha(ultimoVista.producto)} className="dax-btn-secondary flex-1 justify-center"><i className="fa-solid fa-id-card" /> Ver ficha</button>}
           </div>
         </DaxCard>
@@ -267,7 +291,8 @@ export function ConteoSesion() {
         <h2 className="text-sm font-bold text-white mb-2">Lista del departamento</h2>
         <ListaDepartamento filas={lista.filas} resaltada={resaltada}
           onCantidad={(f: FilaLista, qty: number) => { if (f.line_id !== null) void fijarPorId(f.line_id, qty) }}
-          onFicha={(f: FilaLista) => setFicha(f.producto)} />
+          onFicha={(f: FilaLista) => setFicha(f.producto)}
+          onAjustar={(f: FilaLista) => { if (f.line_id !== null) void ajustar(f.line_id, num(f.sistema), num(f.contado)) }} />
       </DaxCard>
 
       {(desconocidos.length > 0 || otras.length > 0) && (
