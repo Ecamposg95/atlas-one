@@ -104,6 +104,16 @@ mismo orden que ya existía, con el PIN como primer intento.
 
 `MovementType`{PURCHASE_IN,SALE_OUT,ADJUSTMENT_IN/OUT,TRANSFER_IN/OUT,SALE_RETURN,RECIPE_CONSUMPTION}.
 
+## Conteos de inventario (`modules/conteos/models.py`)
+| Tabla | PK | Propósito |
+|---|---|---|
+| `inventory_counts` | Int | Sesión de conteo: `branch_id`, `department_id` (`String(36)`, NULL = toda la tienda), `status` (`ABIERTO`/`CERRADO`, String), `notes`, `created_by_user_id`, `created_at`, `closed_at`, `resumen` (Text) + `organization_id` (`TenantMixin`) |
+| `inventory_count_lines` | Int | Una línea por variante o por código desconocido: `count_id`, `variant_id` (`String(36)`, NULL = desconocido), `codigo`, `qty_contada` `Numeric(10,2)`, `qty_sistema` `Numeric(10,2)`, `corregida` `Boolean` (default false; la ficha de la pieza se corrigió durante el conteo), `created_by_user_id`, `created_at`, `updated_at` + `organization_id` |
+
+- `UniqueConstraint(count_id, variant_id)` (`uq_count_line_variant`) y `UniqueConstraint(count_id, codigo)` (`uq_count_line_codigo`): escanear dos veces la misma talla o el mismo código desconocido suma a la misma línea (NULL no choca en ninguna de las dos).
+- **`qty_sistema` está congelada al cerrar:** es NULL mientras el conteo está ABIERTO (el reporte lee la existencia viva de `stock_on_hand`) y se llena con la existencia de la sucursal en `close`. `resumen` guarda el JSON del reporte congelado en ese momento.
+- El conteo no escribe `stock_on_hand` ni `inventory_movements`. Tablas nuevas: las crea `create_all`, sin ALTER.
+
 ## Ventas / Caja
 | Tabla | PK | Propósito | Enums |
 |---|---|---|---|

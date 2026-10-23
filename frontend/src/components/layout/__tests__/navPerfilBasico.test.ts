@@ -19,6 +19,10 @@ const menu = (role: Role, perfilUi: PerfilUi | null | undefined, plan: PlanOrg |
   }).map((i) => i.url)
 
 describe('menú en modo básico', () => {
+  it('el conteo con escáner no aparece en el menú básico de la dueña', () => {
+    expect(OCULTAS_BASICO_HQ).toContain('/inventory/conteos')
+  })
+
   it('cajera: exactamente seis entradas (spec §4.1)', () => {
     expect([...menu('CAJERO', 'basico')].sort()).toEqual(
       ['/atlas-pos', '/cash-history', '/pos', '/printer-settings', '/products', '/sales'],
