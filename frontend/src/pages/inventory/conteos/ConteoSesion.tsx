@@ -170,12 +170,13 @@ export function ConteoSesion() {
     })
     if (!ok) { enfocarEntrada(); return }
     try {
-      await conteosApi.ajustarLinea(conteoId, lineId)
+      const r = await conteosApi.ajustarLinea(conteoId, lineId)
+      setUltimo((u) => u && { ...u, qty_sistema: r.qty_sistema })
       vibrar('ok')
       toast.success('Existencia ajustada')
       await recargar()
     } catch (e: any) {
-      if (e?.response?.status === 409) { toast.info('Ya cuadra'); await recargar() }
+      if (e?.response?.status === 409) { toast.info('Ya cuadra'); await recargar() /* la lista trae el sistema real */ }
       else toast.error(errorDetailText(e?.response?.data?.detail, 'No se pudo ajustar'))
     } finally { enfocarEntrada() }
   }
@@ -197,10 +198,13 @@ export function ConteoSesion() {
   if (conteo.status === 'CERRADO') { navigate(`/inventory/conteos/${conteoId}/reporte`, { replace: true }); return null }
 
   const fresco = (p: ProductoResumen | null) => (p ? lista.filas.find((f) => f.producto.variant_id === p.variant_id)?.producto ?? p : p)
-  const ultimoVista = ultimo && ultimo.producto ? { ...ultimo, producto: fresco(ultimo.producto) } : ultimo
+  const filaUltimo = ultimo?.producto ? lista.filas.find((f) => f.producto.variant_id === ultimo.producto!.variant_id) : undefined
+  const ultimoVista = ultimo && ultimo.producto
+    ? { ...ultimo, producto: fresco(ultimo.producto), qty_sistema: filaUltimo ? filaUltimo.sistema : ultimo.qty_sistema }
+    : ultimo
   const fichaVista = fresco(ficha)
   const pct = porcentajeAvance(lista.totales.revisados + lista.totales.con_diferencia, lista.totales.total)
-  const ultimaLinea = ultimo?.linea ?? conteo.lineas.find((l) => l.variant_id === ultimo?.producto?.variant_id) ?? null
+  const ultimaLinea = (ultimo?.producto ? conteo.lineas.find((l) => l.variant_id === ultimo.producto!.variant_id) : undefined) ?? ultimo?.linea ?? null
   const desconocidos = conteo.lineas.filter((l) => l.variant_id === null)
   const enLista = new Set(lista.filas.map((f) => f.producto.variant_id))
   const otras = conteo.lineas.filter((l) => l.variant_id !== null && !enLista.has(l.variant_id))
