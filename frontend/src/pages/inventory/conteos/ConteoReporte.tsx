@@ -12,7 +12,7 @@ import { TarjetaFila } from '../../../components/ui/TarjetaFila'
 import { useEsTelefono } from '../../../hooks/useIsMobile'
 import { toast } from '../../../store/toastStore'
 import { errorDetailText } from '../../../utils/errorDetail'
-import { num, resumenSeleccion, seccionesReporte, seleccionInicial, textoDiferencia, type Seccion } from './avance'
+import { num, resumenSeleccion, seccionesReporte, seleccionInicial, seleccionTrasAplicar, textoDiferencia, type Seccion } from './avance'
 
 /** Reporte del conteo: abierto = avance en vivo; cerrado = congelado. Spec 2026-10-22 §5-§6. */
 export function ConteoReporte() {
@@ -53,8 +53,9 @@ export function ConteoReporte() {
     setAplicando(true)
     try {
       const r = await conteosApi.aplicar(conteoId, [...seleccion])
-      setReporte(r); setSeleccion(seleccionInicial(r))
+      setReporte(r); setSeleccion((p) => seleccionTrasAplicar(p, r))
       toast.success('Existencias ajustadas al conteo')
+      try { setConteo(await conteosApi.ver(conteoId)) } catch { /* el ajuste ya quedó; la cabecera se refresca al recargar */ }
     } catch (e: any) { toast.error(errorDetailText(e?.response?.data?.detail, 'No se pudo ajustar')) }
     finally { setAplicando(false) }
   }

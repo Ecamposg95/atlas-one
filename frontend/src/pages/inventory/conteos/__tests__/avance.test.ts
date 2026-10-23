@@ -1,7 +1,7 @@
 // frontend/src/pages/inventory/conteos/__tests__/avance.test.ts
 import { describe, it, expect } from 'vitest'
 
-import { num, porcentajeAvance, resumenSeleccion, seccionesReporte, seleccionInicial, textoDiferencia } from '../avance'
+import { num, porcentajeAvance, resumenSeleccion, seccionesReporte, seleccionInicial, seleccionTrasAplicar, textoDiferencia } from '../avance'
 import type { Reporte } from '../../../../api/conteos'
 
 describe('porcentajeAvance', () => {
@@ -71,5 +71,13 @@ describe('seleccionInicial', () => {
   })
   it('resume la selección en tallas y piezas', () => {
     expect(resumenSeleccion(rep, new Set(['P', 'S', 'N']))).toEqual({ tallas: 3, menos: 4, mas: 1 })
+  })
+})
+
+describe('seleccionTrasAplicar', () => {
+  const f = (sku: string, ajustada: boolean) => ({ variant_id: sku, sku, nombre: sku, marca: null, talla: null, color: null, departamento: null, sistema: '3', contado: '1', diferencia: '-2', corregida: false, ajustada })
+  it('quita las ya ajustadas y no re-marca las destildadas', () => {
+    const r = { faltantes: [f('P', true), f('N', false), f('X', false)], sobrantes: [], fuera_de_alcance: [] } as never
+    expect([...seleccionTrasAplicar(new Set(['P', 'N']), r)]).toEqual(['N'])
   })
 })

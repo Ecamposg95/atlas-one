@@ -57,3 +57,12 @@ export function resumenSeleccion(r: Reporte, sel: Set<string>): { tallas: number
   }
   return { tallas, menos, mas }
 }
+
+/** Tras aplicar: la selección previa sin las filas ya ajustadas ni las que dejaron de estar en el reporte. No se recalcula de origen. */
+export function seleccionTrasAplicar(previa: Set<string>, r: Reporte): Set<string> {
+  const s = new Set<string>()
+  for (const f of [...r.faltantes, ...r.sobrantes, ...r.fuera_de_alcance]) {
+    if (previa.has(f.variant_id) && !f.ajustada) s.add(f.variant_id)
+  }
+  return s
+}
