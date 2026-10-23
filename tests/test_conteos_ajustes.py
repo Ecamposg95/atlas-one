@@ -138,3 +138,57 @@ def test_inventory_adjust_sigue_igual(client, db, org, branch_a, auth_admin, tie
     r = client.post("/api/inventory/adjust", headers=h, json={
         "variant_id": tienda["a"].id, "quantity": "-5", "reason": "Merma", "branch_id": branch_a.id})
     assert r.status_code == 400
+
+
+def test_aplicar_recorta_con_remanente_bajo_el_candado(db, org, branch_a, tienda):
+    c = tienda["conteo"]
+    services.escanear(db, c, "1", None)                 # a: 1 de 3 → −2 congelado
+    services.cerrar(db, c, None)
+    s = db.query(StockOnHand).filter_by(variant_id=tienda["a"].id).first()
+    s.qty_on_hand = Decimal("1")                        # venta posterior al cierre
+    db.commit()
+    rep = services.aplicar(db, c, [tienda["a"].id], None)
+    aj = rep.ajustes[0]
+    assert aj.delta == Decimal("-1") and aj.recortado is True
+    assert aj.qty_before == Decimal("1") and aj.qty_after == Decimal("0")
+    mov = db.query(InventoryMovement).filter_by(variant_id=tienda["a"].id, reference="Conteo").one()
+    assert mov.qty_change == Decimal("-1") and "recortado a 0" in mov.notes
+    assert _stock(db, tienda["a"], branch_a) == Decimal("0")
+
+
+def test_ajustar_linea_dos_veces_da_409(db, org, branch_a, tienda):
+    c = tienda["conteo"]
+    r = services.escanear(db, c, "3", None)             # sobrante: contado 1, sistema 0
+    linea = next(l for l in c.lineas if l.id == r.linea.id)
+    services.ajustar_linea(db, c, linea, None)
+    with pytest.raises(HTTPException) as e:
+        services.ajustar_linea(db, c, linea, None)
+    assert e.value.status_code == 409
+    assert _stock(db, tienda["c"], branch_a) == Decimal("1")   # no se duplicó
+
+
+def test_aplicar_es_atomico_si_una_fila_falla(db, org, branch_a, tienda, monkeypatch):
+    c = tienda["conteo"]
+    services.escanear(db, c, "3", None)                 # c: +1
+    services.cerrar(db, c, None)
+    real = services.aplicar_ajuste
+    llamadas = []
+
+    def falla_en_la_segunda(*a, **k):
+        llamadas.append(1)
+        if len(llamadas) == 2:
+            raise HTTPException(400, "Stock insuficiente para realizar este ajuste.")
+        return real(*a, **k)
+
+    monkeypatch.setattr(services, "aplicar_ajuste", falla_en_la_segunda)
+    # La sesión de pruebas vive dentro de una transacción externa, así que un
+    # rollback real se llevaría también la siembra: se prueba que NINGÚN commit
+    # ocurre antes del fallo (el rollback de la petición descarta lo pendiente).
+    commits = []
+    commit_real = db.commit
+    monkeypatch.setattr(db, "commit", lambda: (commits.append(1), commit_real())[1])
+    resumen_antes = c.resumen
+    with pytest.raises(HTTPException):
+        services.aplicar(db, c, [tienda["c"].id, tienda["b"].id], None)
+    assert commits == []
+    assert c.resumen == resumen_antes and c.aplicado_at is None

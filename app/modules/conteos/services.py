@@ -267,15 +267,20 @@ def ajustar_linea(db: Session, conteo: InventoryCount, linea: InventoryCountLine
     _exigir_abierto(conteo)
     if linea.count_id != conteo.id or linea.organization_id != conteo.organization_id or not linea.variant_id:
         raise HTTPException(404, "Línea no encontrada")
+    # Candado de la línea ANTES de leer la existencia: dos toques seguidos no
+    # calculan el mismo delta. (En SQLite el candado es no-op: ver CLAUDE.md §2.7.)
+    db.refresh(linea, with_for_update=True)
+    if linea.ajustada_at is not None:
+        raise HTTPException(409, "Esta línea ya se ajustó.")
     actual = existencias(db, conteo).get(linea.variant_id, CERO)
     delta = Decimal(linea.qty_contada or 0) - actual
     if delta == 0:
         raise HTTPException(409, "La existencia ya cuadra con lo contado.")
     mov = aplicar_ajuste(db, org_id=conteo.organization_id, branch_id=conteo.branch_id,
                          variant_id=linea.variant_id, user_id=user_id, quantity=delta,
-                         reason="Conteo", notes=_nota(conteo) + " · ajuste en piso")
+                         reason="Conteo", notes=_nota(conteo) + " · ajuste en piso", commit=False)
     linea.ajustada_at = datetime.now(timezone.utc)
-    db.commit()
+    db.commit()   # movimiento + marca de la línea, una sola transacción
     db.refresh(linea)
     return AjusteLineaResult(linea=a_linea_read(linea), qty_sistema=Decimal(mov.qty_after),
                              movimiento_id=mov.id)
@@ -291,6 +296,13 @@ def aplicar(db: Session, conteo: InventoryCount, variant_ids: List[str],
         raise HTTPException(409, "Primero cierra el conteo.")
     if not variant_ids:
         raise HTTPException(422, "Elige al menos una talla.")
+    # Candado del conteo y SOLO después se lee `resumen`: dos /apply simultáneos
+    # se serializan y el segundo ve los ajustes del primero. (No-op en SQLite, así
+    # que ninguna prueba lo demuestra; solo Postgres. CLAUDE.md §2.7.)
+    conteo = (db.query(InventoryCount)
+              .filter_by(id=conteo.id, organization_id=conteo.organization_id)
+              .with_for_update().one())
+    db.refresh(conteo)
     rep = Reporte.model_validate(json.loads(conteo.resumen))
     ya = {a.variant_id for a in rep.ajustes}
     filas = {f.variant_id: f for f in rep.faltantes + rep.sobrantes + rep.fuera_de_alcance}
@@ -301,18 +313,23 @@ def aplicar(db: Session, conteo: InventoryCount, variant_ids: List[str],
         if f is None or vid in ya:
             continue
         delta = Decimal(f.diferencia)
-        actual = stock.get(vid, CERO)
-        recortado = False
-        if actual + delta < 0:
-            delta, recortado = -actual, True
-        mov_id = None
-        if delta != 0:
-            mov = aplicar_ajuste(db, org_id=conteo.organization_id, branch_id=conteo.branch_id,
-                                 variant_id=vid, user_id=user_id, quantity=delta, reason="Conteo",
-                                 notes=_nota(conteo) + (" · recortado a 0" if recortado else ""))
-            mov_id = mov.id
-        rep.ajustes.append(AjusteAplicado(variant_id=vid, delta=delta, qty_before=actual,
-                                          qty_after=actual + delta, movimiento_id=mov_id,
+        # Todo con commit=False: si una fila falla, nada queda a medias en el kardex
+        # y un reintento no repite las anteriores. El recorte se calcula bajo el
+        # candado de la existencia, no contra la foto de arriba.
+        mov = aplicar_ajuste(db, org_id=conteo.organization_id, branch_id=conteo.branch_id,
+                             variant_id=vid, user_id=user_id, quantity=delta, reason="Conteo",
+                             notes=_nota(conteo), commit=False, recortar_a_cero=True)
+        if mov is None:
+            antes = stock.get(vid, CERO)
+            real, despues, mov_id = CERO, antes, None
+        else:
+            antes, despues, real, mov_id = (Decimal(mov.qty_before), Decimal(mov.qty_after),
+                                            Decimal(mov.qty_change), mov.id)
+        recortado = real != delta
+        if recortado and mov is not None:
+            mov.notes = _nota(conteo) + " · recortado a 0"
+        rep.ajustes.append(AjusteAplicado(variant_id=vid, delta=real, qty_before=antes,
+                                          qty_after=despues, movimiento_id=mov_id,
                                           recortado=recortado, en=ahora))
         ya.add(vid)
         linea = next((l for l in conteo.lineas if l.variant_id == vid), None)

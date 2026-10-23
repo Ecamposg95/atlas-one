@@ -20,15 +20,25 @@ router = APIRouter()
 
 def aplicar_ajuste(db: Session, *, org_id: int, branch_id: int, variant_id: str,
                    user_id: Optional[int], quantity: Decimal, reason: str,
-                   notes: Optional[str] = None) -> InventoryMovement:
+                   notes: Optional[str] = None, commit: bool = True,
+                   recortar_a_cero: bool = False) -> Optional[InventoryMovement]:
     """Entrada (+) o salida (−) manual con su renglón de kardex. Es la misma
     lógica de `POST /inventory/adjust`; la comparte el conteo físico
     (app/modules/conteos) para que sus ajustes se vean en el mismo kardex.
-    400 si la salida dejaría la existencia negativa. Hace commit."""
+    400 si la salida dejaría la existencia negativa.
+
+    `commit=False` solo hace flush: el llamador cierra la transacción (el conteo
+    aplica varias filas de forma atómica). `recortar_a_cero=True` limita la salida
+    a la existencia que haya BAJO EL CANDADO en vez de dar 400; si el recorte
+    deja 0 no crea movimiento y devuelve None."""
     stock_record = db.query(StockOnHand).filter_by(
         branch_id=branch_id, variant_id=variant_id, organization_id=org_id,
     ).with_for_update().first()
     qty_before = stock_record.qty_on_hand if stock_record else Decimal("0")
+    if quantity < 0 and recortar_a_cero and qty_before + quantity < 0:
+        quantity = -qty_before
+        if quantity == 0:
+            return None
     if quantity > 0:
         mov_type = MovementType.ADJUSTMENT_IN
     else:
@@ -47,8 +57,11 @@ def aplicar_ajuste(db: Session, *, org_id: int, branch_id: int, variant_id: str,
         organization_id=org_id,
     )
     db.add(movement)
-    db.commit()
-    db.refresh(movement)
+    if commit:
+        db.commit()
+        db.refresh(movement)
+    else:
+        db.flush()
     return movement
 
 
