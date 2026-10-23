@@ -20,7 +20,7 @@ Decisiones tomadas con el usuario el 2026-10-22:
 | Pregunta | Decisión |
 |---|---|
 | Modo | Inventario físico completo: lo que el sistema tiene y nadie escaneó es faltante |
-| Discrepancias | **Solo se reportan**; nada toca el kardex (aplicar ajustes es fase 2) |
+| Discrepancias | **Solo se reportan** en fase 1; los ajustes al kardex se aplican en fase 2 (§11) |
 | Sesión | Una por departamento, guardada en el servidor; se puede seguir otro día o en otro teléfono |
 | Escaneo | Cada lectura suma 1 pieza; la cantidad se puede corregir en la lista |
 | Pieza sin código legible | Buscar por nombre/SKU y marcarla contada; o ligarle el código ahí mismo (**reemplaza** el interno, como hace el Escáner) |
@@ -204,11 +204,12 @@ conteo de otra org 404; CAJERO 403. vitest: los tres helpers de `avance.ts` y la
 `overlaysFueraDelKit.test.ts`/`botonesDelKit.test.ts` (nada nuevo fuera del kit). `tsc` y
 `vite build`; las rutas son lazy, el presupuesto de la ruta crítica no cambia.
 
-## 9. Fuera de alcance (fase 2, no se diseña aquí)
+## 9. Fuera de alcance
 
-Aplicar los ajustes del reporte al kardex con aprobación; exportar a Excel/PDF; varias personas
+Exportar a Excel/PDF; varias personas
 en la misma sesión; cola sin red; cajeras/gerentes contando; código alterno de marca sin
 reemplazar el interno; corregir la paginación sin `ORDER BY` de `read_products`.
+Aplicar los ajustes al kardex ya no está fuera de alcance: ver §11.
 
 ## 10. Diagnóstico de Eleven y limpieza
 

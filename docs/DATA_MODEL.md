@@ -112,7 +112,7 @@ mismo orden que ya existía, con el PIN como primer intento.
 
 - `UniqueConstraint(count_id, variant_id)` (`uq_count_line_variant`) y `UniqueConstraint(count_id, codigo)` (`uq_count_line_codigo`): escanear dos veces la misma talla o el mismo código desconocido suma a la misma línea (NULL no choca en ninguna de las dos).
 - **`qty_sistema` está congelada al cerrar:** es NULL mientras el conteo está ABIERTO (el reporte lee la existencia viva de `stock_on_hand`) y se llena con la existencia de la sucursal en `close`. `resumen` guarda el JSON del reporte congelado en ese momento.
-- El conteo no escribe `stock_on_hand` ni `inventory_movements`. Tablas nuevas: las crea `create_all`, sin ALTER.
+- Fase 2: `inventory_count_lines.ajustada_at`, `inventory_counts.aplicado_at` y `inventory_counts.aplicado_por_user_id` (ALTER idempotentes en `scripts/railway_init.py`). Ajustar escribe `stock_on_hand` e `inventory_movements` (`reference="Conteo"`) solo por `/ajustar` y `/apply`; el resto del conteo no los toca. Tablas nuevas: las crea `create_all`.
 
 ## Ventas / Caja
 | Tabla | PK | Propósito | Enums |
