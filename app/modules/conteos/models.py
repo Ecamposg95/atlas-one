@@ -35,6 +35,9 @@ class InventoryCount(Base, TenantMixin):
     closed_at = Column(DateTime(timezone=True), nullable=True)
     # JSON del reporte congelado al cerrar (services.cerrar).
     resumen = Column(Text, nullable=True)
+    # Fase 2: cuándo y quién aplicó por primera vez el reporte al kardex.
+    aplicado_at = Column(DateTime(timezone=True), nullable=True)
+    aplicado_por_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     lineas = relationship(
         "InventoryCountLine", back_populates="conteo",
@@ -42,7 +45,8 @@ class InventoryCount(Base, TenantMixin):
     )
     branch = relationship("Branch")
     department = relationship("Department")
-    created_by = relationship("User")
+    created_by = relationship("User", foreign_keys=[created_by_user_id])
+    aplicado_por = relationship("User", foreign_keys=[aplicado_por_user_id])
 
 
 class InventoryCountLine(Base, TenantMixin):
@@ -59,6 +63,8 @@ class InventoryCountLine(Base, TenantMixin):
     # La ficha del producto se corrigió desde el conteo (nombre/marca/modelo/
     # descripción): el reporte lo lista para saber qué se tocó.
     corregida = Column(Boolean, nullable=False, default=False, server_default="false")
+    # Fase 2: la existencia se ajustó a esta línea (en piso o al aplicar el reporte).
+    ajustada_at = Column(DateTime(timezone=True), nullable=True)
     created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

@@ -22,7 +22,7 @@ from app.models.organization import Branch
 from app.modules.conteos import services
 from app.modules.conteos.models import ABIERTO, InventoryCount, InventoryCountLine
 from app.modules.conteos.schemas import (
-    ConteoCreate, ConteoDetalle, ConteoRead, LineaCreate, LineaPatch, LineaRead,
+    AjusteLineaResult, AplicarRequest, ConteoCreate, ConteoDetalle, ConteoRead, LineaCreate, LineaPatch, LineaRead,
     Lista, Reporte, ScanRequest, ScanResult,
 )
 from app.modules.products.models import Department
@@ -168,3 +168,16 @@ def reporte_conteo(conteo_id: int, db: Session = Depends(get_db), _: User = Depe
 def lista_conteo(conteo_id: int, db: Session = Depends(get_db), _: User = Depends(_admin),
                  org_id: int = Depends(get_current_active_organization)):
     return services.lista(db, _conteo_o_404(db, org_id, conteo_id))
+
+
+@router.post("/{conteo_id}/lines/{line_id}/ajustar", response_model=AjusteLineaResult)
+def ajustar_linea(conteo_id: int, line_id: int, db: Session = Depends(get_db),
+                  user: User = Depends(_admin), org_id: int = Depends(get_current_active_organization)):
+    c = _conteo_o_404(db, org_id, conteo_id)
+    return services.ajustar_linea(db, c, _linea_o_404(c, line_id), user.id)
+
+
+@router.post("/{conteo_id}/apply", response_model=Reporte)
+def aplicar_conteo(conteo_id: int, body: AplicarRequest, db: Session = Depends(get_db),
+                   user: User = Depends(_admin), org_id: int = Depends(get_current_active_organization)):
+    return services.aplicar(db, _conteo_o_404(db, org_id, conteo_id), body.variant_ids, user.id)

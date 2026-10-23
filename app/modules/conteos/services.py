@@ -16,9 +16,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.inventory import StockOnHand
+from app.routers.inventory import aplicar_ajuste   # mismo kardex que /inventory/adjust
 from app.modules.conteos.models import ABIERTO, CERRADO, InventoryCount, InventoryCountLine
 from app.modules.conteos.schemas import (
-    Avance, ConteoDetalle, ConteoRead, FilaDesconocido, FilaLista, FilaReporte, LineaRead,
+    AjusteAplicado, AjusteLineaResult, Avance, ConteoDetalle, ConteoRead, FilaDesconocido, FilaLista, FilaReporte, LineaRead,
     Lista, ProductoResumen, Reporte, ScanResult,
 )
 from app.modules.products.models import PackagingUnit, Product, ProductVariant
@@ -243,6 +244,7 @@ def lista(db: Session, conteo: InventoryCount) -> Lista:
             estado = "diferencia"
         filas.append(FilaLista(producto=resumen_producto(v), sistema=sistema, contado=contado,
                                estado=estado, corregida=bool(l.corregida) if l else False,
+                               ajustada=bool(l.ajustada_at) if l else False,
                                line_id=l.id if l else None))
     return Lista(filas=filas, totales={
         "total": len(filas),
@@ -253,12 +255,97 @@ def lista(db: Session, conteo: InventoryCount) -> Lista:
     })
 
 
+# ── Ajustes al kardex ────────────────────────────────────────────────────────
+def _nota(conteo: InventoryCount) -> str:
+    depto = conteo.department.name if conteo.department else "toda la tienda"
+    return f"Conteo #{conteo.id} · {depto}"
+
+
+def ajustar_linea(db: Session, conteo: InventoryCount, linea: InventoryCountLine,
+                  user_id: Optional[int]) -> AjusteLineaResult:
+    """Ajuste en piso: deja la existencia igual a lo contado en esta línea."""
+    _exigir_abierto(conteo)
+    if linea.count_id != conteo.id or linea.organization_id != conteo.organization_id or not linea.variant_id:
+        raise HTTPException(404, "Línea no encontrada")
+    actual = existencias(db, conteo).get(linea.variant_id, CERO)
+    delta = Decimal(linea.qty_contada or 0) - actual
+    if delta == 0:
+        raise HTTPException(409, "La existencia ya cuadra con lo contado.")
+    mov = aplicar_ajuste(db, org_id=conteo.organization_id, branch_id=conteo.branch_id,
+                         variant_id=linea.variant_id, user_id=user_id, quantity=delta,
+                         reason="Conteo", notes=_nota(conteo) + " · ajuste en piso")
+    linea.ajustada_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(linea)
+    return AjusteLineaResult(linea=a_linea_read(linea), qty_sistema=Decimal(mov.qty_after),
+                             movimiento_id=mov.id)
+
+
+def aplicar(db: Session, conteo: InventoryCount, variant_ids: List[str],
+            user_id: Optional[int]) -> Reporte:
+    """Aplica al kardex la DIFERENCIA congelada de las filas elegidas del reporte
+    cerrado. Una venta posterior al cierre no se descuenta dos veces porque se
+    aplica el delta, no el valor contado. Si la salida dejaría negativo, se
+    recorta a 0 y se anota. Filas ya aplicadas se omiten (idempotente)."""
+    if conteo.status != CERRADO or not conteo.resumen:
+        raise HTTPException(409, "Primero cierra el conteo.")
+    if not variant_ids:
+        raise HTTPException(422, "Elige al menos una talla.")
+    rep = Reporte.model_validate(json.loads(conteo.resumen))
+    ya = {a.variant_id for a in rep.ajustes}
+    filas = {f.variant_id: f for f in rep.faltantes + rep.sobrantes + rep.fuera_de_alcance}
+    stock = existencias(db, conteo)
+    ahora = datetime.now(timezone.utc)
+    for vid in variant_ids:
+        f = filas.get(vid)
+        if f is None or vid in ya:
+            continue
+        delta = Decimal(f.diferencia)
+        actual = stock.get(vid, CERO)
+        recortado = False
+        if actual + delta < 0:
+            delta, recortado = -actual, True
+        mov_id = None
+        if delta != 0:
+            mov = aplicar_ajuste(db, org_id=conteo.organization_id, branch_id=conteo.branch_id,
+                                 variant_id=vid, user_id=user_id, quantity=delta, reason="Conteo",
+                                 notes=_nota(conteo) + (" · recortado a 0" if recortado else ""))
+            mov_id = mov.id
+        rep.ajustes.append(AjusteAplicado(variant_id=vid, delta=delta, qty_before=actual,
+                                          qty_after=actual + delta, movimiento_id=mov_id,
+                                          recortado=recortado, en=ahora))
+        ya.add(vid)
+        linea = next((l for l in conteo.lineas if l.variant_id == vid), None)
+        if linea is not None:
+            linea.ajustada_at = ahora
+    rep = _marcar_ajustadas(rep)
+    rep.aplicado_en = rep.aplicado_en or ahora
+    if conteo.aplicado_at is None:
+        conteo.aplicado_at = ahora
+        conteo.aplicado_por_user_id = user_id
+    conteo.resumen = json.dumps(rep.model_dump(mode="json"))
+    db.commit()
+    return rep
+
+
+def _marcar_ajustadas(rep: Reporte) -> Reporte:
+    ya = {a.variant_id for a in rep.ajustes}
+    for seccion in (rep.faltantes, rep.sobrantes, rep.fuera_de_alcance):
+        for f in seccion:
+            f.ajustada = f.variant_id in ya
+    rep.totales["ajustadas"] = len(rep.ajustes)
+    rep.totales["piezas_ajustadas"] = sum((abs(Decimal(a.delta)) for a in rep.ajustes), CERO)
+    return rep
+
+
 # ── Reporte ──────────────────────────────────────────────────────────────────
-def _fila(v: ProductVariant, sistema: Decimal, contado: Decimal, corregida: bool = False) -> FilaReporte:
+def _fila(v: ProductVariant, sistema: Decimal, contado: Decimal, corregida: bool = False,
+          ajustada: bool = False) -> FilaReporte:
     r = resumen_producto(v)
     return FilaReporte(variant_id=v.id, sku=v.sku, nombre=r.nombre, marca=r.marca, talla=r.talla,
                        color=r.color, departamento=r.departamento, sistema=sistema,
-                       contado=contado, diferencia=contado - sistema, corregida=corregida)
+                       contado=contado, diferencia=contado - sistema, corregida=corregida,
+                       ajustada=ajustada)
 
 
 def _calcular(db: Session, conteo: InventoryCount) -> Reporte:
@@ -268,6 +355,7 @@ def _calcular(db: Session, conteo: InventoryCount) -> Reporte:
     contadas = {l.variant_id: Decimal(l.qty_contada or 0) for l in conteo.lineas if l.variant_id}
 
     corregidas = {l.variant_id: bool(l.corregida) for l in conteo.lineas if l.variant_id}
+    ajustadas = {l.variant_id: bool(l.ajustada_at) for l in conteo.lineas if l.variant_id}
     faltantes: List[FilaReporte] = []
     sobrantes: List[FilaReporte] = []
     cuadradas = 0
@@ -280,9 +368,9 @@ def _calcular(db: Session, conteo: InventoryCount) -> Reporte:
             esperadas_variantes += 1
             esperadas_piezas += sistema
         if sistema > 0 and contado < sistema:
-            faltantes.append(_fila(v, sistema, contado, corregidas.get(v.id, False)))
+            faltantes.append(_fila(v, sistema, contado, corregidas.get(v.id, False), ajustadas.get(v.id, False)))
         elif contado > sistema:
-            sobrantes.append(_fila(v, sistema, contado, corregidas.get(v.id, False)))
+            sobrantes.append(_fila(v, sistema, contado, corregidas.get(v.id, False), ajustadas.get(v.id, False)))
         elif sistema > 0 and contado == sistema:
             cuadradas += 1
 
@@ -290,7 +378,7 @@ def _calcular(db: Session, conteo: InventoryCount) -> Reporte:
     for l in conteo.lineas:
         if l.variant_id and l.variant_id not in ids_alcance and l.variant is not None:
             fuera.append(_fila(l.variant, stock.get(l.variant_id, CERO), Decimal(l.qty_contada or 0),
-                              bool(l.corregida)))
+                              bool(l.corregida), bool(l.ajustada_at)))
     desconocidos = [FilaDesconocido(codigo=l.codigo or "", contado=Decimal(l.qty_contada or 0))
                     for l in conteo.lineas if l.variant_id is None]
 
@@ -318,6 +406,8 @@ def _calcular(db: Session, conteo: InventoryCount) -> Reporte:
             "fuera_de_alcance_piezas": sum((f.contado for f in fuera), CERO),
             "desconocidos": len(desconocidos),
             "corregidas": sum(1 for l in conteo.lineas if l.corregida),
+            "ajustadas": sum(1 for l in conteo.lineas if l.ajustada_at),
+            "piezas_ajustadas": CERO,
         },
         faltantes=faltantes, sobrantes=sobrantes, fuera_de_alcance=fuera, desconocidos=desconocidos,
     )
@@ -326,7 +416,8 @@ def _calcular(db: Session, conteo: InventoryCount) -> Reporte:
 def reporte(db: Session, conteo: InventoryCount) -> Reporte:
     """Abierto: se calcula en vivo. Cerrado: el JSON congelado, tal cual."""
     if conteo.status == CERRADO and conteo.resumen:
-        return Reporte.model_validate(json.loads(conteo.resumen))
+        # Los congelados antes de la fase 2 no traen `ajustes`: lista vacía.
+        return _marcar_ajustadas(Reporte.model_validate(json.loads(conteo.resumen)))
     return _calcular(db, conteo)
 
 
@@ -365,7 +456,8 @@ def a_linea_read(linea: InventoryCountLine) -> LineaRead:
         id=linea.id, variant_id=linea.variant_id, codigo=linea.codigo,
         qty_contada=Decimal(linea.qty_contada or 0), qty_sistema=linea.qty_sistema,
         producto=resumen_producto(linea.variant) if linea.variant is not None else None,
-        corregida=bool(linea.corregida), updated_at=linea.updated_at,
+        corregida=bool(linea.corregida), ajustada=bool(linea.ajustada_at),
+        updated_at=linea.updated_at,
     )
 
 
@@ -377,7 +469,8 @@ def a_conteo_read(db: Session, conteo: InventoryCount, con_lineas: bool = False)
         department_name=conteo.department.name if conteo.department else None,
         status=conteo.status, notes=conteo.notes,
         created_by=conteo.created_by.username if conteo.created_by else None,
-        created_at=conteo.created_at, closed_at=conteo.closed_at,
+        created_at=conteo.created_at, closed_at=conteo.closed_at, aplicado_at=conteo.aplicado_at,
+        aplicado_por=conteo.aplicado_por.username if conteo.aplicado_por else None,
         avance=avance(db, conteo),
     )
     if con_lineas:
