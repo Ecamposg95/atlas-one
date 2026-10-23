@@ -294,6 +294,7 @@ export function Labels() {
           departamentos={departamentos}
           marcas={marcas}
           onBuscar={() => setBusqueda(filtros.search)}
+          onLimpiar={() => { setFiltros(FILTROS_VACIOS); setBusqueda('') }}
           cargando={cargando}
         />
       </DaxCard>

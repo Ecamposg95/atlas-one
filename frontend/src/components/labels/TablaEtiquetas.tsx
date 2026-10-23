@@ -52,17 +52,23 @@ function CeldaCopias({
   )
 }
 
-function BotonPrevia({ item, activa, onVerPrevia }: { item: LabelCandidate; activa: boolean; onVerPrevia: (i: LabelCandidate) => void }) {
+/**
+ * Abre la vista previa. En la tabla lleva texto ("Previa"): el ojo solo, en
+ * gris, pasaba desapercibido y la tienda creía que la vista previa no existía.
+ * En la tarjeta del teléfono no cabe el texto: botón de icono del kit.
+ */
+function BotonPrevia({ item, activa, onVerPrevia, conTexto }: { item: LabelCandidate; activa: boolean; onVerPrevia: (i: LabelCandidate) => void; conTexto: boolean }) {
+  const base = activa ? 'dax-btn-primary' : 'dax-btn-secondary'
   return (
     <button
       type="button"
-      className={`px-2 py-1 rounded-lg text-sm ${activa ? 'text-blue-300 bg-blue-500/15' : 'text-slate-400 hover:text-white'}`}
+      className={conTexto ? `${base} text-xs whitespace-nowrap` : `dax-btn-icon ${base}`}
       disabled={!item.printable}
       onClick={(e) => { e.stopPropagation(); onVerPrevia(item) }}
       aria-label={`Ver etiqueta de ${item.sku}`}
       title="Ver cómo saldrá la etiqueta"
     >
-      <i className="fa-regular fa-eye" />
+      <i className="fa-regular fa-eye" />{conTexto && ' Previa'}
     </button>
   )
 }
@@ -123,7 +129,7 @@ export function TablaEtiquetas({
                   <p className="text-[11px] text-slate-500 font-mono">{it.sku} · {it.barcode || 'sin código'}</p>
                 </div>
                 <CeldaCopias item={it} valor={copias[it.variant_id] ?? 0} onCopias={onCopias} />
-                <BotonPrevia item={it} activa={activa === it.variant_id} onVerPrevia={onVerPrevia} />
+                <BotonPrevia item={it} activa={activa === it.variant_id} onVerPrevia={onVerPrevia} conTexto={false} />
               </div>
               <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-400">
                 {detalle(it) && <span>{detalle(it)}</span>}
@@ -206,8 +212,10 @@ export function TablaEtiquetas({
                   <span className="block text-[11px] text-slate-500">{it.stock} pzas</span>
                 </td>
                 <td className="text-center whitespace-nowrap">
-                  <CeldaCopias item={it} valor={copias[it.variant_id] ?? 0} onCopias={onCopias} />
-                  <BotonPrevia item={it} activa={activa === it.variant_id} onVerPrevia={onVerPrevia} />
+                  <span className="inline-flex items-center gap-2">
+                    <CeldaCopias item={it} valor={copias[it.variant_id] ?? 0} onCopias={onCopias} />
+                    <BotonPrevia item={it} activa={activa === it.variant_id} onVerPrevia={onVerPrevia} conTexto />
+                  </span>
                 </td>
               </tr>
             )

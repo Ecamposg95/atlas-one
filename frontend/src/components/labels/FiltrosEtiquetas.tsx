@@ -31,6 +31,12 @@ export const FILTROS_VACIOS: EstadoFiltros = {
   created_after: '',
 }
 
+/** `true` si hay algo capturado en cualquier eje: entonces vale la pena ofrecer "Limpiar". */
+export function filtrosActivos(valor: EstadoFiltros): boolean {
+  return valor.search.trim() !== '' || valor.department_id !== '' || valor.brand_id !== ''
+    || valor.gender !== '' || valor.only_with_stock || valor.created_after !== ''
+}
+
 interface Props {
   valor: EstadoFiltros
   onChange: (siguiente: EstadoFiltros) => void
@@ -38,10 +44,12 @@ interface Props {
   marcas: Brand[]
   /** Se dispara al enviar el formulario (Enter en la búsqueda) o al tocar Buscar. */
   onBuscar: () => void
+  /** Vuelve todos los ejes a `FILTROS_VACIOS` y recarga (el padre también limpia la búsqueda aplicada). */
+  onLimpiar: () => void
   cargando: boolean
 }
 
-export function FiltrosEtiquetas({ valor, onChange, departamentos, marcas, onBuscar, cargando }: Props) {
+export function FiltrosEtiquetas({ valor, onChange, departamentos, marcas, onBuscar, onLimpiar, cargando }: Props) {
   const set = <K extends keyof EstadoFiltros>(k: K, v: EstadoFiltros[K]) => onChange({ ...valor, [k]: v })
 
   return (
@@ -160,6 +168,18 @@ export function FiltrosEtiquetas({ valor, onChange, departamentos, marcas, onBus
           />
           Solo con existencia
         </label>
+
+        {filtrosActivos(valor) && (
+          <button
+            type="button"
+            className="dax-btn-ghost text-sm ml-auto"
+            onClick={onLimpiar}
+            disabled={cargando}
+            title="Quitar búsqueda, departamento, marca, género, existencia y fecha"
+          >
+            <i className="fa-solid fa-filter-circle-xmark" /> Limpiar filtros
+          </button>
+        )}
       </div>
     </form>
   )
