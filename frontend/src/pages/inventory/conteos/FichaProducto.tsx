@@ -2,47 +2,62 @@ import { useEffect, useState } from 'react'
 
 import type { ProductoResumen } from '../../../api/conteos'
 import { productsApi } from '../../../api/products'
+import { ProductImageUploader } from '../../../components/products/ProductImageUploader'
+import { DaxCard } from '../../../components/ui/DaxCard'
 import { Modal } from '../../../components/ui/Modal'
 import { toast } from '../../../store/toastStore'
-import type { Brand } from '../../../types/products'
+import type { Brand, Department, Product } from '../../../types/products'
 import { errorDetailText } from '../../../utils/errorDetail'
 import { num } from './avance'
+import { cambiosFicha, formDesde, type FormFicha } from './ficha'
+
+const FORM_VACIO: FormFicha = {
+  name: '', brand_id: '', model: '', description: '', department_id: '',
+  size: '', color: '', barcode: '', price: '', cost: '',
+}
 
 /**
- * Ficha de la pieza recién palomeada, para verificar que la descripción es la
- * correcta, y un formulario corto para corregirla ahí mismo (nombre, marca,
- * modelo, descripción: lo que se lee en la etiqueta y el ticket). Guarda con
- * `PUT /products/{id}` y avisa al conteo para marcar la fila como corregida.
+ * Ficha de la pieza que se está revisando, con todo lo que se corrige durante
+ * el conteo sin ir al catálogo: del PRODUCTO nombre, marca, modelo,
+ * descripción, departamento y foto; de ESTA TALLA talla, color, código de
+ * barras, precio y costo. Cada bloque guarda por su API (PUT producto / PUT
+ * variante) y solo viaja lo que cambió (`cambiosFicha`). Tras guardar avisa al
+ * conteo para marcar la fila como corregida y recargar.
+ *
+ * Dos montajes: `modo="modal"` (teléfono y tablet, ventana del kit) y
+ * `modo="panel"` (escritorio, tarjeta fija a la derecha de la lista, donde la
+ * pistola sigue palomeando mientras se corrige).
  */
-export function FichaProducto({ producto, open, onClose, onCorregida }: {
+export function FichaProducto({ producto, open, onClose, onCorregida, modo = 'modal', onEditando }: {
   producto: ProductoResumen | null
   open: boolean
   onClose: () => void
-  /** Se llama tras guardar; el padre marca la línea como corregida y recarga. */
+  /** Se llama tras guardar (o cambiar la foto); el padre marca la línea como corregida y recarga. */
   onCorregida: (producto: ProductoResumen) => Promise<void> | void
+  modo?: 'modal' | 'panel'
+  /** El padre no cambia de pieza mientras se edita en el panel. */
+  onEditando?: (editando: boolean) => void
 }) {
   const [editando, setEditando] = useState(false)
   const [marcas, setMarcas] = useState<Brand[]>([])
-  const [form, setForm] = useState({ name: '', brand_id: '', model: '', description: '' })
+  const [departamentos, setDepartamentos] = useState<Department[]>([])
+  const [completo, setCompleto] = useState<Product | null>(null)
+  const [original, setOriginal] = useState<FormFicha>(FORM_VACIO)
+  const [form, setForm] = useState<FormFicha>(FORM_VACIO)
   const [guardando, setGuardando] = useState(false)
 
-  useEffect(() => {
-    if (!open || !producto) return
-    setEditando(false)
-    // El nombre base del producto no viaja en el resumen (viene el nombre de venta);
-    // se lee del catálogo al abrir el editor para no adivinarlo.
-    setForm({
-      name: producto.nombre.includes(' · ') ? '' : producto.nombre,
-      brand_id: producto.marca_id ?? '', model: producto.modelo ?? '', description: producto.descripcion ?? '',
-    })
-  }, [open, producto])
+  // Al cambiar de pieza (no al recargar la misma: el objeto se renueva con la lista) se vuelve a la vista.
+  const variantId = producto?.variant_id ?? null
+  useEffect(() => { setEditando(false); setCompleto(null) }, [open, variantId])
+  useEffect(() => { onEditando?.(editando) }, [editando, onEditando])
 
   const abrirEditor = async () => {
     if (!producto) return
     try {
-      const [p, bs] = await Promise.all([productsApi.getById(producto.product_id), productsApi.getBrands()])
-      setMarcas(bs)
-      setForm({ name: p.name ?? '', brand_id: p.brand_id ?? '', model: p.model ?? '', description: p.description ?? '' })
+      const [p, bs, ds] = await Promise.all([productsApi.getById(producto.product_id), productsApi.getBrands(), productsApi.getDepartments()])
+      setMarcas(bs); setDepartamentos(ds); setCompleto(p)
+      const f = formDesde(p, producto.variant_id)
+      setOriginal(f); setForm(f)
       setEditando(true)
     } catch (e: any) {
       toast.error(errorDetailText(e?.response?.data?.detail, 'No se pudo abrir la ficha'))
@@ -50,16 +65,17 @@ export function FichaProducto({ producto, open, onClose, onCorregida }: {
   }
 
   const guardar = async () => {
-    if (!producto || !form.name.trim()) { toast.warning('El nombre no puede quedar vacío'); return }
+    if (!producto) return
+    const c = cambiosFicha(original, form)
+    if (c.error) { toast.warning(c.error); return }
+    if (!c.producto && !c.variante) { toast.info('Sin cambios'); setEditando(false); return }
     setGuardando(true)
     try {
-      await productsApi.update(producto.product_id, {
-        name: form.name.trim(), brand_id: form.brand_id || null, model: form.model.trim() || null,
-        description: form.description.trim() || null,
-      })
+      if (c.producto) await productsApi.update(producto.product_id, c.producto)
+      if (c.variante) await productsApi.updateVariant(producto.variant_id, c.variante)
       await onCorregida(producto)
       toast.success('Ficha corregida')
-      onClose()
+      if (modo === 'modal') onClose(); else setEditando(false)
     } catch (e: any) {
       toast.error(errorDetailText(e?.response?.data?.detail, 'No se pudo guardar la ficha'))
     } finally {
@@ -67,44 +83,95 @@ export function FichaProducto({ producto, open, onClose, onCorregida }: {
     }
   }
 
-  if (!producto) return null
-  return (
-    <Modal open={open} onClose={onClose} title={editando ? 'Corregir ficha' : 'Ficha de la pieza'} size="md"
-      footer={editando ? (<>
-        <button type="button" onClick={() => setEditando(false)} className="dax-btn-secondary flex-1">Cancelar</button>
-        <button type="button" onClick={guardar} disabled={guardando} className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
-          {guardando ? <i className="fa-solid fa-spinner fa-spin" /> : 'Guardar'}
-        </button>
-      </>) : (<>
-        <button type="button" onClick={onClose} className="dax-btn-secondary flex-1">Está bien</button>
-        <button type="button" onClick={abrirEditor} className="dax-btn-primary flex-1 justify-center"><i className="fa-solid fa-pen" /> Corregir</button>
-      </>)}>
-      {!editando ? (
-        <div className="flex gap-3">
-          {producto.foto && <img src={producto.foto} alt="" className="h-24 w-24 rounded object-cover" />}
-          <dl className="text-sm space-y-1 flex-1">
-            <div><dt className="text-xs text-slate-400">Nombre de venta</dt><dd className="text-white font-bold">{producto.nombre}</dd></div>
-            <div><dt className="text-xs text-slate-400">Marca · modelo</dt><dd className="text-slate-200">{[producto.marca, producto.modelo].filter(Boolean).join(' · ') || '—'}</dd></div>
-            <div><dt className="text-xs text-slate-400">Talla · color</dt><dd className="text-slate-200">{[producto.talla, producto.color].filter(Boolean).join(' · ') || '—'}</dd></div>
-            <div><dt className="text-xs text-slate-400">Descripción</dt><dd className="text-slate-200 whitespace-pre-wrap">{producto.descripcion || '—'}</dd></div>
-            <div><dt className="text-xs text-slate-400">SKU · código · precio</dt><dd className="text-slate-200">{producto.sku} · {producto.barcode ?? 'sin código'} · ${num(producto.precio).toLocaleString('es-MX')}</dd></div>
-          </dl>
-        </div>
+  const fotoCambiada = async (p: Product) => { setCompleto(p); if (producto) await onCorregida(producto) }
+
+  if (!producto || !open) return null
+
+  const campo = (etiqueta: string, k: keyof FormFicha, extra?: { tipo?: string; filas?: number }) => (
+    <label className="block"><span className="text-xs text-slate-400">{etiqueta}</span>
+      {extra?.filas ? (
+        <textarea className="dax-input w-full" rows={extra.filas} value={form[k]} onChange={(e) => setForm({ ...form, [k]: e.target.value })} />
       ) : (
-        <div className="space-y-3">
-          <label className="block"><span className="text-xs text-slate-400">Nombre</span>
-            <input className="dax-input w-full" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
+        <input className="dax-input w-full" type={extra?.tipo ?? 'text'} inputMode={extra?.tipo === 'number' ? 'decimal' : undefined}
+          min={extra?.tipo === 'number' ? 0 : undefined} step={extra?.tipo === 'number' ? '0.01' : undefined}
+          value={form[k]} onChange={(e) => setForm({ ...form, [k]: e.target.value })} />
+      )}
+    </label>
+  )
+
+  const vista = (
+    <div className="flex gap-3">
+      {producto.foto && <img src={producto.foto} alt="" className="h-24 w-24 rounded object-cover" />}
+      <dl className="text-sm space-y-1 flex-1 min-w-0">
+        <div><dt className="text-xs text-slate-400">Nombre de venta</dt><dd className="text-white font-bold">{producto.nombre}</dd></div>
+        <div><dt className="text-xs text-slate-400">Marca · modelo</dt><dd className="text-slate-200">{[producto.marca, producto.modelo].filter(Boolean).join(' · ') || '—'}</dd></div>
+        <div><dt className="text-xs text-slate-400">Talla · color</dt><dd className="text-slate-200">{[producto.talla, producto.color].filter(Boolean).join(' · ') || '—'}</dd></div>
+        <div><dt className="text-xs text-slate-400">Departamento</dt><dd className="text-slate-200">{producto.departamento || '—'}</dd></div>
+        <div><dt className="text-xs text-slate-400">Descripción</dt><dd className="text-slate-200 whitespace-pre-wrap">{producto.descripcion || '—'}</dd></div>
+        <div><dt className="text-xs text-slate-400">SKU · código</dt><dd className="text-slate-200 font-mono text-xs">{producto.sku} · {producto.barcode ?? 'sin código'}</dd></div>
+        <div><dt className="text-xs text-slate-400">Precio</dt><dd className="text-slate-200">${num(producto.precio).toLocaleString('es-MX')}</dd></div>
+      </dl>
+    </div>
+  )
+
+  const editor = (
+    <div className="space-y-4">
+      <section className="space-y-2">
+        <h3 className="text-xs font-bold uppercase text-slate-400">Producto</h3>
+        {campo('Nombre', 'name')}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <label className="block"><span className="text-xs text-slate-400">Marca</span>
             <select className="dax-input w-full" value={form.brand_id} onChange={(e) => setForm({ ...form, brand_id: e.target.value })}>
               <option value="">Sin marca</option>
               {marcas.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select></label>
-          <label className="block"><span className="text-xs text-slate-400">Modelo</span>
-            <input className="dax-input w-full" value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} /></label>
-          <label className="block"><span className="text-xs text-slate-400">Descripción</span>
-            <textarea className="dax-input w-full" rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></label>
+          {campo('Modelo', 'model')}
         </div>
-      )}
+        <label className="block"><span className="text-xs text-slate-400">Departamento</span>
+          <select className="dax-input w-full" value={form.department_id} onChange={(e) => setForm({ ...form, department_id: e.target.value })}>
+            <option value="">Sin departamento</option>
+            {departamentos.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select></label>
+        {campo('Descripción', 'description', { filas: 3 })}
+        {completo && <ProductImageUploader product={completo} onUpdated={(p) => void fotoCambiada(p)} />}
+      </section>
+      <section className="space-y-2">
+        <h3 className="text-xs font-bold uppercase text-slate-400">Esta talla · {producto.sku}</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {campo('Talla', 'size')}
+          {campo('Color', 'color')}
+        </div>
+        {campo('Código de barras', 'barcode')}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {campo('Precio', 'price', { tipo: 'number' })}
+          {campo('Costo', 'cost', { tipo: 'number' })}
+        </div>
+      </section>
+    </div>
+  )
+
+  const pie = editando ? (<>
+    <button type="button" onClick={() => setEditando(false)} className="dax-btn-secondary flex-1">Cancelar</button>
+    <button type="button" onClick={guardar} disabled={guardando} className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
+      {guardando ? <i className="fa-solid fa-spinner fa-spin" /> : 'Guardar'}
+    </button>
+  </>) : (<>
+    <button type="button" onClick={onClose} className="dax-btn-secondary flex-1">{modo === 'modal' ? 'Está bien' : 'Cerrar'}</button>
+    <button type="button" onClick={abrirEditor} className="dax-btn-primary flex-1 justify-center"><i className="fa-solid fa-pen" /> Corregir</button>
+  </>)
+
+  if (modo === 'panel') {
+    return (
+      <DaxCard>
+        <h2 className="text-sm font-bold text-white mb-2">{editando ? 'Corregir ficha' : 'Ficha de la pieza'}</h2>
+        {editando ? editor : vista}
+        <div className="mt-3 flex gap-2">{pie}</div>
+      </DaxCard>
+    )
+  }
+  return (
+    <Modal open={open} onClose={onClose} title={editando ? 'Corregir ficha' : 'Ficha de la pieza'} size="md" footer={pie}>
+      {editando ? editor : vista}
     </Modal>
   )
 }
