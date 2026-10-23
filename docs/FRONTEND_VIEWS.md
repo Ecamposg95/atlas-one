@@ -308,14 +308,14 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 ### `/inventory/conteos/:id` — Sesión de conteo 📱
 - **Archivo:** `pages/inventory/conteos/ConteoSesion.tsx`
 - **Propósito:** Sesión "lista primero": el departamento completo aparece con su paloma (pendiente / revisado / con diferencia) y cada lectura palomea la fila, la resalta, la trae a la vista y muestra la tarjeta de la pieza con "Ver ficha" y +1. La pistola USB teclea el código + Enter en el campo siempre enfocado (se reenfoca tras cada lectura y al cerrar modales; un `keydown` global devuelve el foco al campo si quedó en un botón; las lecturas rápidas se encolan en orden), así que no necesita "Siguiente"; la cámara es opcional ("Usar cámara") y solo ella se pausa tras cada lectura. También buscador por nombre y "ligar código" para desconocidos. Cantidades editables por fila (PATCH; 0 borra). La lista se relee del servidor: recargar o cambiar de dispositivo no pierde nada.
-- **Datos/API:** `conteosApi.ver/lista/escanear/agregarLinea/patchLinea/borrarLinea/cerrar`; `productsApi` para el buscador y para ligar un código a una variante.
+- **Datos/API:** `conteosApi.ver/lista/escanear/agregarLinea/patchLinea/borrarLinea/ajustarLinea/cerrar`; `productsApi` para el buscador y para ligar un código a una variante.
 - **Componentes clave:** `useLectorCodigos.ts` (**reutiliza** `pages/scanner/barcodeReader.ts`: detector nativo con respaldo ZXing, mismo módulo que usa `/scanner`), `BuscadorVariante.tsx`, `ListaDepartamento.tsx` (filas/tarjetas con palomas), `FichaProducto.tsx` (ver y corregir la ficha; marca `corregida`), helpers `avance.ts`, `lista.ts` y `sesion.ts`.
 - **Notas:** Un código con varias variantes devuelve `ambiguo` y se elige de la lista; una pieza fuera del departamento se cuenta pero marca `fuera_de_alcance`. Cerrar congela el conteo y lleva al reporte.
 
 ### `/inventory/conteos/:id/reporte` — Reporte del conteo 📱
 - **Archivo:** `pages/inventory/conteos/ConteoReporte.tsx`
-- **Propósito:** Reporte en pantalla: totales, faltantes, sobrantes, fuera de departamento y códigos desconocidos. Abierto se recalcula en vivo; cerrado muestra el JSON congelado. No ajusta existencias. Marca con un lápiz las tallas cuya ficha se corrigió y totaliza "Fichas corregidas".
-- **Datos/API:** `conteosApi.reporte` (`GET /api/inventory/counts/{id}/report`).
+- **Propósito:** Reporte en pantalla: totales, faltantes, sobrantes, fuera de departamento y códigos desconocidos. Abierto se recalcula en vivo; cerrado muestra el JSON congelado. Cerrado, cada fila de faltantes/sobrantes/fuera de departamento lleva una casilla (marcadas de origen las escaneadas con diferencia y los sobrantes; las ya ajustadas, deshabilitadas) y una barra `sticky bottom-0` "Ajustar existencias · N tallas · −X / +Y piezas" con confirmación; tras aplicar muestra "Ajustes aplicados el … · …", la tarjeta "Ajustadas" y la nota "recortado a 0". En la sesión de conteo, "Ajustar ahora" ajusta una fila en piso. Marca con un lápiz las tallas cuya ficha se corrigió y totaliza "Fichas corregidas".
+- **Datos/API:** `conteosApi.reporte` (`GET /api/inventory/counts/{id}/report`), `conteosApi.aplicar` (`POST .../apply`).
 
 ### `/logistics` — Logística / transferencias 📱
 - **Archivo:** `pages/inventory/Logistics.tsx` (275 líneas)

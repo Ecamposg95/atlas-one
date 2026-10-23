@@ -34,6 +34,7 @@ class LineaRead(BaseModel):
     qty_sistema: Optional[Cant] = None
     producto: Optional[ProductoResumen] = None
     corregida: bool = False
+    ajustada: bool = False
     updated_at: Optional[datetime] = None
 
 
@@ -62,6 +63,8 @@ class ConteoRead(BaseModel):
     created_by: Optional[str] = None
     created_at: Optional[datetime] = None
     closed_at: Optional[datetime] = None
+    aplicado_at: Optional[datetime] = None
+    aplicado_por: Optional[str] = None
     avance: Avance
 
 
@@ -111,11 +114,32 @@ class FilaReporte(BaseModel):
     contado: Cant
     diferencia: Cant
     corregida: bool = False
+    ajustada: bool = False
 
 
 class FilaDesconocido(BaseModel):
     codigo: str
     contado: Cant
+
+
+class AjusteAplicado(BaseModel):
+    variant_id: str
+    delta: Cant
+    qty_before: Cant
+    qty_after: Cant
+    movimiento_id: Optional[int] = None
+    recortado: bool = False      # la salida se limitó para no dejar existencia negativa
+    en: datetime
+
+
+class AplicarRequest(BaseModel):
+    variant_ids: List[str] = Field(min_length=1)
+
+
+class AjusteLineaResult(BaseModel):
+    linea: LineaRead
+    qty_sistema: Cant
+    movimiento_id: int
 
 
 class Reporte(BaseModel):
@@ -127,6 +151,8 @@ class Reporte(BaseModel):
     sobrantes: List[FilaReporte] = []
     fuera_de_alcance: List[FilaReporte] = []
     desconocidos: List[FilaDesconocido] = []
+    ajustes: List[AjusteAplicado] = []
+    aplicado_en: Optional[datetime] = None
 
 
 EstadoFila = Literal["pendiente", "revisado", "diferencia"]
@@ -138,6 +164,7 @@ class FilaLista(BaseModel):
     contado: Cant
     estado: EstadoFila
     corregida: bool = False
+    ajustada: bool = False
     line_id: Optional[int] = None
 
 

@@ -29,3 +29,9 @@ export function iconoEstado(estado: EstadoFila): { icono: string; clase: string;
   if (estado === 'diferencia') return { icono: 'fa-triangle-exclamation', clase: 'text-amber-400', texto: 'Con diferencia' }
   return { icono: 'fa-circle', clase: 'text-slate-500', texto: 'Pendiente' }
 }
+
+/** "sistema 3 → 2 (−1)": lo que hará (o hizo) el ajuste de existencia. */
+export function textoAjuste(sistema: number, contado: number): string {
+  const d = contado - sistema
+  return `sistema ${sistema} → ${contado} (${d > 0 ? '+' : '−'}${Math.abs(d)})`
+}

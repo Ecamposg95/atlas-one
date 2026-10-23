@@ -15,6 +15,7 @@ import { num, porcentajeAvance } from './avance'
 import { BuscadorVariante } from './BuscadorVariante'
 import { FichaProducto } from './FichaProducto'
 import { ListaDepartamento } from './ListaDepartamento'
+import { textoAjuste } from './lista'
 import { crearCola, debeRedirigirTecla, vibrar } from './sesion'
 import { useLectorCodigos } from './useLectorCodigos'
 
@@ -161,6 +162,25 @@ export function ConteoSesion() {
     await recargar()
   }
 
+  const ajustar = async (lineId: number, sistema: number, contado: number) => {
+    const ok = await confirm({
+      title: 'Ajustar existencia',
+      message: `${textoAjuste(sistema, contado)}. Queda en el kardex como "Conteo".`,
+      confirmText: 'Ajustar', variant: 'warning',
+    })
+    if (!ok) { enfocarEntrada(); return }
+    try {
+      const r = await conteosApi.ajustarLinea(conteoId, lineId)
+      setUltimo((u) => u && { ...u, qty_sistema: r.qty_sistema })
+      vibrar('ok')
+      toast.success('Existencia ajustada')
+      await recargar()
+    } catch (e: any) {
+      if (e?.response?.status === 409) { toast.info('Ya cuadra'); await recargar() /* la lista trae el sistema real */ }
+      else toast.error(errorDetailText(e?.response?.data?.detail, 'No se pudo ajustar'))
+    } finally { enfocarEntrada() }
+  }
+
   const cerrar = async () => {
     if (!conteo) return
     const pendientes = lista?.totales.pendientes ?? 0
@@ -178,10 +198,13 @@ export function ConteoSesion() {
   if (conteo.status === 'CERRADO') { navigate(`/inventory/conteos/${conteoId}/reporte`, { replace: true }); return null }
 
   const fresco = (p: ProductoResumen | null) => (p ? lista.filas.find((f) => f.producto.variant_id === p.variant_id)?.producto ?? p : p)
-  const ultimoVista = ultimo && ultimo.producto ? { ...ultimo, producto: fresco(ultimo.producto) } : ultimo
+  const filaUltimo = ultimo?.producto ? lista.filas.find((f) => f.producto.variant_id === ultimo.producto!.variant_id) : undefined
+  const ultimoVista = ultimo && ultimo.producto
+    ? { ...ultimo, producto: fresco(ultimo.producto), qty_sistema: filaUltimo ? filaUltimo.sistema : ultimo.qty_sistema }
+    : ultimo
   const fichaVista = fresco(ficha)
   const pct = porcentajeAvance(lista.totales.revisados + lista.totales.con_diferencia, lista.totales.total)
-  const ultimaLinea = ultimo?.linea ?? conteo.lineas.find((l) => l.variant_id === ultimo?.producto?.variant_id) ?? null
+  const ultimaLinea = (ultimo?.producto ? conteo.lineas.find((l) => l.variant_id === ultimo.producto!.variant_id) : undefined) ?? ultimo?.linea ?? null
   const desconocidos = conteo.lineas.filter((l) => l.variant_id === null)
   const enLista = new Set(lista.filas.map((f) => f.producto.variant_id))
   const otras = conteo.lineas.filter((l) => l.variant_id !== null && !enLista.has(l.variant_id))
@@ -258,6 +281,11 @@ export function ConteoSesion() {
           <div className="mt-3 flex flex-wrap gap-2">
             {verCamara && <button onClick={siguiente} className="dax-btn-primary flex-1 justify-center"><i className="fa-solid fa-forward" /> Siguiente</button>}
             {ultimoVista.resultado === 'contado' && <button onClick={masUno} className="dax-btn-secondary flex-1 justify-center">+1 igual</button>}
+            {ultimoVista.resultado === 'contado' && ultimaLinea && ultimoVista.qty_sistema != null && num(ultimoVista.qty_sistema) !== num(ultimaLinea.qty_contada) && (
+              <button onClick={() => void ajustar(ultimaLinea.id, num(ultimoVista.qty_sistema), num(ultimaLinea.qty_contada))} className="dax-btn-secondary flex-1 justify-center">
+                Ajustar ahora · {textoAjuste(num(ultimoVista.qty_sistema), num(ultimaLinea.qty_contada))}
+              </button>
+            )}
             {ultimoVista.resultado === 'contado' && ultimoVista.producto && <button onClick={() => setFicha(ultimoVista.producto)} className="dax-btn-secondary flex-1 justify-center"><i className="fa-solid fa-id-card" /> Ver ficha</button>}
           </div>
         </DaxCard>
@@ -267,7 +295,8 @@ export function ConteoSesion() {
         <h2 className="text-sm font-bold text-white mb-2">Lista del departamento</h2>
         <ListaDepartamento filas={lista.filas} resaltada={resaltada}
           onCantidad={(f: FilaLista, qty: number) => { if (f.line_id !== null) void fijarPorId(f.line_id, qty) }}
-          onFicha={(f: FilaLista) => setFicha(f.producto)} />
+          onFicha={(f: FilaLista) => setFicha(f.producto)}
+          onAjustar={(f: FilaLista) => { if (f.line_id !== null) void ajustar(f.line_id, num(f.sistema), num(f.contado)) }} />
       </DaxCard>
 
       {(desconocidos.length > 0 || otras.length > 0) && (

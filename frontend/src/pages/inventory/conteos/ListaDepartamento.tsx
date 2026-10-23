@@ -13,12 +13,13 @@ import { contarPorEstado, filtrarLista, iconoEstado, type FiltroLista } from './
  * se filtra y se deja corregir la cantidad de las filas ya escaneadas. La
  * fila recién leída se resalta y se trae a la vista.
  */
-export function ListaDepartamento({ filas, resaltada, onCantidad, onFicha }: {
+export function ListaDepartamento({ filas, resaltada, onCantidad, onFicha, onAjustar }: {
   filas: FilaLista[]
   /** variant_id de la última lectura, para resaltar y hacer scroll. */
   resaltada: string | null
   onCantidad: (fila: FilaLista, qty: number) => void
   onFicha: (fila: FilaLista) => void
+  onAjustar: (fila: FilaLista) => void
 }) {
   const esTelefono = useEsTelefono()
   const [filtro, setFiltro] = useState<FiltroLista>('pendientes')
@@ -52,8 +53,17 @@ export function ListaDepartamento({ filas, resaltada, onCantidad, onFicha }: {
 
   const estadoDe = (f: FilaLista) => {
     const e = iconoEstado(f.estado)
-    return <span className={e.clase} title={e.texto}><i className={`fa-solid ${e.icono}`} /> {f.corregida && <i className="fa-solid fa-pen text-indigo-400" title="Ficha corregida" />}</span>
+    return <span className={e.clase} title={e.texto}><i className={`fa-solid ${e.icono}`} /> {f.corregida && <i className="fa-solid fa-pen text-indigo-400" title="Ficha corregida" />} {f.ajustada && <i className="fa-solid fa-arrows-rotate text-indigo-400" title="Existencia ajustada al conteo" />}</span>
   }
+
+  const botones = (f: FilaLista) => (
+    <>
+      {f.estado === 'diferencia' && f.line_id !== null && (
+        <button type="button" className="dax-btn-secondary text-xs" onClick={() => onAjustar(f)}>Ajustar</button>
+      )}
+      <button type="button" className="dax-btn-ghost text-xs" onClick={() => onFicha(f)}><i className="fa-solid fa-id-card" /> Ficha</button>
+    </>
+  )
 
   return (
     <div className="space-y-3">
@@ -74,7 +84,7 @@ export function ListaDepartamento({ filas, resaltada, onCantidad, onFicha }: {
                 subtitulo={[f.producto.sku, f.producto.talla, f.producto.color].filter(Boolean).join(' · ')}
                 estado={estadoDe(f)}
                 datos={[{ etiqueta: 'Sistema', valor: num(f.sistema) }, { etiqueta: 'Contado', valor: cantidad(f) }]}
-                acciones={<button type="button" className="dax-btn-ghost text-xs" onClick={() => onFicha(f)}><i className="fa-solid fa-id-card" /> Ficha</button>}
+                acciones={botones(f)}
               />
             </div>
           ))}
@@ -94,7 +104,7 @@ export function ListaDepartamento({ filas, resaltada, onCantidad, onFicha }: {
                 <td className="p-2 text-slate-400">{[f.producto.sku, f.producto.talla].filter(Boolean).join(' · ')}</td>
                 <td className="p-2 text-right text-slate-300">{num(f.sistema)}</td>
                 <td className="p-2 text-right">{cantidad(f)}</td>
-                <td className="p-2 text-right"><button type="button" className="dax-btn-ghost text-xs" onClick={() => onFicha(f)}><i className="fa-solid fa-id-card" /> Ficha</button></td>
+                <td className="p-2 text-right whitespace-nowrap">{botones(f)}</td>
               </tr>
             ))}
           </tbody>

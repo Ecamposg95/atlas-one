@@ -20,7 +20,7 @@ Decisiones tomadas con el usuario el 2026-10-22:
 | Pregunta | Decisión |
 |---|---|
 | Modo | Inventario físico completo: lo que el sistema tiene y nadie escaneó es faltante |
-| Discrepancias | **Solo se reportan**; nada toca el kardex (aplicar ajustes es fase 2) |
+| Discrepancias | **Solo se reportan** en fase 1; los ajustes al kardex se aplican en fase 2 (§11) |
 | Sesión | Una por departamento, guardada en el servidor; se puede seguir otro día o en otro teléfono |
 | Escaneo | Cada lectura suma 1 pieza; la cantidad se puede corregir en la lista |
 | Pieza sin código legible | Buscar por nombre/SKU y marcarla contada; o ligarle el código ahí mismo (**reemplaza** el interno, como hace el Escáner) |
@@ -204,11 +204,12 @@ conteo de otra org 404; CAJERO 403. vitest: los tres helpers de `avance.ts` y la
 `overlaysFueraDelKit.test.ts`/`botonesDelKit.test.ts` (nada nuevo fuera del kit). `tsc` y
 `vite build`; las rutas son lazy, el presupuesto de la ruta crítica no cambia.
 
-## 9. Fuera de alcance (fase 2, no se diseña aquí)
+## 9. Fuera de alcance
 
-Aplicar los ajustes del reporte al kardex con aprobación; exportar a Excel/PDF; varias personas
+Exportar a Excel/PDF; varias personas
 en la misma sesión; cola sin red; cajeras/gerentes contando; código alterno de marca sin
 reemplazar el interno; corregir la paginación sin `ORDER BY` de `read_products`.
+Aplicar los ajustes al kardex ya no está fuera de alcance: ver §11.
 
 ## 10. Diagnóstico de Eleven y limpieza
 
@@ -218,3 +219,20 @@ departamento, variantes vendidas que hoy están en cero, departamentos repetidos
 (Hoddies/Hoodies/Sudaderas) y la mayoría de las variantes sin costo. Ninguna de esas limpiezas
 se hace antes del conteo: el primer reporte por departamento dice qué existe de verdad y con eso
 se decide archivar, fusionar y recostear.
+
+## 11. Fase 2 (2026-10-22, tras la primera prueba en tienda): ajustar la existencia al conteo
+
+El dueño probó el conteo y pidió **que el inventario se ajuste**. Decisiones confirmadas:
+
+| Pregunta | Decisión |
+|---|---|
+| Cuándo | **Las dos vías**: "Ajustar ahora" por fila mientras se cuenta (conteo abierto) y un botón global "Ajustar existencias al conteo" sobre el reporte cerrado, con filas destildables |
+| Tallas con existencia nunca escaneadas | **El dueño elige en el reporte**: vienen destildadas; si las marca bajan a 0 |
+
+Reglas:
+
+- Todo ajuste pasa por el **mismo kardex** que `POST /api/inventory/adjust` (`InventoryMovement` ADJUSTMENT_IN/OUT con `reference="Conteo"` y `notes="Conteo #<id> · <departamento>"`): la lógica de ese handler se extrae a `app.routers.inventory.aplicar_ajuste(...)` y el handler la reutiliza, sin cambiar su comportamiento.
+- **Ajuste en piso** (`POST /{id}/lines/{line_id}/ajustar`, conteo ABIERTO): `delta = qty_contada − existencia actual` de la sucursal; si es 0, 409 "ya cuadra"; la línea guarda `ajustada_at`. Tras aplicar, la fila queda `revisado` (sistema == contado).
+- **Ajuste al cerrar** (`POST /{id}/apply` con `{variant_ids: [...]}`, conteo CERRADO): se aplica la **diferencia congelada** (`contado − sistema` del `resumen`), no el valor absoluto, para que una venta posterior al cierre no se descuente dos veces. Si la existencia actual + delta quedaría negativa, se recorta a 0 y se anota. Cada fila aplicada queda en `resumen.ajustes` (`variant_id, delta, qty_before, qty_after, movimiento_id, en`) y el conteo guarda `aplicado_at`/`aplicado_por_user_id` la primera vez. Idempotente: una fila ya aplicada se omite; selección vacía = 422. Solo filas de faltantes, sobrantes y fuera de departamento (los desconocidos no tienen variante).
+- Reporte: cada fila lleva `ajustada: bool`; totales `ajustadas` y `piezas_ajustadas`. Pantalla: casillas por fila; por defecto marcadas las filas **escaneadas** con diferencia (faltantes parciales y sobrantes), destildadas las nunca escaneadas (`contado = 0`) y las de fuera de departamento; botón "Ajustar existencias (N tallas, −X / +Y piezas)" con `ConfirmDialog`; tras aplicar, las filas muestran "ajustada" y la cabecera "Ajustes aplicados el … por …".
+- Permisos: ADMINISTRADOR/DUEÑO, como el resto del módulo.

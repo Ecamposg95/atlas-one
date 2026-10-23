@@ -4,7 +4,8 @@ MOONSHOT_ENGINE: Inventory Engine
 DOMAIN: Supply Chain / Logistics
 STATUS: Core
 """
-from typing import List  # <--- ESTA ERA LA LÍNEA QUE FALTABA
+from decimal import Decimal
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.core.database import get_db
@@ -16,6 +17,53 @@ from app.core.tenant_context import get_current_active_organization
 from app.crud.products import get_variant_if_visible, _is_admin, _role_str
 
 router = APIRouter()
+
+def aplicar_ajuste(db: Session, *, org_id: int, branch_id: int, variant_id: str,
+                   user_id: Optional[int], quantity: Decimal, reason: str,
+                   notes: Optional[str] = None, commit: bool = True,
+                   recortar_a_cero: bool = False) -> Optional[InventoryMovement]:
+    """Entrada (+) o salida (−) manual con su renglón de kardex. Es la misma
+    lógica de `POST /inventory/adjust`; la comparte el conteo físico
+    (app/modules/conteos) para que sus ajustes se vean en el mismo kardex.
+    400 si la salida dejaría la existencia negativa.
+
+    `commit=False` solo hace flush: el llamador cierra la transacción (el conteo
+    aplica varias filas de forma atómica). `recortar_a_cero=True` limita la salida
+    a la existencia que haya BAJO EL CANDADO en vez de dar 400; si el recorte
+    deja 0 no crea movimiento y devuelve None."""
+    stock_record = db.query(StockOnHand).filter_by(
+        branch_id=branch_id, variant_id=variant_id, organization_id=org_id,
+    ).with_for_update().first()
+    qty_before = stock_record.qty_on_hand if stock_record else Decimal("0")
+    if quantity < 0 and recortar_a_cero and qty_before + quantity < 0:
+        quantity = -qty_before
+        if quantity == 0:
+            return None
+    if quantity > 0:
+        mov_type = MovementType.ADJUSTMENT_IN
+    else:
+        mov_type = MovementType.ADJUSTMENT_OUT
+        if qty_before + quantity < 0:
+            raise HTTPException(400, "Stock insuficiente para realizar este ajuste.")
+    if not stock_record:
+        stock_record = StockOnHand(branch_id=branch_id, variant_id=variant_id,
+                                   qty_on_hand=0, organization_id=org_id)
+        db.add(stock_record)
+    stock_record.qty_on_hand += quantity
+    movement = InventoryMovement(
+        branch_id=branch_id, variant_id=variant_id, user_id=user_id,
+        movement_type=mov_type, qty_change=quantity, qty_before=qty_before,
+        qty_after=stock_record.qty_on_hand, reference=reason, notes=notes,
+        organization_id=org_id,
+    )
+    db.add(movement)
+    if commit:
+        db.commit()
+        db.refresh(movement)
+    else:
+        db.flush()
+    return movement
+
 
 @router.post("/adjust", response_model=MovementRead)
 def create_adjustment(
@@ -49,51 +97,10 @@ def create_adjustment(
             raise HTTPException(403, "Tu usuario no tiene sucursal asignada")
         target_branch_id = current_user.branch_id
     
-    stock_record = db.query(StockOnHand).filter_by(
-        branch_id=target_branch_id,
-        variant_id=adj.variant_id,
-        organization_id=org_id
-    ).with_for_update().first()
-
-    qty_before = stock_record.qty_on_hand if stock_record else 0
-    
-    # 3. Determinar Tipo de Movimiento
-    if adj.quantity > 0:
-        mov_type = MovementType.ADJUSTMENT_IN
-    else:
-        mov_type = MovementType.ADJUSTMENT_OUT
-        # Validar stock negativo si es salida
-        if qty_before + adj.quantity < 0:
-            raise HTTPException(400, "Stock insuficiente para realizar este ajuste.")
-
-    # 4. Actualizar Stock
-    if not stock_record:
-        stock_record = StockOnHand(
-            branch_id=target_branch_id,
-            variant_id=adj.variant_id,
-            qty_on_hand=0,
-            organization_id=org_id
-        )
-        db.add(stock_record)
-    
-    stock_record.qty_on_hand += adj.quantity
-
-    # 5. Guardar Kardex
-    movement = InventoryMovement(
-        branch_id=target_branch_id,
-        variant_id=adj.variant_id,
-        user_id=current_user.id,
-        movement_type=mov_type,
-        qty_change=adj.quantity,
-        qty_before=qty_before,
-        qty_after=stock_record.qty_on_hand,
-        reference=adj.reason,
-        notes=adj.notes,
-        organization_id=org_id
+    movement = aplicar_ajuste(
+        db, org_id=org_id, branch_id=target_branch_id, variant_id=adj.variant_id,
+        user_id=current_user.id, quantity=adj.quantity, reason=adj.reason, notes=adj.notes,
     )
-    db.add(movement)
-    db.commit()
-    db.refresh(movement)
 
     # Construir respuesta manual para incluir nombre usuario
     return MovementRead(

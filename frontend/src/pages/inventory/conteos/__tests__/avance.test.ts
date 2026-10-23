@@ -1,7 +1,7 @@
 // frontend/src/pages/inventory/conteos/__tests__/avance.test.ts
 import { describe, it, expect } from 'vitest'
 
-import { num, porcentajeAvance, seccionesReporte, textoDiferencia } from '../avance'
+import { num, porcentajeAvance, resumenSeleccion, seccionesReporte, seleccionInicial, seleccionTrasAplicar, textoDiferencia } from '../avance'
 import type { Reporte } from '../../../../api/conteos'
 
 describe('porcentajeAvance', () => {
@@ -53,5 +53,31 @@ describe('num', () => {
     expect(num('3.00')).toBe(3)
     expect(num(null)).toBe(0)
     expect(num('x')).toBe(0)
+  })
+})
+
+describe('seleccionInicial', () => {
+  const fila = (sku: string, sistema: string, contado: string, ajustada = false) => ({
+    variant_id: sku, sku, nombre: sku, marca: null, talla: null, color: null, departamento: null,
+    sistema, contado, diferencia: String(Number(contado) - Number(sistema)), corregida: false, ajustada,
+  })
+  const rep = {
+    estado: 'CERRADO', generado_en: '', alcance: { sucursal: null, departamento: null }, totales: {},
+    faltantes: [fila('P', '3', '1'), fila('N', '2', '0'), fila('Y', '2', '1', true)],
+    sobrantes: [fila('S', '0', '1')], fuera_de_alcance: [fila('F', '1', '2')], desconocidos: [], ajustes: [], aplicado_en: null,
+  } as never
+  it('marca escaneadas con diferencia y sobrantes; deja fuera no vistas, fuera de depto y ya ajustadas', () => {
+    expect([...seleccionInicial(rep)].sort()).toEqual(['P', 'S'])
+  })
+  it('resume la selección en tallas y piezas', () => {
+    expect(resumenSeleccion(rep, new Set(['P', 'S', 'N']))).toEqual({ tallas: 3, menos: 4, mas: 1 })
+  })
+})
+
+describe('seleccionTrasAplicar', () => {
+  const f = (sku: string, ajustada: boolean) => ({ variant_id: sku, sku, nombre: sku, marca: null, talla: null, color: null, departamento: null, sistema: '3', contado: '1', diferencia: '-2', corregida: false, ajustada })
+  it('quita las ya ajustadas y no re-marca las destildadas', () => {
+    const r = { faltantes: [f('P', true), f('N', false), f('X', false)], sobrantes: [], fuera_de_alcance: [] } as never
+    expect([...seleccionTrasAplicar(new Set(['P', 'N']), r)]).toEqual(['N'])
   })
 })

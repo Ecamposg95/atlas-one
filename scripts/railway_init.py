@@ -169,6 +169,14 @@ COLUMN_MIGRATIONS = [
     # Atribucion por pago (2026-09-02) — ver los bloques de arriba.
     *MIGRACIONES_PAYMENTS_CASH_SESSION,
     *MIGRACIONES_CASH_MOVEMENT_AUTHOR,
+    # Conteo fisico, fase 2 (ajustar la existencia al conteo). Las tablas ya
+    # existen en produccion (fase 1), por eso hace falta el ALTER.
+    ("inventory_count_lines", "ajustada_at",
+     "ALTER TABLE inventory_count_lines ADD COLUMN IF NOT EXISTS ajustada_at TIMESTAMPTZ;"),
+    ("inventory_counts", "aplicado_at",
+     "ALTER TABLE inventory_counts ADD COLUMN IF NOT EXISTS aplicado_at TIMESTAMPTZ;"),
+    ("inventory_counts", "aplicado_por_user_id",
+     "ALTER TABLE inventory_counts ADD COLUMN IF NOT EXISTS aplicado_por_user_id INTEGER REFERENCES users(id);"),
 ]
 
 INDEX_MIGRATIONS = [

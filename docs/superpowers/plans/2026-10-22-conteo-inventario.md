@@ -3364,3 +3364,498 @@ Expected: verde; presupuesto bajo el tope (las pantallas siguen siendo lazy).
 git add frontend/src/pages/inventory/conteos docs
 git commit -m "feat(conteos): sesión lista-primero con pistola, ficha corregible y reporte con fichas corregidas"
 ```
+
+---
+
+## Fase 2 (2026-10-22): ajustar la existencia al conteo (spec §11)
+
+Rama `feat/conteo-ajustes` desde `main` c696739 (la fase 1 ya está en producción).
+
+### Task 12: Ajustes en el kardex desde el conteo (backend)
+
+**Files:**
+- Modify: `app/routers/inventory.py` (extraer `aplicar_ajuste`), `app/modules/conteos/models.py`, `app/modules/conteos/schemas.py`, `app/modules/conteos/services.py`, `app/modules/conteos/router.py`
+- Test: `tests/test_conteos_ajustes.py`
+
+**Interfaces:**
+- Produces: `aplicar_ajuste(db, *, org_id, branch_id, variant_id, user_id, quantity: Decimal, reason: str, notes: str | None) -> InventoryMovement` en `app/routers/inventory.py` (lanza `HTTPException(400)` si dejaría stock negativo; crea `StockOnHand` si no existe; hace `commit`); columnas `InventoryCountLine.ajustada_at`, `InventoryCount.aplicado_at`, `InventoryCount.aplicado_por_user_id`; schemas `AjusteAplicado`, `AplicarRequest`, `AjusteLineaResult`; `FilaReporte.ajustada`, `FilaLista.ajustada`, `LineaRead.ajustada`, `Reporte.ajustes`, `Reporte.aplicado_en`, totales `ajustadas`/`piezas_ajustadas`; `services.ajustar_linea(db, conteo, linea, user_id) -> AjusteLineaResult`; `services.aplicar(db, conteo, variant_ids, user_id) -> Reporte`; rutas `POST /{id}/lines/{line_id}/ajustar` y `POST /{id}/apply`.
+
+- [ ] **Step 1: Pruebas que fallan**
+
+```python
+# tests/test_conteos_ajustes.py
+"""Fase 2: el conteo ajusta la existencia por el mismo kardex que /inventory/adjust."""
+from decimal import Decimal
+
+import pytest
+from fastapi import HTTPException
+
+from app.models.inventory import InventoryMovement, StockOnHand
+from app.models.products import Department, Product, ProductVariant
+from app.modules.conteos import services
+from app.modules.conteos.models import ABIERTO, InventoryCount
+
+
+def _prenda(db, org, branch, *, name, sku, barcode, depto, stock):
+    p = Product(name=name, organization_id=org.id, is_active=True, department_id=depto.id)
+    db.add(p)
+    db.flush()
+    v = ProductVariant(product_id=p.id, sku=sku, barcode=barcode, organization_id=org.id,
+                       price=Decimal("100"), cost=Decimal("50"), size="M")
+    db.add(v)
+    db.flush()
+    if stock is not None:
+        db.add(StockOnHand(variant_id=v.id, branch_id=branch.id, organization_id=org.id,
+                           qty_on_hand=Decimal(stock), is_active=True))
+    db.flush()
+    return v
+
+
+def _stock(db, v, branch):
+    s = db.query(StockOnHand).filter_by(variant_id=v.id, branch_id=branch.id).first()
+    return Decimal(s.qty_on_hand) if s else Decimal("0")
+
+
+@pytest.fixture()
+def tienda(db, org, branch_a):
+    playeras = Department(name="Playeras", organization_id=org.id)
+    tenis = Department(name="Tenis", organization_id=org.id)
+    db.add_all([playeras, tenis])
+    db.flush()
+    a = _prenda(db, org, branch_a, name="Playera", sku="A", barcode="1", depto=playeras, stock="3")
+    b = _prenda(db, org, branch_a, name="Camisa", sku="B", barcode="2", depto=playeras, stock="2")
+    c = _prenda(db, org, branch_a, name="Vieja", sku="C", barcode="3", depto=playeras, stock="0")
+    t = _prenda(db, org, branch_a, name="Tenis", sku="T", barcode="4", depto=tenis, stock="1")
+    conteo = InventoryCount(organization_id=org.id, branch_id=branch_a.id,
+                            department_id=playeras.id, status=ABIERTO)
+    db.add(conteo)
+    db.commit()
+    return {"a": a, "b": b, "c": c, "t": t, "conteo": conteo, "playeras": playeras}
+
+
+def test_ajustar_linea_en_piso(db, org, branch_a, tienda):
+    c = tienda["conteo"]
+    r = services.escanear(db, c, "1", None)            # a: contado 1, sistema 3
+    linea = next(l for l in c.lineas if l.id == r.linea.id)
+    res = services.ajustar_linea(db, c, linea, None)
+    assert res.qty_sistema == Decimal("1") and res.linea.ajustada is True
+    assert _stock(db, tienda["a"], branch_a) == Decimal("1")
+    mov = db.query(InventoryMovement).filter_by(variant_id=tienda["a"].id).order_by(InventoryMovement.id.desc()).first()
+    assert mov.qty_change == Decimal("-2") and mov.reference == "Conteo" and "Conteo #" in mov.notes
+    assert next(f for f in services.lista(db, c).filas if f.producto.sku == "A").estado == "revisado"
+    with pytest.raises(HTTPException) as e:        # ya cuadra
+        services.ajustar_linea(db, c, linea, None)
+    assert e.value.status_code == 409
+
+
+def test_ajustar_linea_sube_sobrante(db, org, branch_a, tienda):
+    c = tienda["conteo"]
+    r = services.escanear(db, c, "3", None)            # c: contado 1, sistema 0
+    linea = next(l for l in c.lineas if l.id == r.linea.id)
+    services.ajustar_linea(db, c, linea, None)
+    assert _stock(db, tienda["c"], branch_a) == Decimal("1")
+
+
+def test_aplicar_tras_cerrar_usa_la_diferencia_congelada(db, org, branch_a, tienda):
+    c = tienda["conteo"]
+    services.escanear(db, c, "1", None)                 # a: 1 de 3 → −2
+    services.escanear(db, c, "3", None)                 # c: 1 de 0 → +1
+    services.escanear(db, c, "4", None)                 # t: fuera de departamento, 1 de 1
+    services.cerrar(db, c, None)                        # b nunca escaneada: 0 de 2 → −2
+    # Venta después del cierre: a baja a 0 en el sistema.
+    s = db.query(StockOnHand).filter_by(variant_id=tienda["a"].id).first()
+    s.qty_on_hand = Decimal("0")
+    db.commit()
+    rep = services.aplicar(db, c, [tienda["a"].id, tienda["c"].id], None)
+    # a: delta congelado −2 sobre existencia 0 → se recorta a 0 (no negativo)
+    assert _stock(db, tienda["a"], branch_a) == Decimal("0")
+    assert _stock(db, tienda["c"], branch_a) == Decimal("1")
+    assert _stock(db, tienda["b"], branch_a) == Decimal("2")      # no seleccionada: intacta
+    assert {x.variant_id for x in rep.ajustes} == {tienda["a"].id, tienda["c"].id}
+    recorte = next(x for x in rep.ajustes if x.variant_id == tienda["a"].id)
+    assert recorte.delta == Decimal("0") and recorte.recortado is True
+    assert rep.aplicado_en is not None and c.aplicado_at is not None
+    assert next(f for f in rep.faltantes if f.sku == "A").ajustada is True
+    assert next(f for f in rep.faltantes if f.sku == "B").ajustada is False
+    assert rep.totales["ajustadas"] == 2
+    # Idempotente: repetir con las mismas filas no mueve nada ni duplica.
+    rep2 = services.aplicar(db, c, [tienda["a"].id, tienda["b"].id], None)
+    assert _stock(db, tienda["b"], branch_a) == Decimal("0")
+    assert len(rep2.ajustes) == 3
+    assert db.query(InventoryMovement).filter(InventoryMovement.reference == "Conteo").count() == 3  # a(0 no crea), c, b
+
+
+def test_aplicar_rechaza_abierto_vacio_y_desconocidos(db, org, branch_a, tienda):
+    c = tienda["conteo"]
+    with pytest.raises(HTTPException) as e:
+        services.aplicar(db, c, [tienda["a"].id], None)
+    assert e.value.status_code == 409
+    services.cerrar(db, c, None)
+    with pytest.raises(HTTPException) as e:
+        services.aplicar(db, c, [], None)
+    assert e.value.status_code == 422
+    rep = services.aplicar(db, c, ["no-existe"], None)
+    assert rep.ajustes == []
+
+
+def test_api_ajustar_y_apply(client, db, org, branch_a, auth_admin, auth_cajero_a, tienda):
+    h = {**auth_admin, "X-Organization-ID": str(org.id)}
+    cid = tienda["conteo"].id
+    lid = client.post(f"/api/inventory/counts/{cid}/scan", headers=h, json={"code": "1"}).json()["linea"]["id"]
+    r = client.post(f"/api/inventory/counts/{cid}/lines/{lid}/ajustar", headers=h)
+    assert r.status_code == 200 and r.json()["qty_sistema"] == "1" and r.json()["linea"]["ajustada"] is True
+    r = client.post(f"/api/inventory/counts/{cid}/apply", headers=h, json={"variant_ids": [tienda["b"].id]})
+    assert r.status_code == 409                       # abierto
+    client.post(f"/api/inventory/counts/{cid}/close", headers=h)
+    r = client.post(f"/api/inventory/counts/{cid}/apply", headers=h, json={"variant_ids": [tienda["b"].id]})
+    assert r.status_code == 200 and r.json()["totales"]["ajustadas"] == 1
+    assert r.json()["aplicado_en"] is not None
+    r = client.post(f"/api/inventory/counts/{cid}/apply", headers={**auth_cajero_a, "X-Organization-ID": str(org.id)}, json={"variant_ids": [tienda["b"].id]})
+    assert r.status_code == 403
+
+
+def test_inventory_adjust_sigue_igual(client, db, org, branch_a, auth_admin, tienda):
+    """El handler viejo usa la función extraída y no cambia de contrato."""
+    h = {**auth_admin, "X-Organization-ID": str(org.id)}
+    r = client.post("/api/inventory/adjust", headers=h, json={
+        "variant_id": tienda["a"].id, "quantity": "-1", "reason": "Merma", "branch_id": branch_a.id})
+    assert r.status_code == 200 and r.json()["qty_after"] == "2.00" or r.json()["qty_after"] == "2"
+    r = client.post("/api/inventory/adjust", headers=h, json={
+        "variant_id": tienda["a"].id, "quantity": "-5", "reason": "Merma", "branch_id": branch_a.id})
+    assert r.status_code == 400
+```
+
+- [ ] **Step 2: Correr y ver que fallan**
+
+Run: `python3 -m pytest -q --ignore=tests/test_cash_complete.py tests/test_conteos_ajustes.py`
+Expected: FAIL (`ajustar_linea`/`aplicar` no existen).
+
+- [ ] **Step 3: Extraer `aplicar_ajuste` en `app/routers/inventory.py`**
+
+Sin cambiar el contrato del handler. Nueva función de módulo, encima de `create_adjustment`:
+
+```python
+def aplicar_ajuste(db: Session, *, org_id: int, branch_id: int, variant_id: str,
+                   user_id: Optional[int], quantity: Decimal, reason: str,
+                   notes: Optional[str] = None) -> InventoryMovement:
+    """Entrada (+) o salida (−) manual con su renglón de kardex. Es la misma
+    lógica de `POST /inventory/adjust`; la comparte el conteo físico
+    (app/modules/conteos) para que sus ajustes se vean en el mismo kardex.
+    400 si la salida dejaría la existencia negativa. Hace commit."""
+    stock_record = db.query(StockOnHand).filter_by(
+        branch_id=branch_id, variant_id=variant_id, organization_id=org_id,
+    ).with_for_update().first()
+    qty_before = stock_record.qty_on_hand if stock_record else Decimal("0")
+    if quantity > 0:
+        mov_type = MovementType.ADJUSTMENT_IN
+    else:
+        mov_type = MovementType.ADJUSTMENT_OUT
+        if qty_before + quantity < 0:
+            raise HTTPException(400, "Stock insuficiente para realizar este ajuste.")
+    if not stock_record:
+        stock_record = StockOnHand(branch_id=branch_id, variant_id=variant_id,
+                                   qty_on_hand=0, organization_id=org_id)
+        db.add(stock_record)
+    stock_record.qty_on_hand += quantity
+    movement = InventoryMovement(
+        branch_id=branch_id, variant_id=variant_id, user_id=user_id,
+        movement_type=mov_type, qty_change=quantity, qty_before=qty_before,
+        qty_after=stock_record.qty_on_hand, reference=reason, notes=notes,
+        organization_id=org_id,
+    )
+    db.add(movement)
+    db.commit()
+    db.refresh(movement)
+    return movement
+```
+
+y `create_adjustment` queda: resolver `variant` y `target_branch_id` como hoy, luego
+`movement = aplicar_ajuste(db, org_id=org_id, branch_id=target_branch_id, variant_id=adj.variant_id, user_id=current_user.id, quantity=adj.quantity, reason=adj.reason, notes=adj.notes)` y el mismo `MovementRead(...)` de siempre. (`Decimal` y `Optional` ya importados o añádelos.)
+
+- [ ] **Step 4: Modelo**
+
+`InventoryCountLine`: `ajustada_at = Column(DateTime(timezone=True), nullable=True)`.
+`InventoryCount`: `aplicado_at = Column(DateTime(timezone=True), nullable=True)` y `aplicado_por_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)`.
+**Estas tablas ya existen en producción** (fase 1 desplegada): añade en `scripts/railway_init.py`, junto a los demás ALTER idempotentes, tres `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` (`inventory_count_lines.ajustada_at TIMESTAMPTZ`, `inventory_counts.aplicado_at TIMESTAMPTZ`, `inventory_counts.aplicado_por_user_id INTEGER REFERENCES users(id)`), siguiendo el patrón del archivo (busca `ADD COLUMN IF NOT EXISTS`).
+
+- [ ] **Step 5: Schemas**
+
+```python
+class AjusteAplicado(BaseModel):
+    variant_id: str
+    delta: Cant
+    qty_before: Cant
+    qty_after: Cant
+    movimiento_id: Optional[int] = None
+    recortado: bool = False      # la salida se limitó para no dejar existencia negativa
+    en: datetime
+
+
+class AplicarRequest(BaseModel):
+    variant_ids: List[str] = Field(min_length=1)
+
+
+class AjusteLineaResult(BaseModel):
+    linea: LineaRead
+    qty_sistema: Cant
+    movimiento_id: int
+```
+
+`LineaRead.ajustada: bool = False`; `FilaLista.ajustada: bool = False`; `FilaReporte.ajustada: bool = False`; `Reporte.ajustes: List[AjusteAplicado] = []` y `Reporte.aplicado_en: Optional[datetime] = None`; `ConteoRead` gana `aplicado_at: Optional[datetime] = None` y `aplicado_por: Optional[str] = None`.
+
+- [ ] **Step 6: Servicios**
+
+```python
+from app.routers.inventory import aplicar_ajuste   # mismo kardex que /inventory/adjust
+
+def _nota(conteo: InventoryCount) -> str:
+    depto = conteo.department.name if conteo.department else "toda la tienda"
+    return f"Conteo #{conteo.id} · {depto}"
+
+
+def ajustar_linea(db: Session, conteo: InventoryCount, linea: InventoryCountLine,
+                  user_id: Optional[int]) -> AjusteLineaResult:
+    """Ajuste en piso: deja la existencia igual a lo contado en esta línea."""
+    _exigir_abierto(conteo)
+    if linea.count_id != conteo.id or linea.organization_id != conteo.organization_id or not linea.variant_id:
+        raise HTTPException(404, "Línea no encontrada")
+    actual = existencias(db, conteo).get(linea.variant_id, CERO)
+    delta = Decimal(linea.qty_contada or 0) - actual
+    if delta == 0:
+        raise HTTPException(409, "La existencia ya cuadra con lo contado.")
+    mov = aplicar_ajuste(db, org_id=conteo.organization_id, branch_id=conteo.branch_id,
+                         variant_id=linea.variant_id, user_id=user_id, quantity=delta,
+                         reason="Conteo", notes=_nota(conteo) + " · ajuste en piso")
+    linea.ajustada_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(linea)
+    return AjusteLineaResult(linea=a_linea_read(linea), qty_sistema=Decimal(mov.qty_after),
+                             movimiento_id=mov.id)
+
+
+def aplicar(db: Session, conteo: InventoryCount, variant_ids: List[str],
+            user_id: Optional[int]) -> Reporte:
+    """Aplica al kardex la DIFERENCIA congelada de las filas elegidas del reporte
+    cerrado. Una venta posterior al cierre no se descuenta dos veces porque se
+    aplica el delta, no el valor contado. Si la salida dejaría negativo, se
+    recorta a 0 y se anota. Filas ya aplicadas se omiten (idempotente)."""
+    if conteo.status != CERRADO or not conteo.resumen:
+        raise HTTPException(409, "Primero cierra el conteo.")
+    if not variant_ids:
+        raise HTTPException(422, "Elige al menos una talla.")
+    rep = Reporte.model_validate(json.loads(conteo.resumen))
+    ya = {a.variant_id for a in rep.ajustes}
+    filas = {f.variant_id: f for f in rep.faltantes + rep.sobrantes + rep.fuera_de_alcance}
+    stock = existencias(db, conteo)
+    ahora = datetime.now(timezone.utc)
+    for vid in variant_ids:
+        f = filas.get(vid)
+        if f is None or vid in ya:
+            continue
+        delta = Decimal(f.diferencia)
+        actual = stock.get(vid, CERO)
+        recortado = False
+        if actual + delta < 0:
+            delta, recortado = -actual, True
+        mov_id = None
+        if delta != 0:
+            mov = aplicar_ajuste(db, org_id=conteo.organization_id, branch_id=conteo.branch_id,
+                                 variant_id=vid, user_id=user_id, quantity=delta, reason="Conteo",
+                                 notes=_nota(conteo) + (" · recortado a 0" if recortado else ""))
+            mov_id = mov.id
+        rep.ajustes.append(AjusteAplicado(variant_id=vid, delta=delta, qty_before=actual,
+                                          qty_after=actual + delta, movimiento_id=mov_id,
+                                          recortado=recortado, en=ahora))
+        ya.add(vid)
+        linea = next((l for l in conteo.lineas if l.variant_id == vid), None)
+        if linea is not None:
+            linea.ajustada_at = ahora
+    rep = _marcar_ajustadas(rep)
+    rep.aplicado_en = rep.aplicado_en or ahora
+    if conteo.aplicado_at is None:
+        conteo.aplicado_at = ahora
+        conteo.aplicado_por_user_id = user_id
+    conteo.resumen = json.dumps(rep.model_dump(mode="json"))
+    db.commit()
+    return rep
+
+
+def _marcar_ajustadas(rep: Reporte) -> Reporte:
+    ya = {a.variant_id for a in rep.ajustes}
+    for seccion in (rep.faltantes, rep.sobrantes, rep.fuera_de_alcance):
+        for f in seccion:
+            f.ajustada = f.variant_id in ya
+    rep.totales["ajustadas"] = len(rep.ajustes)
+    rep.totales["piezas_ajustadas"] = sum((abs(Decimal(a.delta)) for a in rep.ajustes), CERO)
+    return rep
+```
+
+En `_calcular` (conteo abierto): `_fila(..., ajustada=bool(l.ajustada_at))` desde las líneas (añade el parámetro a `_fila`), y `totales["ajustadas"] = sum(1 for l in conteo.lineas if l.ajustada_at)`, `totales["piezas_ajustadas"] = CERO`. En `reporte()` para CERRADO, devuelve `_marcar_ajustadas(Reporte.model_validate(...))` (reportes congelados antes de esta fase no traen `ajustes` → lista vacía). En `lista`: `ajustada=bool(l.ajustada_at) if l else False`. En `a_linea_read`: `ajustada=bool(linea.ajustada_at)`. En `a_conteo_read`: `aplicado_at`, `aplicado_por` (username del usuario, relación `aplicado_por = relationship("User", foreign_keys=[aplicado_por_user_id])` en el modelo; el `created_by` existente necesita entonces `foreign_keys=[created_by_user_id]`).
+
+- [ ] **Step 7: Router**
+
+```python
+@router.post("/{conteo_id}/lines/{line_id}/ajustar", response_model=AjusteLineaResult)
+def ajustar_linea(conteo_id: int, line_id: int, db: Session = Depends(get_db),
+                  user: User = Depends(_admin), org_id: int = Depends(get_current_active_organization)):
+    c = _conteo_o_404(db, org_id, conteo_id)
+    return services.ajustar_linea(db, c, _linea_o_404(c, line_id), user.id)
+
+
+@router.post("/{conteo_id}/apply", response_model=Reporte)
+def aplicar_conteo(conteo_id: int, body: AplicarRequest, db: Session = Depends(get_db),
+                   user: User = Depends(_admin), org_id: int = Depends(get_current_active_organization)):
+    return services.aplicar(db, _conteo_o_404(db, org_id, conteo_id), body.variant_ids, user.id)
+```
+
+- [ ] **Step 8: Pruebas + suite**
+
+Run: `python3 -m pytest -q --ignore=tests/test_cash_complete.py tests/test_conteos_ajustes.py tests/test_conteos_api.py tests/test_conteos_services.py tests/test_conteos_lista.py tests/test_conteos_models.py` → verde. Suite completa con los dos `--ignore` de integración → `0 failed`. Ajusta la aserción de `qty_after` en `test_inventory_adjust_sigue_igual` al formato real que devuelve `MovementRead` ("2.00").
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add app/routers/inventory.py app/modules/conteos scripts/railway_init.py tests/test_conteos_ajustes.py
+git commit -m "feat(conteos): ajustar la existencia al conteo por el kardex (en piso y al cerrar)"
+```
+
+### Task 13: "Ajustar ahora" en la sesión (frontend)
+
+**Files:**
+- Modify: `frontend/src/api/conteos.ts`, `frontend/src/pages/inventory/conteos/ListaDepartamento.tsx`, `frontend/src/pages/inventory/conteos/ConteoSesion.tsx`, `frontend/src/pages/inventory/conteos/lista.ts`
+- Test: `frontend/src/pages/inventory/conteos/__tests__/lista.test.ts` (caso nuevo)
+
+**Interfaces:**
+- Consumes: `POST /{id}/lines/{line_id}/ajustar` (Task 12).
+- Produces: tipos `AjusteAplicado`, `AjusteLineaResult`; `FilaLista.ajustada`, `Linea.ajustada`, `FilaReporte.ajustada`, `Reporte.ajustes/aplicado_en`, `Conteo.aplicado_at/aplicado_por`; `conteosApi.ajustarLinea(id, lineId)`, `conteosApi.aplicar(id, variantIds)`; helper `textoAjuste(sistema, contado): string` ("sistema 3 → 2"); prop `onAjustar(fila)` en `ListaDepartamento`.
+
+- [ ] **Step 1: Prueba del helper (en `lista.test.ts`)**
+
+```ts
+import { textoAjuste } from '../lista'
+describe('textoAjuste', () => {
+  it('describe el cambio de existencia', () => {
+    expect(textoAjuste(3, 2)).toBe('sistema 3 → 2 (−1)')
+    expect(textoAjuste(0, 1)).toBe('sistema 0 → 1 (+1)')
+  })
+})
+```
+
+Implementación en `lista.ts`:
+
+```ts
+export function textoAjuste(sistema: number, contado: number): string {
+  const d = contado - sistema
+  return `sistema ${sistema} → ${contado} (${d > 0 ? '+' : '−'}${Math.abs(d)})`
+}
+```
+
+- [ ] **Step 2: Cliente**
+
+Tipos nuevos espejo de Task 12 y:
+
+```ts
+  ajustarLinea: async (id: number, lineId: number): Promise<{ linea: Linea; qty_sistema: string; movimiento_id: number }> => {
+    const { data } = await client.post(`/inventory/counts/${id}/lines/${lineId}/ajustar`)
+    return data
+  },
+  aplicar: async (id: number, variantIds: string[]): Promise<Reporte> => {
+    const { data } = await client.post<Reporte>(`/inventory/counts/${id}/apply`, { variant_ids: variantIds })
+    return data
+  },
+```
+
+- [ ] **Step 3: Lista y sesión**
+
+`ListaDepartamento`: nueva prop `onAjustar: (fila: FilaLista) => void`; en filas con `estado === 'diferencia'` y `line_id !== null`, botón `dax-btn-secondary text-xs` "Ajustar" junto a "Ficha"; en filas `ajustada` un icono `fa-arrows-rotate text-indigo-400` con título "Existencia ajustada al conteo".
+
+`ConteoSesion`: 
+- `ajustar = async (lineId, sistema, contado)`: `confirm({ title: 'Ajustar existencia', message: `${textoAjuste(sistema, contado)}. Queda en el kardex como "Conteo".`, confirmText: 'Ajustar', variant: 'warning' })` → `conteosApi.ajustarLinea` → `vibrar('ok')`, toast success "Existencia ajustada", `recargar()`, `enfocarEntrada()`; 409 → toast info "Ya cuadra".
+- En la tarjeta de la última lectura, cuando `ultimo.qty_sistema != null` y `num(qty_sistema) !== num(ultimaLinea?.qty_contada)`: botón "Ajustar ahora · {textoAjuste(...)}" (`dax-btn-secondary`) que llama `ajustar(ultimaLinea.id, …)`.
+- Pasa `onAjustar={(f) => f.line_id !== null && ajustar(f.line_id, num(f.sistema), num(f.contado))}` a la lista.
+
+- [ ] **Step 4: Verificación y commit**
+
+`cd frontend && npx tsc --noEmit -p . && npx vitest run src/pages/inventory/conteos src/__tests__` → verde.
+
+```bash
+git add frontend/src/api/conteos.ts frontend/src/pages/inventory/conteos
+git commit -m "feat(conteos): ajustar ahora desde la sesión de conteo"
+```
+
+### Task 14: Ajustar desde el reporte cerrado + docs
+
+**Files:**
+- Modify: `frontend/src/pages/inventory/conteos/ConteoReporte.tsx`, `frontend/src/pages/inventory/conteos/avance.ts`, `docs/API_REFERENCE.md`, `docs/DATA_MODEL.md`, `docs/FRONTEND_VIEWS.md`, `docs/superpowers/specs/2026-10-22-conteo-inventario-design.md` (§9: quitar "aplicar ajustes" de fuera de alcance)
+- Test: `frontend/src/pages/inventory/conteos/__tests__/avance.test.ts` (casos nuevos)
+
+**Interfaces:**
+- Consumes: `conteosApi.aplicar`, `Reporte.ajustes/aplicado_en`, `FilaReporte.ajustada`.
+- Produces: helpers `seleccionInicial(reporte): Set<string>` (marcadas: filas de faltantes con `contado > 0` y todas las de sobrantes; destildadas: `contado == 0`, fuera de departamento y las ya `ajustada`) y `resumenSeleccion(reporte, seleccion): { tallas, menos, mas }`.
+
+- [ ] **Step 1: Pruebas de los helpers (en `avance.test.ts`)**
+
+```ts
+import { resumenSeleccion, seleccionInicial } from '../avance'
+describe('seleccionInicial', () => {
+  const fila = (sku: string, sistema: string, contado: string, ajustada = false) => ({
+    variant_id: sku, sku, nombre: sku, marca: null, talla: null, color: null, departamento: null,
+    sistema, contado, diferencia: String(Number(contado) - Number(sistema)), corregida: false, ajustada,
+  })
+  const rep = {
+    estado: 'CERRADO', generado_en: '', alcance: { sucursal: null, departamento: null }, totales: {},
+    faltantes: [fila('P', '3', '1'), fila('N', '2', '0'), fila('Y', '2', '1', true)],
+    sobrantes: [fila('S', '0', '1')], fuera_de_alcance: [fila('F', '1', '2')], desconocidos: [], ajustes: [], aplicado_en: null,
+  } as never
+  it('marca escaneadas con diferencia y sobrantes; deja fuera no vistas, fuera de depto y ya ajustadas', () => {
+    expect([...seleccionInicial(rep)].sort()).toEqual(['P', 'S'])
+  })
+  it('resume la selección en tallas y piezas', () => {
+    expect(resumenSeleccion(rep, new Set(['P', 'S', 'N']))).toEqual({ tallas: 3, menos: 4, mas: 1 })
+  })
+})
+```
+
+Implementación en `avance.ts`:
+
+```ts
+export function seleccionInicial(r: Reporte): Set<string> {
+  const s = new Set<string>()
+  for (const f of r.faltantes) if (!f.ajustada && num(f.contado) > 0) s.add(f.variant_id)
+  for (const f of r.sobrantes) if (!f.ajustada) s.add(f.variant_id)
+  return s
+}
+
+export function resumenSeleccion(r: Reporte, sel: Set<string>): { tallas: number; menos: number; mas: number } {
+  let menos = 0, mas = 0, tallas = 0
+  for (const f of [...r.faltantes, ...r.sobrantes, ...r.fuera_de_alcance]) {
+    if (!sel.has(f.variant_id)) continue
+    tallas += 1
+    const d = num(f.diferencia)
+    if (d < 0) menos += -d; else mas += d
+  }
+  return { tallas, menos, mas }
+}
+```
+
+- [ ] **Step 2: Reporte**
+
+En `ConteoReporte.tsx`, solo con `conteo.status === 'CERRADO'`:
+- Estado `seleccion` inicializado con `seleccionInicial(reporte)` cuando el reporte carga (y recalculado tras aplicar).
+- En las secciones faltantes/sobrantes/fuera de departamento, cada fila lleva una casilla (`<input type="checkbox">`, deshabilitada y marcada si `f.ajustada`, con icono `fa-arrows-rotate` y título "Ajustada"); en teléfono la casilla va en `acciones` de `TarjetaFila`, en escritorio en una primera columna.
+- Barra fija al final de la página (dentro del flujo, `sticky bottom-0`, no `fixed inset-0`): "Ajustar existencias · N tallas · −X / +Y piezas" (`dax-btn-primary`, deshabilitado con 0) → `confirm({ title: 'Ajustar existencias al conteo', message: 'Se registran N ajustes en el kardex con referencia "Conteo". Las tallas destildadas no cambian.', confirmText: 'Ajustar', variant: 'warning' })` → `conteosApi.aplicar(conteoId, [...seleccion])` → `setReporte(resultado)`, toast success, `seleccion = seleccionInicial(resultado)`.
+- Cabecera: si `reporte.aplicado_en`, texto "Ajustes aplicados el {fecha} · {conteo.aplicado_por ?? ''}"; tarjeta de totales nueva "Ajustadas" (`${num(t.ajustadas)} tallas · ${num(t.piezas_ajustadas)} pzas`), rejilla `grid-cols-2 sm:grid-cols-3 lg:grid-cols-6`.
+- Filas con `recortado` en `reporte.ajustes`: nota "recortado a 0" junto al icono.
+
+- [ ] **Step 3: Docs**
+
+`API_REFERENCE.md`: las dos rutas nuevas y la regla del delta congelado. `DATA_MODEL.md`: columnas `ajustada_at`, `aplicado_at`, `aplicado_por_user_id` (con ALTER en `railway_init.py`). `FRONTEND_VIEWS.md`: "Ajustar ahora" y la barra del reporte. Spec §9: quitar "aplicar los ajustes" de fuera de alcance y remitir a §11.
+
+- [ ] **Step 4: Verificación y commit**
+
+`cd frontend && npx tsc --noEmit -p . && npx vitest run && npm run build 2>&1 | tail -2 && cd .. && python3 scripts/presupuesto_bundle.py | tail -1` → verde, presupuesto bajo tope.
+
+```bash
+git add frontend/src/pages/inventory/conteos docs
+git commit -m "feat(conteos): ajustar existencias desde el reporte cerrado, con selección por talla"
+```

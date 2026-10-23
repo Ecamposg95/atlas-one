@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest'
 
-import { contarPorEstado, filtrarLista, iconoEstado } from '../lista'
+import { contarPorEstado, filtrarLista, iconoEstado, textoAjuste } from '../lista'
 import type { FilaLista } from '../../../../api/conteos'
 
 const fila = (sku: string, nombre: string, estado: FilaLista['estado'], marca: string | null = null): FilaLista => ({
   producto: { variant_id: sku, product_id: 'p-' + sku, nombre, marca, marca_id: null, modelo: null, descripcion: null,
     precio: '100', talla: 'M', color: null, sku, barcode: sku, foto: null, departamento: 'Playeras' },
-  sistema: '1', contado: estado === 'pendiente' ? '0' : '1', estado, corregida: false, line_id: estado === 'pendiente' ? null : 1,
+  sistema: '1', contado: estado === 'pendiente' ? '0' : '1', estado, corregida: false, ajustada: false, line_id: estado === 'pendiente' ? null : 1,
 })
 const filas = [fila('A', 'Zegna · Playera', 'revisado', 'Zegna'), fila('B', 'Camisa', 'pendiente'), fila('C', 'Gorra', 'diferencia')]
 
@@ -38,5 +38,12 @@ describe('iconoEstado', () => {
     expect(iconoEstado('revisado')).toEqual({ icono: 'fa-circle-check', clase: 'text-emerald-400', texto: 'Revisado' })
     expect(iconoEstado('diferencia')).toEqual({ icono: 'fa-triangle-exclamation', clase: 'text-amber-400', texto: 'Con diferencia' })
     expect(iconoEstado('pendiente')).toEqual({ icono: 'fa-circle', clase: 'text-slate-500', texto: 'Pendiente' })
+  })
+})
+
+describe('textoAjuste', () => {
+  it('describe el cambio de existencia', () => {
+    expect(textoAjuste(3, 2)).toBe('sistema 3 → 2 (−1)')
+    expect(textoAjuste(0, 1)).toBe('sistema 0 → 1 (+1)')
   })
 })
