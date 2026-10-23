@@ -20,7 +20,7 @@ describe('un solo formulario de producto', () => {
   it('solo FormularioProducto llama a productsApi.create/update', () => {
     // Excepción legítima (no es el formulario de la lista/página de productos):
     //  - scanner/StoreScanner.tsx: ediciones parciales (código de barras, escalones de precio)
-    //  - inventory/conteos/FichaProducto.tsx: corrección corta de la ficha (nombre, marca, modelo, descripción) durante el conteo
+    //  - inventory/conteos/FichaProducto.tsx: corrección de la ficha durante el conteo (producto + talla, cada bloque por su PUT)
     // La ficha del POS (pos/modals/ProductDetailModal.tsx) es solo consulta desde SP1-c:
     // edita y da de alta con FormularioProducto (EditarProductoPos / AltaRapidaProducto).
     expect(llamadas).toEqual([

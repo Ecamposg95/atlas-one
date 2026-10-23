@@ -8,6 +8,7 @@ import { confirm } from '../../../components/ui/ConfirmDialog'
 import { DaxCard } from '../../../components/ui/DaxCard'
 import { Modal } from '../../../components/ui/Modal'
 import { Spinner } from '../../../components/ui/Spinner'
+import { useIsMobile } from '../../../hooks/useIsMobile'
 import { toast } from '../../../store/toastStore'
 import { errorDetailText } from '../../../utils/errorDetail'
 import { isNativeDetectorAvailable, normalizeTyped } from '../../scanner/barcodeReader'
@@ -30,6 +31,11 @@ import { useLectorCodigos } from './useLectorCodigos'
  * enfocado, así que no necesita "Siguiente"; la pausa tras cada lectura solo
  * detiene la CÁMARA (una pieza quieta frente a ella se contaría por cuadro).
  * Diseño: spec 2026-10-22 §6 y ajuste "lista primero" del plan.
+ *
+ * En escritorio (≥ 1024) la pantalla va a dos columnas: la lista a todo lo
+ * ancho y, a la derecha, un panel fijo con la última lectura y la ficha de la
+ * pieza (se abre sola con cada lectura, salvo que se esté corrigiendo otra).
+ * En teléfono y tablet todo se apila y la ficha es un modal.
  */
 export function ConteoSesion() {
   const { id } = useParams()
@@ -48,9 +54,20 @@ export function ConteoSesion() {
   const [candidatos, setCandidatos] = useState<ProductoResumen[] | null>(null)
   const [ficha, setFicha] = useState<ProductoResumen | null>(null)
   const entradaRef = useRef<HTMLInputElement | null>(null)
+  const panel = !useIsMobile()
+  const panelRef = useRef(panel)
+  panelRef.current = panel
+  const editandoRef = useRef(false)
+  const fichaEditando = useCallback((v: boolean) => { editandoRef.current = v }, [])
 
   const enfocarEntrada = () => entradaRef.current?.focus()
-  const sinModal = ficha === null && !buscar && candidatos === null
+  // En el panel la ficha no es un modal: la pistola sigue palomeando con ella abierta.
+  const sinModal = (panel || ficha === null) && !buscar && candidatos === null
+
+  /** La ficha del panel sigue a la lectura, salvo que se esté corrigiendo otra pieza. */
+  const mostrarEnPanel = (p: ProductoResumen | null | undefined) => {
+    if (panelRef.current && !editandoRef.current && p) setFicha(p)
+  }
 
   // El Modal del kit devuelve el foco al botón que lo abrió DESPUÉS de onClose; refocar tras
   // el commit evita que el siguiente Enter de la pistola reabra la ficha o el buscador.
@@ -81,7 +98,8 @@ export function ConteoSesion() {
       const [c, l] = await Promise.all([conteosApi.ver(conteoId), conteosApi.lista(conteoId)])
       setConteo(c)
       setLista(l)
-    } catch (e: any) { toast.error(errorDetailText(e?.response?.data?.detail, 'No se pudo abrir el conteo')) }
+      return l
+    } catch (e: any) { toast.error(errorDetailText(e?.response?.data?.detail, 'No se pudo abrir el conteo')); return null }
   }, [conteoId])
   useEffect(() => { void recargar() }, [recargar])
 
@@ -90,7 +108,7 @@ export function ConteoSesion() {
     try {
       const r = await conteosApi.escanear(conteoId, code)
       setUltimo(r)
-      if (r.resultado === 'contado') { vibrar('ok'); setResaltada(r.producto?.variant_id ?? null) } else vibrar('aviso')
+      if (r.resultado === 'contado') { vibrar('ok'); setResaltada(r.producto?.variant_id ?? null); mostrarEnPanel(r.producto) } else vibrar('aviso')
       if (r.resultado === 'ambiguo') setCandidatos(r.candidatos)
       await recargar()
     } catch (e: any) {
@@ -144,6 +162,7 @@ export function ConteoSesion() {
       }
       vibrar('ok')
       setResaltada(p.variant_id)
+      mostrarEnPanel(p)
       setUltimo({ resultado: 'contado', linea: null, producto: p, qty_sistema: null, fuera_de_alcance: false, candidatos: [] })
       setCandidatos(null)
     } catch (e: any) { toast.error(errorDetailText(e?.response?.data?.detail, 'No se pudo registrar la pieza')) }
@@ -159,7 +178,14 @@ export function ConteoSesion() {
   const fichaCorregida = async (p: ProductoResumen) => {
     const lineId = conteo?.lineas.find((l) => l.variant_id === p.variant_id)?.id ?? null
     if (lineId !== null) await conteosApi.patchLinea(conteoId, lineId, { corregida: true })
-    await recargar()
+    const l = await recargar()
+    // Si la corrección la mandó a otro departamento, la pieza ya no está en esta lista y la
+    // ficha quedaría con datos viejos (la vista los toma de la lista): se cierra y se avisa.
+    if (l && !l.filas.some((f) => f.producto.variant_id === p.variant_id)) {
+      setFicha(null)
+      toast.info('La pieza pasó a otro departamento y salió de esta lista')
+    }
+    if (panel) enfocarEntrada()   // en modal lo hace el efecto al cerrarse
   }
 
   const ajustar = async (lineId: number, sistema: number, contado: number) => {
@@ -209,8 +235,53 @@ export function ConteoSesion() {
   const enLista = new Set(lista.filas.map((f) => f.producto.variant_id))
   const otras = conteo.lineas.filter((l) => l.variant_id !== null && !enLista.has(l.variant_id))
 
+  const tarjetaUltimo = ultimoVista && (
+    <DaxCard className={ultimoVista.resultado === 'contado' ? 'border border-emerald-700' : 'border border-amber-700'}>
+      {ultimoVista.resultado === 'contado' && ultimoVista.producto && (
+        <div className="flex gap-3">
+          {ultimoVista.producto.foto && <img src={ultimoVista.producto.foto} alt="" className="h-20 w-20 rounded object-cover" />}
+          <div className="flex-1 min-w-0">
+            <div className="text-white font-bold"><i className="fa-solid fa-circle-check text-emerald-400" /> {ultimoVista.producto.nombre}</div>
+            <div className="text-xs text-slate-400">{ultimoVista.producto.sku}{ultimoVista.producto.departamento ? ` · ${ultimoVista.producto.departamento}` : ''}</div>
+            {ultimoVista.producto.descripcion && <div className="text-xs text-slate-300 mt-1 line-clamp-2">{ultimoVista.producto.descripcion}</div>}
+            <div className="mt-1 text-sm text-emerald-300">
+              Contadas <b>{num(ultimaLinea?.qty_contada)}</b>{ultimoVista.qty_sistema != null && <> · sistema <b>{num(ultimoVista.qty_sistema)}</b></>}
+            </div>
+            {ultimoVista.fuera_de_alcance && <div className="text-xs text-amber-400">Esta pieza no es de este departamento; se cuenta y el reporte la separa.</div>}
+          </div>
+        </div>
+      )}
+      {ultimoVista.resultado === 'desconocido' && ultimoVista.linea && (
+        <div>
+          <div className="text-white font-bold">Código desconocido: {ultimoVista.linea.codigo}</div>
+          <p className="text-xs text-slate-400 mt-1">No existe en el sistema. Puedes buscar la pieza y ligarle este código, o dejarla como desconocida en el reporte.</p>
+          <button onClick={() => { setLigarCodigo(ultimoVista.linea?.codigo ?? null); setBuscar(true) }} className="dax-btn-secondary mt-2 text-xs"><i className="fa-solid fa-link" /> Buscar y ligar código</button>
+        </div>
+      )}
+      {ultimoVista.resultado === 'ambiguo' && <div className="text-white font-bold">Varias tallas comparten ese código: elige una.</div>}
+      <div className="mt-3 flex flex-wrap gap-2">
+        {verCamara && <button onClick={siguiente} className="dax-btn-primary flex-1 justify-center"><i className="fa-solid fa-forward" /> Siguiente</button>}
+        {ultimoVista.resultado === 'contado' && <button onClick={masUno} className="dax-btn-secondary flex-1 justify-center">+1 igual</button>}
+        {ultimoVista.resultado === 'contado' && ultimaLinea && ultimoVista.qty_sistema != null && num(ultimoVista.qty_sistema) !== num(ultimaLinea.qty_contada) && (
+          <button onClick={() => void ajustar(ultimaLinea.id, num(ultimoVista.qty_sistema), num(ultimaLinea.qty_contada))} className="dax-btn-secondary flex-1 justify-center">
+            Ajustar ahora · {textoAjuste(num(ultimoVista.qty_sistema), num(ultimaLinea.qty_contada))}
+          </button>
+        )}
+        {ultimoVista.resultado === 'contado' && ultimoVista.producto && !(panel && fichaVista?.variant_id === ultimoVista.producto.variant_id) && (
+          <button onClick={() => setFicha(ultimoVista.producto)} className="dax-btn-secondary flex-1 justify-center"><i className="fa-solid fa-id-card" /> Ver ficha</button>
+        )}
+      </div>
+    </DaxCard>
+  )
+
+  const fichaElemento = (
+    <FichaProducto producto={fichaVista} open={ficha !== null} modo={panel ? 'panel' : 'modal'} onEditando={fichaEditando}
+      onClose={() => { setFicha(null); enfocarEntrada() }} onCorregida={fichaCorregida} />
+  )
+
   return (
-    <div className="space-y-4 max-w-3xl mx-auto pb-24">
+    <div className={`pb-24 ${panel ? 'lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-4 lg:items-start' : 'space-y-4'}`}>
+    <div className="space-y-4 min-w-0">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-black text-white">{conteo.department_name ?? 'Toda la tienda'}</h1>
@@ -254,46 +325,11 @@ export function ConteoSesion() {
         )}
       </DaxCard>
 
-      {ultimoVista && (
-        <DaxCard className={ultimoVista.resultado === 'contado' ? 'border border-emerald-700' : 'border border-amber-700'}>
-          {ultimoVista.resultado === 'contado' && ultimoVista.producto && (
-            <div className="flex gap-3">
-              {ultimoVista.producto.foto && <img src={ultimoVista.producto.foto} alt="" className="h-20 w-20 rounded object-cover" />}
-              <div className="flex-1">
-                <div className="text-white font-bold"><i className="fa-solid fa-circle-check text-emerald-400" /> {ultimoVista.producto.nombre}</div>
-                <div className="text-xs text-slate-400">{ultimoVista.producto.sku}{ultimoVista.producto.departamento ? ` · ${ultimoVista.producto.departamento}` : ''}</div>
-                {ultimoVista.producto.descripcion && <div className="text-xs text-slate-300 mt-1 line-clamp-2">{ultimoVista.producto.descripcion}</div>}
-                <div className="mt-1 text-sm text-emerald-300">
-                  Contadas <b>{num(ultimaLinea?.qty_contada)}</b>{ultimoVista.qty_sistema != null && <> · sistema <b>{num(ultimoVista.qty_sistema)}</b></>}
-                </div>
-                {ultimoVista.fuera_de_alcance && <div className="text-xs text-amber-400">Esta pieza no es de este departamento; se cuenta y el reporte la separa.</div>}
-              </div>
-            </div>
-          )}
-          {ultimoVista.resultado === 'desconocido' && ultimoVista.linea && (
-            <div>
-              <div className="text-white font-bold">Código desconocido: {ultimoVista.linea.codigo}</div>
-              <p className="text-xs text-slate-400 mt-1">No existe en el sistema. Puedes buscar la pieza y ligarle este código, o dejarla como desconocida en el reporte.</p>
-              <button onClick={() => { setLigarCodigo(ultimoVista.linea?.codigo ?? null); setBuscar(true) }} className="dax-btn-secondary mt-2 text-xs"><i className="fa-solid fa-link" /> Buscar y ligar código</button>
-            </div>
-          )}
-          {ultimoVista.resultado === 'ambiguo' && <div className="text-white font-bold">Varias tallas comparten ese código: elige una.</div>}
-          <div className="mt-3 flex flex-wrap gap-2">
-            {verCamara && <button onClick={siguiente} className="dax-btn-primary flex-1 justify-center"><i className="fa-solid fa-forward" /> Siguiente</button>}
-            {ultimoVista.resultado === 'contado' && <button onClick={masUno} className="dax-btn-secondary flex-1 justify-center">+1 igual</button>}
-            {ultimoVista.resultado === 'contado' && ultimaLinea && ultimoVista.qty_sistema != null && num(ultimoVista.qty_sistema) !== num(ultimaLinea.qty_contada) && (
-              <button onClick={() => void ajustar(ultimaLinea.id, num(ultimoVista.qty_sistema), num(ultimaLinea.qty_contada))} className="dax-btn-secondary flex-1 justify-center">
-                Ajustar ahora · {textoAjuste(num(ultimoVista.qty_sistema), num(ultimaLinea.qty_contada))}
-              </button>
-            )}
-            {ultimoVista.resultado === 'contado' && ultimoVista.producto && <button onClick={() => setFicha(ultimoVista.producto)} className="dax-btn-secondary flex-1 justify-center"><i className="fa-solid fa-id-card" /> Ver ficha</button>}
-          </div>
-        </DaxCard>
-      )}
+      {!panel && tarjetaUltimo}
 
       <DaxCard>
         <h2 className="text-sm font-bold text-white mb-2">Lista del departamento</h2>
-        <ListaDepartamento filas={lista.filas} resaltada={resaltada}
+        <ListaDepartamento filas={lista.filas} resaltada={resaltada} seleccionada={panel ? fichaVista?.variant_id ?? null : null}
           onCantidad={(f: FilaLista, qty: number) => { if (f.line_id !== null) void fijarPorId(f.line_id, qty) }}
           onFicha={(f: FilaLista) => setFicha(f.producto)}
           onAjustar={(f: FilaLista) => { if (f.line_id !== null) void ajustar(f.line_id, num(f.sistema), num(f.contado)) }} />
@@ -316,11 +352,23 @@ export function ConteoSesion() {
           </ul>
         </DaxCard>
       )}
+    </div>
+
+      {panel && (
+        <aside className="space-y-4 lg:sticky lg:top-4">
+          {tarjetaUltimo}
+          {ficha !== null ? fichaElemento : (
+            <DaxCard>
+              <p className="text-xs text-slate-500">Escanea una pieza o toca <b>Ficha</b> en una fila: aquí se ve y se corrige su información.</p>
+            </DaxCard>
+          )}
+        </aside>
+      )}
 
       <BuscadorVariante open={buscar} onClose={() => { setBuscar(false); setLigarCodigo(null); enfocarEntrada() }} onElegir={(p) => elegido(p, ligarCodigo)}
         titulo={ligarCodigo ? `Ligar el código ${ligarCodigo} a…` : 'Buscar pieza'} />
 
-      <FichaProducto producto={fichaVista} open={ficha !== null} onClose={() => { setFicha(null); enfocarEntrada() }} onCorregida={fichaCorregida} />
+      {!panel && fichaElemento}
 
       <Modal open={candidatos !== null} onClose={() => setCandidatos(null)} title="¿Cuál es?" size="sm">
         <div className="space-y-2">
