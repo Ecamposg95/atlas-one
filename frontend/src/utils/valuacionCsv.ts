@@ -1,4 +1,5 @@
 import type { AgruparValuacion, ValuacionInventario } from '../api/reports'
+import { porcentaje } from './porcentaje'
 
 export const ETIQUETA_GRUPO: Record<AgruparValuacion, string> = {
   sucursal: 'Sucursal',
@@ -14,17 +15,20 @@ function celda(v: string | number): string {
 
 /**
  * CSV del desglose + fila TOTAL. Números crudos (sin "$" ni separador de
- * miles) para que Excel los sume. Sin la columna de costo cuando el rol no
- * la ve (`ve_costo=false`): un gerente no exporta lo que no ve en pantalla.
- * Empieza con BOM: sin él Excel en Windows lee los acentos como basura.
+ * miles) para que Excel los sume. "% del valor" = parte del valor a venta
+ * sobre el total consultado (100.0 en TOTAL; 0.0 si no hay nada). Sin la
+ * columna de costo cuando el rol no la ve (`ve_costo=false`): un gerente no
+ * exporta lo que no ve en pantalla. Empieza con BOM: sin él Excel en Windows
+ * lee los acentos como basura.
  */
 export function csvValuacion(d: ValuacionInventario): string {
-  const cabecera = [ETIQUETA_GRUPO[d.agrupar], 'Piezas', 'SKUs', 'Valor a venta']
+  const cabecera = [ETIQUETA_GRUPO[d.agrupar], 'Piezas', 'SKUs', 'Valor a venta', '% del valor']
   if (d.ve_costo) cabecera.push('Valor a costo')
   cabecera.push('Piezas sin costo')
+  const total = d.totales.valor_venta
 
-  const fila = (nombre: string, piezas: number, skus: number, venta: number, costo: number | null, sinCosto: number) => {
-    const cols: (string | number)[] = [nombre, piezas, skus, venta.toFixed(2)]
+  const fila = (nombre: string, piezas: number, skus: number, venta: number, pct: number, costo: number | null, sinCosto: number) => {
+    const cols: (string | number)[] = [nombre, piezas, skus, venta.toFixed(2), pct.toFixed(1)]
     if (d.ve_costo) cols.push((costo ?? 0).toFixed(2))
     cols.push(sinCosto)
     return cols.map(celda).join(',')
@@ -32,10 +36,10 @@ export function csvValuacion(d: ValuacionInventario): string {
 
   const lineas = [cabecera.map(celda).join(',')]
   for (const g of d.grupos) {
-    lineas.push(fila(g.nombre, g.piezas, g.skus, g.valor_venta, g.valor_costo, g.piezas_sin_costo))
+    lineas.push(fila(g.nombre, g.piezas, g.skus, g.valor_venta, porcentaje(g.valor_venta, total), g.valor_costo, g.piezas_sin_costo))
   }
   const t = d.totales
-  lineas.push(fila('TOTAL', t.piezas, t.skus, t.valor_venta, t.valor_costo, t.piezas_sin_costo))
+  lineas.push(fila('TOTAL', t.piezas, t.skus, t.valor_venta, total > 0 ? 100 : 0, t.valor_costo, t.piezas_sin_costo))
   return '﻿' + lineas.join('\r\n')
 }
 

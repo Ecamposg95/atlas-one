@@ -128,6 +128,8 @@ export interface ValuacionInventario {
   agrupar: AgruparValuacion
   /** Sucursal consultada; null = todas las que venden. El gerente siempre recibe la suya. */
   branch_id: number | null
+  /** Departamento al que se acotó la consulta (UUID); null = todos. */
+  department_id?: string | null
   ve_costo: boolean
   totales: ValuacionTotales
   grupos: ValuacionGrupo[]
@@ -278,7 +280,7 @@ export const reportsApi = {
   },
 
   valorInventario: async (
-    params: { agrupar?: AgruparValuacion; branch_id?: number } = {},
+    params: { agrupar?: AgruparValuacion; branch_id?: number; department_id?: string } = {},
   ): Promise<ValuacionInventario> => {
     const { data } = await client.get<ValuacionInventario>('/reports/valor-inventario', { params })
     return data

@@ -1,38 +1,42 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { reportsApi, type AgruparValuacion, type ValuacionInventario } from '../../api/reports'
+import { reportsApi, type ValuacionGrupo, type ValuacionInventario } from '../../api/reports'
 import { organizationApi, type Branch } from '../../api/organization'
 import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
 import { BarraFiltros } from '../../components/ui/BarraFiltros'
-import { ListaTarjetas } from '../../components/ui/ListaTarjetas'
-import { TarjetaFila } from '../../components/ui/TarjetaFila'
-import { Spinner } from '../../components/ui/Spinner'
+import { DistribucionValor } from '../../components/reports/DistribucionValor'
 import { useEsTelefono } from '../../hooks/useIsMobile'
 import { useAuthStore } from '../../store/authStore'
 import { toast } from '../../store/toastStore'
 import { formatCurrency } from '../../utils/currency'
 import { errorDetailText } from '../../utils/errorDetail'
-import { csvValuacion, descargarCsv, ETIQUETA_GRUPO } from '../../utils/valuacionCsv'
+import { csvValuacion, descargarCsv } from '../../utils/valuacionCsv'
 
 /**
- * /hq/valor-inventario — ¿cuánto vale mi existencia hoy, y dónde?
+ * /hq/valor-inventario — ¿cuánto vale mi existencia hoy, y cómo se reparte?
  *
- * Desglose del mismo dato que la tarjeta del inicio: por sucursal,
- * departamento o marca, con filtro de sucursal y exportación CSV armada en
- * el cliente (`utils/valuacionCsv`). El backend decide qué ve cada rol:
- * `ve_costo=false` (gerente) llega sin la columna de costo y ya limitado a su
- * sucursal, así que aquí ni se le ofrece el selector.
+ * Totales arriba (los mismos de la tarjeta del inicio) y, debajo, la
+ * distribución del valor a venta por departamento y por marca a la vez, con
+ * porcentaje y barra. Tocar un departamento acota el panel de marcas a ese
+ * departamento (`department_id`). Con más de una sucursal que vende y sin
+ * filtro, un tercer panel reparte por sucursal. Cada panel exporta su CSV
+ * (`utils/valuacionCsv`). El backend decide qué ve cada rol: `ve_costo=false`
+ * (gerente) llega sin costo y ya limitado a su sucursal, así que aquí ni se
+ * le ofrece el selector.
  */
 const piezasTxt = (n: number) => Math.round(n).toLocaleString('es-MX')
+const nombreArchivo = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w-]+/g, '_')
 
 export function HQValorInventario() {
   const user = useAuthStore((s) => s.user)
   const esGerente = user?.role === 'GERENTE'
   const telefono = useEsTelefono()
 
-  const [agrupar, setAgrupar] = useState<AgruparValuacion>('sucursal')
   const [branchId, setBranchId] = useState<number | ''>('')
   const [branches, setBranches] = useState<Branch[]>([])
-  const [data, setData] = useState<ValuacionInventario | null>(null)
+  const [depto, setDepto] = useState<ValuacionGrupo | null>(null) // acota el panel de marcas
+  const [porDepto, setPorDepto] = useState<ValuacionInventario | null>(null)
+  const [porMarca, setPorMarca] = useState<ValuacionInventario | null>(null)
+  const [porSucursal, setPorSucursal] = useState<ValuacionInventario | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -41,17 +45,26 @@ export function HQValorInventario() {
     organizationApi.getBranches().then(setBranches).catch(() => {})
   }, [esGerente])
 
+  // Con más de una sucursal que vende y sin filtro, el valor también se reparte por sucursal.
+  const venden = branches.filter((b) => b.can_sell !== false && b.is_active)
+  const conSucursales = !esGerente && branchId === '' && venden.length > 1
+
   const reqId = useRef(0)
   const load = useCallback(async () => {
     const mio = ++reqId.current
     setLoading(true)
+    const sucursal = branchId !== '' ? { branch_id: branchId } : {}
+    const departamento = depto && depto.clave ? { department_id: depto.clave } : {}
     try {
-      const res = await reportsApi.valorInventario({
-        agrupar,
-        ...(branchId !== '' ? { branch_id: branchId } : {}),
-      })
+      const [d, m, s] = await Promise.all([
+        reportsApi.valorInventario({ agrupar: 'departamento', ...sucursal }),
+        reportsApi.valorInventario({ agrupar: 'marca', ...sucursal, ...departamento }),
+        conSucursales ? reportsApi.valorInventario({ agrupar: 'sucursal' }) : Promise.resolve<ValuacionInventario | null>(null),
+      ])
       if (mio !== reqId.current) return // respuesta vieja: ya hay otra en camino
-      setData(res)
+      setPorDepto(d)
+      setPorMarca(m)
+      setPorSucursal(s)
       setError(null)
     } catch (e: any) {
       if (mio !== reqId.current) return
@@ -62,43 +75,29 @@ export function HQValorInventario() {
     } finally {
       if (mio === reqId.current) setLoading(false)
     }
-  }, [agrupar, branchId])
+  }, [branchId, depto, conSucursales])
 
   useEffect(() => { load() }, [load])
 
-  const exportar = () => {
-    if (!data) { toast.warning('Todavía no hay datos que exportar.'); return }
+  const exportar = (d: ValuacionInventario | null, sufijo = '') => () => {
+    if (!d) { toast.warning('Todavía no hay datos que exportar.'); return }
     const fecha = new Date().toISOString().slice(0, 10)
-    descargarCsv(csvValuacion(data), `valor-tienda-${data.agrupar}-${fecha}.csv`)
+    descargarCsv(csvValuacion(d), `valor-tienda-${d.agrupar}${sufijo}-${fecha}.csv`)
   }
 
-  const veCosto = data?.ve_costo ?? false
-  const t = data?.totales
-  const grupos = data?.grupos ?? []
+  const veCosto = porDepto?.ve_costo ?? false
+  const t = porDepto?.totales
   const costoIncompleto = (t?.piezas_sin_costo ?? 0) > 0
 
   return (
     <div className="space-y-4">
       <CabeceraPagina
         titulo={<h1 className="text-2xl font-bold">Valor de la tienda</h1>}
-        descripcion="Existencia de hoy a precio de venta y a costo. Sin instantáneas: lo que ves es lo que hay ahora."
-        acciones={
-          <button type="button" onClick={exportar} disabled={!data || loading} className="dax-btn-secondary">
-            <i className="fa-solid fa-file-csv mr-1" aria-hidden="true" /> Exportar CSV
-          </button>
-        }
+        descripcion="Existencia de hoy a precio de venta y a costo, y cómo se reparte por departamento y marca. Sin instantáneas: lo que ves es lo que hay ahora."
       />
 
-      <BarraFiltros accion={<button type="button" onClick={load} className="dax-btn-primary">Actualizar</button>}>
-        <label className="flex flex-col text-xs text-dax-muted">
-          Agrupar por
-          <select className="dax-input w-44" value={agrupar} onChange={(e) => setAgrupar(e.target.value as AgruparValuacion)}>
-            <option value="sucursal">Sucursal</option>
-            <option value="departamento">Departamento</option>
-            <option value="marca">Marca</option>
-          </select>
-        </label>
-        {!esGerente && (
+      {!esGerente && (
+        <BarraFiltros accion={<button type="button" onClick={load} className="dax-btn-primary">Actualizar</button>}>
           <label className="flex flex-col text-xs text-dax-muted">
             Sucursal
             <select
@@ -114,8 +113,8 @@ export function HQValorInventario() {
               ))}
             </select>
           </label>
-        )}
-      </BarraFiltros>
+        </BarraFiltros>
+      )}
 
       {error && (
         <div className="dax-card rounded-xl border border-rose-500/30 bg-rose-500/5 p-4 flex items-start gap-3">
@@ -153,67 +152,48 @@ export function HQValorInventario() {
         </div>
       )}
 
-      {telefono ? (
-        <ListaTarjetas cargando={loading && !data} vacio={grupos.length === 0} textoVacio="Sin existencias que valuar">
-          {grupos.map((g) => (
-            <TarjetaFila
-              key={g.clave || 'sin'}
-              titulo={g.nombre}
-              subtitulo={`${piezasTxt(g.piezas)} piezas · ${g.skus} SKUs`}
-              importe={formatCurrency(g.valor_venta)}
-              datos={[
-                ...(veCosto ? [{ etiqueta: 'A costo', valor: formatCurrency(g.valor_costo ?? 0) }] : []),
-                { etiqueta: 'Sin costo', valor: `${piezasTxt(g.piezas_sin_costo)} pz` },
-              ]}
-            />
-          ))}
-        </ListaTarjetas>
-      ) : (
-        <div className="dax-card overflow-x-auto">
-          {loading && !data ? (
-            <Spinner text="Calculando…" />
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <DistribucionValor
+          data-testid="distribucion-departamento"
+          titulo="Por departamento"
+          etiqueta="Departamento"
+          data={porDepto}
+          cargando={loading}
+          telefono={telefono}
+          seleccionada={depto?.clave ?? null}
+          onSeleccionar={(g) => setDepto(depto?.clave === g.clave ? null : g)}
+          onExportar={exportar(porDepto)}
+          aviso={<p className="text-xs text-dax-muted">Toca un departamento para ver sus marcas</p>}
+        />
+        <DistribucionValor
+          data-testid="distribucion-marca"
+          titulo="Por marca"
+          etiqueta="Marca"
+          data={porMarca}
+          cargando={loading}
+          telefono={telefono}
+          onExportar={exportar(porMarca, depto ? `-${nombreArchivo(depto.nombre)}` : '')}
+          aviso={depto ? (
+            <p className="text-xs text-dax-muted">
+              Marcas en <strong className="text-dax-text">{depto.nombre}</strong>
+              <button type="button" className="dax-btn-ghost ml-2 text-xs" onClick={() => setDepto(null)}>Quitar</button>
+            </p>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs uppercase tracking-wider text-dax-muted">
-                  <th className="p-3">{ETIQUETA_GRUPO[data?.agrupar ?? agrupar]}</th>
-                  <th className="p-3 text-right">Piezas</th>
-                  <th className="p-3 text-right">SKUs</th>
-                  <th className="p-3 text-right">Valor a venta</th>
-                  {veCosto && <th className="p-3 text-right">Valor a costo</th>}
-                  <th className="p-3 text-right">Piezas sin costo</th>
-                </tr>
-              </thead>
-              <tbody>
-                {grupos.length === 0 && (
-                  <tr><td colSpan={veCosto ? 6 : 5} className="p-8 text-center text-dax-muted">Sin existencias que valuar</td></tr>
-                )}
-                {grupos.map((g) => (
-                  <tr key={g.clave || 'sin'} className="border-t border-dax-border-dim">
-                    <td className="p-3 font-medium">{g.nombre}</td>
-                    <td className="p-3 text-right tabular-nums">{piezasTxt(g.piezas)}</td>
-                    <td className="p-3 text-right tabular-nums">{g.skus}</td>
-                    <td className="p-3 text-right tabular-nums">{formatCurrency(g.valor_venta)}</td>
-                    {veCosto && <td className="p-3 text-right tabular-nums">{formatCurrency(g.valor_costo ?? 0)}</td>}
-                    <td className={`p-3 text-right tabular-nums ${g.piezas_sin_costo > 0 ? 'text-amber-400' : ''}`}>{piezasTxt(g.piezas_sin_costo)}</td>
-                  </tr>
-                ))}
-              </tbody>
-              {t && grupos.length > 0 && (
-                <tfoot>
-                  <tr className="font-bold border-t-2 border-dax-border-dim">
-                    <td className="p-3">Total</td>
-                    <td className="p-3 text-right tabular-nums">{piezasTxt(t.piezas)}</td>
-                    <td className="p-3 text-right tabular-nums">{t.skus}</td>
-                    <td className="p-3 text-right tabular-nums">{formatCurrency(t.valor_venta)}</td>
-                    {veCosto && <td className="p-3 text-right tabular-nums">{formatCurrency(t.valor_costo ?? 0)}</td>}
-                    <td className="p-3 text-right tabular-nums">{piezasTxt(t.piezas_sin_costo)}</td>
-                  </tr>
-                </tfoot>
-              )}
-            </table>
+            <p className="text-xs text-dax-muted">Toda la existencia consultada</p>
           )}
-        </div>
+        />
+      </div>
+
+      {conSucursales && (
+        <DistribucionValor
+          data-testid="distribucion-sucursal"
+          titulo="Por sucursal"
+          etiqueta="Sucursal"
+          data={porSucursal}
+          cargando={loading}
+          telefono={telefono}
+          onExportar={exportar(porSucursal)}
+        />
       )}
     </div>
   )

@@ -268,9 +268,9 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 
 ### `/hq/valor-inventario` — Valor de la tienda
 - **Archivo:** `pages/hq/HQValorInventario.tsx`
-- **Propósito:** ¿Cuánto vale la existencia de hoy? Valor a precio de venta y a costo con el conteo de piezas/SKUs sin costo, desglosado por sucursal, departamento o marca; filtro por sucursal; CSV generado en el cliente (`utils/valuacionCsv.ts`).
+- **Propósito:** ¿Cuánto vale la existencia de hoy y cómo se reparte? Totales a precio de venta y a costo con piezas/SKUs sin costo; debajo, dos paneles a la vez (**por departamento** y **por marca**) con % del valor y barra (`components/reports/DistribucionValor.tsx`); tocar un departamento acota las marcas a ese departamento (`department_id`); con más de una sucursal que vende y sin filtro, un tercer panel por sucursal. Filtro por sucursal; CSV por panel con columna "% del valor" (`utils/valuacionCsv.ts`).
 - **Quién la ve:** Admin, Dueño y Gerente — módulo `reports` (base). El gerente llega limitado a su sucursal por el backend (`ve_costo=false`): la página no le ofrece selector de sucursal ni columna de costo.
-- **Datos/API:** `reportsApi.valorInventario`, `organizationApi.getBranches`.
+- **Datos/API:** `reportsApi.valorInventario` ×2-3 (departamento, marca[, sucursal]), `organizationApi.getBranches`.
 - **Notas:** La tarjeta `components/reports/ValorTiendaCard.tsx` del Inicio muestra el mismo dato; cuando hay piezas sin costo la cifra grande es la de venta y el costo baja a secundaria con el aviso "N piezas sin costo".
 
 ### `/hq/branches` y `/hq/branches/:branchId` — Sucursales 📱
