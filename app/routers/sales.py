@@ -276,7 +276,6 @@ def read_sales(
     items = [SaleRead.model_validate(s) for s in sales]
     return {"items": items, "total": total, "page": skip // limit if limit else 0, "pages": pages}
 
-@router.post("", response_model=Dict[str, Any], include_in_schema=False)
 def _line_description(variant, detallado: bool = False) -> str:
     """Descripcion que se CONGELA en `sales_lines.description`.
 
@@ -372,6 +371,7 @@ def _deuda_cargada_por_documento(
     return max(Decimal("0.00"), cargos - abonos)
 
 
+@router.post("", response_model=Dict[str, Any], include_in_schema=False)
 @router.post("/", response_model=Dict[str, Any])
 def create_sale(
     sale_in: SaleCreate,
