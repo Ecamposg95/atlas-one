@@ -11,8 +11,8 @@ paga las consultas de las secciones que no pinta. `/inicio-basico` es el alias
 del frontend anterior.
 
 Solo lectura. Reusa el criterio de los reportes: `SALES_REPORT_STATUSES` para
-"esto ya es venta", `get_daily_summary` para los cobros (descuenta el vuelto
-del efectivo) y `compute_expected_cash` para la caja. Ámbito como la valuación:
+"esto ya es venta", `metricas_ventas` leído directamente para los cobros
+(descuenta el vuelto del efectivo) y `compute_expected_cash` para la caja. Ámbito como la valuación:
 ADMIN/DUEÑO/SUPERADMIN ven la org o la sucursal que pidan; GERENTE, la suya.
 """
 from datetime import date, datetime, timedelta, timezone
