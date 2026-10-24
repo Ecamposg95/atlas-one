@@ -154,6 +154,25 @@ contra organización para admin y para cajera; `Periodo.anterior()` de `7d` y de
 (`tests/test_reports_inicio.py`, `test_reports_daily_summary.py`, `test_regresion_reportes.py`,
 `test_branch_dashboard.py`) se ajustan solo donde asumían el bruto o las 14 horas.
 
+### 2.5 Añadido 2026-10-24 · Valor de la tienda: distribución por departamento y marca
+
+Pedido del usuario durante la ejecución: "en el módulo de valor de tienda quiero ver por
+departamento y marca para saber cómo está distribuido el valor de la tienda". Hoy
+`/hq/valor-inventario` agrupa por sucursal **o** departamento **o** marca (un selector, una
+tabla) y no muestra porcentajes, así que la distribución no se ve.
+
+- **Pantalla:** sin selector "Agrupar por"; dos paneles a la vez, **Por departamento** y **Por
+  marca**, cada uno con piezas, valor a venta, **% del valor** con barra, valor a costo (si el rol
+  lo ve), piezas sin costo y su CSV (columna "% del valor"). Tocar un departamento acota el panel
+  de marcas a ese departamento ("Marcas en Bolsas · Quitar"); "Sin departamento" no es elegible.
+  Con más de una sucursal que vende y sin filtro de sucursal, un tercer panel **Por sucursal**.
+  Barra en CSS con tokens (`bg-dax-accent` sobre `bg-dax-border-dim`); la Fase 2 puede cambiarla
+  por una dona del kit. La tarjeta del Inicio no cambia.
+- **Backend:** `GET /reports/valor-inventario` gana `department_id` (UUID) que acota totales y
+  grupos; de otra org → 404; la respuesta lo devuelve (`null` si no se pidió). El gerente sigue
+  limitado a su sucursal y sin costo.
+- **Dónde:** plan de la Fase 1, Tarea 8 (corre antes del cierre de la Tarea 7).
+
 ## 3. Fase 2 · Inicio, Reportes y tema
 
 ### 3.1 Inicio del administrador (`pages/hq/Inicio.tsx`)

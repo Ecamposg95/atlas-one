@@ -1595,6 +1595,8 @@ Claude-Session: https://claude.ai/code/session_01GrtNxw21eDzCu5rRSFgaDf"
 
 ### Task 7: Suite completa, build del frontend y cierre de docs
 
+> **Orden:** esta tarea cierra la rama; corre **después de la Tarea 8** (añadida el 2026-10-24, al final del plan), que sí toca `frontend/`.
+
 **Files:**
 - Modify: `docs/superpowers/specs/2026-10-23-admin-precision-inicio-fusiones-design.md` (línea 3: `**Estado:**` → "fase 1 implementada en `feat/admin-metricas-ventas`, pendiente de fusión")
 - Modify: `CLAUDE.md` §6 (una viñeta nueva)
@@ -1602,12 +1604,12 @@ Claude-Session: https://claude.ai/code/session_01GrtNxw21eDzCu5rRSFgaDf"
 - [ ] **Step 1: Suite de backend**
 
 Run: `cd .worktrees/admin-fase1 && python3 -m pytest -q --ignore=tests/test_cash_complete.py --ignore=tests/test_branch_dashboard.py --ignore=tests/test_cash_close_guided.py -p no:warnings 2>&1 | tail -5`
-Expected: 0 failed (los dos archivos ignorados fallan en esta máquina por el uvicorn ajeno en :8000; en CI corren). Si falla algo que no tocaron las tareas 1-6, anotarlo y compararlo con `main` antes de tocarlo.
+Expected: 0 failed (los dos archivos ignorados fallan en esta máquina por el uvicorn ajeno en :8000; en CI corren). Si falla algo que no tocaron las tareas 1-6 y 8, anotarlo y compararlo con `main` antes de tocarlo.
 
-- [ ] **Step 2: Frontend intacto**
+- [ ] **Step 2: Frontend (tsc, vitest y build)**
 
-Run: `cd .worktrees/admin-fase1/frontend && npx tsc --noEmit -p tsconfig.json && npx vitest run --reporter=dot 2>&1 | tail -3`
-Expected: tsc sin errores; vitest verde salvo el timeout conocido de `rutasPerezosas` bajo carga (pasa solo). No se tocó `frontend/`: cualquier otro fallo es ajeno.
+Run: `cd .worktrees/admin-fase1/frontend && npx tsc --noEmit -p tsconfig.json && npx vitest run --reporter=dot 2>&1 | tail -3 && npm run build 2>&1 | tail -3`
+Expected: tsc sin errores; vitest verde salvo el timeout conocido de `rutasPerezosas` bajo carga (pasa solo); `vite build` termina. La Tarea 8 tocó `frontend/` (valuación): un fallo en `HQValorInventario`, `DistribucionValor`, `valuacionCsv` o `porcentaje` es de esta rama; cualquier otro es ajeno. Verificar que `scripts/presupuesto_bundle` (si el CI lo corre) no cambió: la valuación no entra en el preload del POS.
 
 - [ ] **Step 3: Docs**
 
@@ -1625,3 +1627,863 @@ Claude-Session: https://claude.ai/code/session_01GrtNxw21eDzCu5rRSFgaDf"
 ```
 
 La fusión a `main` y el despliegue los autoriza el usuario (spec §7: antes de desplegar, avisarle que las cifras de Eleven bajarán lo devuelto).
+
+---
+
+### Task 8: Valor de la tienda — distribución por departamento y marca (añadida 2026-10-24)
+
+> **Orden:** corre después de la Tarea 6 y **antes** de la Tarea 7 (la 7 cierra la rama y ahora también verifica `frontend/`). Pedido del usuario: "en el módulo de valor de tienda quiero ver por departamento y marca para saber cómo está distribuido el valor de la tienda". Hoy `/hq/valor-inventario` agrupa por sucursal **o** departamento **o** marca (un selector, una tabla) y no muestra porcentajes, así que la distribución no se ve. Spec §2.5.
+
+**Diseño:** la pantalla deja el selector "Agrupar por" y pinta a la vez dos paneles, **Por departamento** y **Por marca**, cada uno con piezas, valor a venta, **% del valor** con una barra, valor a costo (si el rol lo ve) y piezas sin costo, más su propio CSV. Tocar un departamento acota el panel de marcas a ese departamento ("Marcas en Bolsas · Quitar"); para eso el endpoint gana el filtro `department_id`. "Sin departamento" no se puede elegir (no tiene id). Con más de una sucursal que vende y sin filtro de sucursal aparece un tercer panel **Por sucursal**. Sin chart.js: la barra es CSS con tokens (`bg-dax-accent`, `bg-dax-border-dim`); la Fase 2 podrá cambiarla por una dona del kit. La tarjeta del Inicio (`ValorTiendaCard`) no cambia.
+
+**Files:**
+- Modify: `app/routers/reports_valuacion.py` (`_consulta`, `valor_inventario`)
+- Modify: `app/schemas/reports.py` (`ValuacionInventarioResponse.department_id`)
+- Test: `tests/test_reports_valor_inventario.py` (4 pruebas nuevas al final de la sección agrupación)
+- Modify: `frontend/src/api/reports.ts` (tipo + parámetro `department_id`)
+- Create: `frontend/src/utils/porcentaje.ts` + `frontend/src/utils/porcentaje.test.ts`
+- Modify: `frontend/src/utils/valuacionCsv.ts` + `frontend/src/utils/valuacionCsv.test.ts` (columna "% del valor")
+- Create: `frontend/src/components/reports/DistribucionValor.tsx`
+- Rewrite: `frontend/src/pages/hq/HQValorInventario.tsx`
+- Create: `frontend/src/pages/hq/__tests__/HQValorInventario.test.tsx`
+- Modify: `docs/API_REFERENCE.md` (fila `/valor-inventario`), `docs/FRONTEND_VIEWS.md` (entrada `/hq/valor-inventario`)
+
+**Interfaces:**
+- Consumes: `GET /api/reports/valor-inventario?agrupar=&branch_id=` (existe), `ValuacionInventario`/`ValuacionGrupo` de `api/reports.ts`, `csvValuacion`/`descargarCsv`/`ETIQUETA_GRUPO` de `utils/valuacionCsv.ts`, kit `CabeceraPagina`, `BarraFiltros`, `ListaTarjetas`, `TarjetaFila`, `Spinner`, `useEsTelefono`.
+- Produces: parámetro `department_id` (UUID como texto) en el endpoint y campo `department_id` en la respuesta; `porcentaje(parte, total): number`; componente `DistribucionValor`.
+
+- [ ] **Step 1: Pruebas del backend que fallan (filtro por departamento)**
+
+Añadir al final de la sección `# --- agrupacion` de `tests/test_reports_valor_inventario.py` (antes de `# --- roles`):
+
+```python
+# ---------------------------------------------------------------- filtro por departamento
+# Para "¿como se reparte el valor?": el panel de marcas se acota a un
+# departamento (clic en la pantalla). El filtro vale para totales y grupos.
+
+def test_filtro_por_departamento_acota_totales_y_grupos(client, auth_admin, tienda):
+    dept = tienda["dept_bolsas"].id
+    body = client.get(URL, params={"agrupar": "marca", "department_id": dept}, headers=auth_admin).json()
+    assert body["department_id"] == dept
+    assert [g["nombre"] for g in body["grupos"]] == ["Gucci"]
+    assert body["totales"] == {
+        "piezas": 5.0, "skus": 1, "valor_venta": 5000.0, "valor_costo": 2000.0,
+        "piezas_sin_costo": 0.0, "skus_sin_costo": 0,
+    }
+
+
+def test_filtro_por_departamento_se_combina_con_sucursal(client, auth_admin, branch_a, tienda):
+    body = client.get(
+        URL,
+        params={"agrupar": "marca", "department_id": tienda["dept_bolsas"].id, "branch_id": branch_a.id},
+        headers=auth_admin,
+    ).json()
+    assert body["totales"]["piezas"] == 3.0            # las 3 bolsas de la sucursal A
+    assert _grupo(body, "Gucci")["valor_venta"] == 3000.0
+
+
+def test_departamento_de_otra_org_es_404(client, auth_admin, db, tienda):
+    otra = Organization(name="Otra Org", status="ACTIVE")
+    db.add(otra)
+    db.flush()
+    ajeno = Department(name="Ajeno", organization_id=otra.id)
+    db.add(ajeno)
+    db.flush()
+    r = client.get(URL, params={"department_id": ajeno.id}, headers=auth_admin)
+    assert r.status_code == 404, r.text
+
+
+def test_gerente_filtra_por_departamento_dentro_de_su_sucursal(client, auth_gerente_a, tienda):
+    body = client.get(
+        URL, params={"agrupar": "marca", "department_id": tienda["dept_bolsas"].id}, headers=auth_gerente_a,
+    ).json()
+    assert body["ve_costo"] is False
+    assert body["totales"]["piezas"] == 3.0
+    assert body["totales"]["valor_costo"] is None
+```
+
+Sin `department_id` la respuesta debe traer `"department_id": None`: añadir a `test_admin_ve_totales_de_la_organizacion`, tras `assert body["branch_id"] is None`, la línea `assert body["department_id"] is None`.
+
+- [ ] **Step 2: Verlas fallar**
+
+Run: `python3 -m pytest -q -p no:warnings tests/test_reports_valor_inventario.py`
+Expected: 5 fallan (`department_id` no está en la respuesta; el parámetro se ignora y llegan todos los grupos).
+
+- [ ] **Step 3: Backend**
+
+En `app/schemas/reports.py`, `ValuacionInventarioResponse`:
+
+```python
+class ValuacionInventarioResponse(BaseModel):
+    agrupar: str
+    branch_id: Optional[int]
+    department_id: Optional[str] = None   # UUID del departamento al que se acotó; None = todos
+    ve_costo: bool
+    totales: ValuacionTotales
+    grupos: List[ValuacionGrupo]
+```
+
+En `app/routers/reports_valuacion.py`, `_consulta` gana el filtro (antes del `if branch_id`):
+
+```python
+def _consulta(db: Session, org_id: int, branch_id: Optional[int], columnas_grupo=(),
+              department_id: Optional[str] = None):
+    """Existencias positivas de la org × variante × producto × sucursal.
+
+    Sin productos ni variantes borrados (soft delete = `deleted_at`). Una
+    existencia negativa (venta sin stock) es un error de inventario, no valor
+    negativo: se excluye. Si no se pide sucursal, solo cuentan las que venden
+    y siguen activas (`can_sell` e `is_active`): la bodega de una org multi-sucursal no es "la tienda"; con
+    `branch_id` explicito se puede mirar cualquiera. `department_id` acota a
+    un departamento (totales y grupos): asi la pantalla reparte las marcas
+    de un solo departamento.
+    """
+    q = (
+        db.query(*columnas_grupo, *_AGREGADOS)
+        .select_from(StockOnHand)
+        .join(ProductVariant, ProductVariant.id == StockOnHand.variant_id)
+        .join(Product, Product.id == ProductVariant.product_id)
+        .join(Branch, Branch.id == StockOnHand.branch_id)
+        .filter(
+            StockOnHand.organization_id == org_id,
+            Product.organization_id == org_id,
+            Branch.organization_id == org_id,
+            StockOnHand.qty_on_hand > 0,
+            ProductVariant.deleted_at.is_(None),
+            Product.deleted_at.is_(None),
+        )
+    )
+    if department_id is not None:
+        q = q.filter(Product.department_id == department_id)
+    if branch_id is not None:
+        return q.filter(Branch.id == branch_id)
+    return q.filter(Branch.can_sell == True, Branch.is_active.is_(True))  # noqa: E712
+```
+
+Y el endpoint:
+
+```python
+@router.get("/valor-inventario", response_model=ValuacionInventarioResponse)
+def valor_inventario(
+    agrupar: Agrupar = "sucursal",
+    branch_id: Optional[int] = None,
+    department_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    org_id: int = Depends(get_current_active_organization),
+):
+    """Valor de la tienda: totales de la organizacion (o de una sucursal, o de
+    un departamento) y desglose por sucursal, departamento o marca."""
+    ve_costo, solo_su_sucursal = _ambito(current_user)
+    if solo_su_sucursal:
+        if not current_user.branch_id:
+            raise HTTPException(status_code=403, detail="Tu usuario no tiene una sucursal asignada")
+        # El parametro se ignora: el gerente no mira otras tiendas.
+        branch_id = current_user.branch_id
+    elif branch_id is not None:
+        existe = db.query(Branch.id).filter(
+            Branch.id == branch_id, Branch.organization_id == org_id,
+        ).first()
+        if existe is None:
+            raise HTTPException(status_code=404, detail="Sucursal no encontrada")
+    if department_id is not None:
+        existe_depto = db.query(Department.id).filter(
+            Department.id == department_id, Department.organization_id == org_id,
+        ).first()
+        if existe_depto is None:
+            raise HTTPException(status_code=404, detail="Departamento no encontrado")
+
+    fila = _consulta(db, org_id, branch_id, department_id=department_id).one()
+    totales = ValuacionTotales(
+        **_fila_a_dict(fila, ve_costo), skus_sin_costo=int(fila.skus_sin_costo or 0),
+    )
+
+    col_id, col_nombre, union, sin_nombre = _GRUPOS[agrupar]
+    q = _consulta(db, org_id, branch_id, (col_id, col_nombre), department_id=department_id)
+    if union is not None:
+        q = q.outerjoin(*union)
+    filas = q.group_by(col_id, col_nombre).order_by(desc("valor_venta"), col_nombre).all()
+    grupos = [
+        ValuacionGrupo(
+            clave="" if f[0] is None else str(f[0]),
+            nombre=f[1] or sin_nombre,
+            **_fila_a_dict(f, ve_costo),
+        )
+        for f in filas
+    ]
+
+    return ValuacionInventarioResponse(
+        agrupar=agrupar, branch_id=branch_id, department_id=department_id, ve_costo=ve_costo,
+        totales=totales, grupos=grupos,
+    )
+```
+
+Run: `python3 -m pytest -q -p no:warnings tests/test_reports_valor_inventario.py`
+Expected: todo verde (las ~25 de antes + 4).
+
+- [ ] **Step 4: Commit del backend**
+
+```bash
+git add app/routers/reports_valuacion.py app/schemas/reports.py tests/test_reports_valor_inventario.py
+git commit -m "feat(valuacion): filtro department_id en /reports/valor-inventario
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01GrtNxw21eDzCu5rRSFgaDf"
+```
+
+- [ ] **Step 5: Utilidades del frontend con sus pruebas (fallan primero)**
+
+Crear `frontend/src/utils/porcentaje.test.ts`:
+
+```ts
+import { describe, it, expect } from 'vitest'
+import { porcentaje } from './porcentaje'
+
+describe('porcentaje', () => {
+  it('parte sobre total, a un decimal', () => {
+    expect(porcentaje(5000, 10200)).toBe(49)
+    expect(porcentaje(5200, 10200)).toBe(51)
+    expect(porcentaje(1, 3)).toBe(33.3)
+  })
+  it('sin total no divide: 0', () => {
+    expect(porcentaje(10, 0)).toBe(0)
+    expect(porcentaje(0, 0)).toBe(0)
+  })
+  it('el todo es 100', () => {
+    expect(porcentaje(10200, 10200)).toBe(100)
+  })
+})
+```
+
+Crear `frontend/src/utils/porcentaje.ts`:
+
+```ts
+/** Porcentaje de `parte` sobre `total`, redondeado a un decimal; 0 cuando no hay total. */
+export function porcentaje(parte: number, total: number): number {
+  if (!(total > 0)) return 0
+  return Math.round((parte / total) * 1000) / 10
+}
+```
+
+En `frontend/src/utils/valuacionCsv.test.ts` la columna nueva va después de "Valor a venta"; cambiar las expectativas así:
+
+```ts
+    expect(l[0]).toBe('Marca,Piezas,SKUs,Valor a venta,% del valor,Valor a costo,Piezas sin costo')
+    expect(l[1]).toBe('Sin marca,14,2,5200.00,51.0,0.00,14')
+    expect(l[3]).toBe('TOTAL,19,3,10200.00,100.0,2000.00,14')
+```
+```ts
+    expect(l[2]).toBe('"Dolce, Gabbana",5,1,5000.00,49.0,2000.00,0')
+    const conComillas = { ...base, grupos: [{ ...base.grupos[1], nombre: 'Bolsa "XL"' }] }
+    expect(lineas(csvValuacion(conComillas))[1]).toBe('"Bolsa ""XL""",5,1,5000.00,49.0,2000.00,0')
+```
+```ts
+    expect(l[0]).toBe('Departamento,Piezas,SKUs,Valor a venta,% del valor,Piezas sin costo')
+    expect(l[1]).toBe('Sin marca,14,2,5200.00,51.0,14')
+    expect(l[3]).toBe('TOTAL,19,3,10200.00,100.0,14')
+```
+
+Y añadir una prueba:
+
+```ts
+  it('sin valor total el porcentaje es 0.0 (no NaN)', () => {
+    const vacia: ValuacionInventario = {
+      ...base,
+      totales: { piezas: 0, skus: 0, valor_venta: 0, valor_costo: 0, piezas_sin_costo: 0, skus_sin_costo: 0 },
+      grupos: [],
+    }
+    expect(lineas(csvValuacion(vacia))[1]).toBe('TOTAL,0,0,0.00,0.0,0.00,0')
+  })
+```
+
+Run: `cd frontend && npx vitest run src/utils/porcentaje.test.ts src/utils/valuacionCsv.test.ts --reporter=dot`
+Expected: fallan (no existe `porcentaje`; el CSV no trae la columna).
+
+- [ ] **Step 6: `csvValuacion` con "% del valor"**
+
+Reemplazar `csvValuacion` en `frontend/src/utils/valuacionCsv.ts` (el resto del archivo queda igual; añadir el import):
+
+```ts
+import { porcentaje } from './porcentaje'
+```
+```ts
+/**
+ * CSV del desglose + fila TOTAL. Números crudos (sin "$" ni separador de
+ * miles) para que Excel los sume. "% del valor" = parte del valor a venta
+ * sobre el total consultado (100.0 en TOTAL; 0.0 si no hay nada). Sin la
+ * columna de costo cuando el rol no la ve (`ve_costo=false`): un gerente no
+ * exporta lo que no ve en pantalla. Empieza con BOM: sin él Excel en Windows
+ * lee los acentos como basura.
+ */
+export function csvValuacion(d: ValuacionInventario): string {
+  const cabecera = [ETIQUETA_GRUPO[d.agrupar], 'Piezas', 'SKUs', 'Valor a venta', '% del valor']
+  if (d.ve_costo) cabecera.push('Valor a costo')
+  cabecera.push('Piezas sin costo')
+  const total = d.totales.valor_venta
+
+  const fila = (nombre: string, piezas: number, skus: number, venta: number, pct: number, costo: number | null, sinCosto: number) => {
+    const cols: (string | number)[] = [nombre, piezas, skus, venta.toFixed(2), pct.toFixed(1)]
+    if (d.ve_costo) cols.push((costo ?? 0).toFixed(2))
+    cols.push(sinCosto)
+    return cols.map(celda).join(',')
+  }
+
+  const lineas = [cabecera.map(celda).join(',')]
+  for (const g of d.grupos) {
+    lineas.push(fila(g.nombre, g.piezas, g.skus, g.valor_venta, porcentaje(g.valor_venta, total), g.valor_costo, g.piezas_sin_costo))
+  }
+  const t = d.totales
+  lineas.push(fila('TOTAL', t.piezas, t.skus, t.valor_venta, total > 0 ? 100 : 0, t.valor_costo, t.piezas_sin_costo))
+  return '﻿' + lineas.join('\r\n')
+}
+```
+
+(El archivo actual escribe el BOM como carácter literal; `'﻿'` es el mismo byte y se ve en el diff.)
+
+Run: `cd frontend && npx vitest run src/utils/porcentaje.test.ts src/utils/valuacionCsv.test.ts --reporter=dot`
+Expected: verde.
+
+- [ ] **Step 7: Tipo y parámetro en `api/reports.ts`**
+
+En `ValuacionInventario` añadir, después de `branch_id`:
+
+```ts
+  /** Departamento al que se acotó la consulta (UUID); null = todos. */
+  department_id?: string | null
+```
+
+Y en `reportsApi.valorInventario`:
+
+```ts
+  valorInventario: async (
+    params: { agrupar?: AgruparValuacion; branch_id?: number; department_id?: string } = {},
+  ): Promise<ValuacionInventario> => {
+    const { data } = await client.get<ValuacionInventario>('/reports/valor-inventario', { params })
+    return data
+  },
+```
+
+- [ ] **Step 8: Prueba de la pantalla (falla primero)**
+
+Crear `frontend/src/pages/hq/__tests__/HQValorInventario.test.tsx`:
+
+```tsx
+// frontend/src/pages/hq/__tests__/HQValorInventario.test.tsx
+// @vitest-environment jsdom
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
+import { render, screen, cleanup, fireEvent, within, waitFor } from '@testing-library/react'
+
+const { valorInventario, getBranches } = vi.hoisted(() => ({ valorInventario: vi.fn(), getBranches: vi.fn() }))
+vi.mock('../../../api/reports', () => ({ reportsApi: { valorInventario } }))
+vi.mock('../../../api/organization', () => ({ organizationApi: { getBranches } }))
+
+import { HQValorInventario } from '../HQValorInventario'
+import { useAuthStore } from '../../../store/authStore'
+
+const TOTALES = { piezas: 19, skus: 3, valor_venta: 10200, valor_costo: 2000, piezas_sin_costo: 14, skus_sin_costo: 2 }
+const DEPTOS = [
+  { clave: 'd1', nombre: 'Bolsas', piezas: 5, skus: 1, valor_venta: 5000, valor_costo: 2000, piezas_sin_costo: 0 },
+  { clave: 'd2', nombre: 'Zapatos', piezas: 4, skus: 1, valor_venta: 3200, valor_costo: 0, piezas_sin_costo: 4 },
+  { clave: '', nombre: 'Sin departamento', piezas: 10, skus: 1, valor_venta: 2000, valor_costo: 0, piezas_sin_costo: 10 },
+]
+const MARCAS = [
+  { clave: '', nombre: 'Sin marca', piezas: 14, skus: 2, valor_venta: 5200, valor_costo: 0, piezas_sin_costo: 14 },
+  { clave: 'm1', nombre: 'Gucci', piezas: 5, skus: 1, valor_venta: 5000, valor_costo: 2000, piezas_sin_costo: 0 },
+]
+const SUCURSALES = [
+  { clave: '1', nombre: 'Roma', piezas: 7, skus: 2, valor_venta: 6200, valor_costo: 1200, piezas_sin_costo: 4 },
+  { clave: '2', nombre: 'Condesa', piezas: 12, skus: 2, valor_venta: 4000, valor_costo: 800, piezas_sin_costo: 10 },
+]
+let veCosto = true
+const sinCosto = <T extends { valor_costo: number | null }>(g: T): T => (veCosto ? g : { ...g, valor_costo: null })
+
+// El mock responde según `agrupar` y acota las marcas cuando llega `department_id`.
+const responder = async (p: { agrupar?: string; department_id?: string; branch_id?: number }) => {
+  const base = { branch_id: p.branch_id ?? null, department_id: p.department_id ?? null, ve_costo: veCosto }
+  if (p.agrupar === 'departamento') return { ...base, agrupar: 'departamento', totales: sinCosto(TOTALES), grupos: DEPTOS.map(sinCosto) }
+  if (p.agrupar === 'marca' && p.department_id) {
+    return { ...base, agrupar: 'marca', totales: sinCosto({ ...TOTALES, piezas: 5, skus: 1, valor_venta: 5000, piezas_sin_costo: 0, skus_sin_costo: 0 }), grupos: [sinCosto(MARCAS[1])] }
+  }
+  if (p.agrupar === 'marca') return { ...base, agrupar: 'marca', totales: sinCosto(TOTALES), grupos: MARCAS.map(sinCosto) }
+  return { ...base, agrupar: 'sucursal', totales: sinCosto(TOTALES), grupos: SUCURSALES.map(sinCosto) }
+}
+
+const SUCURSAL = { id: 1, name: 'Roma', branch_type: 'STORE', is_active: true, can_sell: true }
+const usuario = (role: string) => useAuthStore.setState({ user: { id: 1, username: 'u', role, branch_id: 1 } } as never)
+const pintar = () => render(<MemoryRouter><HQValorInventario /></MemoryRouter>)
+
+beforeEach(() => {
+  veCosto = true
+  usuario('ADMINISTRADOR')
+  valorInventario.mockReset().mockImplementation(responder)
+  getBranches.mockReset().mockResolvedValue([SUCURSAL])
+})
+afterEach(cleanup)
+
+describe('HQValorInventario — distribución del valor', () => {
+  it('reparte el valor por departamento y por marca con su porcentaje', async () => {
+    pintar()
+    const deptos = await screen.findByTestId('distribucion-departamento')
+    await within(deptos).findByText('Bolsas')
+    expect(within(deptos).getByText('49.0%')).toBeTruthy()        // 5000 / 10200
+    expect(within(deptos).getByText('Sin departamento')).toBeTruthy()
+    const marcas = screen.getByTestId('distribucion-marca')
+    await within(marcas).findByText('Gucci')
+    expect(within(marcas).getByText('51.0%')).toBeTruthy()        // Sin marca 5200 / 10200
+    expect(screen.getByText('$10,200.00')).toBeTruthy()           // tarjeta de totales
+  })
+
+  it('elegir un departamento acota las marcas a ese departamento y se puede quitar', async () => {
+    pintar()
+    const deptos = await screen.findByTestId('distribucion-departamento')
+    fireEvent.click(await within(deptos).findByRole('button', { name: 'Bolsas' }))
+    await waitFor(() => expect(valorInventario).toHaveBeenCalledWith(expect.objectContaining({ agrupar: 'marca', department_id: 'd1' })))
+    const marcas = screen.getByTestId('distribucion-marca')
+    await within(marcas).findByText(/Marcas en/)
+    expect(within(marcas).getByText('Bolsas')).toBeTruthy()
+    await waitFor(() => expect(within(marcas).queryByText('Sin marca')).toBeNull())
+    fireEvent.click(within(marcas).getByRole('button', { name: 'Quitar' }))
+    await within(marcas).findByText('Sin marca')
+  })
+
+  it('"Sin departamento" no se puede elegir: no tiene id que filtrar', async () => {
+    pintar()
+    const deptos = await screen.findByTestId('distribucion-departamento')
+    await within(deptos).findByText('Sin departamento')
+    expect(within(deptos).getByRole('button', { name: 'Zapatos' })).toBeTruthy()
+    expect(within(deptos).queryByRole('button', { name: 'Sin departamento' })).toBeNull()
+  })
+
+  it('el panel por sucursal solo aparece con más de una sucursal que vende', async () => {
+    pintar()
+    await screen.findByTestId('distribucion-departamento')
+    expect(screen.queryByTestId('distribucion-sucursal')).toBeNull()
+    cleanup()
+    getBranches.mockResolvedValue([SUCURSAL, { ...SUCURSAL, id: 2, name: 'Condesa' }])
+    pintar()
+    const suc = await screen.findByTestId('distribucion-sucursal')
+    await within(suc).findByText('Condesa')
+    expect(valorInventario).toHaveBeenCalledWith(expect.objectContaining({ agrupar: 'sucursal' }))
+  })
+
+  it('el gerente no ve selector de sucursal ni columnas de costo', async () => {
+    veCosto = false
+    usuario('GERENTE')
+    pintar()
+    const deptos = await screen.findByTestId('distribucion-departamento')
+    await within(deptos).findByText('Bolsas')
+    expect(screen.queryByLabelText('Sucursal')).toBeNull()
+    const cabeceras = within(deptos).getAllByRole('columnheader').map((th) => th.textContent)
+    expect(cabeceras).not.toContain('Valor a costo')
+    expect(cabeceras).toContain('% del valor')
+  })
+})
+```
+
+Run: `cd frontend && npx vitest run src/pages/hq/__tests__/HQValorInventario.test.tsx --reporter=dot`
+Expected: fallan (no existe `distribucion-departamento`).
+
+- [ ] **Step 9: Componente `DistribucionValor`**
+
+Crear `frontend/src/components/reports/DistribucionValor.tsx`:
+
+```tsx
+import type { ReactNode } from 'react'
+import type { ValuacionGrupo, ValuacionInventario } from '../../api/reports'
+import { ListaTarjetas } from '../ui/ListaTarjetas'
+import { TarjetaFila } from '../ui/TarjetaFila'
+import { Spinner } from '../ui/Spinner'
+import { formatCurrency } from '../../utils/currency'
+import { porcentaje } from '../../utils/porcentaje'
+
+/**
+ * DistribucionValor — un panel de "¿cómo se reparte el valor de la tienda?".
+ *
+ * Pinta los grupos de una respuesta de `/reports/valor-inventario` (por
+ * departamento, marca o sucursal) con su parte del valor a venta en
+ * porcentaje y una barra. En escritorio es una tabla; en teléfono,
+ * `TarjetaFila`. Con `onSeleccionar`, cada grupo con clave es un botón:
+ * la pantalla lo usa para acotar otro panel (departamento → marcas). Los
+ * grupos sin clave ("Sin departamento") no se pueden elegir: no hay id que
+ * filtrar.
+ *
+ * Sin colores nuevos: la barra usa `bg-dax-accent` sobre `bg-dax-border-dim`.
+ */
+const piezasTxt = (n: number) => Math.round(n).toLocaleString('es-MX')
+const pctTxt = (n: number) => `${n.toFixed(1)}%`
+
+export interface DistribucionValorProps {
+  titulo: string
+  /** Cabecera de la primera columna: "Departamento", "Marca", "Sucursal". */
+  etiqueta: string
+  data: ValuacionInventario | null
+  cargando: boolean
+  telefono: boolean
+  /** Clave del grupo elegido (se resalta); solo tiene sentido con `onSeleccionar`. */
+  seleccionada?: string | null
+  /** Si viene, cada grupo con clave es un botón. */
+  onSeleccionar?: (g: ValuacionGrupo) => void
+  onExportar: () => void
+  /** Texto o chip bajo el título ("Marcas en Bolsas · Quitar"). */
+  aviso?: ReactNode
+  'data-testid'?: string
+}
+
+function Barra({ pct }: { pct: number }) {
+  return (
+    <span className="block h-1.5 w-full rounded-full bg-dax-border-dim" aria-hidden="true">
+      <span className="block h-1.5 rounded-full bg-dax-accent" style={{ width: `${Math.min(100, pct)}%` }} />
+    </span>
+  )
+}
+
+export function DistribucionValor({
+  titulo, etiqueta, data, cargando, telefono, seleccionada, onSeleccionar, onExportar, aviso,
+  'data-testid': testId,
+}: DistribucionValorProps) {
+  const veCosto = data?.ve_costo ?? false
+  const total = data?.totales.valor_venta ?? 0
+  const grupos = data?.grupos ?? []
+  const elegible = (g: ValuacionGrupo) => !!onSeleccionar && g.clave !== ''
+
+  const nombre = (g: ValuacionGrupo) =>
+    elegible(g) ? (
+      <button
+        type="button"
+        className="dax-btn-ghost px-0 text-left font-medium"
+        aria-pressed={seleccionada === g.clave}
+        onClick={() => onSeleccionar!(g)}
+      >
+        {g.nombre}
+      </button>
+    ) : (
+      <span className="font-medium">{g.nombre}</span>
+    )
+
+  return (
+    <section className="dax-card" aria-label={titulo} data-testid={testId}>
+      <header className="flex items-start justify-between gap-2 border-b border-dax-border-dim p-3">
+        <div>
+          <h2 className="text-sm font-bold">{titulo}</h2>
+          {aviso}
+        </div>
+        <button type="button" onClick={onExportar} disabled={!data || cargando} className="dax-btn-secondary text-xs">
+          <i className="fa-solid fa-file-csv mr-1" aria-hidden="true" /> CSV
+        </button>
+      </header>
+
+      {telefono ? (
+        <ListaTarjetas className="p-2" cargando={cargando && !data} vacio={grupos.length === 0} textoVacio="Sin existencias que valuar">
+          {grupos.map((g) => {
+            const pct = porcentaje(g.valor_venta, total)
+            return (
+              <TarjetaFila
+                key={g.clave || 'sin'}
+                titulo={g.nombre}
+                subtitulo={`${piezasTxt(g.piezas)} piezas · ${g.skus} SKUs`}
+                importe={formatCurrency(g.valor_venta)}
+                estado={<span className="text-xs font-bold tabular-nums">{pctTxt(pct)}</span>}
+                datos={[
+                  { etiqueta: '% del valor', valor: <Barra pct={pct} /> },
+                  ...(veCosto ? [{ etiqueta: 'A costo', valor: formatCurrency(g.valor_costo ?? 0) }] : []),
+                  { etiqueta: 'Sin costo', valor: `${piezasTxt(g.piezas_sin_costo)} pz` },
+                ]}
+                onClick={elegible(g) ? () => onSeleccionar!(g) : undefined}
+              />
+            )
+          })}
+        </ListaTarjetas>
+      ) : cargando && !data ? (
+        <Spinner text="Calculando…" />
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase tracking-wider text-dax-muted">
+                <th className="p-3">{etiqueta}</th>
+                <th className="p-3 text-right">Piezas</th>
+                <th className="p-3 text-right">Valor a venta</th>
+                <th className="p-3 w-40">% del valor</th>
+                {veCosto && <th className="p-3 text-right">Valor a costo</th>}
+                <th className="p-3 text-right">Sin costo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {grupos.length === 0 && (
+                <tr><td colSpan={veCosto ? 6 : 5} className="p-8 text-center text-dax-muted">Sin existencias que valuar</td></tr>
+              )}
+              {grupos.map((g) => {
+                const pct = porcentaje(g.valor_venta, total)
+                const elegido = seleccionada != null && seleccionada === g.clave
+                return (
+                  <tr key={g.clave || 'sin'} className={`border-t border-dax-border-dim ${elegido ? 'bg-dax-accent-soft' : ''}`}>
+                    <td className="p-3">{nombre(g)}</td>
+                    <td className="p-3 text-right tabular-nums">{piezasTxt(g.piezas)}</td>
+                    <td className="p-3 text-right tabular-nums">{formatCurrency(g.valor_venta)}</td>
+                    <td className="p-3">
+                      <span className="flex items-center gap-2">
+                        <Barra pct={pct} />
+                        <span className="w-14 text-right text-xs font-bold tabular-nums">{pctTxt(pct)}</span>
+                      </span>
+                    </td>
+                    {veCosto && <td className="p-3 text-right tabular-nums">{formatCurrency(g.valor_costo ?? 0)}</td>}
+                    <td className={`p-3 text-right tabular-nums ${g.piezas_sin_costo > 0 ? 'text-amber-400' : ''}`}>{piezasTxt(g.piezas_sin_costo)}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+            {data && grupos.length > 0 && (
+              <tfoot>
+                <tr className="border-t-2 border-dax-border-dim font-bold">
+                  <td className="p-3">Total</td>
+                  <td className="p-3 text-right tabular-nums">{piezasTxt(data.totales.piezas)}</td>
+                  <td className="p-3 text-right tabular-nums">{formatCurrency(data.totales.valor_venta)}</td>
+                  <td className="p-3 text-right text-xs tabular-nums">{total > 0 ? '100.0%' : '0.0%'}</td>
+                  {veCosto && <td className="p-3 text-right tabular-nums">{formatCurrency(data.totales.valor_costo ?? 0)}</td>}
+                  <td className="p-3 text-right tabular-nums">{piezasTxt(data.totales.piezas_sin_costo)}</td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
+      )}
+    </section>
+  )
+}
+```
+
+Si `botonesDelKit.test.ts` u `overlaysFueraDelKit.test.ts` se quejan de alguna clase, ajustar al kit (los botones ya llevan `dax-btn-ghost` / `dax-btn-secondary`).
+
+- [ ] **Step 10: Reescribir `HQValorInventario.tsx`**
+
+Reemplazar el archivo completo:
+
+```tsx
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { reportsApi, type ValuacionGrupo, type ValuacionInventario } from '../../api/reports'
+import { organizationApi, type Branch } from '../../api/organization'
+import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
+import { BarraFiltros } from '../../components/ui/BarraFiltros'
+import { DistribucionValor } from '../../components/reports/DistribucionValor'
+import { useEsTelefono } from '../../hooks/useIsMobile'
+import { useAuthStore } from '../../store/authStore'
+import { toast } from '../../store/toastStore'
+import { formatCurrency } from '../../utils/currency'
+import { errorDetailText } from '../../utils/errorDetail'
+import { csvValuacion, descargarCsv } from '../../utils/valuacionCsv'
+
+/**
+ * /hq/valor-inventario — ¿cuánto vale mi existencia hoy, y cómo se reparte?
+ *
+ * Totales arriba (los mismos de la tarjeta del inicio) y, debajo, la
+ * distribución del valor a venta por departamento y por marca a la vez, con
+ * porcentaje y barra. Tocar un departamento acota el panel de marcas a ese
+ * departamento (`department_id`). Con más de una sucursal que vende y sin
+ * filtro, un tercer panel reparte por sucursal. Cada panel exporta su CSV
+ * (`utils/valuacionCsv`). El backend decide qué ve cada rol: `ve_costo=false`
+ * (gerente) llega sin costo y ya limitado a su sucursal, así que aquí ni se
+ * le ofrece el selector.
+ */
+const piezasTxt = (n: number) => Math.round(n).toLocaleString('es-MX')
+const nombreArchivo = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w-]+/g, '_')
+
+export function HQValorInventario() {
+  const user = useAuthStore((s) => s.user)
+  const esGerente = user?.role === 'GERENTE'
+  const telefono = useEsTelefono()
+
+  const [branchId, setBranchId] = useState<number | ''>('')
+  const [branches, setBranches] = useState<Branch[]>([])
+  const [depto, setDepto] = useState<ValuacionGrupo | null>(null) // acota el panel de marcas
+  const [porDepto, setPorDepto] = useState<ValuacionInventario | null>(null)
+  const [porMarca, setPorMarca] = useState<ValuacionInventario | null>(null)
+  const [porSucursal, setPorSucursal] = useState<ValuacionInventario | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (esGerente) return // el gerente solo ve su sucursal: sin selector
+    organizationApi.getBranches().then(setBranches).catch(() => {})
+  }, [esGerente])
+
+  // Con más de una sucursal que vende y sin filtro, el valor también se reparte por sucursal.
+  const venden = branches.filter((b) => b.can_sell !== false && b.is_active)
+  const conSucursales = !esGerente && branchId === '' && venden.length > 1
+
+  const reqId = useRef(0)
+  const load = useCallback(async () => {
+    const mio = ++reqId.current
+    setLoading(true)
+    const sucursal = branchId !== '' ? { branch_id: branchId } : {}
+    const departamento = depto && depto.clave ? { department_id: depto.clave } : {}
+    try {
+      const [d, m, s] = await Promise.all([
+        reportsApi.valorInventario({ agrupar: 'departamento', ...sucursal }),
+        reportsApi.valorInventario({ agrupar: 'marca', ...sucursal, ...departamento }),
+        conSucursales ? reportsApi.valorInventario({ agrupar: 'sucursal' }) : Promise.resolve<ValuacionInventario | null>(null),
+      ])
+      if (mio !== reqId.current) return // respuesta vieja: ya hay otra en camino
+      setPorDepto(d)
+      setPorMarca(m)
+      setPorSucursal(s)
+      setError(null)
+    } catch (e: any) {
+      if (mio !== reqId.current) return
+      setError(errorDetailText(
+        e?.response?.data?.detail,
+        'No se pudo calcular el valor de la tienda. Vuelve a intentar en unos segundos.',
+      ))
+    } finally {
+      if (mio === reqId.current) setLoading(false)
+    }
+  }, [branchId, depto, conSucursales])
+
+  useEffect(() => { load() }, [load])
+
+  const exportar = (d: ValuacionInventario | null, sufijo = '') => () => {
+    if (!d) { toast.warning('Todavía no hay datos que exportar.'); return }
+    const fecha = new Date().toISOString().slice(0, 10)
+    descargarCsv(csvValuacion(d), `valor-tienda-${d.agrupar}${sufijo}-${fecha}.csv`)
+  }
+
+  const veCosto = porDepto?.ve_costo ?? false
+  const t = porDepto?.totales
+  const costoIncompleto = (t?.piezas_sin_costo ?? 0) > 0
+
+  return (
+    <div className="space-y-4">
+      <CabeceraPagina
+        titulo={<h1 className="text-2xl font-bold">Valor de la tienda</h1>}
+        descripcion="Existencia de hoy a precio de venta y a costo, y cómo se reparte por departamento y marca. Sin instantáneas: lo que ves es lo que hay ahora."
+      />
+
+      {!esGerente && (
+        <BarraFiltros accion={<button type="button" onClick={load} className="dax-btn-primary">Actualizar</button>}>
+          <label className="flex flex-col text-xs text-dax-muted">
+            Sucursal
+            <select
+              className="dax-input w-52"
+              value={branchId}
+              onChange={(e) => setBranchId(e.target.value === '' ? '' : Number(e.target.value))}
+            >
+              <option value="">Todas las que venden</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}{b.can_sell === false ? ' (no vende)' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+        </BarraFiltros>
+      )}
+
+      {error && (
+        <div className="dax-card rounded-xl border border-rose-500/30 bg-rose-500/5 p-4 flex items-start gap-3">
+          <i className="fas fa-triangle-exclamation text-rose-400 mt-0.5" aria-hidden="true" />
+          <p className="text-sm text-rose-200 flex-1">{error}</p>
+          <button type="button" onClick={load} className="dax-btn-secondary text-xs">Reintentar</button>
+        </div>
+      )}
+
+      {t && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="dax-card p-4">
+            <p className="text-[10px] font-black uppercase tracking-widest text-dax-muted">Valor a precio de venta</p>
+            <p className="text-xl font-bold tabular-nums">{formatCurrency(t.valor_venta)}</p>
+          </div>
+          {veCosto && (
+            <div className="dax-card p-4">
+              <p className="text-[10px] font-black uppercase tracking-widest text-dax-muted">Valor a costo</p>
+              <p className="text-xl font-bold tabular-nums">{formatCurrency(t.valor_costo ?? 0)}</p>
+              {costoIncompleto && (
+                <p className="text-[10px] font-bold text-amber-400">incompleto: faltan costos</p>
+              )}
+            </div>
+          )}
+          <div className="dax-card p-4">
+            <p className="text-[10px] font-black uppercase tracking-widest text-dax-muted">Piezas · SKUs</p>
+            <p className="text-xl font-bold tabular-nums">{piezasTxt(t.piezas)} · {t.skus}</p>
+          </div>
+          <div className="dax-card p-4">
+            <p className="text-[10px] font-black uppercase tracking-widest text-dax-muted">Sin costo</p>
+            <p className={`text-xl font-bold tabular-nums ${costoIncompleto ? 'text-amber-400' : ''}`}>
+              {piezasTxt(t.piezas_sin_costo)} pz · {t.skus_sin_costo} SKU{t.skus_sin_costo === 1 ? '' : 's'}
+            </p>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <DistribucionValor
+          data-testid="distribucion-departamento"
+          titulo="Por departamento"
+          etiqueta="Departamento"
+          data={porDepto}
+          cargando={loading}
+          telefono={telefono}
+          seleccionada={depto?.clave ?? null}
+          onSeleccionar={(g) => setDepto(depto?.clave === g.clave ? null : g)}
+          onExportar={exportar(porDepto)}
+          aviso={<p className="text-xs text-dax-muted">Toca un departamento para ver sus marcas</p>}
+        />
+        <DistribucionValor
+          data-testid="distribucion-marca"
+          titulo="Por marca"
+          etiqueta="Marca"
+          data={porMarca}
+          cargando={loading}
+          telefono={telefono}
+          onExportar={exportar(porMarca, depto ? `-${nombreArchivo(depto.nombre)}` : '')}
+          aviso={depto ? (
+            <p className="text-xs text-dax-muted">
+              Marcas en <strong className="text-dax-text">{depto.nombre}</strong>
+              <button type="button" className="dax-btn-ghost ml-2 text-xs" onClick={() => setDepto(null)}>Quitar</button>
+            </p>
+          ) : (
+            <p className="text-xs text-dax-muted">Toda la existencia consultada</p>
+          )}
+        />
+      </div>
+
+      {conSucursales && (
+        <DistribucionValor
+          data-testid="distribucion-sucursal"
+          titulo="Por sucursal"
+          etiqueta="Sucursal"
+          data={porSucursal}
+          cargando={loading}
+          telefono={telefono}
+          onExportar={exportar(porSucursal)}
+        />
+      )}
+    </div>
+  )
+}
+
+export default HQValorInventario
+```
+
+Notas: `ETIQUETA_GRUPO` y `AgruparValuacion` siguen exportándose desde `utils/valuacionCsv.ts` (el CSV los usa); la pantalla ya no los importa. `text-dax-text` existe en Tailwind (mapa de tokens); si no, usar `style={{ color: 'var(--dax-text)' }}`.
+
+Run: `cd frontend && npx vitest run src/pages/hq/__tests__/HQValorInventario.test.tsx src/utils --reporter=dot && npx tsc --noEmit -p tsconfig.json`
+Expected: verde y tsc limpio. Luego los guardias del kit: `npx vitest run src/components/layout src/__tests__ --reporter=dot` (o la carpeta donde vivan `botonesDelKit.test.ts` / `overlaysFueraDelKit.test.ts`; localizarlos con `grep -rl botonesDelKit src`).
+
+- [ ] **Step 11: Docs**
+
+`docs/API_REFERENCE.md`, fila `/valor-inventario`: cambiar el encabezado a `**/valor-inventario** \`?branch_id=&agrupar=sucursal\|departamento\|marca&department_id=\`` y añadir al final de la celda: "`department_id` (UUID) acota totales y grupos a un departamento (la pantalla lo usa para repartir las marcas de un departamento); de otra org → 404; la respuesta lo devuelve en `department_id` (null si no se pidió)."
+
+`docs/FRONTEND_VIEWS.md`, entrada `### /hq/valor-inventario — Valor de la tienda`: reemplazar **Propósito** por: "¿Cuánto vale la existencia de hoy y cómo se reparte? Totales a precio de venta y a costo con piezas/SKUs sin costo; debajo, dos paneles a la vez (**por departamento** y **por marca**) con % del valor y barra (`components/reports/DistribucionValor.tsx`); tocar un departamento acota las marcas a ese departamento (`department_id`); con más de una sucursal que vende y sin filtro, un tercer panel por sucursal. Filtro por sucursal; CSV por panel con columna "% del valor" (`utils/valuacionCsv.ts`)." Añadir en **Datos/API**: `reportsApi.valorInventario` ×2-3 (departamento, marca[, sucursal]).
+
+- [ ] **Step 12: Commit del frontend y docs**
+
+```bash
+git add frontend/src/api/reports.ts frontend/src/utils/porcentaje.ts frontend/src/utils/porcentaje.test.ts \
+  frontend/src/utils/valuacionCsv.ts frontend/src/utils/valuacionCsv.test.ts \
+  frontend/src/components/reports/DistribucionValor.tsx frontend/src/pages/hq/HQValorInventario.tsx \
+  frontend/src/pages/hq/__tests__/HQValorInventario.test.tsx docs/API_REFERENCE.md docs/FRONTEND_VIEWS.md
+git commit -m "feat(valuacion): distribución del valor de la tienda por departamento y marca a la vez
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01GrtNxw21eDzCu5rRSFgaDf"
+```
