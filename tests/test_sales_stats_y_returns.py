@@ -91,3 +91,28 @@ def test_returns_lista_por_dia_de_mexico_y_30_dias_por_defecto(client, db, org, 
 
     ids = {r["id"] for r in client.get(f"/api/returns/?start_date={hoy}&end_date={hoy}", headers=auth_admin_a).json()}
     assert ids == {reciente.id}
+
+
+def test_sales_stats_rango_invertido_es_422(client, auth_admin_a):
+    r = client.get("/api/sales/stats?start_date=2026-10-20&end_date=2026-10-19", headers=auth_admin_a)
+    assert r.status_code == 422
+
+
+def test_sales_stats_solo_end_date_usa_ese_dia(client, db, org, branch_a, cajero_a, auth_admin_a, products_setup):
+    dia = mv.hoy_mx() - timedelta(days=5)
+    _venta(db, org, branch_a, cajero_a, _v(products_setup), "70", dia=dia)
+    _venta(db, org, branch_a, cajero_a, _v(products_setup), "30")
+    s = client.get(f"/api/sales/stats?end_date={dia}", headers=auth_admin_a).json()
+    assert (s["total_sales"], s["total_transactions"]) == (70.0, 1)
+
+
+def test_returns_rango_invertido_es_422(client, auth_admin_a):
+    r = client.get("/api/returns/?start_date=2026-10-20&end_date=2026-10-19", headers=auth_admin_a)
+    assert r.status_code == 422
+
+
+def test_sales_stats_sin_ventas_promedio_cero_y_sin_hora_pico(client, auth_admin_a):
+    dia = mv.hoy_mx() - timedelta(days=3)
+    s = client.get(f"/api/sales/stats?start_date={dia}&end_date={dia}", headers=auth_admin_a).json()
+    assert s["total_sales"] == 0 and s["average_ticket"] == 0
+    assert s["peak_hour"] is None

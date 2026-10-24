@@ -159,7 +159,12 @@ def get_sales_stats(
     devoluciones y hora pico. Criterio único en `app/services/metricas_ventas.py`
     (antes aquí sumaban pendientes y borradores)."""
     hoy = mv.hoy_mx()
-    periodo = mv.Periodo(start_date or hoy, end_date or hoy)
+    # La fecha que falta copia a la otra; un rango invertido es error del cliente (422).
+    inicio = start_date or end_date or hoy
+    fin = end_date or start_date or hoy
+    if fin < inicio:
+        raise HTTPException(status_code=422, detail="end_date no puede ser anterior a start_date")
+    periodo = mv.Periodo(inicio, fin)
     ambito = mv.resolver_ambito(current_user, org_id, branch_id)
     r = mv.resumen(db, ambito, periodo)
     horas = mv.por_hora(db, ambito, periodo)

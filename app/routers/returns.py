@@ -153,6 +153,13 @@ def list_returns(
     if start_date is None and end_date is None and status != "PENDING":
         periodo = mv.periodo_preset("30d")
         start_date, end_date = periodo.inicio, periodo.fin
+    elif start_date is None or end_date is None:
+        # Con una sola fecha, la que falta copia a la otra (mismo criterio que /sales/stats).
+        if start_date is not None or end_date is not None:
+            start_date = start_date or end_date
+            end_date = end_date or start_date
+    if start_date and end_date and end_date < start_date:
+        raise HTTPException(status_code=422, detail="end_date no puede ser anterior a start_date")
     if start_date:
         query = query.filter(mv.dia_mx(SaleReturn.created_at) >= start_date)
     if end_date:
