@@ -50,6 +50,7 @@ class ValuacionGrupo(BaseModel):
 class ValuacionInventarioResponse(BaseModel):
     agrupar: str
     branch_id: Optional[int]
+    department_id: Optional[str] = None   # UUID del departamento al que se acotó; None = todos
     ve_costo: bool
     totales: ValuacionTotales
     grupos: List[ValuacionGrupo]

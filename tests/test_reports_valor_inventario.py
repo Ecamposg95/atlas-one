@@ -83,6 +83,7 @@ def test_admin_ve_totales_de_la_organizacion(client, auth_admin, tienda):
     body = r.json()
     assert body["ve_costo"] is True
     assert body["branch_id"] is None
+    assert body["department_id"] is None
     assert body["totales"] == {
         "piezas": 19.0, "skus": 3,
         "valor_venta": 10200.0, "valor_costo": 2000.0,
@@ -294,6 +295,51 @@ def test_agrupar_con_filtro_de_sucursal(client, auth_admin, branch_a, tienda):
 def test_agrupar_invalido_es_422(client, auth_admin, tienda):
     r = client.get(URL, params={"agrupar": "color"}, headers=auth_admin)
     assert r.status_code == 422, r.text
+
+
+# ---------------------------------------------------------------- filtro por departamento
+# Para "¿como se reparte el valor?": el panel de marcas se acota a un
+# departamento (clic en la pantalla). El filtro vale para totales y grupos.
+
+def test_filtro_por_departamento_acota_totales_y_grupos(client, auth_admin, tienda):
+    dept = tienda["dept_bolsas"].id
+    body = client.get(URL, params={"agrupar": "marca", "department_id": dept}, headers=auth_admin).json()
+    assert body["department_id"] == dept
+    assert [g["nombre"] for g in body["grupos"]] == ["Gucci"]
+    assert body["totales"] == {
+        "piezas": 5.0, "skus": 1, "valor_venta": 5000.0, "valor_costo": 2000.0,
+        "piezas_sin_costo": 0.0, "skus_sin_costo": 0,
+    }
+
+
+def test_filtro_por_departamento_se_combina_con_sucursal(client, auth_admin, branch_a, tienda):
+    body = client.get(
+        URL,
+        params={"agrupar": "marca", "department_id": tienda["dept_bolsas"].id, "branch_id": branch_a.id},
+        headers=auth_admin,
+    ).json()
+    assert body["totales"]["piezas"] == 3.0            # las 3 bolsas de la sucursal A
+    assert _grupo(body, "Gucci")["valor_venta"] == 3000.0
+
+
+def test_departamento_de_otra_org_es_404(client, auth_admin, db, tienda):
+    otra = Organization(name="Otra Org", status="ACTIVE")
+    db.add(otra)
+    db.flush()
+    ajeno = Department(name="Ajeno", organization_id=otra.id)
+    db.add(ajeno)
+    db.flush()
+    r = client.get(URL, params={"department_id": ajeno.id}, headers=auth_admin)
+    assert r.status_code == 404, r.text
+
+
+def test_gerente_filtra_por_departamento_dentro_de_su_sucursal(client, auth_gerente_a, tienda):
+    body = client.get(
+        URL, params={"agrupar": "marca", "department_id": tienda["dept_bolsas"].id}, headers=auth_gerente_a,
+    ).json()
+    assert body["ve_costo"] is False
+    assert body["totales"]["piezas"] == 3.0
+    assert body["totales"]["valor_costo"] is None
 
 
 # ---------------------------------------------------------------- roles
