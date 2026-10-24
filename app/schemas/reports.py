@@ -61,7 +61,8 @@ class ValuacionInventarioResponse(BaseModel):
 class PeriodoVentas(BaseModel):
     desde: date
     hasta: date
-    total: float
+    total: float        # venta NETA: cobradas menos devoluciones aprobadas del periodo
+    devuelto: float = 0.0
     tickets: int
 
 
@@ -138,7 +139,8 @@ class Pendientes(BaseModel):
 class SucursalInicio(BaseModel):
     branch_id: int
     nombre: str
-    ventas_hoy: float
+    ventas_hoy: float        # neta
+    devuelto_hoy: float = 0.0
     tickets_hoy: int
     corte: CorteInicio
     poca_existencia: int     # variantes ≤ umbral en esa sucursal

@@ -10,15 +10,12 @@ from datetime import datetime, date, timedelta, timezone
 from typing import List, Dict, Any, Optional
 from zoneinfo import ZoneInfo
 
-_MX = ZoneInfo("America/Mexico_City")
+from app.services import metricas_ventas as mv
 
-def _today_mx() -> date:
-    """Fecha actual en timezone Mexico/Ciudad de Mexico."""
-    return datetime.now(_MX).date()
-
-def _mx(col):
-    """Convierte una columna TIMESTAMPTZ de UTC a America/Mexico_City en SQL."""
-    return func.timezone("America/Mexico_City", col)
+# Alias para quien aún importa de aquí (reports_inicio, reports_valuacion).
+_MX = mv._MX
+_today_mx = mv.hoy_mx
+_mx = mv.mx
 
 from app.core.database import get_db
 from app.services.cash_reconciliation import SALES_REPORT_STATUSES
@@ -81,91 +78,27 @@ def get_daily_summary(
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization)
 ):
-    """Resumen de ventas, métodos de pago y utilidad del día."""
-    if not target_date:
-        target_date = _today_mx()
-
-    target_branch_id, toda_la_org = _resolver_sucursal(current_user, branch_id)
-    filtros_sucursal = (
-        [] if toda_la_org else [SalesDocument.branch_id == target_branch_id]
-    )
-
-    # 1. Ventas Totales por Estatus
-    sales_query = db.query(
-        func.count(SalesDocument.id).label("count"),
-        func.sum(SalesDocument.total_amount).label("total")
-    ).filter(
-        SalesDocument.organization_id == org_id,
-        func.date(_mx(SalesDocument.created_at)) == target_date,
-        *filtros_sucursal,
-        SalesDocument.status.in_(SALES_REPORT_STATUSES)
-    ).first()
-
-    # 2. Desglose por Métodos de Pago
-    payments_breakdown = db.query(
-        Payment.method,
-        func.sum(Payment.amount).label("total")
-    ).join(SalesDocument).filter(
-        SalesDocument.organization_id == org_id,
-        func.date(_mx(Payment.created_at)) == target_date,
-        *filtros_sucursal,
-        SalesDocument.status.in_(SALES_REPORT_STATUSES)
-    ).group_by(Payment.method).all()
-
-    # 3. Top 5 Productos más vendidos
-    top_products = db.query(
-        SalesLineItem.description,
-        func.sum(SalesLineItem.quantity).label("qty")
-    ).join(SalesDocument).filter(
-        SalesDocument.organization_id == org_id,
-        func.date(_mx(SalesDocument.created_at)) == target_date,
-        *filtros_sucursal,
-        SalesDocument.status.in_(SALES_REPORT_STATUSES)
-    ).group_by(SalesLineItem.description).order_by(desc("qty")).limit(5).all()
-
-    # 2.b El vuelto no es ingreso. `Payment.amount` guarda lo que el cliente
-    # ENTREGO, no lo que se quedó en el cajón, así que el efectivo del día salía
-    # inflado y no cuadraba contra la venta. El corte de caja ya aplica este
-    # criterio (`net_cash = gross_cash - change_given`, en
-    # app/services/cash_reconciliation.py); aquí se replica el criterio, no la
-    # fórmula, porque el resumen agrupa por día y el corte por sesión.
-    vuelto_del_dia = db.query(
-        func.coalesce(func.sum(SalesDocument.change_given), 0)
-    ).filter(
-        SalesDocument.organization_id == org_id,
-        func.date(_mx(SalesDocument.created_at)) == target_date,
-        *filtros_sucursal,
-        SalesDocument.status.in_(SALES_REPORT_STATUSES)
-    ).scalar() or Decimal(0)
-
-    pagos = {p.method: Decimal(str(p.total or 0)) for p in payments_breakdown}
-    if PaymentMethod.CASH in pagos:
-        pagos[PaymentMethod.CASH] -= Decimal(str(vuelto_del_dia))
-
-    # 4. Cálculo de Utilidad Bruta (Venta - Costo)
-    # `coalesce(unit_cost, 0)`: en SQL cualquier aritmética con NULL da NULL y
-    # SUM lo ignora, así que una línea con costo desconocido (catálogos
-    # importados: Imaltzin) desaparecía ENTERA de la utilidad — ni su margen
-    # ni su ingreso. Auditoría A-8.
-    profit_data = db.query(
-        func.sum(
-            SalesLineItem.total_line
-            - (func.coalesce(SalesLineItem.unit_cost, 0) * SalesLineItem.quantity)
-        )
-    ).join(SalesDocument).filter(
-        SalesDocument.organization_id == org_id,
-        func.date(_mx(SalesDocument.created_at)) == target_date,
-        *filtros_sucursal,
-        SalesDocument.status.in_(SALES_REPORT_STATUSES)
-    ).scalar() or Decimal(0)
-
+    """Resumen del día: venta neta (cobradas menos devoluciones aprobadas),
+    cobros por método (sin vuelto, netos de devoluciones), utilidad bruta y lo
+    más vendido. Criterio único en `app/services/metricas_ventas.py`."""
+    periodo = mv.Periodo(target_date, target_date) if target_date else mv.periodo_preset("hoy")
+    ambito = mv.resolver_ambito(current_user, org_id, branch_id)
+    r = mv.resumen(db, ambito, periodo)
+    # Contrato A-8 de este endpoint: la línea sin costo suma su ingreso entero
+    # (costo 0). `utilidad_bruta` separa lo que tiene costo de lo que no; juntas
+    # dan la fórmula `total_line - coalesce(costo, 0) * cantidad`.
+    utilidad, sin_costo = mv.utilidad_bruta(db, ambito, periodo)
     return {
-        "date": target_date,
-        "transactions_count": sales_query.count or 0,
-        "total_revenue": float(sales_query.total or 0),
-        "gross_profit": float(profit_data),
-        "payments": {m: float(v) for m, v in pagos.items()},
-        "top_selling_items": [{"name": p.description, "quantity": float(p.qty)} for p in top_products]
+        "date": periodo.inicio,
+        "transactions_count": r.tickets,
+        "total_revenue": r.neta,
+        "gross_revenue": r.bruta,
+        "returns_total": r.devuelto,
+        "returns_count": r.devoluciones,
+        "gross_profit": round(utilidad + sin_costo, 2),
+        "payments": {k: m.total for k, m in mv.por_metodo(db, ambito, periodo).items()},
+        "top_selling_items": [{"name": p.nombre, "quantity": p.cantidad}
+                              for p in mv.top_productos(db, ambito, periodo, limite=5)],
     }
 
 @router.get("/audit/discrepancies")

@@ -237,3 +237,29 @@ def test_un_rol_sin_sucursal_no_puede_pedir_toda_la_organizacion(
     ).json()
 
     assert data["total_revenue"] == 0.0
+
+
+from app.models.returns import SaleReturn  # noqa: E402
+
+
+def test_daily_summary_resta_devoluciones_aprobadas(client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup):
+    v = _venta(db, org, branch_a, cajero_a, _v(products_setup), "R-10", "100", DocumentStatus.PAID)
+    db.add(SaleReturn(organization_id=org.id, sale_id=v.id, user_id=cajero_a.id, branch_id=branch_a.id,
+                      total_refunded=Decimal("30"), refund_method=PaymentMethod.CASH, reason="Prueba",
+                      status="APPROVED"))
+    db.commit()
+    d = client.get("/api/reports/daily-summary", headers=auth_cajero_a).json()
+    assert d["gross_revenue"] == 100.0
+    assert d["returns_total"] == 30.0 and d["returns_count"] == 1
+    assert d["total_revenue"] == 70.0
+    assert d["payments"]["CASH"] == 70.0
+
+
+def test_daily_summary_admin_sin_parametro_ve_toda_la_org(client, db, org, branch_a, branch_b, cajero_a, auth_admin_a, products_setup):
+    _venta(db, org, branch_a, cajero_a, _v(products_setup), "R-11", "100", DocumentStatus.PAID)
+    doc_b = _venta(db, org, branch_b, cajero_a, _v(products_setup), "R-12", "200", DocumentStatus.PAID)
+    assert doc_b.branch_id == branch_b.id
+    d = client.get("/api/reports/daily-summary", headers=auth_admin_a).json()
+    assert d["total_revenue"] == 300.0
+    solo_a = client.get(f"/api/reports/daily-summary?branch_id={branch_a.id}", headers=auth_admin_a).json()
+    assert solo_a["total_revenue"] == 100.0
