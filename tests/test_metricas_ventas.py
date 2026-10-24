@@ -157,3 +157,82 @@ def test_resumen_respeta_el_ambito(db, org, branch_a, branch_b, cajero_a, produc
     assert mv.resumen(db, mv.Ambito(org.id, branch_a.id, False), hoy).neta == 100.0
     assert mv.resumen(db, mv.Ambito(org.id, None, True), hoy).neta == 300.0
     assert mv.resumen(db, mv.Ambito(org.id, None, False), hoy).tickets == 0
+
+
+from app.models.returns import SaleReturnItem  # noqa: E402
+
+
+def test_por_dia_rellena_ceros_y_agrupa_en_dia_de_mexico(db, org, branch_a, cajero_a, products_setup):
+    hoy = mv.hoy_mx()
+    p = mv.Periodo(hoy - timedelta(days=2), hoy)
+    _venta(db, org, branch_a, cajero_a, _v(products_setup), "100", dia=hoy - timedelta(days=2), hora=19)
+    v = _venta(db, org, branch_a, cajero_a, _v(products_setup), "50", dia=hoy)
+    _devolucion(db, org, branch_a, cajero_a, v, "10", dia=hoy)
+    dias = mv.por_dia(db, mv.Ambito(org.id, None, True), p)
+    assert [d.fecha for d in dias] == p.fechas()
+    assert [(d.bruta, d.devuelto, d.neta, d.tickets) for d in dias] == [
+        (100.0, 0.0, 100.0, 1), (0.0, 0.0, 0.0, 0), (50.0, 10.0, 40.0, 1),
+    ]
+
+
+def test_por_hora_trae_24_horas_y_no_recorta(db, org, branch_a, cajero_a, products_setup):
+    _venta(db, org, branch_a, cajero_a, _v(products_setup), "100", hora=7)
+    _venta(db, org, branch_a, cajero_a, _v(products_setup), "200", hora=22)
+    horas = mv.por_hora(db, mv.Ambito(org.id, None, True), mv.periodo_preset("hoy"))
+    assert [h.hora for h in horas] == list(range(24))
+    assert horas[7].neta == 100.0 and horas[7].tickets == 1
+    assert horas[22].neta == 200.0
+    assert sum(h.tickets for h in horas) == 2
+
+
+def test_por_metodo_resta_el_cambio_del_efectivo(db, org, branch_a, cajero_a, products_setup):
+    _venta(db, org, branch_a, cajero_a, _v(products_setup), "80", entregado="100")
+    m = mv.por_metodo(db, mv.Ambito(org.id, None, True), mv.periodo_preset("hoy"))
+    assert m["CASH"].total == 80.0 and m["CASH"].tickets == 1
+
+
+def test_por_metodo_resta_la_devolucion_a_su_metodo(db, org, branch_a, cajero_a, products_setup):
+    v = _venta(db, org, branch_a, cajero_a, _v(products_setup), "100", metodo=PaymentMethod.CASH)
+    _venta(db, org, branch_a, cajero_a, _v(products_setup), "300", metodo=PaymentMethod.CARD)
+    _devolucion(db, org, branch_a, cajero_a, v, "40", metodo=PaymentMethod.CARD)
+    m = mv.por_metodo(db, mv.Ambito(org.id, None, True), mv.periodo_preset("hoy"))
+    assert m["CASH"].total == 100.0
+    assert m["CARD"].total == 260.0
+    assert "TRANSFER" not in m
+
+
+def test_por_sucursal_devuelve_resumen_neto_por_sucursal(db, org, branch_a, branch_b, cajero_a, products_setup):
+    va = _venta(db, org, branch_a, cajero_a, _v(products_setup), "100")
+    _venta(db, org, branch_b, cajero_a, _v(products_setup), "200")
+    _devolucion(db, org, branch_a, cajero_a, va, "25")
+    s = mv.por_sucursal(db, org.id, mv.periodo_preset("hoy"))
+    assert s[branch_a.id].neta == 75.0 and s[branch_a.id].tickets == 1
+    assert s[branch_b.id].neta == 200.0
+
+
+def test_top_productos_por_piezas(db, org, branch_a, cajero_a, products_setup):
+    for _ in range(3):
+        _venta(db, org, branch_a, cajero_a, _v(products_setup), "10")
+    docs = db.query(SalesDocument).all()
+    for d in docs:
+        for li in db.query(SalesLineItem).filter(SalesLineItem.document_id == d.id):
+            li.description = "Gorra"
+    _venta(db, org, branch_a, cajero_a, _v(products_setup), "500")
+    db.commit()
+    top = mv.top_productos(db, mv.Ambito(org.id, None, True), mv.periodo_preset("hoy"), limite=5)
+    assert top[0].nombre == "Gorra" and top[0].cantidad == 3.0 and top[0].total == 30.0
+    assert len(top) == 2
+
+
+def test_utilidad_bruta_solo_con_costo_y_resta_reingresos(db, org, branch_a, cajero_a, products_setup):
+    variante = _v(products_setup)          # cost = 60 (conftest: precio 100 × 0.6)
+    v = _venta(db, org, branch_a, cajero_a, variante, "100", costo="60")
+    _venta(db, org, branch_a, cajero_a, variante, "70", costo="0")      # sin costo: fuera de la utilidad
+    dev = _devolucion(db, org, branch_a, cajero_a, v, "100")
+    db.add(SaleReturnItem(organization_id=org.id, return_id=dev.id, variant_id=variante.id,
+                          quantity=Decimal("1"), refund_amount=Decimal("100"), is_inventory_reentry=True))
+    db.commit()
+    utilidad, sin_costo = mv.utilidad_bruta(db, mv.Ambito(org.id, None, True), mv.periodo_preset("hoy"))
+    # (100 − 60) de la venta − (100 − 60) de la devolución que volvió al stock = 0
+    assert utilidad == 0.0
+    assert sin_costo == 70.0
