@@ -44,7 +44,7 @@ Catálogo de endpoints por dominio. Todos bajo `/api`. Swagger vivo en `/docs`. 
 ## Ventas / POS · `/api/sales` `[module:pos]` — motor ATS-crítico
 | Método | Ruta | Qué hace |
 |---|---|---|
-| GET | /stats | KPIs de ventas (branch-scoped salvo HQ) |
+| GET | /stats | KPIs de ventas (branch-scoped salvo HQ): neto de devoluciones aprobadas, sin pendientes ni borradores; trae `gross_sales` (`app/services/metricas_ventas.py`) |
 | GET · POST | / | Lista paginada · **create_sale** (checkout) |
 | GET | /by-folio/{series}/{folio} · /my-last · /{id} · /{id}/print-view | Detalle / última / ticket HTML |
 | DELETE | /{id} | **cancel_sale** (revierte stock + deuda) |
@@ -126,7 +126,7 @@ CRUD productos + aprobar/rechazar/restore/duplicate/imagen; `search` (variants/p
 `POST / · GET / · GET/PUT/DELETE /{id}` · `GET /{id}/pdf` · **`POST /{id}/convert-to-sale`** (crea venta PAID; ⚠️ **no** emite el evento outbox → no dispara consumo de insumos/mesa) · `GET /stats/kpi`.
 
 ## Devoluciones · `/api/returns`
-`GET /stats` (⚠️ sin user) · `POST /` crear PENDING · `GET /sale/{id} · / · /{id}` · `POST /{id}/approve` (force p/ refunds >$10k; 409 si caja cerrada) · `POST /{id}/reject`. Approve/reject `[ADMIN/DUEÑO/GERENTE]`.
+`GET /stats` (⚠️ sin user) · `POST /` crear PENDING · `GET /sale/{id} · / · /{id}` (`/` acepta `start_date`/`end_date` `YYYY-MM-DD` en día de México, `branch_id` para roles de oficina y `status`; sin fechas, últimos 30 días salvo `status=PENDING`) · `POST /{id}/approve` (force p/ refunds >$10k; 409 si caja cerrada) · `POST /{id}/reject`. Approve/reject `[ADMIN/DUEÑO/GERENTE]`.
 
 ## Compras · `/api/purchases`
 `GET /stats · / · /{id}` (⚠️ sin user) · `POST /` crear PO · `PATCH /{id}/status` · `POST /{id}/receive` (stock + costo promedio + Movement) · `DELETE /{id}`.
