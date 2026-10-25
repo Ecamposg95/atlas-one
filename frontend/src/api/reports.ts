@@ -24,6 +24,7 @@ export interface DashboardData {
     prev_gross_profit?: number | null
     /** Lo vendido en renglones sin costo (fuera de la utilidad). */
     sales_without_cost?: number | null
+    sales_with_cost?: number | null
   }
   charts: {
     trend: { labels: string[]; data: number[] }

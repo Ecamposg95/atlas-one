@@ -335,6 +335,21 @@ def top_productos(db: Session, ambito: Ambito, periodo: Periodo, limite: int = 5
     return [ProductoTop(nombre=f.description or "", cantidad=_f(f.qty), total=_f(f.importe)) for f in filas]
 
 
+def venta_con_costo(db: Session, ambito: Ambito, periodo: Periodo) -> float:
+    """Importe bruto de los renglones con costo (`unit_cost > 0`) del periodo:
+    la base sobre la que se calcula la utilidad (primer agregado de
+    `utilidad_bruta`). Sirve para saber si hay costos capturados; compararla con
+    el total del documento (propinas, ajustes) o con lo neto de devoluciones
+    mezcla bases distintas."""
+    total = (
+        db.query(func.coalesce(func.sum(SalesLineItem.total_line), 0))
+        .join(SalesDocument, SalesDocument.id == SalesLineItem.document_id)
+        .filter(*filtros_documentos(ambito, periodo), SalesLineItem.unit_cost > 0)
+        .scalar()
+    )
+    return _f(total)
+
+
 def utilidad_bruta(db: Session, ambito: Ambito, periodo: Periodo) -> tuple:
     """(utilidad SOLO sobre renglones con costo; venta del periodo en renglones
     sin costo). Con `coalesce(costo, 0)` una pieza sin costo parecía 100 % de

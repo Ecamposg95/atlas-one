@@ -248,6 +248,19 @@ def test_utilidad_bruta_solo_con_costo_y_resta_reingresos(db, org, branch_a, caj
     assert sin_costo == 70.0
 
 
+def test_venta_con_costo_solo_cuenta_renglones_con_costo(db, org, branch_a, cajero_a, products_setup):
+    variante = _v(products_setup)
+    v = _venta(db, org, branch_a, cajero_a, variante, "100", costo="60")
+    _venta(db, org, branch_a, cajero_a, variante, "70", costo="0")       # sin costo: no cuenta
+    dev = _devolucion(db, org, branch_a, cajero_a, v, "100")             # las devoluciones no restan: es base bruta
+    db.add(SaleReturnItem(organization_id=org.id, return_id=dev.id, variant_id=variante.id,
+                          quantity=Decimal("1"), refund_amount=Decimal("100"), is_inventory_reentry=True))
+    db.commit()
+    ambito = mv.Ambito(org.id, None, True)
+    assert mv.venta_con_costo(db, ambito, mv.periodo_preset("hoy")) == 100.0
+    assert mv.venta_con_costo(db, ambito, mv.periodo_preset("hoy").anterior()) == 0.0
+
+
 def _sin_costo(variante, valor):
     """Fija el costo ACTUAL de la variante (la devolución se clasifica por él)."""
     variante.cost = valor

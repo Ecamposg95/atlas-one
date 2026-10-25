@@ -239,10 +239,11 @@ def get_dashboard_stats(
 
     # 1b. Utilidad bruta del periodo y del anterior: solo renglones con costo, menos lo
     # devuelto por el costo de su variante (metricas_ventas.utilidad_bruta). Quien no ve
-    # costos (gerente) recibe None en los tres.
-    utilidad = utilidad_prev = sin_costo = None
+    # costos (gerente) recibe None en los cuatro.
+    utilidad = utilidad_prev = sin_costo = con_costo = None
     if mv.ve_costos(current_user):
         utilidad, sin_costo = mv.utilidad_bruta(db, ambito, periodo)
+        con_costo = mv.venta_con_costo(db, ambito, periodo)
         utilidad_prev, _ = mv.utilidad_bruta(db, ambito, periodo.anterior())
 
     # 2. Tendencia por día de México (antes agrupaba por día UTC)
@@ -341,6 +342,7 @@ def get_dashboard_stats(
             "gross_profit": utilidad,
             "prev_gross_profit": utilidad_prev,
             "sales_without_cost": sin_costo,
+            "sales_with_cost": con_costo,
         },
         "charts": {
             "trend": {"labels": etiquetas, "data": [d.neta for d in dias]},

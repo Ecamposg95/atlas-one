@@ -129,8 +129,9 @@ def test_dashboard_utilidad_bruta_para_admin_y_null_para_gerente(client, db, org
     d = client.get(f"/api/reports/dashboard?start_date={hoy}&end_date={hoy}&branch_id=0", headers=auth_admin_a).json()
     k = d["kpis"]
     assert (k["gross_profit"], k["prev_gross_profit"], k["sales_without_cost"]) == (90.0, 40.0, 0.0)
+    assert k["sales_with_cost"] == 100.0
     g = client.get(f"/api/reports/dashboard?start_date={hoy}&end_date={hoy}", headers=auth_gerente_a).json()["kpis"]
-    assert (g["gross_profit"], g["prev_gross_profit"], g["sales_without_cost"]) == (None, None, None)
+    assert (g["gross_profit"], g["prev_gross_profit"], g["sales_without_cost"], g["sales_with_cost"]) == (None, None, None, None)
 
 
 def test_dashboard_top_products_trae_importe_y_hasta_diez(client, db, org, branch_a, cajero_a, auth_admin_a, products_setup):
