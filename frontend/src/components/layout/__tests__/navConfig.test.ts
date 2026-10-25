@@ -163,6 +163,10 @@ describe('las guardas de ruta', () => {
   it('una ruta de nadie no se la queda nadie', () => {
     expect(rolesConAcceso('/ruta/inventada')).toEqual([])
   })
+
+  it('Fase 3: el admin y el dueño abren /returns (antes solo /hq/returns)', () => {
+    expect(rolesConAcceso('/returns')).toEqual(expect.arrayContaining(['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO']))
+  })
 })
 
 describe('Valor de la tienda (/hq/valor-inventario)', () => {

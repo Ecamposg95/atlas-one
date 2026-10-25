@@ -159,7 +159,7 @@ describe('Inicio', () => {
     expect(screen.getByTestId('cifra-utilidad').textContent).toContain('sobre $1,000.00 con costo · $234.50 vendidos sin costo')
     expect(screen.getByText(/No se mueve \(sin venta en 30 días\)/)).toBeTruthy()
     expect(screen.getByText('Abrigo largo').closest('a')?.getAttribute('href')).toBe('/hq/inventory?q=ABR-1&variant=v9')
-    expect(screen.getByText('2 devoluciones por aprobar →').getAttribute('href')).toBe('/hq/returns')
+    expect(screen.getByText('2 devoluciones por aprobar →').getAttribute('href')).toBe('/returns')
     expect(screen.getByText(/1 turno abierto desde hace más de un día/)).toBeTruthy()
     expect(screen.getByText('Lupita')).toBeTruthy()
     const sucursales = screen.getByTestId('sucursales')

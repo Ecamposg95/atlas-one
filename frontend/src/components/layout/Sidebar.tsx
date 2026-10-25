@@ -14,7 +14,7 @@ import {
 } from './navConfig'
 
 const APPROVER_ROLES: Role[] = ['ADMINISTRADOR', 'DUEÑO', 'GERENTE']
-const RETURNS_URLS = new Set(['/returns', '/hq/returns'])
+const RETURNS_URLS = new Set(['/returns'])
 
 /** Cómo llamar al acceso sin sucursal fija. Con una sola tienda, "HQ Global"
  *  no nombra nada que la dueña reconozca. */

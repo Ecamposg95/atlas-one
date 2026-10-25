@@ -242,7 +242,7 @@ function Pendientes({ datos, esTelefono }: { datos: NonNullable<DatosInicio['pen
       ) : (
         <div className="space-y-3" data-testid="pendientes">
           {datos.devoluciones > 0 && (
-            <Link to="/hq/returns" className={`block text-sm text-dax-warning ${enlace}`}>
+            <Link to="/returns" className={`block text-sm text-dax-warning ${enlace}`}>
               {datos.devoluciones === 1 ? '1 devolución por aprobar' : `${datos.devoluciones} devoluciones por aprobar`} →
             </Link>
           )}
