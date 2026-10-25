@@ -297,6 +297,6 @@ describe('Inicio', () => {
     pintar()
     await screen.findByTestId('cifra-hoy')
     expect(screen.getByText('Falda negra').closest('a')?.getAttribute('href')).toBe('/hq/inventory?q=FAL-1&variant=v1')
-    expect(screen.getByText('Ver ventas →').getAttribute('href')).toBe('/hq/sales')
+    expect(screen.getByText('Ver ventas →').getAttribute('href')).toBe('/sales')
   })
 })

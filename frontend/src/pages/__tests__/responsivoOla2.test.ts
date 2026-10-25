@@ -6,7 +6,7 @@ import { resolve } from 'node:path'
 export const PAGINAS = [
   'core/Brands.tsx', 'core/Departments.tsx', 'core/Users.tsx', 'crm/Customers.tsx', 'inventory/Inventory.tsx',
   'hq/HQInventory.tsx', 'inventory/Products.tsx', 'core/AdminCatalog.tsx', 'hq/Inicio.tsx',
-  'reports/Reportes.tsx', 'hq/HQSalesLog.tsx', 'hq/HQReturns.tsx', 'hq/HQBranches.tsx', 'hq/HQValorInventario.tsx',
+  'reports/Reportes.tsx', 'sales/SalesHistory.tsx', 'hq/HQReturns.tsx', 'hq/HQBranches.tsx', 'hq/HQValorInventario.tsx',
 ]
 /** Tienen tarjetas propias y no usan TarjetaFila (HQValorInventario las delega en `components/reports/DistribucionValor`). */
 export const SIN_TARJETA_FILA: string[] = ['core/AdminCatalog.tsx', 'hq/HQValorInventario.tsx']

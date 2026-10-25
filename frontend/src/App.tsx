@@ -12,6 +12,7 @@ const _savedTheme = localStorage.getItem('atlas_theme') ?? 'dark'
 document.documentElement.classList.add(_savedTheme)
 import { Layout } from './components/layout/Layout'
 import { RequireRole, RutaPorRol } from './components/layout/RequireRole'
+import { RedirigirConQuery } from './components/layout/RedirigirConQuery'
 
 import { LoginPage } from './pages/Login'
 
@@ -26,7 +27,6 @@ const NotFoundPage = lazy(() => import('./pages/NotFound').then(m => ({ default:
 // HQ / Admin
 // Reportes (Fase 2 del admin): una sola pantalla para HQ y sucursal; chart.js va en su chunk, no en el de entrada.
 const Reportes        = lazy(() => import('./pages/reports/Reportes').then(m => ({ default: m.Reportes })))
-const HQSalesLog      = lazy(() => import('./pages/hq/HQSalesLog').then(m => ({ default: m.HQSalesLog })))
 const HQReturns       = lazy(() => import('./pages/hq/HQReturns').then(m => ({ default: m.HQReturns })))
 const HQInventory     = lazy(() => import('./pages/hq/HQInventory').then(m => ({ default: m.HQInventory })))
 const HQBranches      = lazy(() => import('./pages/hq/HQBranches').then(m => ({ default: m.HQBranches })))
@@ -276,7 +276,8 @@ export default function App() {
             {/* Inicio: la misma pantalla en básico y completo (decide con perfilUi). Reportes: una para todos; aquí con selector de sucursal. */}
             <Route path="operations" element={<RutaPorRol url="/hq/operations"><Suspense fallback={<PageLoader />}><Inicio /></Suspense></RutaPorRol>} />
             <Route path="reports-hub" element={<RutaPorRol url="/hq/reports-hub"><Suspense fallback={<PageLoader />}><Reportes conSucursales /></Suspense></RutaPorRol>} />
-            <Route path="sales" element={<RutaPorRol url="/hq/sales"><Suspense fallback={<PageLoader />}><HQSalesLog /></Suspense></RutaPorRol>} />
+            {/* Fase 3 del admin: Ventas, Devoluciones e Inventario son una sola pantalla en la URL corta; las viejas redirigen con su consulta. */}
+            <Route path="sales" element={<RedirigirConQuery a="/sales" />} />
             <Route path="returns" element={<RutaPorRol url="/hq/returns"><Suspense fallback={<PageLoader />}><HQReturns /></Suspense></RutaPorRol>} />
             <Route path="inventory" element={<RutaPorRol url="/hq/inventory"><Suspense fallback={<PageLoader />}><HQInventory /></Suspense></RutaPorRol>} />
             <Route path="valor-inventario" element={<RutaPorRol url="/hq/valor-inventario"><Suspense fallback={<PageLoader />}><HQValorInventario /></Suspense></RutaPorRol>} />

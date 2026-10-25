@@ -46,7 +46,7 @@ const ventas = (n: number) => `${n} ${n === 1 ? 'venta' : 'ventas'}`
  *  (Productos y Mis ventas); en completo, a Existencias (kardex, ajuste, costo) y Ventas HQ. */
 const ENLACES = {
   basico:   { existencias: '/products', ventas: '/sales' },
-  completo: { existencias: '/hq/inventory', ventas: '/hq/sales' },
+  completo: { existencias: '/hq/inventory', ventas: '/sales' },
 } as const
 const urlExistencias = (basico: boolean, sku: string, variantId: string) =>
   basico ? ENLACES.basico.existencias : `/hq/inventory?q=${encodeURIComponent(sku)}&variant=${encodeURIComponent(variantId)}`

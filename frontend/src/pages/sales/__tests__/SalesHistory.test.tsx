@@ -1,0 +1,107 @@
+// frontend/src/pages/sales/__tests__/SalesHistory.test.tsx
+// @vitest-environment jsdom
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
+import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react'
+
+const { list, getStats, getBranches } = vi.hoisted(() => ({ list: vi.fn(), getStats: vi.fn(), getBranches: vi.fn() }))
+vi.mock('../../../api/sales', () => ({ salesApi: { list, getStats } }))
+vi.mock('../../../api/organization', () => ({ organizationApi: { getBranches } }))
+vi.mock('../../../api/printer', () => ({ printerApi: { getTicketBase64: vi.fn(), printViaAgent: vi.fn() } }))
+vi.mock('../../../store/posStore', () => ({
+  usePOSStore: (sel: (s: { printerName: string | null }) => unknown) => sel({ printerName: null }),
+}))
+vi.mock('../../../components/pos/modals/ReturnModal', () => ({ ReturnModal: () => <div data-testid="return-modal" /> }))
+vi.mock('../../../components/pos/modals/ReprintPinModal', () => ({ ReprintPinModal: () => <div data-testid="pin-modal" /> }))
+
+import { SalesHistory } from '../SalesHistory'
+import { useAuthStore } from '../../../store/authStore'
+import { rangoPreset } from '../../reports/presetsReportes'
+
+const hoy = rangoPreset('hoy')
+const VENTA = {
+  id: 'venta-1', series: 'A', folio: 41, status: 'PAID', total_amount: 250, subtotal: 250, tax_amount: 0,
+  created_at: '2026-10-20T15:00:00Z', customer_name: null, branch_id: 1, branch_name: 'Roma',
+  payments: [{ method: 'CASH', amount: 250 }],
+  lines: [{ description: 'Blusa', sku: 'BLU', quantity: 1, unit_price: '250', total_line: '250' }],
+}
+const STATS = { total_sales: 250, total_transactions: 1, average_ticket: 250, payment_methods: { CASH: 250 }, refund_count: 0, refund_total: 0, peak_hour: '15:00' }
+const SUC = (id: number, name: string, can_sell = true) =>
+  ({ id, name, branch_type: 'STORE', address: null, phone: null, is_headquarters: false, is_active: true, can_sell })
+const usuario = (role: string, branch_id: number | null = null) =>
+  useAuthStore.setState({ user: { id: 1, username: 'u', role, branch_id, platform_role: 'NONE' } } as never)
+const pintar = () => render(<MemoryRouter><SalesHistory /></MemoryRouter>)
+const cabeceras = () => screen.getAllByRole('columnheader').map((th) => th.textContent)
+
+beforeEach(() => {
+  list.mockReset().mockResolvedValue({ items: [VENTA], total: 1, page: 0, pages: 1 })
+  getStats.mockReset().mockResolvedValue(STATS)
+  getBranches.mockReset().mockResolvedValue([SUC(1, 'Roma'), SUC(2, 'Condesa')])
+})
+afterEach(cleanup)
+
+describe('Ventas (/sales, fusión de HQSalesLog)', () => {
+  it('la cajera arranca en Hoy, solo estados cerrados, sin pedir sucursales ni mandar branch_id; el título es Ventas', async () => {
+    usuario('CAJERO', 1)
+    pintar()
+    await screen.findByText('A-0041')
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Ventas')
+    expect(screen.getByRole('button', { name: 'Hoy' }).getAttribute('aria-pressed')).toBe('true')
+    expect(list).toHaveBeenCalledWith({
+      start_date: hoy.inicio, end_date: hoy.fin, limit: 100, skip: 0, statuses: 'PAID,REFUNDED_PARTIAL,REFUNDED_TOTAL,CANCELLED',
+    })
+    expect(getStats).toHaveBeenCalledWith({ start_date: hoy.inicio, end_date: hoy.fin })
+    expect((screen.getByLabelText('Incluir abiertas/borradores') as HTMLInputElement).checked).toBe(false)
+    expect(getBranches).not.toHaveBeenCalled()
+    expect(screen.queryByLabelText('Sucursal')).toBeNull()
+    expect(cabeceras()).not.toContain('Sucursal')
+  })
+
+  it('la cajera conserva Ver, Reimprimir y Devolver; el detalle abre el Modal del kit', async () => {
+    usuario('CAJERO', 1)
+    pintar()
+    await screen.findByText('A-0041')
+    expect(screen.getByRole('button', { name: /Reimprimir/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Devolver/ })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Ver' }))
+    const dialogo = await screen.findByRole('dialog')
+    expect(within(dialogo).getByText('Blusa')).toBeTruthy()
+    expect(within(dialogo).getByRole('button', { name: /Registrar devolución/ })).toBeTruthy()
+  })
+
+  it('la administradora con dos sucursales que venden ve el selector y la columna Sucursal; al elegir una manda branch_id', async () => {
+    usuario('ADMINISTRADOR')
+    pintar()
+    await screen.findByText('A-0041')
+    const selector = await screen.findByLabelText('Sucursal')
+    expect(cabeceras()).toContain('Sucursal')
+    expect(list.mock.calls[0][0]).not.toHaveProperty('branch_id')
+    // HQ veía abiertas y borradores por defecto (HQSalesLog): la casilla arranca encendida y no viaja `statuses`.
+    expect((screen.getByLabelText('Incluir abiertas/borradores') as HTMLInputElement).checked).toBe(true)
+    expect(list.mock.calls[0][0]).not.toHaveProperty('statuses')
+    fireEvent.change(selector, { target: { value: '2' } })
+    await waitFor(() => expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ branch_id: 2, skip: 0 })))
+    expect(getStats).toHaveBeenLastCalledWith({ start_date: hoy.inicio, end_date: hoy.fin, branch_id: 2 })
+  })
+
+  it('con una sola sucursal que vende (la otra es bodega) no hay selector ni columna', async () => {
+    usuario('DUEÑO')
+    getBranches.mockResolvedValue([SUC(1, 'Roma'), SUC(9, 'Bodega', false)])
+    pintar()
+    await screen.findByText('A-0041')
+    await waitFor(() => expect(getBranches).toHaveBeenCalled())
+    expect(screen.queryByLabelText('Sucursal')).toBeNull()
+    expect(cabeceras()).not.toContain('Sucursal')
+  })
+
+  it('el buscador filtra por folio o cliente sin volver al servidor', async () => {
+    usuario('CAJERO', 1)
+    list.mockResolvedValue({ items: [VENTA, { ...VENTA, id: 'venta-2', folio: 42, customer_name: 'Lupita' }], total: 2, page: 0, pages: 1 })
+    pintar()
+    await screen.findByText('A-0042')
+    fireEvent.change(screen.getByLabelText('Buscar folio o cliente'), { target: { value: 'lupita' } })
+    expect(screen.queryByText('A-0041')).toBeNull()
+    expect(screen.getByText('A-0042')).toBeTruthy()
+    expect(list).toHaveBeenCalledTimes(1)
+  })
+})
