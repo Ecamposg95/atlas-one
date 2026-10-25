@@ -399,7 +399,7 @@ function RetailHome({ greeting, orgName, plan, enabledModules }: HomeProps) {
       <Widget module="inventory" icon="fa-boxes" title="Inventario" description="Stock por sucursal y movimientos del día." cta="Ver inventario" ctaUrl="/inventory" />
       <Widget module="purchasing" icon="fa-truck" title="Compras" description="Órdenes a proveedores y recepciones." cta="Ver compras" ctaUrl="/purchasing" beta />
       <Widget icon="fa-store" title="Sucursales" description="Resumen de cada sucursal y catálogo habilitado." cta="Ver sucursales" ctaUrl="/hq/branches" />
-      <Widget module="promotions" icon="fa-tag" title="Promociones" description="Promos activas, descuentos por temporada." cta="Ver promos" ctaUrl="/admin/catalog" />
+      <Widget module="promotions" icon="fa-tag" title="Promociones" description="Promos activas, descuentos por temporada." cta="Ver promos" ctaUrl="/products" />
       <Widget module="quotes" icon="fa-file-invoice-dollar" title="Cotizaciones" description="Presupuestos abiertos y conversión a venta." cta="Ver cotizaciones" ctaUrl="/quotes" />
       <Widget module="reports" icon="fa-chart-pie" title="Reportes" description="Margen, rotación, productos top." cta="Ver reportes" ctaUrl="/hq/reports-hub" />
     </HomeShell>

@@ -6,8 +6,10 @@ import { render, screen, cleanup, waitFor } from '@testing-library/react'
 const api = vi.hoisted(() => ({
   list: vi.fn(async () => ({ items: [], total: 0 })),
   getDepartments: vi.fn(async () => []),
+  getBrands: vi.fn(async () => []),
   barcodesMissingCount: vi.fn(async () => 4),
   getCatalogKpis: vi.fn(async () => null),
+  catalogKpis: vi.fn(async () => null),
 }))
 vi.mock('../../../api/products', () => ({ productsApi: api }))
 vi.mock('../../../api/inventory', () => ({ inventoryApi: {} }))
@@ -46,6 +48,8 @@ describe('Productos HQ', () => {
     expect(await screen.findByLabelText('Nuevo producto')).toBeTruthy()
     await waitFor(() => expect(api.getDepartments).toHaveBeenCalled())
     expect(api.barcodesMissingCount).not.toHaveBeenCalled()
+    expect(api.catalogKpis).not.toHaveBeenCalled()
+    expect(screen.queryByLabelText('Incluir archivados')).toBeNull()
     expect(screen.queryByLabelText('Importar productos')).toBeNull()
     expect(screen.queryByLabelText('Descargar etiquetas CSV')).toBeNull()
     expect(screen.queryByLabelText(/Generar códigos/)).toBeNull()

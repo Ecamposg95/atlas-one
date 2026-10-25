@@ -1,35 +1,36 @@
 /**
- * Acciones por producto de `/admin/catalog`.
+ * Acciones por producto del catálogo (lista de `/products`, HQ en perfil
+ * completo; antes `/admin/catalog`, fusionado en la Fase 3 del admin).
  *
  * Qué botones aparecen depende del estado del producto (pendiente de
- * aprobación, archivado…). Esa decisión vivía duplicada dentro del JSX de la
- * tabla; al añadir la vista de tarjetas para teléfono habría habido que
- * repetirla, así que se extrae aquí —pura y probable— y las dos vistas la
- * recorren igual.
+ * aprobación, archivado…). La decisión vive aquí —pura y probable— y la tabla
+ * (escritorio) y las tarjetas (teléfono) la recorren igual.
  */
 
 export type ClaveAccionCatalogo =
   | 'matriz' | 'aprobar' | 'rechazar' | 'historial'
   | 'editar' | 'duplicar' | 'archivar' | 'restaurar'
 
+/** Clase del botón del kit (botonesDelKit.test.ts): neutras en ghost, aprobar en primary, destructivas en danger. */
+export type ClaseBotonAccion = 'dax-btn-ghost' | 'dax-btn-primary' | 'dax-btn-danger'
+
 export interface MetaAccionCatalogo {
-  /** Texto del `title` y del `aria-label`; en tarjeta también se pinta. */
+  /** Texto del `title` y del `aria-label` («Acción — Producto»); en tarjeta también se pinta. */
   etiqueta: string
   /** Clase de Font Awesome. */
   icono: string
-  /** Colores de hover del botón. */
-  clase: string
+  clase: ClaseBotonAccion
 }
 
 export const ACCIONES_CATALOGO: Record<ClaveAccionCatalogo, MetaAccionCatalogo> = {
-  matriz:    { etiqueta: 'Matriz de sucursales', icono: 'fa-store',              clase: 'hover:text-indigo-300 hover:bg-indigo-500/10' },
-  aprobar:   { etiqueta: 'Aprobar',              icono: 'fa-check',              clase: 'hover:text-emerald-400 hover:bg-emerald-500/10' },
-  rechazar:  { etiqueta: 'Rechazar',             icono: 'fa-xmark',              clase: 'hover:text-amber-400 hover:bg-amber-500/10' },
-  historial: { etiqueta: 'Historial',            icono: 'fa-clock-rotate-left',  clase: 'hover:text-amber-300 hover:bg-amber-500/10' },
-  editar:    { etiqueta: 'Editar',               icono: 'fa-pen-to-square',      clase: 'hover:text-white hover:bg-slate-700' },
-  duplicar:  { etiqueta: 'Duplicar',             icono: 'fa-copy',               clase: 'hover:text-cyan-300 hover:bg-cyan-500/10' },
-  archivar:  { etiqueta: 'Archivar',             icono: 'fa-box-archive',        clase: 'hover:text-rose-400 hover:bg-rose-500/10' },
-  restaurar: { etiqueta: 'Restaurar',            icono: 'fa-box-open',           clase: 'hover:text-emerald-400 hover:bg-emerald-500/10' },
+  matriz:    { etiqueta: 'Matriz de sucursales', icono: 'fa-store',             clase: 'dax-btn-ghost' },
+  aprobar:   { etiqueta: 'Aprobar',              icono: 'fa-check',             clase: 'dax-btn-primary' },
+  rechazar:  { etiqueta: 'Rechazar',             icono: 'fa-xmark',             clase: 'dax-btn-danger' },
+  historial: { etiqueta: 'Historial',            icono: 'fa-clock-rotate-left', clase: 'dax-btn-ghost' },
+  editar:    { etiqueta: 'Editar',               icono: 'fa-pencil',            clase: 'dax-btn-ghost' },
+  duplicar:  { etiqueta: 'Duplicar',             icono: 'fa-copy',              clase: 'dax-btn-ghost' },
+  archivar:  { etiqueta: 'Archivar',             icono: 'fa-box-archive',       clase: 'dax-btn-danger' },
+  restaurar: { etiqueta: 'Restaurar',            icono: 'fa-box-open',          clase: 'dax-btn-ghost' },
 }
 
 /** Producto visto solo por lo que decide sus acciones. */
@@ -42,10 +43,11 @@ export interface ProductoAccionable {
  * Acciones disponibles para un producto, en el orden en que se pintan.
  *
  * Aprobar y rechazar solo tienen sentido mientras está `PENDING`; archivar y
- * restaurar son excluyentes según `is_active`.
+ * restaurar son excluyentes según `is_active`. Con una sola sucursal la matriz
+ * sobra (`conMatriz: false`): el formulario ya trae su sección de sucursal.
  */
-export function accionesDeProducto(p: ProductoAccionable): ClaveAccionCatalogo[] {
-  const claves: ClaveAccionCatalogo[] = ['matriz']
+export function accionesDeProducto(p: ProductoAccionable, opciones: { conMatriz?: boolean } = {}): ClaveAccionCatalogo[] {
+  const claves: ClaveAccionCatalogo[] = opciones.conMatriz === false ? [] : ['matriz']
   if (p.approval_status === 'PENDING') claves.push('aprobar', 'rechazar')
   claves.push('historial', 'editar', 'duplicar')
   claves.push(p.is_active ? 'archivar' : 'restaurar')

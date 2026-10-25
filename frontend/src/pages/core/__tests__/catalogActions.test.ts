@@ -32,4 +32,13 @@ describe('accionesDeProducto', () => {
       expect(ACCIONES_CATALOGO[clave].icono).toMatch(/^fa-/)
     }
   })
+
+  it('con conMatriz: false no ofrece la matriz (una sola tienda)', () => {
+    expect(accionesDeProducto({ approval_status: 'APPROVED', is_active: true }, { conMatriz: false }))
+      .toEqual(['historial', 'editar', 'duplicar', 'archivar'])
+  })
+
+  it('toda acción usa una clase de botón del kit (sin colores sueltos)', () => {
+    for (const meta of Object.values(ACCIONES_CATALOGO)) expect(meta.clase).toMatch(/^dax-btn-(ghost|primary|danger)$/)
+  })
 })

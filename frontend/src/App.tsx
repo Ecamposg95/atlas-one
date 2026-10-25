@@ -33,7 +33,6 @@ const HQValorInventario = lazy(() => import('./pages/hq/HQValorInventario').then
 const Inicio          = lazy(() => import('./pages/hq/Inicio').then(m => ({ default: m.Inicio })))
 
 // Catalog / Core
-const AdminCatalog    = lazy(() => import('./pages/core/AdminCatalog').then(m => ({ default: m.AdminCatalog })))
 const StoreScanner    = lazy(() => import('./pages/scanner/StoreScanner').then(m => ({ default: m.StoreScanner })))
 const Conteos       = lazy(() => import('./pages/inventory/conteos/Conteos').then(m => ({ default: m.Conteos })))
 const ConteoSesion  = lazy(() => import('./pages/inventory/conteos/ConteoSesion').then(m => ({ default: m.ConteoSesion })))
@@ -283,22 +282,12 @@ export default function App() {
             <Route path="branches/:branchId" element={<RutaPorRol url="/hq/branches"><Suspense fallback={<PageLoader />}><HQBranches /></Suspense></RutaPorRol>} />
           </Route>
 
-          {/* Admin / Core — Track 3 (POS bug-fix): cajero tiene control
-              avanzado del catálogo en su tienda. Backend filtra por
-              organization_id + branch_id (cajero solo afecta productos
-              de su sucursal vía PBS). */}
-          <Route
-            path="admin/catalog"
-            element={
-              <RequireRole roles={['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO']}>
-                <Suspense fallback={<PageLoader />}><AdminCatalog /></Suspense>
-              </RequireRole>
-            }
-          />
-          {/* El alta del Catálogo es el mismo formulario que /products/new. */}
-          <Route path="admin/products/new" element={<Navigate to="/products/new?volver=/admin/catalog" replace />} />
+          {/* El Catálogo del admin vive en /products desde la Fase 3 (cifras, aprobación y
+              archivado para HQ en perfil completo); la URL vieja y su alta redirigen. */}
+          <Route path="admin/catalog" element={<RedirigirConQuery a="/products" />} />
+          <Route path="admin/products/new" element={<Navigate to="/products/new" replace />} />
           {/* Scanner de tienda — corrige precios y cuenta existencias parado en
-              el pasillo. Mismo guard que admin/catalog y products/:id/edit:
+              el pasillo. Mismo guard que products/:id/edit:
               es escritura de catálogo/inventario scoped por sucursal. */}
           <Route
             path="scanner"

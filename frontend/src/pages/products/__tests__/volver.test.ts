@@ -6,8 +6,8 @@ describe('destinoDeRegreso', () => {
     expect(destinoDeRegreso('', '/products')).toBe('/products')
   })
   it('acepta rutas internas', () => {
-    expect(destinoDeRegreso('?volver=/admin/catalog', '/products')).toBe('/admin/catalog')
-    expect(destinoDeRegreso('?volver=%2Fadmin%2Fcatalog%3Fq%3D1', '/products')).toBe('/admin/catalog?q=1')
+    expect(destinoDeRegreso('?volver=/hq/branches', '/products')).toBe('/hq/branches')
+    expect(destinoDeRegreso('?volver=%2Fhq%2Fbranches%3Fq%3D1', '/products')).toBe('/hq/branches?q=1')
   })
   it('rechaza destinos externos o raros', () => {
     expect(destinoDeRegreso('?volver=https://evil', '/products')).toBe('/products')

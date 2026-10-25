@@ -278,6 +278,11 @@ export const productsApi = {
     return data
   },
 
+  /** DELETE /api/products/{id} — archiva (soft-delete, admin-only); `restore` lo revierte. */
+  archive: async (id: string): Promise<void> => {
+    await client.delete(`/products/${id}`)
+  },
+
   /** POST /api/products/{id}/variants — agrega variantes de color/talla (módulo `variants`). */
   createVariants: async (productId: string, variants: ExtraVariantPayload[]): Promise<Product> => {
     const { data } = await client.post<Product>(`/products/${productId}/variants`, { variants })

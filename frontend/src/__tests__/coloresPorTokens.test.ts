@@ -19,8 +19,8 @@ const PROHIBIDAS = /(?<![\w-])(?:text-white|text-slate-\d{2,3}|bg-slate-\d{2,3}|
 const PALETA = /(?<![\w-])(?:(?:hover|focus|active|dark|group-hover|max-md|sm|md|lg):)*(?:text|bg|border|ring-offset|ring|from|to|via|fill|stroke|divide|shadow|placeholder|outline)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|white|black)(?:-\d{2,3})?(?:\/\d{1,3})?(?![\w-])/
 
 const PENDIENTES = [
-  'pages/core/AdminCatalog.tsx', 'pages/core/Brands.tsx', 'pages/core/Departments.tsx', 'pages/core/Organization.tsx',
-  'pages/core/Users.tsx', 'pages/core/catalogActions.ts',
+  'pages/core/Brands.tsx', 'pages/core/Departments.tsx', 'pages/core/Organization.tsx',
+  'pages/core/Users.tsx',
   'pages/finance/CashHistory.tsx', 'pages/finance/Expenses.tsx', 'pages/finance/Purchases.tsx',
   'pages/home/GastroHomeDay.tsx', 'pages/home/PresetHome.tsx',
   'pages/hq/HQBranches.tsx',
@@ -42,7 +42,7 @@ const LIMPIOS = [
   'pages/hq/Inicio.tsx', 'pages/hq/InicioGraficas.tsx', 'pages/reports/Reportes.tsx', 'pages/reports/presetsReportes.ts',
   'components/reports/Heatmap.tsx', 'components/reports/ValorTiendaCard.tsx', 'components/ui/KpiCard.tsx',
   // Fase 3 (fusiones): las pantallas que sobreviven se reescribieron solo con tokens.
-  'pages/sales/SalesHistory.tsx', 'pages/sales/Returns.tsx', 'pages/inventory/Inventory.tsx',
+  'pages/sales/SalesHistory.tsx', 'pages/sales/Returns.tsx', 'pages/inventory/Inventory.tsx', 'pages/core/catalogActions.ts',
 ]
 
 function archivos(dir: string): string[] {

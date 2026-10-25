@@ -5,7 +5,7 @@ import { destinoDeRegreso } from './volver'
 /**
  * Página de alta/edición de producto (`/products/new`, `/products/:id/edit`).
  * Solo decide el modo y a dónde volver; el formulario es `FormularioProducto`.
- * Se llega desde el Catálogo del admin con `?volver=/admin/catalog`.
+ * Acepta `?volver=/ruta` para regresar a quien la abrió (por defecto, `/products`).
  */
 export function ProductForm() {
   const navigate = useNavigate()
