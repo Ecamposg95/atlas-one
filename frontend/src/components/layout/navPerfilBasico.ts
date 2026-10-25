@@ -13,18 +13,18 @@ import { coincideUrl } from './navPerfilPlan'
  * Para esconder algo más en básico, agrégalo aquí (CLAUDE.md §5).
  */
 
-/** Cajera y gerente: Cobrar · Mis ventas · Corte · Productos · Impresora · Mi día. */
+/** Cajera y gerente: Cobrar · Ventas · Corte · Productos · Impresora · Mi día. */
 export const OCULTAS_BASICO_SUCURSAL: readonly string[] = [
-  '/returns',             // se llega desde el ticket en Mis ventas y desde el POS
+  '/returns',             // se llega desde el ticket en Ventas y desde el POS
   '/labels', '/scanner', '/customers', '/hr/me',
   '/reports', '/hq/valor-inventario',   // gerente
 ]
 
-/** Dueña: Inicio · Mis ventas · Corte · Productos · Reportes · Empresa · Usuarios · Impresora. */
+/** Dueña: Inicio · Ventas · Corte · Productos · Reportes · Empresa · Usuarios · Impresora. */
 export const OCULTAS_BASICO_HQ: readonly string[] = [
-  '/admin/catalog', '/departments', '/brands', '/labels', '/scanner',
-  '/customers', '/hq/branches', '/inventory', '/inventory/conteos', '/hq/inventory',
-  '/hq/sales', '/hq/returns',          // Mis ventas (/sales) es global para la dueña y devuelve por ticket
+  '/departments', '/brands', '/labels', '/scanner',
+  '/customers', '/hq/branches', '/inventory', '/inventory/conteos',
+  '/returns',                          // Ventas (/sales) devuelve por ticket; Productos (/products) ya se ve en básico
   '/hq/valor-inventario',              // entra como tarjeta en el Inicio básico
   '/hr/me', '/ai',
   '/quotes', '/quotes/new', '/seguimiento', '/purchases', '/expenses', '/purchasing',

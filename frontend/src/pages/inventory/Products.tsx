@@ -13,8 +13,8 @@ import { BarraFiltros } from '../../components/ui/BarraFiltros'
 import { ListaTarjetas } from '../../components/ui/ListaTarjetas'
 import { TarjetaFila } from '../../components/ui/TarjetaFila'
 import { useEsTelefono } from '../../hooks/useIsMobile'
-import { useModoBasico } from '../../store/enabledModulesStore'
-import type { Product, Department } from '../../types/products'
+import { useModoBasico, useEnabledModulesStore } from '../../store/enabledModulesStore'
+import type { Product, Department, Brand } from '../../types/products'
 import { formatCurrency } from '../../utils/currency'
 import { sortByName } from '../../utils/sortByName'
 import { toast } from '../../store/toastStore'
@@ -22,11 +22,23 @@ import { Modal } from '../../components/ui/Modal'
 import { FormularioProducto } from '../../components/products/FormularioProducto'
 import { expandVariantRows, grupoDeVariantes, nombreDeVariante, priceRange, sumStock } from './variantRows'
 import { cerrarImportacion, debeCerrarSolo } from './importacion'
+import { CatalogKpis } from '../../components/catalog/CatalogKpis'
+import { ProductBranchMatrix } from '../../components/catalog/ProductBranchMatrix'
+import { ProductAuditDrawer } from '../../components/catalog/ProductAuditDrawer'
+import { confirm } from '../../components/ui/ConfirmDialog'
+import { ACCIONES_CATALOGO, accionesDeProducto, type ClaveAccionCatalogo } from '../core/catalogActions'
 
 const SINGULAR_GRUPO = { tallas: 'talla', colores: 'color', variantes: 'variante' } as const
 
 const HQ_ROLES = ['ADMINISTRADOR', 'DUEÑO']
 const CAN_EDIT_ROLES = ['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO']
+
+// Catálogo (fusión de /admin/catalog, Fase 3 del admin): filtro de aprobación. Solo HQ en perfil completo.
+type FiltroAprobacion = 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'
+const FILTROS_APROBACION: { clave: FiltroAprobacion; etiqueta: string }[] = [
+  { clave: 'ALL', etiqueta: 'Todos' }, { clave: 'PENDING', etiqueta: 'Pendientes' },
+  { clave: 'APPROVED', etiqueta: 'Aprobados' }, { clave: 'REJECTED', etiqueta: 'Rechazados' },
+]
 
 // ─── Import Modal ──────────────────────────────────────────────────────────────
 
@@ -276,10 +288,14 @@ function EstadoDeFila({ p }: { p: Product }) {
   const { user } = useAuthStore()
   const isHQ = HQ_ROLES.includes(user?.role ?? '')
   return isHQ ? (
-    <span className="text-xs text-slate-400">
-      {p.branch_statuses?.filter(s => s.is_active_pos).length ?? 0}
-      <span className="text-slate-600 ml-0.5">sucursales</span>
-    </span>
+    (p.branch_statuses?.length ?? 0) === 0 ? (
+      <Badge variant="yellow">Sin sucursal</Badge>
+    ) : (
+      <span className="text-xs text-slate-400">
+        {p.branch_statuses?.filter(s => s.is_active_pos).length ?? 0}
+        <span className="text-slate-600 ml-0.5">sucursales</span>
+      </span>
+    )
   ) : user?.branch_id ? (
     (() => {
       const status = p.branch_statuses?.find(s => s.branch_id === user.branch_id)
@@ -291,12 +307,56 @@ function EstadoDeFila({ p }: { p: Product }) {
   ) : null
 }
 
+/** Distintivo de aprobación/archivado del catálogo (solo HQ en perfil completo). Solo tokens. */
+function EstadoAprobacion({ p }: { p: Product }) {
+  if (!p.is_active) return <Badge variant="slate">Archivado</Badge>
+  const s = p.approval_status || 'APPROVED'
+  if (s === 'PENDING') return <Badge variant="yellow">Pendiente</Badge>
+  if (s === 'REJECTED') return <Badge variant="red">Rechazado</Badge>
+  return <Badge variant="green">Aprobado</Badge>
+}
+
 /**
- * Última columna: Editar. En la tabla es solo icono (como siempre); en la
- * tarjeta (`conTexto`) es un botón con texto visible, hijo directo de las
- * acciones de `TarjetaFila` para que reciba sus 44 px.
+ * Última columna. Fuera del catálogo: solo Editar (icono en la tabla; con texto
+ * en la tarjeta, hijo directo de las acciones de `TarjetaFila` para sus 44 px).
+ * Con `catalogo` (HQ en perfil completo): las acciones de `accionesDeProducto`
+ * en orden —matriz (siempre: es la única vía para reactivar sucursales tras restaurar),
+ * aprobar/rechazar (pendientes),
+ * historial, editar, duplicar y archivar/restaurar— con `aria-label` «Acción — Producto».
  */
-function AccionesDeFila({ p, onEditar, conTexto = false }: { p: Product; onEditar: (p: Product) => void; conTexto?: boolean }) {
+function AccionesDeFila({ p, onEditar, conTexto = false, catalogo = false, conMatriz = true, ocupado = false, onAccion }: {
+  p: Product
+  onEditar: (p: Product) => void
+  conTexto?: boolean
+  catalogo?: boolean
+  conMatriz?: boolean
+  /** Hay una acción en curso: se deshabilitan los botones para no duplicarla. */
+  ocupado?: boolean
+  onAccion?: (clave: ClaveAccionCatalogo, p: Product) => void
+}) {
+  if (catalogo && onAccion) {
+    return (
+      <div className={conTexto ? 'flex flex-wrap gap-1.5' : 'inline-flex items-center gap-1'}>
+        {accionesDeProducto(p, { conMatriz }).map((clave) => {
+          const meta = ACCIONES_CATALOGO[clave]
+          return (
+            <button
+              key={clave}
+              type="button"
+              disabled={ocupado}
+              onClick={() => (clave === 'editar' ? onEditar(p) : onAccion(clave, p))}
+              className={`${meta.clase} ${conTexto ? 'text-xs' : 'dax-btn-icon text-xs'} disabled:opacity-50`}
+              title={meta.etiqueta}
+              aria-label={`${meta.etiqueta} — ${p.name}`}
+            >
+              <i className={`fa-solid ${meta.icono}`} aria-hidden="true" />
+              {conTexto && <span> {meta.etiqueta}</span>}
+            </button>
+          )
+        })}
+      </div>
+    )
+  }
   if (conTexto) {
     return (
       <button onClick={() => onEditar(p)} className="dax-btn-secondary text-xs" aria-label="Editar producto">
@@ -339,7 +399,26 @@ function ProductsHQView() {
   // Modo básico: sin importador, etiquetas CSV, códigos ni rejilla (render condicional).
   const modoBasico = useModoBasico()
 
-  const [products, setProducts] = useState<Product[]>([])
+  // Catálogo (fusión de /admin/catalog, Fase 3): cifras, aprobación, archivados y acciones
+  // por producto. Solo HQ en perfil completo: el básico escondía el Catálogo a propósito y
+  // lo que no se pinta no se consulta. Hasta que `/me/context` responde (`loaded`) el perfil
+  // vale 'completo' por defecto: sin esperar, un FREE en básico pediría marcas y cifras al
+  // montar y se corregiría después.
+  const perfilListo = useEnabledModulesStore((s) => s.loaded)
+  const catalogo = isHQ && perfilListo && !modoBasico
+  const [brands, setBrands] = useState<Brand[]>([])
+  const [brandId, setBrandId] = useState('')
+  const [aprobacion, setAprobacion] = useState<FiltroAprobacion>('ALL')
+  const [incluirArchivados, setIncluirArchivados] = useState(false)
+  const [soloSinSucursal, setSoloSinSucursal] = useState(false)
+  const [kpis, setKpis] = useState<Awaited<ReturnType<typeof productsApi.catalogKpis>> | null>(null)
+  const [kpisLoading, setKpisLoading] = useState(catalogo)   // esqueleto, no ceros, mientras llegan
+  const [matrixProduct, setMatrixProduct] = useState<Product | null>(null)
+  const [auditProduct, setAuditProduct] = useState<Product | null>(null)
+
+  const [todos, setTodos] = useState<Product[]>([])
+  // "Sin sucursal" (tarjeta de cifras): filtro en cliente sobre la página cargada, como en el Catálogo viejo.
+  const products = soloSinSucursal ? todos.filter((p) => !p.branch_statuses || p.branch_statuses.length === 0) : todos
   const [departments, setDepartments] = useState<Department[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(0)
@@ -361,25 +440,59 @@ function ProductsHQView() {
 
   const LIMIT = 50
 
+  // Descarta respuestas viejas: con filtros que cambian rápido, la última petición manda.
+  const seqLista = useRef(0)
+  const seqKpis = useRef(0)
+
   const load = useCallback(async (q: string, dept: string, pg: number) => {
+    const seq = ++seqLista.current
     setLoading(true)
     try {
       const params: Record<string, unknown> = { search: q, skip: pg * LIMIT, limit: LIMIT }
       if (dept) params.department_id = dept
+      // Filtros del catálogo (HQ en perfil completo). Fuera de él no viajan: la lista es la de siempre.
+      if (catalogo) {
+        if (brandId) params.brand_id = brandId
+        if (aprobacion !== 'ALL') params.approval_status = aprobacion
+        if (incluirArchivados) params.include_inactive = true
+      }
       // No enviamos branch_id ni active_in_branch: el backend los deriva del JWT
       // (defense in depth). Esta vista es la de HQ; ningún rol los envía desde aquí.
       const res = await productsApi.list(params)
-      setProducts(res.items ?? [])
+      if (seq !== seqLista.current) return
+      setTodos(res.items ?? [])
       setTotal(res.total ?? 0)
     } catch (e: any) {
-      setProducts([])
+      if (seq !== seqLista.current) return
+      setTodos([])
       setTotal(0)
       const detail = e?.response?.data?.detail
       toast.error(typeof detail === 'string' ? detail : 'No se pudo cargar el catálogo. Reintenta.')
     } finally {
-      setLoading(false)
+      if (seq === seqLista.current) setLoading(false)
     }
-  }, [])
+  }, [catalogo, brandId, aprobacion, incluirArchivados])
+
+  // Cifras del catálogo con los mismos filtros que la lista (sin `include_inactive`: el endpoint no lo acepta).
+  // Un fallo deja las cifras en blanco (`null`): la lista ya avisa de sus propios errores.
+  const cargarKpis = useCallback(async () => {
+    if (!catalogo) return
+    const seq = ++seqKpis.current
+    setKpisLoading(true)
+    try {
+      const datos = await productsApi.catalogKpis({
+        search: search.trim() || undefined,
+        department_id: deptId || undefined,
+        brand_id: brandId || undefined,
+        approval_status: aprobacion === 'ALL' ? undefined : aprobacion,
+      })
+      if (seq === seqKpis.current) setKpis(datos)
+    } catch {
+      if (seq === seqKpis.current) setKpis(null)
+    } finally {
+      if (seq === seqKpis.current) setKpisLoading(false)
+    }
+  }, [catalogo, search, deptId, brandId, aprobacion])
 
   useEffect(() => {
     productsApi.getDepartments()
@@ -387,22 +500,40 @@ function ProductsHQView() {
       .catch(() => toast.error('No se pudieron cargar los departamentos.'))
     // Silencioso a propósito: si el contador falla, el botón simplemente no
     // aparece — no es motivo para molestar con un toast al abrir el catálogo.
-    // En básico el botón no existe: no se pide el contador.
-    if (!modoBasico) {
-      productsApi.barcodesMissingCount()
-        .then(setCodigosFaltantes)
-        .catch(() => setCodigosFaltantes(0))
-    }
   }, [])
 
+  // En básico el botón no existe: no se pide el contador. Con el mismo gate del perfil que el
+  // catálogo: antes de saber si es básico no se consulta (un FREE no debe verlo ni un instante).
   useEffect(() => {
+    if (!perfilListo || modoBasico) return
+    productsApi.barcodesMissingCount()
+      .then(setCodigosFaltantes)
+      .catch(() => setCodigosFaltantes(0))
+  }, [perfilListo, modoBasico])
+
+  // Marcas del filtro: solo cuando el catálogo se pinta (perfil ya conocido y completo).
+  // También enciende el esqueleto de las cifras: en recarga dura el perfil llega tarde y, sin
+  // esto, las tarjetas pintarían ceros en los 300 ms antes de que salga la primera petición.
+  useEffect(() => {
+    if (!catalogo) return
+    setKpisLoading(true)
+    productsApi.getBrands()
+      .then((b) => setBrands(sortByName(b)))
+      .catch(() => toast.error('No se pudieron cargar las marcas.'))
+  }, [catalogo])
+
+  useEffect(() => {
+    // HQ espera a conocer el perfil: la identidad de `load` cambia al llegar (`catalogo`) y,
+    // sin esperar, la lista se pediría dos veces en recarga dura.
+    if (isHQ && !perfilListo) return
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
       setPage(0)
       load(search, deptId, 0)
+      cargarKpis()
     }, 300)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
-  }, [search, deptId, load])
+  }, [search, deptId, load, cargarKpis, isHQ, perfilListo])
 
   // Refetch list whenever we navigate back to this page (e.g., after saving
   // a product in the page form /products/:id/edit). location.key changes on every navigation event,
@@ -411,14 +542,71 @@ function ProductsHQView() {
   useEffect(() => {
     if (isFirstRender.current) { isFirstRender.current = false; return }
     load(search, deptId, page)
+    cargarKpis()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.key])
 
   const pages = Math.ceil(total / LIMIT)
 
   const openEdit = (p: Product) => setEditor({ mode: 'edit', productId: p.id })
-  const handleSaved = () => { setEditor(null); load(search, deptId, page) }
+  const handleSaved = () => { setEditor(null); load(search, deptId, page); cargarKpis() }
   const handleNewProductClick = () => setEditor({ mode: 'create' })
+
+  // Acciones del catálogo (antes en AdminCatalog). Tras cada una se releen lista y cifras.
+  const detalleError = (e: unknown, respaldo: string) => {
+    const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+    toast.error(typeof detail === 'string' ? detail : respaldo)
+  }
+  const recargarCatalogo = () => { load(search, deptId, page); cargarKpis() }
+  const [accionEnCurso, setAccionEnCurso] = useState(false)
+  const correrAccion = async (clave: ClaveAccionCatalogo, p: Product) => {
+    setAccionEnCurso(true)
+    try { await ejecutarAccion(clave, p) } finally { setAccionEnCurso(false) }
+  }
+  const ejecutarAccion = async (clave: ClaveAccionCatalogo, p: Product) => {
+    switch (clave) {
+      case 'matriz': setMatrixProduct(p); return
+      case 'historial': setAuditProduct(p); return
+      case 'editar': openEdit(p); return
+      case 'aprobar':
+        try { await productsApi.approve(p.id); toast.success(`Aprobado: ${p.name}`); recargarCatalogo() }
+        catch (e) { detalleError(e, 'Error al aprobar.') }
+        return
+      case 'rechazar':
+        if (!(await confirm({ title: 'Rechazar producto', message: `"${p.name}" se desactivará en el punto de venta de todas las sucursales.`, confirmText: 'Rechazar', variant: 'danger' }))) return
+        try { await productsApi.reject(p.id); toast.success(`Rechazado: ${p.name}`); recargarCatalogo() }
+        catch (e) { detalleError(e, 'Error al rechazar.') }
+        return
+      case 'duplicar':
+        if (!(await confirm({ title: 'Duplicar producto', message: `Se creará una copia de "${p.name}" con SKU nuevo y sin existencias.`, confirmText: 'Duplicar', variant: 'info' }))) return
+        try { const copia = await productsApi.duplicate(p.id); toast.success(`Copia creada: ${copia.sku}`); recargarCatalogo() }
+        catch (e) { detalleError(e, 'Error al duplicar.') }
+        return
+      case 'archivar':
+        if (!(await confirm({ title: 'Archivar producto', message: `"${p.name}" se desactivará en todas las sucursales. Podrás volver a verlo con "Incluir archivados".`, confirmText: 'Archivar', variant: 'danger' }))) return
+        try { await productsApi.archive(p.id); toast.success('Producto archivado.'); recargarCatalogo() }
+        catch (e) { detalleError(e, 'Error al archivar.') }
+        return
+      case 'restaurar':
+        try { const r = await productsApi.restore(p.id); toast.success(r.message ?? 'Producto restaurado.'); recargarCatalogo() }
+        catch (e) { detalleError(e, 'Error al restaurar.') }
+        return
+    }
+  }
+  const exportar = async () => {
+    try {
+      await productsApi.downloadTemplate({
+        search: search.trim() || undefined,
+        department_id: deptId || undefined,
+        brand_id: brandId || undefined,
+        approval_status: aprobacion === 'ALL' ? undefined : aprobacion,
+        include_inactive: incluirArchivados || undefined,
+      })
+      toast.success('Descarga iniciada.')
+    } catch (e) {
+      detalleError(e, 'No se pudo exportar el catálogo.')
+    }
+  }
 
   const descargarEtiquetas = async () => {
     setDescargandoEtiquetas(true)
@@ -448,6 +636,7 @@ function ProductsHQView() {
     // desglose por talla lo muestre, y el contador para ocultar el botón.
     try {
       await load(search, deptId, page)
+      cargarKpis()
       setCodigosFaltantes(await productsApi.barcodesMissingCount())
     } catch {
       /* el catálogo se recarga solo al siguiente filtro o navegación */
@@ -519,6 +708,17 @@ function ProductsHQView() {
                   )}
                   </>
                   )}
+                  {catalogo && (
+                    <button
+                      type="button"
+                      onClick={exportar}
+                      className="dax-btn-secondary dax-btn-icon text-xs flex items-center gap-1.5 whitespace-nowrap"
+                      title="Exportar el catálogo filtrado a Excel"
+                      aria-label="Exportar catálogo"
+                    >
+                      <i className="fa-solid fa-file-excel" aria-hidden="true" /> <span className="hidden sm:inline">Exportar</span>
+                    </button>
+                  )}
                   <button
                     onClick={handleNewProductClick}
                     aria-label="Nuevo producto"
@@ -553,6 +753,15 @@ function ProductsHQView() {
         }
       />
 
+      {catalogo && (
+        <CatalogKpis
+          data={kpis}
+          loading={kpisLoading}
+          onFilterPending={() => setAprobacion('PENDING')}
+          onFilterNoBranch={() => setSoloSinSucursal(true)}
+        />
+      )}
+
       {/* Filtros */}
       <BarraFiltros className="gap-3 !items-stretch">
         <input
@@ -572,6 +781,41 @@ function ProductsHQView() {
             <option key={d.id} value={d.id}>{d.name}</option>
           ))}
         </select>
+        {catalogo && (
+          <>
+            <select
+              aria-label="Marca"
+              value={brandId}
+              onChange={(e) => { setBrandId(e.target.value); setPage(0) }}
+              className="dax-input max-w-[200px]"
+            >
+              <option value="">Todas las marcas</option>
+              {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+            <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Aprobación">
+              {FILTROS_APROBACION.map((f) => (
+                <button
+                  key={f.clave}
+                  type="button"
+                  onClick={() => { setAprobacion(f.clave); setPage(0) }}
+                  aria-pressed={aprobacion === f.clave}
+                  className={`${aprobacion === f.clave ? 'dax-btn-primary' : 'dax-btn-secondary'} text-xs max-sm:min-h-[44px]`}
+                >
+                  {f.etiqueta}
+                </button>
+              ))}
+            </div>
+            <label className="inline-flex items-center gap-2 text-xs text-dax-muted select-none py-2 max-md:min-h-[44px]">
+              <input type="checkbox" checked={incluirArchivados} onChange={(e) => { setIncluirArchivados(e.target.checked); setPage(0) }} />
+              Incluir archivados
+            </label>
+            {soloSinSucursal && (
+              <button type="button" onClick={() => setSoloSinSucursal(false)} className="dax-btn-ghost text-xs" title="Quitar filtro">
+                <i className="fa-solid fa-xmark" aria-hidden="true" /> Sin sucursal
+              </button>
+            )}
+          </>
+        )}
       </BarraFiltros>
 
       {/* Tabla */}
@@ -591,8 +835,9 @@ function ProductsHQView() {
                     datos={[
                       { etiqueta: 'Departamento', valor: p.department_name ?? '—' },
                       { etiqueta: 'Existencia', valor: <ExistenciaDeFila p={p} abierto={tallasAbiertas} className="max-md:min-h-[44px]" onToggle={() => setExpandedVariantsId(tallasAbiertas ? null : p.id)} /> },
+                      ...(catalogo ? [{ etiqueta: 'Aprobación', valor: <EstadoAprobacion p={p} /> }] : []),
                     ]}
-                    acciones={canEdit ? <AccionesDeFila p={p} onEditar={openEdit} conTexto /> : undefined}
+                    acciones={canEdit ? <AccionesDeFila p={p} onEditar={openEdit} conTexto catalogo={catalogo} onAccion={correrAccion} ocupado={accionEnCurso} /> : undefined}
                   />
                   {tallasAbiertas && expandVariantRows([p]).map((row) => (
                     <TarjetaFila
@@ -713,13 +958,14 @@ function ProductsHQView() {
                   <th className="text-right">Precio</th>
                   <th className="text-right">Stock</th>
                   <th>Estado</th>
+                  {catalogo && <th>Aprobación</th>}
                   {canEdit && <th />}
                 </tr>
               </thead>
               <tbody>
                 {products.map((p) => {
                   const tallasAbiertas = expandedVariantsId === p.id && (p.variants?.length ?? 0) > 1
-                  const colCount = 6 + (canEdit ? 1 : 0)
+                  const colCount = 6 + (catalogo ? 1 : 0) + (canEdit ? 1 : 0)
                   return (
                     <Fragment key={p.id}>
                       <tr>
@@ -746,9 +992,10 @@ function ProductsHQView() {
                         <td>
                           <EstadoDeFila p={p} />
                         </td>
+                        {catalogo && <td><EstadoAprobacion p={p} /></td>}
                         {canEdit && (
                           <td className="text-right">
-                            <AccionesDeFila p={p} onEditar={openEdit} />
+                            <AccionesDeFila p={p} onEditar={openEdit} catalogo={catalogo} onAccion={correrAccion} ocupado={accionEnCurso} />
                           </td>
                         )}
                       </tr>
@@ -809,7 +1056,7 @@ function ProductsHQView() {
         <ImportModal
           isHQ={isHQ}
           onClose={() => setShowImport(false)}
-          onDone={() => { setShowImport(false); load(search, deptId, page) }}
+          onDone={() => { setShowImport(false); load(search, deptId, page); cargarKpis() }}
         />
       )}
       {editor && (
@@ -823,6 +1070,16 @@ function ProductsHQView() {
             onCancel={() => setEditor(null)}
           />
         </Modal>
+      )}
+      {matrixProduct && (
+        <ProductBranchMatrix
+          product={matrixProduct}
+          onClose={() => setMatrixProduct(null)}
+          onSaved={recargarCatalogo}
+        />
+      )}
+      {auditProduct && (
+        <ProductAuditDrawer product={auditProduct} onClose={() => setAuditProduct(null)} />
       )}
     </div>
   )

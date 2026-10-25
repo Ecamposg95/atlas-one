@@ -12,6 +12,7 @@ const _savedTheme = localStorage.getItem('atlas_theme') ?? 'dark'
 document.documentElement.classList.add(_savedTheme)
 import { Layout } from './components/layout/Layout'
 import { RequireRole, RutaPorRol } from './components/layout/RequireRole'
+import { RedirigirConQuery } from './components/layout/RedirigirConQuery'
 
 import { LoginPage } from './pages/Login'
 
@@ -26,16 +27,12 @@ const NotFoundPage = lazy(() => import('./pages/NotFound').then(m => ({ default:
 // HQ / Admin
 // Reportes (Fase 2 del admin): una sola pantalla para HQ y sucursal; chart.js va en su chunk, no en el de entrada.
 const Reportes        = lazy(() => import('./pages/reports/Reportes').then(m => ({ default: m.Reportes })))
-const HQSalesLog      = lazy(() => import('./pages/hq/HQSalesLog').then(m => ({ default: m.HQSalesLog })))
-const HQReturns       = lazy(() => import('./pages/hq/HQReturns').then(m => ({ default: m.HQReturns })))
-const HQInventory     = lazy(() => import('./pages/hq/HQInventory').then(m => ({ default: m.HQInventory })))
 const HQBranches      = lazy(() => import('./pages/hq/HQBranches').then(m => ({ default: m.HQBranches })))
 const HQValorInventario = lazy(() => import('./pages/hq/HQValorInventario').then(m => ({ default: m.HQValorInventario })))
 // Inicio del dueño (SP6): chunk propio sin chart.js; básico y completo son la misma pantalla.
 const Inicio          = lazy(() => import('./pages/hq/Inicio').then(m => ({ default: m.Inicio })))
 
 // Catalog / Core
-const AdminCatalog    = lazy(() => import('./pages/core/AdminCatalog').then(m => ({ default: m.AdminCatalog })))
 const StoreScanner    = lazy(() => import('./pages/scanner/StoreScanner').then(m => ({ default: m.StoreScanner })))
 const Conteos       = lazy(() => import('./pages/inventory/conteos/Conteos').then(m => ({ default: m.Conteos })))
 const ConteoSesion  = lazy(() => import('./pages/inventory/conteos/ConteoSesion').then(m => ({ default: m.ConteoSesion })))
@@ -276,30 +273,21 @@ export default function App() {
             {/* Inicio: la misma pantalla en básico y completo (decide con perfilUi). Reportes: una para todos; aquí con selector de sucursal. */}
             <Route path="operations" element={<RutaPorRol url="/hq/operations"><Suspense fallback={<PageLoader />}><Inicio /></Suspense></RutaPorRol>} />
             <Route path="reports-hub" element={<RutaPorRol url="/hq/reports-hub"><Suspense fallback={<PageLoader />}><Reportes conSucursales /></Suspense></RutaPorRol>} />
-            <Route path="sales" element={<RutaPorRol url="/hq/sales"><Suspense fallback={<PageLoader />}><HQSalesLog /></Suspense></RutaPorRol>} />
-            <Route path="returns" element={<RutaPorRol url="/hq/returns"><Suspense fallback={<PageLoader />}><HQReturns /></Suspense></RutaPorRol>} />
-            <Route path="inventory" element={<RutaPorRol url="/hq/inventory"><Suspense fallback={<PageLoader />}><HQInventory /></Suspense></RutaPorRol>} />
+            {/* Fase 3 del admin: Ventas, Devoluciones e Inventario son una sola pantalla en la URL corta; las viejas redirigen con su consulta. */}
+            <Route path="sales" element={<RedirigirConQuery a="/sales" />} />
+            <Route path="returns" element={<RedirigirConQuery a="/returns" />} />
+            <Route path="inventory" element={<RedirigirConQuery a="/inventory" />} />
             <Route path="valor-inventario" element={<RutaPorRol url="/hq/valor-inventario"><Suspense fallback={<PageLoader />}><HQValorInventario /></Suspense></RutaPorRol>} />
             <Route path="branches" element={<RutaPorRol url="/hq/branches"><Suspense fallback={<PageLoader />}><HQBranches /></Suspense></RutaPorRol>} />
             <Route path="branches/:branchId" element={<RutaPorRol url="/hq/branches"><Suspense fallback={<PageLoader />}><HQBranches /></Suspense></RutaPorRol>} />
           </Route>
 
-          {/* Admin / Core — Track 3 (POS bug-fix): cajero tiene control
-              avanzado del catálogo en su tienda. Backend filtra por
-              organization_id + branch_id (cajero solo afecta productos
-              de su sucursal vía PBS). */}
-          <Route
-            path="admin/catalog"
-            element={
-              <RequireRole roles={['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO']}>
-                <Suspense fallback={<PageLoader />}><AdminCatalog /></Suspense>
-              </RequireRole>
-            }
-          />
-          {/* El alta del Catálogo es el mismo formulario que /products/new. */}
-          <Route path="admin/products/new" element={<Navigate to="/products/new?volver=/admin/catalog" replace />} />
+          {/* El Catálogo del admin vive en /products desde la Fase 3 (cifras, aprobación y
+              archivado para HQ en perfil completo); la URL vieja y su alta redirigen. */}
+          <Route path="admin/catalog" element={<RedirigirConQuery a="/products" />} />
+          <Route path="admin/products/new" element={<Navigate to="/products/new" replace />} />
           {/* Scanner de tienda — corrige precios y cuenta existencias parado en
-              el pasillo. Mismo guard que admin/catalog y products/:id/edit:
+              el pasillo. Mismo guard que products/:id/edit:
               es escritura de catálogo/inventario scoped por sucursal. */}
           <Route
             path="scanner"

@@ -66,7 +66,7 @@ export const BRANCH_COPY = {
     },
   },
   pages: {
-    sales: 'Mis ventas',
+    sales: 'Ventas',
     cash: 'Mi caja',
     returns: 'Devoluciones',
     products: 'Buscar producto',

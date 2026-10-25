@@ -26,22 +26,20 @@ export const BRANCH_NAV_GROUPS: { header: string; urls: string[] }[] = [
   { header: 'Configuración', urls: ['/printer-settings'] },
 ]
 
-// Grupos del menú HQ/admin. Los items no listados caen en "Más" (no se ocultan).
-// "Mi tienda" va primero: en una tienda de una sola sucursal, ver los tickets
-// del día, el catálogo, las etiquetas y la impresora son el trabajo diario de
-// la dueña, y antes no tenían ninguna entrada en su menú. Cobrar ya no: el
-// punto de venta es de la cajera (ver ROLE_ROUTES.ADMINISTRADOR).
+// Grupos del menú HQ/admin (spec 2026-10-23 §4.2, Fase 3). Los ítems no listados
+// caen en "Más" (no se ocultan). Ventas, Devoluciones, Productos e Inventario son
+// una sola pantalla en la URL corta: las de HQ (/hq/sales, /hq/returns,
+// /hq/inventory, /admin/catalog) solo redirigen. Cobrar (/pos) no está aquí:
+// el punto de venta es de la cajera (ver ROLE_ROUTES.ADMINISTRADOR).
 export const HQ_NAV_GROUPS: { header: string; urls: string[] }[] = [
-  { header: 'Mi tienda',    urls: ['/sales', '/products', '/labels', '/printer-settings'] },
-  { header: 'Caja',         urls: ['/cash-history'] },
-  { header: 'Restaurante',  urls: ['/menu', '/tables', '/mobile/comanda', '/kitchen', '/recipes', '/meseros', '/bar/bottles'] },
   { header: 'Operación',    urls: ['/hq/operations', '/hq/reports-hub', '/hq/valor-inventario'] },
-  { header: 'Catálogo',     urls: ['/admin/catalog', '/departments', '/brands'] },
-  { header: 'Inventario',   urls: ['/inventory', '/hq/inventory', '/boxes', '/logistics', '/scanner', '/inventory/conteos'] },
-  { header: 'Ventas',       urls: ['/hq/sales', '/hq/returns', '/quotes', '/quotes/new', '/seguimiento'] },
+  { header: 'Ventas',       urls: ['/sales', '/returns', '/cash-history', '/quotes', '/quotes/new', '/seguimiento'] },
+  { header: 'Catálogo',     urls: ['/products', '/departments', '/brands', '/labels'] },
+  { header: 'Inventario',   urls: ['/inventory', '/inventory/conteos', '/scanner', '/logistics', '/boxes'] },
   { header: 'Compras',      urls: ['/purchases', '/expenses', '/purchasing'] },
   { header: 'Clientes',     urls: ['/customers', '/appointments', '/commissions', '/memberships'] },
-  { header: 'Organización', urls: ['/organization', '/hq/branches', '/users', '/hr'] },
+  { header: 'Restaurante',  urls: ['/menu', '/tables', '/mobile/comanda', '/kitchen', '/recipes', '/meseros', '/bar/bottles'] },
+  { header: 'Organización', urls: ['/organization', '/hq/branches', '/users', '/hr', '/printer-settings'] },
   { header: 'Inteligencia', urls: ['/ai'] },
 ]
 
@@ -52,7 +50,6 @@ export const HQ_NAV_GROUPS: { header: string; urls: string[] }[] = [
 // no como hex sueltos aquí.
 export const GROUP_COLOR: Record<string, string> = {
   // Grupos HQ (admin)
-  'Mi tienda': 'var(--sb-mod-violet)', 'Caja': 'var(--sb-mod-green)',
   'Operación': 'var(--sb-mod-violet)', 'Catálogo': 'var(--sb-mod-green)',
   'Ventas': 'var(--sb-mod-blue)', 'Inventario': 'var(--sb-mod-amber)',
   'Compras': 'var(--sb-mod-teal)', 'Clientes': 'var(--sb-mod-rose)',
@@ -76,15 +73,13 @@ for (const _g of [...HQ_NAV_GROUPS, ...BRANCH_NAV_GROUPS]) {
 // en el menú, en la barra superior (`routeTitle`) y en el `<h1>` de la página.
 // Sin "HQ" ni "Global": para una tienda de una sucursal, HQ y sucursal son el
 // mismo lugar, y para una cadena el selector de sucursal ya dice dónde estás.
+// Fase 3 (2026-10-25): /sales, /returns, /products e /inventory sirven a todos los roles; su ítem es uno.
 export const ALL_NAV: NavItem[] = [
   { label: 'Inicio',            short: 'OPS', icon: 'fa-gauge-high',          url: '/hq/operations',    group: 'hq',   sort: 0  },
   { label: 'Reportes',          short: 'REP', icon: 'fa-chart-line',          url: '/hq/reports-hub',   group: 'hq',   sort: 1  },
   { label: 'Valor de la tienda', short: 'VAL', icon: 'fa-sack-dollar',       url: '/hq/valor-inventario', group: 'hq', sort: 1.5, module: 'reports' },
-  { label: 'Catálogo',          short: 'CAT', icon: 'fa-book',                url: '/admin/catalog',    group: 'hq',   sort: 3,  module: 'catalog' },
   { label: 'Departamentos',     short: 'DEP', icon: 'fa-layer-group',         url: '/departments',      group: 'hq',   sort: 4,  module: 'catalog', hideForGastro: true },
   { label: 'Marcas',            short: 'MRC', icon: 'fa-tags',                url: '/brands',           group: 'hq',   sort: 5,  module: 'catalog', hideForGastro: true },
-  { label: 'Ventas',            short: 'VTA', icon: 'fa-receipt',             url: '/hq/sales',         group: 'hq',   sort: 6,  module: 'pos' },
-  { label: 'Devoluciones',      short: 'DEV', icon: 'fa-undo',                url: '/hq/returns',       group: 'hq',   sort: 7,  module: 'returns' },
   { label: 'Cotizaciones',      short: 'COT', icon: 'fa-file-invoice',        url: '/quotes',           group: 'hq',   sort: 8,  module: 'quotes' },
   { label: 'Nueva cotización',  short: 'NEW', icon: 'fa-file-invoice-dollar', url: '/quotes/new',       group: 'hq',   sort: 9,  module: 'quotes' },
   { label: 'Pedidos',           short: 'PED', icon: 'fa-clipboard-check',     url: '/seguimiento',      group: 'hq',   sort: 10, module: 'quotes' },
@@ -96,7 +91,6 @@ export const ALL_NAV: NavItem[] = [
   { label: 'Escáner',           short: 'SCN', icon: 'fa-barcode',             url: '/scanner',          group: 'hq',   sort: 13.5, module: 'inventory', branchModule: 'scanner' },
   { label: 'Conteo',            short: 'CNT', icon: 'fa-list-check',           url: '/inventory/conteos', group: 'hq',   sort: 13.6, module: 'inventory' },
   { label: 'Etiquetas',         short: 'ETQ', icon: 'fa-tag',                 url: '/labels',           group: 'hq',   sort: 13.6, module: 'labels' },
-  { label: 'Existencias',       short: 'EXI', icon: 'fa-globe',               url: '/hq/inventory',     group: 'hq',   sort: 14, module: 'inventory', hideForGastro: true },
   { label: 'Logística',         short: 'LOG', icon: 'fa-truck-loading',       url: '/logistics',        group: 'hq',   sort: 15, module: 'logistics' },
   { label: 'Cajas y contenedores', short: 'CJA', icon: 'fa-box-open',         url: '/boxes',            group: 'hq',   sort: 16, module: 'logistics' },
   { label: 'Clientes',          short: 'CRM', icon: 'fa-address-book',        url: '/customers',        group: 'hq',   sort: 17, module: 'crm' },
@@ -119,7 +113,7 @@ export const ALL_NAV: NavItem[] = [
   { label: 'Comanda',           short: 'CMD', icon: 'fa-clipboard-list',      url: '/mobile/comanda',   group: 'hq',   sort: 33, module: 'tables' },
   { label: 'Mi día',            short: 'INI', icon: 'fa-house',               url: '/atlas-pos',        group: 'pos',  sort: 0  },
   { label: 'Cobrar',            short: 'POS', icon: 'fa-cash-register',       url: '/pos',              group: 'pos',  sort: 1  },
-  { label: 'Mis ventas',        short: 'HST', icon: 'fa-history',             url: '/sales',            group: 'pos',  sort: 2  },
+  { label: 'Ventas',            short: 'VTA', icon: 'fa-receipt',             url: '/sales',            group: 'pos',  sort: 2  },
   { label: 'Corte de caja',     short: 'CRT', icon: 'fa-vault',               url: '/cash-history',     group: 'pos',  sort: 3  },
   { label: 'Devoluciones',      short: 'DEV', icon: 'fa-undo',                url: '/returns',          group: 'pos',  sort: 4  },
   { label: 'Productos',         short: 'PRD', icon: 'fa-barcode',             url: '/products',         group: 'pos',  sort: 5  },
@@ -138,17 +132,17 @@ export const ALL_NAV: NavItem[] = [
 ]
 
 export const ROLE_ROUTES: Record<Role, string[]> = {
-  // `/sales`, `/products` y `/printer-settings` entran al menú del admin: sin
-  // ellos la dueña no podía reimprimir un ticket, ver su catálogo completo ni
-  // configurar la impresora desde su propia cuenta.
+  // `/sales`, `/products`, `/printer-settings`, `/returns` e `/inventory` entran al
+  // menú del admin: desde la Fase 3 son las únicas pantallas de ventas, catálogo,
+  // devoluciones e inventario (las de HQ redirigen aquí).
   //
   // `/pos` NO está en la lista del administrador (sí en la del dueño): cobrar
   // es de la cajera. Una venta capturada por el admin cae en la caja del
   // admin, no en la de quien está en el mostrador, y hubo que mover ventas a
   // mano por eso. El backend sigue aceptando al admin en `create_sale` (se usa
   // para capturar ventas históricas por API); esto es solo la navegación.
-  ADMINISTRADOR:    ['/sales','/products','/printer-settings','/labels','/mobile/owner','/cash-history','/hq/operations','/hq/reports-hub','/hq/valor-inventario','/admin/catalog','/scanner','/inventory/conteos','/departments','/organization','/users','/customers','/hq/branches','/hq/inventory','/hq/sales','/hq/returns','/brands','/hr','/hr/me','/logistics','/boxes','/quotes','/quotes/new','/seguimiento','/purchases','/expenses','/appointments','/commissions','/memberships','/recipes','/ai','/purchasing','/tables','/kitchen','/meseros','/bar/bottles','/menu','/mobile/comanda'],
-  DUEÑO:            ['/pos','/sales','/products','/printer-settings','/labels','/mobile/owner','/cash-history','/hq/operations','/hq/reports-hub','/hq/valor-inventario','/admin/catalog','/scanner','/inventory/conteos','/customers','/hq/sales','/hq/returns','/hr/me','/logistics','/boxes','/quotes','/quotes/new','/seguimiento','/purchases','/expenses','/appointments','/commissions','/memberships','/recipes','/ai','/purchasing','/tables','/kitchen','/meseros','/bar/bottles','/menu','/mobile/comanda'],
+  ADMINISTRADOR:    ['/sales','/returns','/products','/inventory','/printer-settings','/labels','/mobile/owner','/cash-history','/hq/operations','/hq/reports-hub','/hq/valor-inventario','/scanner','/inventory/conteos','/departments','/organization','/users','/customers','/hq/branches','/brands','/hr','/hr/me','/logistics','/boxes','/quotes','/quotes/new','/seguimiento','/purchases','/expenses','/appointments','/commissions','/memberships','/recipes','/ai','/purchasing','/tables','/kitchen','/meseros','/bar/bottles','/menu','/mobile/comanda'],
+  DUEÑO:            ['/pos','/sales','/returns','/products','/inventory','/printer-settings','/labels','/mobile/owner','/cash-history','/hq/operations','/hq/reports-hub','/hq/valor-inventario','/scanner','/inventory/conteos','/customers','/hr/me','/logistics','/boxes','/quotes','/quotes/new','/seguimiento','/purchases','/expenses','/appointments','/commissions','/memberships','/recipes','/ai','/purchasing','/tables','/kitchen','/meseros','/bar/bottles','/menu','/mobile/comanda'],
   GERENTE:          ['/labels','/cash-history','/reports','/hq/valor-inventario','/hr/me','/products','/scanner','/pos','/sales','/customers','/returns','/atlas-pos','/tables','/kitchen','/recipes','/meseros','/bar/bottles','/menu','/mobile/comanda'],
   CAJERO:           ['/labels','/pos','/cash-history','/hr/me','/products','/scanner','/printer-settings','/sales','/customers','/returns','/atlas-pos','/tables','/kitchen','/bar/bottles','/menu','/mobile/comanda'],
   VENDEDOR:         ['/mobile/dashboard','/mobile/query','/mobile/sales','/mobile/profile','/hr/me','/atlas-pos'],
@@ -182,7 +176,6 @@ export const ROUTE_TITLES: Record<string, string> = Object.fromEntries(
 const EXTRA_TITLES: Record<string, string> = {
   '/home': 'Inicio',
   '/startup': 'Puesta en marcha',
-  '/admin/products/new': 'Nuevo producto',
 }
 
 /**

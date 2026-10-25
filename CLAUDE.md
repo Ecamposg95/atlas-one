@@ -144,6 +144,12 @@ Edita `scripts/init_presets_v2.py` (seed de `industry_presets`) y/o el fallback 
 - Menú: `OCULTAS_BASICO_SUCURSAL` / `OCULTAS_BASICO_HQ` en `components/layout/navPerfilBasico.ts`. POS: banderas de `opcionesPorPerfil` (`pages/pos/opcionesPos.ts`). Campos del producto: `OCULTOS_BASICO` en `app/modules/products/campos.py`. Pantalla entera: `<PorPerfil basico completo>` donde una ruta deba cambiar de componente por perfil; hoy ninguna ruta de `App.tsx` lo usa (Inicio y Reportes son una sola pantalla que se adapta). Una sección: `<MasOpciones activo={modoBasico}>`.
 - Siempre render condicional (nunca `hidden`), sin tocar el backend, y lo que ya trae un dato se sigue viendo. Detalle: `docs/modo-basico.md`.
 
+### Retirar una URL del admin (fusionar dos pantallas)
+1. La pantalla que sobrevive absorbe lo que la otra hacía de más, gateado por rol (`esRolHq` de `frontend/src/utils/rolesHq.ts`) y, si aplica, por "más de una sucursal que vende" (`hooks/useSucursalesVendibles.ts`). `branch_id` solo viaja cuando un rol de oficina elige sucursal: el backend impone la sucursal a la cajera; al gerente según cada endpoint (`/sales/` y `/sales/stats` lo confinan, `/returns/` no: `HQ_ROLES` de `metricas_ventas.py` lo incluye). Revisa el router antes de decidir qué columnas enseñarle.
+2. `git rm` la pantalla vieja y su `lazy()` en `App.tsx`; la ruta vieja pasa a `<RedirigirConQuery a="/nueva" />` (`components/layout/RedirigirConQuery.tsx`: conserva `?…` y `#…`). `app/main.py` no necesita redirect: la SPA sirve la ruta.
+3. Quita la URL de `ALL_NAV`, `HQ_NAV_GROUPS`, `ROLE_ROUTES` y `OCULTAS_BASICO_HQ`; actualiza enlaces (`git grep -n '/ruta/vieja' -- frontend/src docs`).
+4. Guardias: `__tests__/fusionesAdmin.test.ts` (añade la URL a `FUSIONADAS` y el archivo a `BORRADOS`), `coloresPorTokens` (saca el borrado de `PENDIENTES`; el reescrito va a `LIMPIOS`), `overlaysFueraDelKit` (`CONOCIDOS`), `pages/__tests__/responsivoOla2.test.ts` (`PAGINAS`), y `docs/FRONTEND_VIEWS.md`. Ejemplo completo: `docs/superpowers/plans/2026-10-25-admin-fase3-fusiones-menu.md`.
+
 ---
 
 ## 6. Gotchas que te van a morder

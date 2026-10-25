@@ -76,6 +76,7 @@ Dos mecanismos paralelos (el código los reconoce como "dual RBAC" pendiente de 
 
 ### A) Gating por rol
 1. **Matriz de vistas** `ATLAS_POS_ROLE_VIEWS` (`role_permissions.py`): rol → templates permitidos. Alimenta el nav/sidebar del frontend (`get_atlas_pos_nav`, `/users/me/context`). Es gating de **UI/navegación**, no de datos.
+   - **Frontend:** el menú y las guardas de ruta salen de `ROLE_ROUTES` (`frontend/src/components/layout/navConfig.ts`; `rolesConAcceso` + `RutaPorRol`). Desde la Fase 3 del admin (2026-10-25) ADMINISTRADOR y DUEÑO tienen `/returns` e `/inventory`, y `/hq/sales`, `/hq/returns`, `/hq/inventory` y `/admin/catalog` solo redirigen. `/returns` no lleva `module:` ni `RutaPorRol` propio y `/inventory` no lleva `hideForGastro` (a propósito: un solo ítem sirve a todos los roles y giros); `/reports` lo alcanzan ADMINISTRADOR/DUEÑO (por `/hq/reports-hub`) y GERENTE, no CAJERO (no está en su `ROLE_ROUTES`). `TEMPLATE_METADATA` de `role_permissions.py` y `app/ui/nav_registry.py` aún listan esas URL viejas: el frontend no los consume y el redirect las cubre (deuda, no bloqueante).
 2. **Guards**: `require_admin_or_owner` (SUPERADMIN o ADMIN/DUEÑO).
 3. **Checks inline ad-hoc**: ~67 sitios comparan `current_user.role` directamente. No hay decorador central de rol.
 

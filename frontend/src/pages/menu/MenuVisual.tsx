@@ -89,7 +89,7 @@ export function MenuVisual() {
       ) : products.length === 0 ? (
         <DaxCard>
           <p className="text-sm text-slate-400 text-center py-6">
-            No hay productos. <Link to="/admin/catalog" style={{ color: accent }}>Agrega productos al catálogo →</Link>
+            No hay productos. <Link to="/products" style={{ color: accent }}>Agrega productos al catálogo →</Link>
           </p>
         </DaxCard>
       ) : (

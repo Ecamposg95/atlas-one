@@ -19,28 +19,30 @@ const PROHIBIDAS = /(?<![\w-])(?:text-white|text-slate-\d{2,3}|bg-slate-\d{2,3}|
 const PALETA = /(?<![\w-])(?:(?:hover|focus|active|dark|group-hover|max-md|sm|md|lg):)*(?:text|bg|border|ring-offset|ring|from|to|via|fill|stroke|divide|shadow|placeholder|outline)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|white|black)(?:-\d{2,3})?(?:\/\d{1,3})?(?![\w-])/
 
 const PENDIENTES = [
-  'pages/core/AdminCatalog.tsx', 'pages/core/Brands.tsx', 'pages/core/Departments.tsx', 'pages/core/Organization.tsx',
-  'pages/core/Users.tsx', 'pages/core/catalogActions.ts',
+  'pages/core/Brands.tsx', 'pages/core/Departments.tsx', 'pages/core/Organization.tsx',
+  'pages/core/Users.tsx',
   'pages/finance/CashHistory.tsx', 'pages/finance/Expenses.tsx', 'pages/finance/Purchases.tsx',
   'pages/home/GastroHomeDay.tsx', 'pages/home/PresetHome.tsx',
-  'pages/hq/HQBranches.tsx', 'pages/hq/HQInventory.tsx', 'pages/hq/HQReturns.tsx', 'pages/hq/HQSalesLog.tsx',
-  'pages/inventory/Boxes.tsx', 'pages/inventory/Inventory.tsx', 'pages/inventory/Logistics.tsx', 'pages/inventory/Products.tsx',
+  'pages/hq/HQBranches.tsx',
+  'pages/inventory/Boxes.tsx', 'pages/inventory/Logistics.tsx', 'pages/inventory/Products.tsx',
   'pages/inventory/conteos/BuscadorVariante.tsx', 'pages/inventory/conteos/ConteoReporte.tsx', 'pages/inventory/conteos/avance.ts',
   'pages/inventory/conteos/ConteoSesion.tsx', 'pages/inventory/conteos/Conteos.tsx',
   'pages/inventory/conteos/FichaProducto.tsx', 'pages/inventory/conteos/ListaDepartamento.tsx',
   'pages/inventory/conteos/lista.ts',
   'pages/reports/Meseros.tsx',
-  'pages/sales/QuoteMaker.tsx', 'pages/sales/Quotes.tsx', 'pages/sales/Returns.tsx', 'pages/sales/SalesHistory.tsx',
+  'pages/sales/QuoteMaker.tsx', 'pages/sales/Quotes.tsx',
   'pages/sales/Seguimiento.tsx',
 ]
 /** chart.js pinta en canvas y no entiende `var()`: `tema.ts` necesita un color concreto
  *  de respaldo por si el token falta. Es el único hex permitido en estas carpetas. */
 const RESPALDOS_DEL_CANVAS = ['components/graficas/tema.ts']
-/** Lo que esta fase creó o reescribió: cero colores fijos, de ninguna paleta, y sin hex.
+/** Lo que las Fases 2 y 3 crearon o reescribieron: cero colores fijos, de ninguna paleta, y sin hex.
  *  `KpiCard.tsx` (components/ui) entra por aquí y no por CARPETAS: no se escanea toda `ui/`. */
 const LIMPIOS = [
   'pages/hq/Inicio.tsx', 'pages/hq/InicioGraficas.tsx', 'pages/reports/Reportes.tsx', 'pages/reports/presetsReportes.ts',
   'components/reports/Heatmap.tsx', 'components/reports/ValorTiendaCard.tsx', 'components/ui/KpiCard.tsx',
+  // Fase 3 (fusiones): las pantallas que sobreviven se reescribieron solo con tokens.
+  'pages/sales/SalesHistory.tsx', 'pages/sales/Returns.tsx', 'pages/inventory/Inventory.tsx', 'pages/core/catalogActions.ts',
 ]
 
 function archivos(dir: string): string[] {

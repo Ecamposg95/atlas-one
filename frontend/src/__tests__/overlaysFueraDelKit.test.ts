@@ -43,12 +43,9 @@ const CONOCIDOS: Record<string, number> = {
   '/pages/core/Users.tsx': 1,
   '/pages/crm/Customers.tsx': 1,
   '/pages/finance/CashHistory.tsx': 2,
-  '/pages/inventory/Inventory.tsx': 1,
   '/pages/inventory/Products.tsx': 1,
   '/pages/labels/Labels.tsx': 1,
   '/pages/pos/POS.tsx': 2,
-  '/pages/sales/Returns.tsx': 2,
-  '/pages/sales/SalesHistory.tsx': 1,
 }
 
 describe('overlays fuera del kit', () => {

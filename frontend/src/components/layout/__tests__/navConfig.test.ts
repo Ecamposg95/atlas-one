@@ -75,9 +75,31 @@ describe('el menú de la boutique', () => {
 })
 
 describe('los grupos del menú', () => {
-  it('«Mi tienda» reúne el trabajo diario de la tienda, ya sin cobrar', () => {
-    const grupo = HQ_NAV_GROUPS.find((g) => g.header === 'Mi tienda')
-    expect(grupo?.urls).toEqual(['/sales', '/products', '/labels', '/printer-settings'])
+  it('el menú del admin tiene los grupos y el orden de la Fase 3 (spec §4.2), sin «Mi tienda» ni «Caja»', () => {
+    expect(HQ_NAV_GROUPS.map((g) => g.header)).toEqual([
+      'Operación', 'Ventas', 'Catálogo', 'Inventario', 'Compras', 'Clientes', 'Restaurante', 'Organización', 'Inteligencia',
+    ])
+    const grupo = (h: string) => HQ_NAV_GROUPS.find((g) => g.header === h)?.urls
+    expect(grupo('Operación')).toEqual(['/hq/operations', '/hq/reports-hub', '/hq/valor-inventario'])
+    expect(grupo('Ventas')).toEqual(['/sales', '/returns', '/cash-history', '/quotes', '/quotes/new', '/seguimiento'])
+    expect(grupo('Catálogo')).toEqual(['/products', '/departments', '/brands', '/labels'])
+    expect(grupo('Inventario')).toEqual(['/inventory', '/inventory/conteos', '/scanner', '/logistics', '/boxes'])
+    expect(grupo('Compras')).toEqual(['/purchases', '/expenses', '/purchasing'])
+    expect(grupo('Clientes')).toEqual(['/customers', '/appointments', '/commissions', '/memberships'])
+    expect(grupo('Restaurante')).toEqual(['/menu', '/tables', '/mobile/comanda', '/kitchen', '/recipes', '/meseros', '/bar/bottles'])
+    expect(grupo('Organización')).toEqual(['/organization', '/hq/branches', '/users', '/hr', '/printer-settings'])
+    expect(grupo('Inteligencia')).toEqual(['/ai'])
+  })
+
+  it('Ventas, Devoluciones, Productos e Inventario son un solo ítem con la URL corta', () => {
+    const urls = menu('ADMINISTRADOR', BOUTIQUE)
+    expect(urls).toEqual(expect.arrayContaining(['/sales', '/returns', '/products', '/inventory']))
+    for (const u of ['/hq/sales', '/hq/returns', '/hq/inventory', '/admin/catalog']) expect(urls).not.toContain(u)
+    expect(ALL_NAV.filter((n) => n.label === 'Ventas')).toHaveLength(1)
+    expect(ALL_NAV.filter((n) => n.label === 'Devoluciones')).toHaveLength(1)
+    expect(ALL_NAV.filter((n) => n.label === 'Inventario')).toHaveLength(1)
+    expect(rolesConAcceso('/inventory')).toEqual(expect.arrayContaining(['ADMINISTRADOR', 'DUEÑO']))
+    expect(rolesConAcceso('/returns')).toEqual(expect.arrayContaining(['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO']))
   })
 
   it('la cajera encuentra Clientes en su propio grupo, no en «Más»', () => {
@@ -85,9 +107,9 @@ describe('los grupos del menú', () => {
     expect(grupo?.header).toBe('Clientes')
   })
 
-  it('el corte de caja tiene grupo propio y ya no cae en «Más»', () => {
+  it('el corte de caja vive en Ventas y ya no cae en «Más»', () => {
     const grupo = HQ_NAV_GROUPS.find((g) => g.urls.includes('/cash-history'))
-    expect(grupo?.header).toBe('Caja')
+    expect(grupo?.header).toBe('Ventas')
   })
 
   it('ninguna URL está en dos grupos (se pintaría dos veces)', () => {
@@ -117,7 +139,8 @@ describe('el título de la barra superior', () => {
   })
 
   it('usa el rótulo del menú para las pantallas que antes tenían dos nombres', () => {
-    expect(routeTitle('/hq/inventory')).toBe('Existencias')
+    expect(routeTitle('/inventory')).toBe('Inventario')
+    expect(routeTitle('/sales')).toBe('Ventas')
     expect(routeTitle('/products')).toBe('Productos')
     expect(routeTitle('/cash-history')).toBe('Corte de caja')
     expect(routeTitle('/printer-settings')).toBe('Impresora')
@@ -162,6 +185,10 @@ describe('las guardas de ruta', () => {
 
   it('una ruta de nadie no se la queda nadie', () => {
     expect(rolesConAcceso('/ruta/inventada')).toEqual([])
+  })
+
+  it('Fase 3: el admin y el dueño abren /returns (antes solo /hq/returns)', () => {
+    expect(rolesConAcceso('/returns')).toEqual(expect.arrayContaining(['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO']))
   })
 })
 

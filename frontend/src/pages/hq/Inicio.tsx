@@ -43,13 +43,13 @@ const piezas = (n: number) => {
 }
 const ventas = (n: number) => `${n} ${n === 1 ? 'venta' : 'ventas'}`
 /** Enlaces de detalle por perfil: en básico, a las pantallas que SÍ están en su menú
- *  (Productos y Mis ventas); en completo, a Existencias (kardex, ajuste, costo) y Ventas HQ. */
+ *  (Productos y Ventas); en completo, a Inventario (kardex, ajuste, costo) y Ventas. */
 const ENLACES = {
   basico:   { existencias: '/products', ventas: '/sales' },
-  completo: { existencias: '/hq/inventory', ventas: '/hq/sales' },
+  completo: { existencias: '/inventory', ventas: '/sales' },
 } as const
 const urlExistencias = (basico: boolean, sku: string, variantId: string) =>
-  basico ? ENLACES.basico.existencias : `/hq/inventory?q=${encodeURIComponent(sku)}&variant=${encodeURIComponent(variantId)}`
+  basico ? ENLACES.basico.existencias : `/inventory?q=${encodeURIComponent(sku)}&variant=${encodeURIComponent(variantId)}`
 
 /** Título de sección: la pregunta que responde y, si hay, el enlace a su detalle. */
 function Titulo({ children, enlace }: { children: ReactNode; enlace?: { a: string; texto: string } }) {
@@ -132,7 +132,7 @@ function SeAcaba({ datos, esTelefono, basico }: { datos: DatosInicio; esTelefono
   const enlaces = basico ? ENLACES.basico : ENLACES.completo
   return (
     <DaxCard>
-      <Titulo enlace={{ a: enlaces.existencias, texto: basico ? 'Ver productos →' : 'Ver existencias →' }}>
+      <Titulo enlace={{ a: enlaces.existencias, texto: basico ? 'Ver productos →' : 'Ver inventario →' }}>
         Se está acabando (quedan {datos.poca_existencia.umbral} o menos)
       </Titulo>
       {esTelefono ? (
@@ -198,7 +198,7 @@ function NoSeMueve({ datos, esTelefono }: { datos: NonNullable<DatosInicio['sin_
   const lista = datos.productos
   return (
     <DaxCard>
-      <Titulo enlace={{ a: '/hq/inventory', texto: 'Ver existencias →' }}>
+      <Titulo enlace={{ a: '/inventory', texto: 'Ver inventario →' }}>
         No se mueve (sin venta en {datos.dias} días)
       </Titulo>
       {esTelefono ? (
@@ -242,7 +242,7 @@ function Pendientes({ datos, esTelefono }: { datos: NonNullable<DatosInicio['pen
       ) : (
         <div className="space-y-3" data-testid="pendientes">
           {datos.devoluciones > 0 && (
-            <Link to="/hq/returns" className={`block text-sm text-dax-warning ${enlace}`}>
+            <Link to="/returns" className={`block text-sm text-dax-warning ${enlace}`}>
               {datos.devoluciones === 1 ? '1 devolución por aprobar' : `${datos.devoluciones} devoluciones por aprobar`} →
             </Link>
           )}
