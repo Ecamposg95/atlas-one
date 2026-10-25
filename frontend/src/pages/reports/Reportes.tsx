@@ -18,7 +18,7 @@ import { formatCurrency } from '../../utils/currency'
 import { errorDetailText } from '../../utils/errorDetail'
 import { variacion } from '../../utils/variacion'
 import {
-  PRESETS, diasDelRango, etiquetaRango, etiquetasTendencia, presetActivo, rangoPreset, type ClavePreset, type Rango,
+  PRESETS, diasHastaHoy, etiquetaRango, etiquetasTendencia, presetActivo, rangoPreset, type ClavePreset, type Rango,
 } from './presetsReportes'
 
 /**
@@ -39,6 +39,7 @@ const piezas = (n: number) => {
   const r = Math.round(n * 100) / 100
   return `${r.toLocaleString('es-MX')} ${r === 1 ? 'pieza' : 'piezas'}`
 }
+const SIN_HEATMAP: NonNullable<DashboardData['charts']['heatmap']> = []   // referencia estable para los useMemo
 const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`
 
 /** Título de sección: la pregunta que responde y una nota a la derecha. */
@@ -130,7 +131,8 @@ export function Reportes({ conSucursales = false }: { conSucursales?: boolean })
     return r.inicio === rango.inicio && r.fin === rango.fin
   })()
   const activo = elegidoVigente ? presetElegido : presetActivo(rango)
-  const dias = diasDelRango(rango)
+  // Para el promedio por hora: los días del rango que ya pasaron (un fin a futuro no cuenta).
+  const dias = diasHastaHoy(rango)
   const etiquetaPeriodo = etiquetaRango(rango)
   const k = data?.kpis
   // "Tiene costos": el servidor suma los renglones con costo (misma base que la utilidad);
@@ -147,10 +149,17 @@ export function Reportes({ conSucursales = false }: { conSucursales?: boolean })
 
   // Las 24 horas sumadas en el periodo; la gráfica pinta el promedio por día del rango.
   const horas = useMemo(() => (data?.charts.hourly.data ?? []).map((neta, hora) => ({ hora, neta })), [data])
-  const ventana = useMemo(() => recortarHoras(horas), [horas])
+  const heatmap = data?.charts.heatmap ?? SIN_HEATMAP
+  // Una sola ventana para barras y heatmap: une las horas con venta neta y las del heatmap bruto
+  // (una hora con tickets y neta 0, o solo en el heatmap, no debe quedar fuera de la rejilla).
+  const ventana = useMemo(
+    () => recortarHoras([...horas, ...heatmap.map((c) => ({ hora: c.hour, neta: c.amount, tickets: c.tickets }))]),
+    [horas, heatmap],
+  )
   const sinHoras = horas.every((h) => h.neta === 0)
-  const etiquetasHoras = useMemo(() => horas.slice(ventana.desde, ventana.hasta + 1).map((h) => etiquetaHora(h.hora)), [horas, ventana])
-  const valoresHoras = useMemo(() => horas.slice(ventana.desde, ventana.hasta + 1).map((h) => h.neta / dias), [horas, ventana, dias])
+  const enVentana = useMemo(() => horas.filter((h) => h.hora >= ventana.desde && h.hora <= ventana.hasta), [horas, ventana])
+  const etiquetasHoras = useMemo(() => enVentana.map((h) => etiquetaHora(h.hora)), [enVentana])
+  const valoresHoras = useMemo(() => enVentana.map((h) => h.neta / dias), [enVentana, dias])
 
   const tendencia = data?.charts.trend
   const previa = data?.charts.trend_previous
@@ -175,7 +184,9 @@ export function Reportes({ conSucursales = false }: { conSucursales?: boolean })
 
   const top = data?.top_products ?? []
   const maxTop = Math.max(0, ...top.map((p) => p.total ?? 0))
-  const heatmap = data?.charts.heatmap ?? []
+
+  // El selector solo ofrece sucursales que venden (una bodega no es "una tienda" para comparar).
+  const vendibles = useMemo(() => sucursales.filter((b) => b.can_sell !== false), [sucursales])
 
   return (
     <div className="space-y-5">
@@ -212,7 +223,7 @@ export function Reportes({ conSucursales = false }: { conSucursales?: boolean })
           <input type="date" aria-label="Desde" value={desde} onChange={(e) => setDesde(e.target.value)} className="dax-input w-36 text-xs" />
           <input type="date" aria-label="Hasta" value={hasta} onChange={(e) => setHasta(e.target.value)} className="dax-input w-36 text-xs" />
         </ParFechas>
-        {conSucursales && sucursales.length > 1 && (
+        {conSucursales && vendibles.length > 1 && (
           <select
             aria-label="Sucursal"
             value={sucursal}
@@ -220,10 +231,12 @@ export function Reportes({ conSucursales = false }: { conSucursales?: boolean })
             className="dax-input text-xs max-w-[180px]"
           >
             <option value="">Todas las sucursales</option>
-            {sucursales.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            {vendibles.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
         )}
       </BarraFiltros>
+
+      {cargando && data && <p role="status" className="text-xs text-dax-muted">Actualizando…</p>}
 
       {error && <p role="alert" className="text-sm text-dax-danger">{error}</p>}
 
@@ -255,7 +268,7 @@ export function Reportes({ conSucursales = false }: { conSucursales?: boolean })
             <DaxCard className="lg:col-span-8">
               <Titulo nota="El periodo anterior, en gris">¿Cómo fue cada día?</Titulo>
               {data.charts.trend.data.length === 0 ? <Vacio>Sin ventas en el periodo.</Vacio> : (
-                <GraficaLinea etiquetas={etiquetasTendenciaDia} series={seriesTendencia} />
+                <GraficaLinea etiquetas={etiquetasTendenciaDia} series={seriesTendencia} ariaLabel="Venta neta por día del periodo contra el periodo anterior" />
               )}
             </DaxCard>
             <DaxCard className="lg:col-span-4">
@@ -265,6 +278,7 @@ export function Reportes({ conSucursales = false }: { conSucursales?: boolean })
                   <GraficaDona
                     partes={partesDona}
                     alto={200}
+                    ariaLabel="Cobros del periodo por método de pago"
                     centro={(
                       <>
                         <span className="dax-kpi-label">Total</span>
@@ -295,6 +309,7 @@ export function Reportes({ conSucursales = false }: { conSucursales?: boolean })
                   valores={valoresHoras}
                   alto={220}
                   nombre="Venta por hora"
+                  ariaLabel="Promedio de venta por hora del periodo"
                 />
               )}
             </DaxCard>
@@ -317,6 +332,7 @@ export function Reportes({ conSucursales = false }: { conSucursales?: boolean })
                   horizontal
                   alto={Math.max(120, 36 * sucursalesCc.length + 40)}
                   nombre="Venta neta"
+                  ariaLabel="Venta neta del periodo por sucursal"
                 />
                 <ul className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-sm">
                   {sucursalesCc.map((b) => (

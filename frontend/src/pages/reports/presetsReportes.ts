@@ -55,6 +55,16 @@ export function fechasDelRango(r: Rango): string[] {
 
 export const diasDelRango = (r: Rango): number => fechasDelRango(r).length
 
+/**
+ * Días naturales del rango hasta hoy (el `fin` se recorta a hoy): un rango
+ * escrito a mano que termina en el futuro no tiene ventas de esos días, y
+ * promediar entre ellos aplanaría el promedio por hora. Mínimo 1.
+ */
+export const diasHastaHoy = (r: Rango): number => {
+  const hoy = todayStr()
+  return Math.max(1, diasDelRango({ inicio: r.inicio, fin: r.fin < hoy ? r.fin : hoy }))
+}
+
 /** "vie 23" */
 export const etiquetaDia = (iso: string): string =>
   aFecha(iso).toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric' })

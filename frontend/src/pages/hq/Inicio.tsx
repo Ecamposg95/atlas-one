@@ -352,9 +352,11 @@ export function Inicio() {
       ]
     : []
   const basico = perfilUi === 'basico'
-  const conUtilidad = datos?.utilidad_bruta_hoy != null
+  // Misma base que Reportes: el servidor manda el importe con costo; sin él (org sin
+  // costos capturados o servidor viejo) la tarjeta no se muestra.
   const sinCosto = datos?.venta_sin_costo_hoy ?? 0
-  const conCosto = Math.max(0, (datos?.hoy.total ?? 0) - sinCosto)
+  const conCosto = datos?.venta_con_costo_hoy ?? 0
+  const conUtilidad = datos?.utilidad_bruta_hoy != null && conCosto > 0
   const devueltoHoy = datos?.hoy.devuelto ?? 0
 
   // Variaciones (spec §3.1): solo en perfil completo; en básico "solo cambian
@@ -392,7 +394,7 @@ export function Inicio() {
               variacion={conVariacion && semanaAnterior !== null ? variacion(datos.semana.total, semanaAnterior, 'vs semana anterior') : undefined} data-testid="cifra-semana" />
             {conUtilidad && (
               <KpiCard etiqueta="Utilidad bruta de hoy" valor={formatCurrency(datos.utilidad_bruta_hoy as number)}
-                detalle={sinCosto > 0 ? `sobre ${formatCurrency(conCosto)} con costo · ${formatCurrency(sinCosto)} vendidos sin costo` : 'sobre lo que tiene costo'}
+                detalle={`sobre ${formatCurrency(conCosto)} con costo${sinCosto > 0 ? ` · ${formatCurrency(sinCosto)} vendidos sin costo` : ''}`}
                 variacion={conVariacion && datos.utilidad_bruta_ayer != null ? variacion(datos.utilidad_bruta_hoy as number, datos.utilidad_bruta_ayer, 'vs ayer') : undefined}
                 data-testid="cifra-utilidad" />
             )}

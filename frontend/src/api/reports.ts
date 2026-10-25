@@ -248,6 +248,8 @@ export interface Inicio {
   utilidad_bruta_hoy: number | null
   /** Lo vendido hoy en renglones sin costo (fuera de la utilidad). */
   venta_sin_costo_hoy: number | null
+  /** Base de la utilidad: importe bruto de los renglones con costo (la misma de `kpis.sales_with_cost` de Reportes). */
+  venta_con_costo_hoy: number | null
   /** Fase 2: solo con `completo: true` (el Inicio básico no pinta gráficas); null en básico. */
   tendencia: Tendencia | null
   /** 24 horas de hoy; el frontend recorta la ventana con `recortarHoras`. */

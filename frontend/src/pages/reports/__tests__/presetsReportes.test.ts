@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import {
-  PRESETS, diasDelRango, etiquetaRango, etiquetasTendencia, fechasDelRango, presetActivo, rangoPreset,
+  PRESETS, diasDelRango, diasHastaHoy, etiquetaRango, etiquetasTendencia, fechasDelRango, presetActivo, rangoPreset,
 } from '../presetsReportes'
 
 // 23 de octubre de 2026 (viernes), mediodía local.
@@ -47,5 +47,24 @@ describe('fechas del rango', () => {
     expect(e[0]).toMatch(/sáb.*17/)
     expect(e[6]).toMatch(/vie.*23/)
     expect(etiquetasTendencia(rangoPreset('7d'), 5, ['a', 'b', 'c', 'd', 'e'])).toEqual(['a', 'b', 'c', 'd', 'e'])
+  })
+})
+
+describe('diasHastaHoy (promedio por hora de rangos a mano)', () => {
+  it('recorta el fin a hoy y nunca baja de 1', () => {
+    expect(diasHastaHoy({ inicio: '2026-10-17', fin: '2026-10-30' })).toBe(7)   // 17..23
+    expect(diasHastaHoy({ inicio: '2026-10-17', fin: '2026-10-23' })).toBe(7)
+    expect(diasHastaHoy({ inicio: '2026-10-10', fin: '2026-10-12' })).toBe(3)   // todo pasado: igual que diasDelRango
+    expect(diasHastaHoy({ inicio: '2026-10-28', fin: '2026-10-30' })).toBe(1)   // todo futuro
+  })
+})
+
+describe('presets en frontera de mes (día 1)', () => {
+  it('el 1 de noviembre: mes es un solo día y ayer es el 31 de octubre', () => {
+    vi.setSystemTime(new Date(2026, 10, 1, 12))
+    expect(rangoPreset('mes')).toEqual({ inicio: '2026-11-01', fin: '2026-11-01' })
+    expect(diasDelRango(rangoPreset('mes'))).toBe(1)
+    expect(rangoPreset('ayer')).toEqual({ inicio: '2026-10-31', fin: '2026-10-31' })
+    expect(rangoPreset('7d')).toEqual({ inicio: '2026-10-26', fin: '2026-11-01' })
   })
 })

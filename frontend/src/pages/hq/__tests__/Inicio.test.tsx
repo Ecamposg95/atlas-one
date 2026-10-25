@@ -29,7 +29,7 @@ const DATOS = {
   top_semana: [{ nombre: 'Blusa roja', cantidad: 14, total: 1400 }],
   poca_existencia: { umbral: 3, productos: [{ variant_id: 'v1', nombre: 'Falda negra', sku: 'FAL-1', existencia: 1 }] },
   corte: { estado: 'abierto', cajera: 'Mirna', abierto_en: '2026-10-19T15:00:00+00:00', cerrado_en: null, efectivo_esperado: 1500, efectivo_contado: null },
-  sin_movimiento: null, pendientes: null, sucursales: null, utilidad_bruta_hoy: null, venta_sin_costo_hoy: null,
+  sin_movimiento: null, pendientes: null, sucursales: null, utilidad_bruta_hoy: null, venta_sin_costo_hoy: null, venta_con_costo_hoy: null,
   tendencia: null, por_hora_hoy: null, utilidad_bruta_ayer: null,
 }
 // Lo que trae `completo=true` para una org de paga con dos sucursales.
@@ -44,7 +44,7 @@ const COMPLETO = {
     { branch_id: 1, nombre: 'Roma', ventas_hoy: 1000, devuelto_hoy: 0, tickets_hoy: 9, corte: DATOS.corte, poca_existencia: 2 },
     { branch_id: 2, nombre: 'Condesa', ventas_hoy: 234.5, devuelto_hoy: 0, tickets_hoy: 3, corte: { ...DATOS.corte, estado: 'sin_turno' }, poca_existencia: 0 },
   ],
-  utilidad_bruta_hoy: 400, venta_sin_costo_hoy: 234.5, utilidad_bruta_ayer: 300,
+  utilidad_bruta_hoy: 400, venta_sin_costo_hoy: 234.5, venta_con_costo_hoy: 1000, utilidad_bruta_ayer: 300,
   // 7 días terminando hoy (antier = índice 4 → 1000) y los 7 previos (suman 7500).
   tendencia: {
     dias: [500, 900, 1100, 1300, 1000, 800, 1234.5].map((neta, i) => ({ fecha: dia(13 + i), neta, tickets: i + 1 })),
@@ -224,15 +224,29 @@ describe('Inicio', () => {
     expect(clases).toMatch(/\blg:grid-cols-4\b/)
   })
 
+  it('la utilidad solo se muestra si hay venta con costo: sin costos capturados (0) o servidor viejo (campo ausente) no hay tarjeta', async () => {
+    perfil('completo')
+    inicio.mockResolvedValue({ ...COMPLETO, utilidad_bruta_hoy: 0, venta_con_costo_hoy: 0, venta_sin_costo_hoy: 1234.5 })
+    pintar()
+    await screen.findByTestId('cifra-hoy')
+    expect(screen.queryByTestId('cifra-utilidad')).toBeNull()
+    cleanup()
+    const { venta_con_costo_hoy: _omitido, ...viejo } = COMPLETO
+    inicio.mockResolvedValue(viejo)
+    pintar()
+    await screen.findByTestId('cifra-hoy')
+    expect(screen.queryByTestId('cifra-utilidad')).toBeNull()
+  })
+
   it('variaciones: hoy vs ayer, ayer vs antier, 7 días vs semana anterior, utilidad vs ayer', async () => {
     perfil('completo')
     inicio.mockResolvedValue(COMPLETO)
     pintar()
     await screen.findByTestId('cifra-hoy')
-    expect(variacionDe('cifra-hoy')?.textContent).toBe('▲ 54 % vs ayer')                // 1234.5 vs 800
-    expect(variacionDe('cifra-ayer')?.textContent).toBe('▼ 20 % vs antier')             // 800 vs 1000
-    expect(variacionDe('cifra-semana')?.textContent).toBe('▲ 20 % vs semana anterior')  // 9000 vs 7500
-    expect(variacionDe('cifra-utilidad')?.textContent).toBe('▲ 33 % vs ayer')           // 400 vs 300
+    expect(variacionDe('cifra-hoy')?.textContent).toBe('Sube ▲ 54 % vs ayer')                // 1234.5 vs 800
+    expect(variacionDe('cifra-ayer')?.textContent).toBe('Baja ▼ 20 % vs antier')             // 800 vs 1000
+    expect(variacionDe('cifra-semana')?.textContent).toBe('Sube ▲ 20 % vs semana anterior')  // 9000 vs 7500
+    expect(variacionDe('cifra-utilidad')?.textContent).toBe('Sube ▲ 33 % vs ayer')           // 400 vs 300
   })
 
   it('completo sin tendencia (servidor viejo) cae al diseño sin gráficas', async () => {

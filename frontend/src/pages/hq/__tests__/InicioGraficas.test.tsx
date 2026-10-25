@@ -5,16 +5,16 @@ import { render, screen, cleanup } from '@testing-library/react'
 // Stubs del kit: exponen etiquetas, valores y colores; el dibujo lo prueba el kit.
 vi.mock('../../../components/graficas', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../components/graficas')>()),
-  GraficaLinea: (p: { etiquetas: string[]; series: { nombre: string; valores: number[]; comparativo?: boolean }[] }) => (
-    <div data-testid="linea" data-etiquetas={p.etiquetas.join('|')}
+  GraficaLinea: (p: { etiquetas: string[]; series: { nombre: string; valores: number[]; comparativo?: boolean }[]; ariaLabel?: string }) => (
+    <div data-testid="linea" aria-label={p.ariaLabel} data-etiquetas={p.etiquetas.join('|')}
       data-series={p.series.map((s) => `${s.nombre}${s.comparativo ? '*' : ''}=${s.valores.join(',')}`).join('|')} />
   ),
-  GraficaBarras: (p: { etiquetas: string[]; valores: number[]; resaltar?: number | null; horizontal?: boolean }) => (
-    <div data-testid={p.horizontal ? 'barras-h' : 'barras'} data-etiquetas={p.etiquetas.join('|')}
+  GraficaBarras: (p: { etiquetas: string[]; valores: number[]; resaltar?: number | null; horizontal?: boolean; ariaLabel?: string }) => (
+    <div data-testid={p.horizontal ? 'barras-h' : 'barras'} aria-label={p.ariaLabel} data-etiquetas={p.etiquetas.join('|')}
       data-valores={p.valores.join(',')} data-resaltar={String(p.resaltar)} />
   ),
-  GraficaDona: (p: { partes: { nombre: string; valor: number; color: string }[]; centro?: React.ReactNode }) => (
-    <div data-testid="dona" data-partes={p.partes.map((x) => `${x.nombre}=${x.valor}`).join('|')}>{p.centro}</div>
+  GraficaDona: (p: { partes: { nombre: string; valor: number; color: string }[]; centro?: React.ReactNode; ariaLabel?: string }) => (
+    <div data-testid="dona" aria-label={p.ariaLabel} data-partes={p.partes.map((x) => `${x.nombre}=${x.valor}`).join('|')}>{p.centro}</div>
   ),
 }))
 
@@ -30,7 +30,7 @@ const DATOS: Inicio = {
   semana: { desde: dia(13), hasta: dia(19), total: 9000, devuelto: 0, tickets: 70 },
   por_metodo_hoy: { CARD: 234.5, CASH: 1000, MIXED: -10 },
   top_semana: [], poca_existencia: { umbral: 3, productos: [] }, corte,
-  sin_movimiento: null, pendientes: null, utilidad_bruta_hoy: null, venta_sin_costo_hoy: null, utilidad_bruta_ayer: null,
+  sin_movimiento: null, pendientes: null, utilidad_bruta_hoy: null, venta_sin_costo_hoy: null, venta_con_costo_hoy: null, utilidad_bruta_ayer: null,
   sucursales: [
     { branch_id: 1, nombre: 'Roma', ventas_hoy: 1000, devuelto_hoy: 0, tickets_hoy: 9, corte, poca_existencia: 0 },
     { branch_id: 2, nombre: 'Condesa', ventas_hoy: 3000, devuelto_hoy: 0, tickets_hoy: 3, corte, poca_existencia: 0 },
@@ -66,6 +66,37 @@ describe('InicioGraficas', () => {
     expect(etiquetas[0]).toBe('7:00')
     expect(etiquetas[etiquetas.length - 1]).toBe('21:00')
     expect(b.getAttribute('data-resaltar')).toBe(String(12 - 7))
+  })
+
+  it('cada gráfica trae un aria-label corto', () => {
+    for (const [seccion, id, texto] of [
+      ['tendencia', 'linea', 'Venta de los últimos 7 días contra la semana anterior'],
+      ['metodos', 'dona', 'Cobros de hoy por método de pago'],
+      ['horas', 'barras', 'Venta de hoy por hora'],
+      ['sucursales', 'barras-h', 'Venta de hoy por sucursal'],
+    ] as const) {
+      render(<InicioGraficas seccion={seccion} datos={DATOS} />)
+      expect(screen.getByTestId(id).getAttribute('aria-label')).toBe(texto)
+      cleanup()
+    }
+  })
+
+  it('horas: la ventana sale del campo `hora`, no del índice (arreglo incompleto o desordenado)', () => {
+    const incompleto = DATOS.por_hora_hoy!.filter((h) => h.hora >= 5).reverse()   // sin las horas 0..4 y al revés
+    render(<InicioGraficas seccion="horas" datos={{ ...DATOS, por_hora_hoy: incompleto }} horaActual={12} />)
+    const b = screen.getByTestId('barras')
+    const etiquetas = b.getAttribute('data-etiquetas')?.split('|') ?? []
+    expect(etiquetas.every((e) => { const h = parseInt(e, 10); return h >= 7 && h <= 21 })).toBe(true)
+    expect(etiquetas).toHaveLength(15)
+  })
+
+  it('tendencia con un día negativo (más devuelto que vendido) y sin sucursales no revienta', () => {
+    const dias = DATOS.tendencia!.dias.map((d, i) => (i === 2 ? { ...d, neta: -250 } : d))
+    render(<InicioGraficas seccion="tendencia" datos={{ ...DATOS, tendencia: { ...DATOS.tendencia!, dias }, sucursales: null }} />)
+    expect(screen.getByTestId('linea').getAttribute('data-series')).toContain('Estos 7 días=500,900,-250,')
+    cleanup()
+    render(<InicioGraficas seccion="sucursales" datos={{ ...DATOS, sucursales: null }} />)
+    expect(screen.getByTestId('barras-h').getAttribute('data-etiquetas')).toBe('')
   })
 
   it('horas: fuera de la ventana no resalta nada', () => {

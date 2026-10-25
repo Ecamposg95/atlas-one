@@ -49,7 +49,8 @@ export function InicioGraficas({ seccion, datos, horaActual = new Date().getHour
   const horas = useMemo(() => {
     if (!porHora) return null
     const { desde, hasta } = recortarHoras(porHora)
-    const ventana = porHora.slice(desde, hasta + 1)
+    // Por hora (no por índice): no depende de que el backend mande siempre las 24 en orden.
+    const ventana = porHora.filter((h) => h.hora >= desde && h.hora <= hasta)
     return {
       etiquetas: ventana.map((h) => etiquetaHora(h.hora)),
       valores: ventana.map((h) => h.neta),
@@ -64,7 +65,7 @@ export function InicioGraficas({ seccion, datos, horaActual = new Date().getHour
 
   if (seccion === 'tendencia') {
     if (!lineas) return null
-    return <GraficaLinea etiquetas={lineas.etiquetas} series={lineas.series} />
+    return <GraficaLinea etiquetas={lineas.etiquetas} series={lineas.series} ariaLabel="Venta de los últimos 7 días contra la semana anterior" />
   }
 
   if (seccion === 'metodos') {
@@ -72,6 +73,7 @@ export function InicioGraficas({ seccion, datos, horaActual = new Date().getHour
       <GraficaDona
         partes={dona.partes}
         alto={200}
+        ariaLabel="Cobros de hoy por método de pago"
         centro={(
           <>
             <span className="dax-kpi-label">Hoy</span>
@@ -91,6 +93,7 @@ export function InicioGraficas({ seccion, datos, horaActual = new Date().getHour
         resaltar={horas.indice >= 0 ? horas.indice : null}
         alto={200}
         nombre="Venta de hoy"
+        ariaLabel="Venta de hoy por hora"
       />
     )
   }
@@ -102,6 +105,7 @@ export function InicioGraficas({ seccion, datos, horaActual = new Date().getHour
       horizontal
       alto={Math.max(120, 36 * ranking.etiquetas.length + 40)}
       nombre="Venta de hoy"
+      ariaLabel="Venta de hoy por sucursal"
     />
   )
 }

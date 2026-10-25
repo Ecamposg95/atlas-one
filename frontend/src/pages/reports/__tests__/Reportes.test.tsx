@@ -11,15 +11,15 @@ vi.mock('../../../api/organization', () => ({ organizationApi: { getBranches } }
 // jsdom no tiene canvas: el kit se sustituye por stubs que exponen las series. El dibujo lo prueba el kit.
 vi.mock('../../../components/graficas', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../components/graficas')>()),
-  GraficaLinea: (p: { etiquetas: string[]; series: { nombre: string }[] }) => (
-    <div data-testid="grafica-linea" data-etiquetas={p.etiquetas.join('|')} data-series={p.series.map((s) => s.nombre).join('|')} />
+  GraficaLinea: (p: { etiquetas: string[]; series: { nombre: string }[]; ariaLabel?: string }) => (
+    <div data-testid="grafica-linea" aria-label={p.ariaLabel} data-etiquetas={p.etiquetas.join('|')} data-series={p.series.map((s) => s.nombre).join('|')} />
   ),
-  GraficaBarras: (p: { etiquetas: string[]; valores: number[]; horizontal?: boolean }) => (
-    <div data-testid={p.horizontal ? 'grafica-barras-h' : 'grafica-barras'} data-etiquetas={p.etiquetas.join('|')}
+  GraficaBarras: (p: { etiquetas: string[]; valores: number[]; horizontal?: boolean; ariaLabel?: string }) => (
+    <div data-testid={p.horizontal ? 'grafica-barras-h' : 'grafica-barras'} aria-label={p.ariaLabel} data-etiquetas={p.etiquetas.join('|')}
       data-valores={p.valores.map((v) => Math.round(v)).join('|')} />
   ),
-  GraficaDona: (p: { partes: { nombre: string; valor: number }[] }) => (
-    <div data-testid="grafica-dona" data-partes={p.partes.map((x) => `${x.nombre}=${x.valor}`).join('|')} />
+  GraficaDona: (p: { partes: { nombre: string; valor: number }[]; ariaLabel?: string }) => (
+    <div data-testid="grafica-dona" aria-label={p.ariaLabel} data-partes={p.partes.map((x) => `${x.nombre}=${x.valor}`).join('|')} />
   ),
 }))
 
@@ -75,11 +75,11 @@ describe('Reportes', () => {
     render(<Reportes />)
     const venta = await screen.findByTestId('kpi-venta')
     expect(venta.textContent).toContain('$9,000.00')
-    expect(variacionDe('kpi-venta')?.textContent).toBe('▲ 20 % vs periodo anterior')
-    expect(variacionDe('kpi-tickets')?.textContent).toBe('▲ 17 % vs periodo anterior')
-    expect(variacionDe('kpi-promedio')?.textContent).toBe('▲ 3 % vs periodo anterior')
+    expect(variacionDe('kpi-venta')?.textContent).toBe('Sube ▲ 20 % vs periodo anterior')
+    expect(variacionDe('kpi-tickets')?.textContent).toBe('Sube ▲ 17 % vs periodo anterior')
+    expect(variacionDe('kpi-promedio')?.textContent).toBe('Sube ▲ 3 % vs periodo anterior')
     const dev = variacionDe('kpi-devoluciones')
-    expect(dev?.textContent).toBe('▲ 300 % vs periodo anterior')
+    expect(dev?.textContent).toBe('Sube ▲ 300 % vs periodo anterior')
     expect(dev?.className).toContain('text-dax-danger')
     expect(screen.getByTestId('kpi-devoluciones').textContent).toContain('2 devoluciones')
   })
@@ -89,7 +89,7 @@ describe('Reportes', () => {
     const u = await screen.findByTestId('kpi-utilidad')
     expect(u.textContent).toContain('$3,000.00')
     expect(u.textContent).toContain('sobre $9,000.00 con costo · $400.00 sin costo')
-    expect(variacionDe('kpi-utilidad')?.textContent).toBe('▲ 50 % vs periodo anterior')
+    expect(variacionDe('kpi-utilidad')?.textContent).toBe('Sube ▲ 50 % vs periodo anterior')
   })
 
   it('oculta la utilidad bruta sin costo o sin permiso', async () => {
@@ -143,6 +143,56 @@ describe('Reportes', () => {
     expect(etiquetas[etiquetas.length - 1]).toBe('21:00')
     expect(valores[etiquetas.indexOf('12:00')]).toBe('1000')   // 7000 / 7 días
     expect(screen.getByText('Promedio por hora en 7 días')).toBeTruthy()
+  })
+
+  it('un rango a mano que termina en el futuro promedia solo entre los días que ya pasaron', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 9, 23, 12, 0, 0) })
+    render(<Reportes />)
+    await screen.findByTestId('kpi-venta')
+    fireEvent.change(screen.getByLabelText('Desde'), { target: { value: '2026-10-17' } })
+    fireEvent.change(screen.getByLabelText('Hasta'), { target: { value: '2026-10-30' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar' }))
+    await waitFor(() => expect(dashboard).toHaveBeenLastCalledWith({ start_date: '2026-10-17', end_date: '2026-10-30' }))
+    const b = await screen.findByTestId('grafica-barras')
+    const etiquetas = b.getAttribute('data-etiquetas')?.split('|') ?? []
+    expect(b.getAttribute('data-valores')?.split('|')[etiquetas.indexOf('12:00')]).toBe('1000')   // 7000 / 7 días (17..23), no / 14
+    expect(screen.getByText('Promedio por hora en 7 días')).toBeTruthy()
+  })
+
+  it('las gráficas llevan un aria-label corto', async () => {
+    render(<Reportes conSucursales />)
+    await screen.findByTestId('kpi-venta')
+    await screen.findByTestId('sucursales')
+    expect(screen.getByTestId('grafica-linea').getAttribute('aria-label')).toContain('por día')
+    expect(screen.getByTestId('grafica-dona').getAttribute('aria-label')).toContain('método de pago')
+    expect(screen.getByTestId('grafica-barras').getAttribute('aria-label')).toContain('por hora')
+    expect(screen.getByTestId('grafica-barras-h').getAttribute('aria-label')).toContain('sucursal')
+  })
+
+  it('la ventana de horas une las del heatmap bruto: una hora solo en el heatmap abre la rejilla', async () => {
+    dashboard.mockResolvedValue({ ...DASH, charts: { ...DASH.charts, heatmap: [{ day: 1, hour: 6, amount: 0, tickets: 2 }, ...DASH.charts.heatmap] } })
+    const { container } = render(<Reportes />)
+    const b = await screen.findByTestId('grafica-barras')
+    expect(b.getAttribute('data-etiquetas')?.split('|')[0]).toBe('6:00')
+    expect(container.querySelector('[data-testid="celda-1-6"]')).not.toBeNull()
+  })
+
+  it('al recargar con datos a la vista avisa "Actualizando…" sin quitar las cifras', async () => {
+    render(<Reportes />)
+    await screen.findByTestId('kpi-venta')
+    expect(screen.queryByText('Actualizando…')).toBeNull()
+    dashboard.mockReturnValueOnce(new Promise(() => { /* nunca responde */ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Hoy' }))
+    expect(await screen.findByText('Actualizando…')).toBeTruthy()
+    expect(screen.getByTestId('kpi-venta')).toBeTruthy()
+  })
+
+  it('el selector solo cuenta sucursales que venden: con una tienda y una bodega no hay selector', async () => {
+    getBranches.mockResolvedValue([SUC(1, 'Roma'), { ...SUC(2, 'Bodega'), can_sell: false }])
+    render(<Reportes conSucursales />)
+    await screen.findByTestId('kpi-venta')
+    await espera()
+    expect(screen.queryByLabelText('Sucursal')).toBeNull()
   })
 
   it('métodos: efectivo primero con sus cobros, y la dona con las partes', async () => {
