@@ -118,3 +118,28 @@ def test_dashboard_gerente_solo_su_sucursal_aunque_pida_otra(client, db, org, br
     for q in ("", f"&branch_id={branch_b.id}", "&branch_id=0"):
         d = client.get(f"/api/reports/dashboard?start_date={hoy}&end_date={hoy}{q}", headers=auth_gerente_a).json()
         assert (d["kpis"]["sales"], d["kpis"]["orders"]) == (100.0, 1), q
+
+
+# ── Fase 2 (spec 2026-10-23 §3.2): utilidad bruta e importe del top en /dashboard ──
+
+def test_dashboard_utilidad_bruta_para_admin_y_null_para_gerente(client, db, org, branch_a, cajero_a, gerente_a, auth_admin_a, auth_gerente_a, products_setup):
+    hoy = mv.hoy_mx()
+    _venta(db, org, branch_a, cajero_a, _v(products_setup), "100", dia=hoy)                       # costo 10 → 90
+    _venta(db, org, branch_a, cajero_a, _v(products_setup), "50", dia=hoy - timedelta(days=1))    # ayer: 40
+    d = client.get(f"/api/reports/dashboard?start_date={hoy}&end_date={hoy}&branch_id=0", headers=auth_admin_a).json()
+    k = d["kpis"]
+    assert (k["gross_profit"], k["prev_gross_profit"], k["sales_without_cost"]) == (90.0, 40.0, 0.0)
+    g = client.get(f"/api/reports/dashboard?start_date={hoy}&end_date={hoy}", headers=auth_gerente_a).json()["kpis"]
+    assert (g["gross_profit"], g["prev_gross_profit"], g["sales_without_cost"]) == (None, None, None)
+
+
+def test_dashboard_top_products_trae_importe_y_hasta_diez(client, db, org, branch_a, cajero_a, auth_admin_a, products_setup):
+    hoy = mv.hoy_mx()
+    primera = _venta(db, org, branch_a, cajero_a, _v(products_setup), "100", dia=hoy)
+    d = client.get(f"/api/reports/dashboard?start_date={hoy}&end_date={hoy}&branch_id=0", headers=auth_admin_a).json()
+    assert d["top_products"] == [{"name": f"Producto {primera.folio}", "qty": 1.0, "total": 100.0, "trend": [1.0]}]
+    for i in range(11):   # 12 descripciones distintas ("Producto <folio>") → se devuelven 10
+        _venta(db, org, branch_a, cajero_a, _v(products_setup), str(10 + i), dia=hoy)
+    top = client.get(f"/api/reports/dashboard?start_date={hoy}&end_date={hoy}&branch_id=0", headers=auth_admin_a).json()["top_products"]
+    assert len(top) == 10
+    assert all(p["total"] > 0 for p in top)

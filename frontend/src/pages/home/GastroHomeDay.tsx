@@ -76,7 +76,7 @@ export function GastroHomeDay({ greeting, orgName, title, subtitle, accent, topL
 
   const k = data?.kpis
   const hourly = data?.charts?.hourly?.data ?? []
-  const topProducts = (data?.top_products ?? []).slice(0, 6)
+  const topProducts = (data?.top_products ?? []).slice(0, 5)
   const peakHour = (() => {
     const h = data?.charts?.hourly
     if (!h?.data?.length) return null

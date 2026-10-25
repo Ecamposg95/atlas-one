@@ -56,8 +56,7 @@ DIAS_DIFERENCIAS = 7
 HORAS_TURNO_VIEJO = 24
 
 
-def _ve_costos(user: User) -> bool:
-    return user.platform_role == PlatformRole.SUPERADMIN or user.role in (Role.ADMINISTRADOR, Role.DUEÑO)
+_ve_costos = mv.ve_costos
 
 
 def _sucursal_del_inicio(db: Session, current_user: User, org_id: int, branch_id: Optional[int]) -> Optional[int]:

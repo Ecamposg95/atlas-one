@@ -120,6 +120,14 @@ def resolver_ambito(current_user: User, org_id: int, branch_id: Optional[int]) -
     return Ambito(org_id, current_user.branch_id, False)
 
 
+def ve_costos(user: User) -> bool:
+    """Quién ve costos y utilidad: dueño, administrador y superadmin. El gerente no
+    (misma regla que la valuación y el Inicio)."""
+    if getattr(user, "platform_role", None) == PlatformRole.SUPERADMIN:
+        return True
+    return _rol(user) in ("ADMINISTRADOR", "DUEÑO")
+
+
 def filtros_documentos(ambito: Ambito, periodo: Periodo) -> list:
     f = [
         SalesDocument.organization_id == ambito.organization_id,
