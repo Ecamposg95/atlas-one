@@ -104,4 +104,42 @@ describe('Ventas (/sales, fusión de HQSalesLog)', () => {
     expect(screen.getByText('A-0042')).toBeTruthy()
     expect(list).toHaveBeenCalledTimes(1)
   })
+
+  it('una respuesta vieja no pisa a la nueva: si la primera llega tarde, la tabla muestra la de la sucursal elegida', async () => {
+    usuario('ADMINISTRADOR')
+    let resolverPrimera!: (v: unknown) => void
+    list.mockReset()
+      .mockImplementationOnce(() => new Promise((r) => { resolverPrimera = r }))
+      .mockResolvedValue({ items: [{ ...VENTA, id: 'venta-c', folio: 77, branch_id: 2, branch_name: 'Condesa' }], total: 1, page: 0, pages: 1 })
+    pintar()
+    const selector = await screen.findByLabelText('Sucursal')
+    fireEvent.change(selector, { target: { value: '2' } })
+    await screen.findByText('A-0077')
+    // Llega tarde la respuesta de toda la organización: se descarta.
+    resolverPrimera({ items: [VENTA], total: 1, page: 0, pages: 1 })
+    await new Promise((r) => setTimeout(r, 20))
+    expect(screen.getByText('A-0077')).toBeTruthy()
+    expect(screen.queryByText('A-0041')).toBeNull()
+  })
+
+  it('el método OTHER se ve como «Otro»', async () => {
+    usuario('CAJERO', 1)
+    list.mockResolvedValue({ items: [{ ...VENTA, payments: [{ method: 'OTHER', amount: 250 }] }], total: 1, page: 0, pages: 1 })
+    pintar()
+    await screen.findByText('A-0041')
+    expect(screen.getAllByText('Otro').length).toBeGreaterThan(0)
+    expect(screen.queryByText('OTHER')).toBeNull()
+  })
+
+  it('si falla la lista muestra el error con Reintentar, no «Sin ventas»', async () => {
+    usuario('CAJERO', 1)
+    list.mockRejectedValueOnce({ response: { data: { detail: 'Sin conexión con el servidor' } } })
+    pintar()
+    const alerta = await screen.findByRole('alert')
+    expect(alerta.textContent).toContain('Sin conexión con el servidor')
+    expect(screen.queryByText('Sin ventas en este periodo')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Reintentar/ }))
+    await screen.findByText('A-0041')
+    expect(list).toHaveBeenCalledTimes(2)
+  })
 })

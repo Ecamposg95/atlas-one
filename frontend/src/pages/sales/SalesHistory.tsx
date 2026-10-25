@@ -1,5 +1,5 @@
 // frontend/src/pages/sales/SalesHistory.tsx
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { salesApi, type SalesStats } from '../../api/sales'
 import { printerApi } from '../../api/printer'
 import { usePOSStore } from '../../store/posStore'
@@ -23,6 +23,7 @@ import { ReturnModal } from '../../components/pos/modals/ReturnModal'
 import { ReprintPinModal } from '../../components/pos/modals/ReprintPinModal'
 import { formatCurrency } from '../../utils/currency'
 import { toast } from '../../store/toastStore'
+import { errorDetailText } from '../../utils/errorDetail'
 import { mensajeReimpresion, pinBloqueado, pinIncorrecto, requierePin } from '../../utils/reimpresion'
 import { formatPct } from '../pos/cardSurcharge'
 import { PRESETS, presetActivo, rangoPreset, type ClavePreset, type Rango } from '../reports/presetsReportes'
@@ -50,6 +51,7 @@ const METHOD_LABELS: Record<string, string> = {
   TRANSFER:     'Transferencia',
   STORE_CREDIT: 'Crédito tienda',
   CHECK:        'Cheque',
+  OTHER:        'Otro',
   MIXED:        'Mixto',
 }
 
@@ -85,6 +87,9 @@ export function SalesHistory() {
   const [sales, setSales] = useState<SalesDocument[]>([])
   const [stats, setStats] = useState<SalesStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  // Contador de peticiones: una respuesta vieja (otro periodo o sucursal) no pisa a la nueva.
+  const reqId = useRef(0)
   // Arranca en Hoy, como la pantalla HQ que sustituye.
   const [rango, setRango] = useState<Rango>(() => rangoPreset('hoy'))
   const [desde, setDesde] = useState(rango.inicio)
@@ -140,9 +145,12 @@ export function SalesHistory() {
   }
 
   const load = useCallback(async (r: Rango, pg: number, bid: number | '') => {
+    const mio = ++reqId.current
     setLoading(true)
+    setError(null)
     try {
       const params: Record<string, unknown> = { start_date: r.inicio, end_date: r.fin, limit: LIMIT, skip: pg * LIMIT }
+      // Se manda por si el backend lo respeta; el filtro de abajo (en cliente) siempre aplica.
       if (!includeOpenStates) params.statuses = ESTADOS_CERRADOS
       // `branch_id` solo cuando un rol de oficina eligió sucursal. Sin él, el backend
       // da toda la organización a HQ y su sucursal a cajera y gerente (regla de la Fase 1).
@@ -151,19 +159,23 @@ export function SalesHistory() {
         salesApi.list(params),
         salesApi.getStats({ start_date: r.inicio, end_date: r.fin, ...(bid !== '' ? { branch_id: bid } : {}) }),
       ])
+      if (mio !== reqId.current) return
       if (listRes.status === 'fulfilled') {
         let items = listRes.value?.items ?? []
-        // Respaldo en cliente por si el backend ignorara `statuses`.
+        // El backend no filtra por `statuses`: aquí se quitan abiertas y borradores.
         if (!includeOpenStates) items = items.filter((s) => !['PENDING', 'DRAFT'].includes(String(s.status)))
         setSales(items)
         setTotal(listRes.value?.total ?? items.length)
       } else {
+        // Un fallo no se disfraza de "sin ventas".
         setSales([])
         setTotal(0)
+        const e = listRes.reason as { response?: { data?: { detail?: unknown } } } | undefined
+        setError(errorDetailText(e?.response?.data?.detail, 'No se pudieron cargar las ventas. Vuelve a intentar en unos segundos.'))
       }
       setStats(statsRes.status === 'fulfilled' ? statsRes.value : null)
     } finally {
-      setLoading(false)
+      if (mio === reqId.current) setLoading(false)
     }
   }, [includeOpenStates])
 
@@ -220,6 +232,16 @@ export function SalesHistory() {
       <button type="button" onClick={() => setPage(page - 1)} disabled={page === 0} className="dax-btn-secondary text-xs disabled:opacity-40 max-md:min-h-[44px]">← Anterior</button>
       <span className="text-dax-muted text-xs">Pág. {page + 1} / {pages} · {total} registros</span>
       <button type="button" onClick={() => setPage(page + 1)} disabled={page >= pages - 1} className="dax-btn-secondary text-xs disabled:opacity-40 max-md:min-h-[44px]">Siguiente →</button>
+    </div>
+  )
+
+  // Mensaje de error con reintento (en lugar de la lista vacía).
+  const mensajeError = error && (
+    <div role="alert" className="p-8 text-center space-y-3">
+      <p className="text-sm text-dax-danger">{error}</p>
+      <button type="button" onClick={() => load(rango, page, sucursal)} className="dax-btn-secondary text-xs">
+        <i className="fa-solid fa-rotate-right" aria-hidden="true" /> Reintentar
+      </button>
     </div>
   )
 
@@ -299,6 +321,7 @@ export function SalesHistory() {
       {/* Teléfono: tarjetas; escritorio: la tabla de siempre (nunca ambos) */}
       {esTelefono ? (
         <>
+          {error && !loading ? <DaxCard padding={false}>{mensajeError}</DaxCard> : (
           <ListaTarjetas cargando={loading} vacio={visibles.length === 0} textoVacio="Sin ventas en este periodo">
             {visibles.map((s) => (
               <TarjetaFila
@@ -316,11 +339,12 @@ export function SalesHistory() {
               />
             ))}
           </ListaTarjetas>
+          )}
           {paginacion && <DaxCard padding={false}>{paginacion}</DaxCard>}
         </>
       ) : (
         <DaxCard padding={false}>
-          {loading ? <Spinner text="Cargando ventas..." /> : visibles.length === 0 ? (
+          {loading ? <Spinner text="Cargando ventas..." /> : error ? mensajeError : visibles.length === 0 ? (
             <div className="p-12 text-center text-dax-faint">Sin ventas en este periodo</div>
           ) : (
             <TablaDesplazable sangrado={false}>
