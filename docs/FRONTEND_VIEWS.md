@@ -22,13 +22,13 @@ Tres árboles bajo `<BrowserRouter>`:
 `RoleHomeRedirect` (index de `/`) decide el landing por rol/preset: gastro → `/home`; sin preset Atlas One → `/hq/operations`. El **login** enruta directamente: SUPERADMIN→`/platform/metrics`, VENDEDOR/SOPORTE→`/mobile/dashboard`, CAJERO/GERENTE→`/atlas-pos`, CLIENTE→`/portal`, Admin/Dueño→`/`.
 
 ### Gating en dos capas (defensa en profundidad; el backend siempre revalida)
-1. **Por rol** — `ROLE_ROUTES` en `components/layout/Sidebar.tsx` lista las URLs permitidas por rol tenant. El guard `RequireRole` (`components/layout/RequireRole.tsx`) protege rutas puntuales; es **solo UX** (evita redirecciones confusas), no seguridad. SUPERADMIN/SUPPORT saltan el RBAC tenant.
+1. **Por rol** — `ROLE_ROUTES` en `components/layout/navConfig.ts` (`rolesConAcceso` deriva de la misma lista que dibuja el menú; `RutaPorRol` lo aplica) lista las URLs permitidas por rol tenant. El guard `RequireRole` (`components/layout/RequireRole.tsx`) protege rutas puntuales; es **solo UX** (evita redirecciones confusas), no seguridad. SUPERADMIN/SUPPORT saltan el RBAC tenant.
 2. **Por módulo** — cada ítem de nav declara `module: 'pos'|'catalog'|...`; solo aparece si `enabledModulesStore.enabledModules` lo incluye (fail-open: si la lista está vacía porque `/me/context` no cargó, se muestran todos los permitidos por rol). El preset de la org define qué módulos están activos.
 
 **Roles tenant:** `ADMINISTRADOR`, `DUEÑO` (HQ, ven todo), `GERENTE`, `CAJERO` (sucursal), `VENDEDOR` (móvil), `SOPORTE_OPERATIVO`, `CLIENTE` (portal). **Platform:** `SUPERADMIN`, `SUPPORT` (via `platform_role`).
 
 ### Tema
-Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.light`/`.dark` en `<html>`. La app arranca en oscuro; un shim `html.light` con `!important` remapea las clases `slate/white` hardcodeadas. **La mayoría de vistas son dark-first**; las que respetan el tema de verdad son pocas: desde la Fase 2 del admin (2026-10-24) el Inicio, Reportes y el kit `components/graficas` se pintan solo con tokens `dax-*` (guardia `src/__tests__/coloresPorTokens.test.ts`), más MobileOwnerDashboard. El panel Platform usa su propio tema (`platform-v2.css`, tokens `--p-*`).
+Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.light`/`.dark` en `<html>`. La app arranca en oscuro; un shim `html.light` con `!important` remapea las clases `slate/white` hardcodeadas. **La mayoría de vistas son dark-first**; las que respetan el tema de verdad son pocas: desde la Fase 2 del admin (2026-10-24) el Inicio, Reportes y el kit `components/graficas` se pintan solo con tokens `dax-*` (guardia `src/__tests__/coloresPorTokens.test.ts`), más MobileOwnerDashboard; desde la Fase 3 (2026-10-25) también Ventas (`sales/SalesHistory`), Devoluciones (`sales/Returns`) e Inventario (`inventory/Inventory`), reescritas solo con tokens al fusionar sus pares HQ. El panel Platform usa su propio tema (`platform-v2.css`, tokens `--p-*`).
 
 ### Stores (Zustand, `store/`)
 - `authStore` — user, token, org, branch, `hydrated`, `platform_role`.
@@ -51,23 +51,20 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 | `/atlas-pos` | `pos/AtlasPOS` | Gerente, Cajero | pos |
 | `/pos` | `pos/POS` | Cajero, Gerente | pos |
 | `/printer-settings` | `pos/PrinterSettings` | Cajero, Gerente | pos |
-| `/sales` | `sales/SalesHistory` | Gerente, Cajero | pos |
+| `/sales` | `sales/SalesHistory` (Ventas: cajera y gerente ven su sucursal; admin y dueño toda la org, con selector si hay más de una sucursal que vende) | Todos | pos |
 | `/quotes`, `/quotes/new` | `sales/Quotes`, `QuoteMaker` | Admin, Dueño | quotes |
-| `/returns` | `sales/Returns` | Gerente, Cajero | returns |
+| `/returns` | `sales/Returns` (cajera: `ReturnsBranchView`; gerente, admin y dueño: bandeja con periodo; admin y dueño con selector de sucursal) | Todos | returns |
 | `/seguimiento` | `sales/Seguimiento` | Admin, Dueño | quotes |
 | `/hq/operations` | `hq/Inicio` (básico y completo: misma pantalla; en completo monta las cuatro gráficas de `hq/InicioGraficas` con `lazy()`) | Admin, Dueño | pos |
 | `/hq/reports-hub` | `reports/Reportes` (con selector de sucursal; básico y completo) | Admin, Dueño | pos |
-| `/hq/sales` | `hq/HQSalesLog` | Admin, Dueño | pos |
-| `/hq/returns` | `hq/HQReturns` | Admin, Dueño | returns |
-| `/hq/inventory` | `hq/HQInventory` | Admin | inventory |
+| `/hq/sales`, `/hq/returns`, `/hq/inventory`, `/admin/catalog` | redirigen (`RedirigirConQuery`, conserva `?…`) a `/sales`, `/returns`, `/inventory`, `/products` — Fase 3, 2026-10-25 | — | — |
 | `/hq/valor-inventario` | `hq/HQValorInventario` | Admin, Dueño, Gerente | reports |
 | `/hq/branches`, `/:branchId` | `hq/HQBranches` (la ruta hija abre esa sucursal en la misma pantalla) | Admin | inventory |
 | `/labels` | `labels/Labels` | Admin, Dueño, Gerente, Cajero | labels |
-| `/products`, `/new`, `/:id/edit` | `inventory/Products`, `products/ProductForm` | Admin, Dueño, Gerente, Cajero | catalog |
-| `/inventory` | `inventory/Inventory` | — | inventory |
+| `/products`, `/new`, `/:id/edit` | `inventory/Products` (Productos; para admin y dueño en perfil completo trae las cifras, aprobación y archivado del Catálogo viejo), `products/ProductForm` | Admin, Dueño, Gerente, Cajero | catalog |
+| `/inventory` | `inventory/Inventory` (Inventario: kardex y ajuste para todos; costo e importes solo admin y dueño) | Admin, Dueño (menú); gerente y cajera llegan desde «Ajustar» del editor de variantes | inventory |
 | `/inventory/conteos`, `/:id`, `/:id/reporte` | `inventory/conteos/Conteos`, `ConteoSesion`, `ConteoReporte` | Admin, Dueño | inventory |
 | `/logistics`, `/boxes` | `inventory/Logistics`, `Boxes` | — | logistics |
-| `/admin/catalog` | `core/AdminCatalog` | Admin | catalog |
 | `/departments`, `/brands` | `core/Departments`, `Brands` | Admin | catalog (hideForGastro) |
 | `/cash-history` | `finance/CashHistory` | Gerente, Cajero | cash_management |
 | `/expenses`, `/purchases` | `finance/Expenses`, `Purchases` | Admin, Dueño | payments |
@@ -196,12 +193,12 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Componentes clave:** `AgentDiagnosticsPanel`, `PrinterInstallWizard`, `TicketPreview` (interno).
 - **Notas:** Tabs por SO con autodetección; banner si el agente está offline. CUPS server-side deprecado (solo agente local). Datos de muestra hardcodeados en el preview.
 
-### `/sales` — Historial de ventas 📱
-- **Archivo:** `pages/sales/SalesHistory.tsx` (367 líneas)
-- **Propósito:** Ventas por rango con KPIs, detalle de ticket, reimprimir y disparar devoluciones.
-- **Quién la ve:** Gerente, Cajero.
-- **Datos/API:** `salesApi.list/getStats`, `printerApi.getTicketBase64/printViaAgent`.
-- **Notas:** Presets de fecha + paginación (100). Toggle "incluir abiertas" (por defecto solo PAID/REFUNDED/CANCELLED). Devolver solo en PAID. Reimprimir requiere `printerName`. `Promise.allSettled`.
+### `/sales` — Ventas 📱
+- **Archivo:** `pages/sales/SalesHistory.tsx`. Sustituye también a `hq/HQSalesLog.tsx` (borrada 2026-10-25, Fase 3 del admin; `/hq/sales` redirige con su consulta).
+- **Propósito:** ventas por periodo (`Hoy · Ayer · 7 días · 30 días · Este mes` + rango, `pages/reports/presetsReportes.ts`; arranca en **Hoy**) con cifras (`KpiCard`), buscador de folio/cliente, detalle en `ui/Modal`, reimprimir (PIN de supervisor si el backend lo pide) y devolver.
+- **Quién la ve:** todos. Cajera y gerente ven su sucursal (el backend la impone); admin y dueño toda la organización y, con más de una sucursal que vende (`useSucursalesVendibles`), un selector y la columna «Sucursal». `branch_id` solo viaja cuando eligen una.
+- **Datos/API:** `salesApi.list/getStats`, `printerApi.getTicketBase64/printViaAgent`, `organizationApi.getBranches` (solo HQ).
+- **Notas:** la casilla «Incluir abiertas/borradores» arranca **encendida para admin y dueño** (como la bitácora HQ que sustituye) y apagada para cajera y gerente: sin ella solo PAID/REFUNDED_*/CANCELLED. Paginación de 100. Solo tokens `dax-*`.
 
 ### `/quotes` — Cotizaciones 📱
 - **Archivo:** `pages/sales/Quotes.tsx` (233 líneas)
@@ -219,11 +216,11 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Notas:** Carrito/dropdowns inline (debounce 300ms). **Gotcha:** `notes` se captura pero NO se envía; el payload solo manda `{sku, quantity}`.
 
 ### `/returns` — Devoluciones 📱
-- **Archivo:** `pages/sales/Returns.tsx` (261 líneas)
-- **Propósito:** Bandeja de aprobación: pendientes/historial, detalle (reingreso vs merma), aprobar/rechazar con motivo.
-- **Quién la ve:** Gerente, Cajero — módulo `returns`. Si es CAJERO renderiza `ReturnsBranchView`. `CAN_APPROVE`=Admin/Dueño/Gerente.
-- **Datos/API:** `returnsApi.list/approve/reject`.
-- **Notas:** Regla R-3: reembolso CASH >$10,000 requiere `force=true` (doble confirmación). `serverDetail()` extrae el `detail` de FastAPI. **Gotcha:** hooks tras early-return.
+- **Archivo:** `pages/sales/Returns.tsx`. Sustituye también a `hq/HQReturns.tsx` (borrada 2026-10-25; `/hq/returns` redirige).
+- **Propósito:** cajera → `ReturnsBranchView` (asistente). Gerente, admin y dueño → bandeja: Pendientes (siempre completos) e Historial acotado por periodo (`presetsReportes`, arranca en 30 días; ambas listas con `limit` 200); detalle en `ui/Modal` con Aprobar/Rechazar (motivo opcional); reembolso en efectivo alto confirmado con `confirm()` y `force=true` (R-3).
+- **Quién la ve:** todos — módulo `returns`. `CAN_APPROVE` = Admin/Dueño/Gerente. Admin y dueño con más de una sucursal que vende ven el selector y la columna «Sucursal». El gerente no tiene selector pero sí la columna: `GET /returns/` lo trata como rol de oficina (`HQ_ROLES` de `metricas_ventas.py`) y le devuelve toda la organización, como antes de la fusión. El ítem de menú no lleva `module:` a propósito: un solo ítem para todos los roles.
+- **Datos/API:** `returnsApi.list/approve/reject`, `organizationApi.getBranches` (solo HQ).
+- **Notas:** estados con `estadoDevolucion` («Por aprobar», «Aprobada», «Rechazada»). **Gotcha:** hooks tras early-return (`Returns` → `ReturnsAdminView`).
 
 ### `/seguimiento` — Pedidos abiertos 📱
 - **Archivo:** `pages/sales/Seguimiento.tsx` (155 líneas)
@@ -242,7 +239,7 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Archivo:** `pages/hq/Inicio.tsx` (chunk propio, sin chart.js) + `pages/hq/InicioGraficas.tsx` (las cuatro gráficas, cargado con `lazy()` solo en perfil completo). Es la misma pantalla en básico y en completo: espera `enabledModulesStore.loaded` y decide con `perfilUi`.
 - **Propósito:** responder las preguntas del dueño al entrar. Orden en escritorio (rejilla de 12 columnas, apilado en teléfono): 1 cifras Hoy / Ayer / 7 días / Utilidad bruta de hoy con variación (▲/▼ vs ayer, vs antier, vs semana anterior; `components/ui/KpiCard`) · 2 tendencia de 7 días (línea, la semana anterior en gris) y cómo te pagaron (dona con el total al centro + lista) · 3 ventas por hora de hoy (barras, la hora actual en acento) y caja · 4 pendientes · 5 se está acabando y lo más vendido · 6 no se mueve · 7 sucursales (barras horizontales + tarjetas; solo con más de una que vende) · valor de la tienda (`ValorTiendaCard`). En básico: cifras (solo Hoy con variación), lista de métodos, caja, se acaba, lo más vendido y valor de la tienda; **sin gráficas y sin bajar el chunk `charts`**.
 - **Datos/API:** `reportsApi.inicio({ completo: !modoBasico })` (`GET /reports/inicio`: con `completo`, `tendencia`, `por_hora_hoy`, `utilidad_bruta_ayer`) y `reportsApi.valorInventario`.
-- **Responsivo:** kit `ui/`; tablas en escritorio y `TarjetaFila` bajo 768. Filas de "se acaba"/"no se mueve" enlazan a `/hq/inventory?q=<sku>&variant=<id>`.
+- **Responsivo:** kit `ui/`; tablas en escritorio y `TarjetaFila` bajo 768. Filas de "se acaba"/"no se mueve" enlazan a `/inventory?q=<sku>&variant=<id>`.
 - **Tema:** solo tokens `dax-*` (`coloresPorTokens.test.ts`); las gráficas leen los tokens con `useTemaGrafica` y se repintan al cambiar de tema.
 
 ### `/hq/reports-hub` — Reportes 📱
@@ -251,21 +248,7 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Datos/API:** `reportsApi.dashboard` (una llamada) y, solo con selector, `reportsApi.commandCenterStats` y `organizationApi.getBranches`; `reportsApi.exportCsv`.
 - **Notas:** sin velocímetro, conteo animado ni sondeo cada 30 s. Gráficas del kit `components/graficas` (chart.js en el chunk `charts`, fuera de la ruta crítica del POS).
 
-### `/hq/sales` — Ventas 📱
-- **Archivo:** `pages/hq/HQSalesLog.tsx`
-- **Propósito:** bitácora consolidada: KPIs, filtros fecha/sucursal, búsqueda folio/cliente, paginación, detalle en `ui/Modal`.
-- **Datos/API:** `salesApi.list/getStats`, `organizationApi.getBranches`.
-
-### `/hq/returns` — Devoluciones 📱
-- **Archivo:** `pages/hq/HQReturns.tsx`
-- **Propósito:** pendientes/historial, filtro por sucursal; detalle con Aprobar/Rechazar y rechazo con motivo, ambos en `ui/Modal`.
-- **Datos/API:** `returnsApi.list/approve/reject`, `organizationApi.getBranches`, `toast`, `confirm` (reembolso en efectivo alto con `force`).
-
-### `/hq/inventory` — Existencias 📱
-- **Archivo:** `pages/hq/HQInventory.tsx`
-- **Propósito:** buscar por nombre/SKU; un renglón por variante con precio, **costo**, existencia, **importe a venta e importe a costo** y totales de lo listado; casilla "Solo sin costo" (filtra lo buscado); kardex y ajuste por sucursal (`ui/Modal`). Acepta `?q=&variant=`.
-- **Quién la ve:** Admin y Dueño (las columnas de costo solo para quien ve costos).
-- **Datos/API:** `productsApi.search`, `inventoryApi.getKardex/createAdjustment`, `organizationApi.getBranches`.
+> **Fase 3 del admin (2026-10-25):** Ventas, Devoluciones y Existencias de HQ se fusionaron en `/sales`, `/returns` e `/inventory` (§3 y §5); el Catálogo del admin, en `/products`. Las URL `/hq/sales`, `/hq/returns`, `/hq/inventory` y `/admin/catalog` redirigen conservando la consulta (`components/layout/RedirigirConQuery.tsx`, en `App.tsx`). Guardia: `src/__tests__/fusionesAdmin.test.ts`.
 
 ### `/hq/valor-inventario` — Valor de la tienda
 - **Archivo:** `pages/hq/HQValorInventario.tsx`
@@ -285,20 +268,20 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 
 > **Formulario de producto unificado (SP1).** `components/products/FormularioProducto.tsx` es el único formulario de alta/edición; la página `ProductForm` lo monta como página, las listas de HQ (`Products.tsx`) y de sucursal (`ProductsBranchView.tsx`) lo abren dentro de un `Modal` (sin cerrar con Escape ni con el fondo), y `AdminProductCreate`, `ProductModal` y `ProductFormModal` ya no existen. Excepción anotada: `pages/scanner/StoreScanner.tsx` (ediciones parciales). **SP1-c (2026-10-21):** la ficha del POS (`components/pos/modals/ProductDetailModal.tsx`) ya no crea ni edita: "Editar" abre `EditarProductoPos` y "Nuevo producto" abre `AltaRapidaProducto`, ambos `FormularioProducto` en el `Modal` del kit, en todos los perfiles. Las reglas de alta propias del POS (costo, código de barras y existencia inicial obligatorios) ceden a `validarProducto`/`campos_producto`; la foto se sube desde el formulario.
 
-### `/products` — Catálogo / consulta de productos 📱
-- **Archivo:** `pages/inventory/Products.tsx` (~720 líneas)
-- **Propósito:** Vista central del catálogo: buscar/filtrar, lista o grid, crear/editar, importar Excel/CSV, y (roles sucursal) ajustar precio/stock/flags por sucursal.
-- **Quién la ve:** Admin, Dueño, Gerente, Cajero — módulo `catalog`. UI bifurca por rol (HQ ve matriz global; sucursal ve `ProductsBranchView`).
-- **Datos/API:** `productsApi.list/search/getById/create/update/getDepartments/getBrands/uploadProducts/downloadTemplate/updateBranchStatus`.
-- **Componentes clave:** `ImportModal`, `FormularioProducto` (en `Modal`), `BranchStatusEditor`, `ProductImageUploader`.
-- **Notas:** Todos los roles editan con `FormularioProducto` en un `Modal`: Admin/Dueño desde la lista HQ; Gerente/Cajero desde `ProductsBranchView` (pasa `variant_id` del renglón). Cerrar el importador tras una carga parcial recarga la lista (`cerrarImportacion`). Refetch por `location.key`.
+### `/products` — Productos 📱
+- **Archivo:** `pages/inventory/Products.tsx`. Desde la Fase 3 (2026-10-25) absorbe `core/AdminCatalog.tsx` (borrado; `/admin/catalog` redirige).
+- **Propósito:** vista central del catálogo: buscar/filtrar, lista o cuadrícula, crear/editar (`FormularioProducto` en `Modal`), importar Excel/CSV, etiquetas CSV, códigos de barras. Para admin y dueño **en perfil completo** (`catalogo = isHQ && !modoBasico`): cifras (`components/catalog/CatalogKpis`), filtro por marca y por aprobación, «Incluir archivados», «Exportar» (Excel con los filtros), distintivo de aprobación por fila y acciones por producto (`pages/core/catalogActions.ts`: matriz de sucursales —**siempre** para HQ en completo, sin importar cuántas sucursales haya: es la única vía para reactivar las filas de sucursal tras archivar/restaurar—, aprobar/rechazar pendientes, historial, editar, duplicar, archivar/restaurar).
+- **Quién la ve:** Admin, Dueño, Gerente, Cajero — módulo `catalog`. Roles de sucursal ven `ProductsBranchView`.
+- **Datos/API:** `productsApi.list/search/getDepartments/getBrands/catalogKpis/approve/reject/duplicate/archive/restore/downloadTemplate/uploadProducts/barcodesMissingCount/assignMissingBarcodes/downloadLabelsCsv`.
+- **Componentes clave:** `ImportModal`, `FormularioProducto`, `CatalogKpis`, `ProductBranchMatrix`, `ProductAuditDrawer`.
+- **Notas:** en básico no se pinta ni consulta nada del catálogo viejo (`docs/modo-basico.md`). Refetch por `location.key`. Pendiente de tokens (`coloresPorTokens.test.ts`, `PENDIENTES`).
 
-### `/inventory` — Inventario (kardex y ajustes) 📱
-- **Archivo:** `pages/inventory/Inventory.tsx` (193 líneas)
-- **Propósito:** Buscar producto → kardex (historial de movimientos) + ajustes manuales por sucursal.
-- **Quién la ve:** módulo `inventory`.
+### `/inventory` — Inventario 📱
+- **Archivo:** `pages/inventory/Inventory.tsx`. Desde la Fase 3 (2026-10-25) absorbe `hq/HQInventory.tsx` (borrada; `/hq/inventory` redirige con su consulta).
+- **Propósito:** buscar por nombre/SKU → un renglón por variante con precio, existencia e importe a venta; kardex (con quién lo movió) y ajuste por sucursal (`ui/Modal`). Para admin y dueño (`esRolHq`): costo, importe a costo, totales de lo listado y la casilla «Solo sin costo». Acepta `?q=&variant=` (el «Ajustar» del editor de variantes y los enlaces del Inicio abren esa talla).
+- **Quién la ve:** admin y dueño desde el menú (grupo Inventario; el ítem no lleva `hideForGastro`, a diferencia del «Existencias» borrado: un solo ítem sirve a todos los giros); gerente y cajera llegan por enlace y ven lo mismo sin costos. La ruta no lleva `RutaPorRol` (comportamiento histórico).
 - **Datos/API:** `productsApi.search`, `inventoryApi.getKardex/createAdjustment`, `organizationApi.getBranches`.
-- **Notas:** **Gotcha:** la API espera variant UUID (`p.variants?.[0]?.id ?? p.id`). Casi idéntica a `HQInventory` (candidata a unificar).
+- **Notas:** **Gotcha:** la API espera variant UUID (`expandVariantRows`). Solo tokens `dax-*`.
 
 ### `/inventory/conteos` — Conteos de inventario 📱
 - **Archivo:** `pages/inventory/conteos/Conteos.tsx`
@@ -342,17 +325,8 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Componentes clave:** `FormularioProducto` con las secciones `ProductBasicsSection`, `ProductCommercialSection`, `ProductTieredPricesSection`, `ProductPackagingSection`, `ProductVariantsSection`/`ProductVariantsEditor`, `ProductBranchMatrixSection`, `ProductInitialStockSection`; lógica pura en `productoForm.ts`.
 - **Notas:** Admin en create ve matriz + stock inicial; cajero tiene sucursal bloqueada. En edit no toca matriz/stock. Maneja 409/SKU duplicado. **`products/new` monta `<ProductForm key="new" />` y `products/:id/edit` monta un wrapper `ProductFormEditRoute` con `<ProductForm key={id} />`** (`App.tsx:44-50`) — fix 2026-09-22: sin el `key`, React Router reutilizaba la instancia y "Nuevo producto" heredaba los datos del producto que se estaba editando (auditoría #3, `docs/AUDITORIA-2026-09-22.md`).
 
-### `/admin/catalog` — Catálogo (administración) 📱
-- **Archivo:** `pages/core/AdminCatalog.tsx` (534 líneas)
-- **Propósito:** Panel avanzado: KPIs, filtros por aprobación, ciclo de vida (aprobar/rechazar/archivar/restaurar/duplicar), matriz de sucursales, auditoría.
-- **Quién la ve:** Admin — módulo `catalog`.
-- **Datos/API:** `productsApi.list/catalogKpis/duplicate/approve/reject/restore/getDepartments/getBrands`, `client.delete('/products/:id')`.
-- **Componentes clave:** `CatalogKpis`, `ProductBranchMatrix`, `ProductAuditDrawer`.
-- **Notas:** **No edita campos aquí:** "Nuevo"→`/products/new?volver=/admin/catalog`, "Editar"→`/products/:id/edit?volver=/admin/catalog`.
-
-### `/admin/products/new` — redirección
-- **Archivo:** `App.tsx` (sin página propia).
-- **Notas:** redirige a `/products/new?volver=/admin/catalog`; `pages/admin/AdminProductCreate.tsx` se eliminó.
+### `/admin/catalog` y `/admin/products/new` — redirecciones
+- **Archivo:** `App.tsx` (sin página propia). `/admin/catalog` → `/products` conservando la consulta (`RedirigirConQuery`); `/admin/products/new` → `/products/new`. `pages/core/AdminCatalog.tsx` se borró en la Fase 3 (2026-10-25): sus cifras, filtros y acciones viven en `/products`.
 
 ### `/departments` — Departamentos 📱
 - **Archivo:** `pages/core/Departments.tsx` (112 líneas)
@@ -651,7 +625,7 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 
 5. **Manejo de errores inconsistente.** Muchas vistas usan `alert()`/`confirm()` nativos y toasts inline propios (POS, PrinterSettings) en vez de `toastStore`. Solo HRMe y Sucursales (detalle) tienen estados de error/success completos.
 
-6. **Componentes repetidos por extraer** (candidatos): `<PageHeader>` (~3 patrones), `<KpiCard>/<KpiGrid>` (copiado literal en varias), `<SegmentedControl>/<FilterChips>` (4 variantes de chip), `<DocumentDetailModal>`/`<LineItemsTable>` (SalesHistory/Quotes/Returns/Seguimiento/HQSalesLog), `<SalesTable>`, `<ProductTile>` (MenuVisual ≈ ComandaOrder), `useAccent()` (3 métodos con defaults divergentes), `<AsyncState>`/`<PageSkeleton>` (elimina el layout-shift del Spinner full-screen), `useReprintTicket()`.
+6. **Componentes repetidos por extraer** (candidatos): `<PageHeader>` (~3 patrones), `<KpiCard>/<KpiGrid>` (copiado literal en varias), `<SegmentedControl>/<FilterChips>` (4 variantes de chip), `<DocumentDetailModal>`/`<LineItemsTable>` (SalesHistory/Quotes/Returns/Seguimiento), `<SalesTable>`, `<ProductTile>` (MenuVisual ≈ ComandaOrder), `useAccent()` (3 métodos con defaults divergentes), `<AsyncState>`/`<PageSkeleton>` (elimina el layout-shift del Spinner full-screen), `useReprintTicket()`.
 
 7. **`window.prompt()`/`alert()` crudos** en operaciones sensibles: Botellas (merma/ajuste por conteo), KDS (crear estación). Recipes ya demuestra el patrón correcto con `confirm()` dialog.
 

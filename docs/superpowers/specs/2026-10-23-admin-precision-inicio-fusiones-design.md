@@ -1,6 +1,6 @@
 # Vista del administrador: precisión, Inicio con gráficas y fusiones — diseño
 
-**Fecha:** 2026-10-23 · **Estado:** fases 1 y 2 implementadas (fase 2 en `feat/admin-fase2-inicio-reportes`, pendiente de fusión); fase 3 (fusiones y menú) pendiente ·
+**Fecha:** 2026-10-23 · **Estado:** fases 1 y 2 en `main`; fase 3 (fusiones y menú) implementada en `feat/admin-fase3-fusiones-menu` (plan `docs/superpowers/plans/2026-10-25-admin-fase3-fusiones-menu.md`), pendiente de fusión ·
 **Caso guía:** Eleven Fashion (org 17, una sucursal, ULTRA+) y las orgs FREE de una sucursal
 (Kaory, Coqueta, Imaltzin). **Quién lo usa:** ADMINISTRADOR y DUEÑO en escritorio; cajera y
 gerente heredan las pantallas fusionadas.
@@ -265,7 +265,7 @@ Inicio de SP6), cifras con `dax-kpi-*`. Un solo `CabeceraPagina` por pantalla.
 | `/sales` Ventas | `SalesHistory.tsx` | filtro de sucursal | el selector, visible con más de una sucursal |
 | `/returns` Devoluciones | `Returns.tsx` | filtro de sucursal y periodo (presets de §2.1) | el selector |
 | `/inventory` Inventario | `Inventory.tsx` | costo, importe, "solo sin costo", búsqueda por `?q=&variant=` | las columnas de costo |
-| `/products` Productos | `Products.tsx` | cifras de catálogo (`CatalogKpis`), filtro y acciones de aprobación, duplicar, archivar, restaurar | aprobación, archivar, restaurar |
+| `/products` Productos | `Products.tsx` | cifras de catálogo (`CatalogKpis`), filtro por marca y aprobación, acciones de aprobación, duplicar, archivar, restaurar, exportar | **todo lo anterior** (decisión al implementar, 2026-10-25: duplicar, exportar y cifras también solo HQ en perfil completo; cajera y gerente siguen en `ProductsBranchView`). **Desviación:** la acción «Matriz de sucursales» se ofrece a admin y dueño en completo **siempre**, no solo con más de una sucursal: es la única UI que reactiva las filas de sucursal tras archivar/restaurar (restaurar no las reenciende) |
 
 "Solo HQ" se decide con `useAuthStore().user.role`; "más de una sucursal" con la lista de
 `/branches` que ya cargan `HQSalesLog` y `HQReturns`. Se borran `HQSalesLog.tsx`,
