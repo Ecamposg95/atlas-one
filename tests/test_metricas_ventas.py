@@ -9,8 +9,10 @@ from itertools import count
 from zoneinfo import ZoneInfo
 
 import pytest
+from fastapi import HTTPException
+from sqlalchemy import update
 
-from app.models.returns import SaleReturn
+from app.models.returns import SaleReturn, SaleReturnItem
 from app.models.sales import DocumentStatus, Payment, PaymentMethod, SalesDocument, SalesLineItem
 from app.services import metricas_ventas as mv
 
@@ -83,6 +85,17 @@ def test_periodo_preset_7d_y_mes():
 def test_periodo_invertido_revienta():
     with pytest.raises(ValueError):
         mv.Periodo(date(2026, 10, 23), date(2026, 10, 22))
+
+
+def test_periodo_de_query_una_fecha_es_ese_dia_ninguna_es_hoy_invertido_es_422():
+    hoy = date(2026, 10, 23)
+    assert mv.periodo_de_query(date(2026, 10, 20), None, hoy) == mv.Periodo(date(2026, 10, 20), date(2026, 10, 20))
+    assert mv.periodo_de_query(None, date(2026, 10, 21), hoy) == mv.Periodo(date(2026, 10, 21), date(2026, 10, 21))
+    assert mv.periodo_de_query(date(2026, 10, 20), date(2026, 10, 22), hoy) == mv.Periodo(date(2026, 10, 20), date(2026, 10, 22))
+    assert mv.periodo_de_query(None, None, hoy) == mv.Periodo(hoy, hoy)
+    with pytest.raises(HTTPException) as e:
+        mv.periodo_de_query(date(2026, 10, 20), date(2026, 10, 19), hoy)
+    assert e.value.status_code == 422
 
 
 # --- Ámbito ------------------------------------------------------------------
@@ -159,9 +172,6 @@ def test_resumen_respeta_el_ambito(db, org, branch_a, branch_b, cajero_a, produc
     assert mv.resumen(db, mv.Ambito(org.id, None, False), hoy).tickets == 0
 
 
-from app.models.returns import SaleReturnItem  # noqa: E402
-
-
 def test_por_dia_rellena_ceros_y_agrupa_en_dia_de_mexico(db, org, branch_a, cajero_a, products_setup):
     hoy = mv.hoy_mx()
     p = mv.Periodo(hoy - timedelta(days=2), hoy)
@@ -236,3 +246,67 @@ def test_utilidad_bruta_solo_con_costo_y_resta_reingresos(db, org, branch_a, caj
     # (100 − 60) de la venta − (100 − 60) de la devolución que volvió al stock = 0
     assert utilidad == 0.0
     assert sin_costo == 70.0
+
+
+def _sin_costo(variante, valor):
+    """Fija el costo ACTUAL de la variante (la devolución se clasifica por él)."""
+    variante.cost = valor
+
+
+def test_utilidad_bruta_devolucion_sin_reingreso_resta_todo_el_reembolso(db, org, branch_a, cajero_a, products_setup):
+    variante = _v(products_setup)
+    _sin_costo(variante, Decimal("40"))
+    v = _venta(db, org, branch_a, cajero_a, variante, "100", costo="40")
+    ambito, hoy = mv.Ambito(org.id, None, True), mv.periodo_preset("hoy")
+    assert mv.utilidad_bruta(db, ambito, hoy) == (60.0, 0.0)          # antes de la devolución
+    dev = _devolucion(db, org, branch_a, cajero_a, v, "100")
+    db.add(SaleReturnItem(organization_id=org.id, return_id=dev.id, variant_id=variante.id,
+                          quantity=Decimal("1"), refund_amount=Decimal("100"), is_inventory_reentry=False))
+    db.commit()
+    utilidad, sin_costo = mv.utilidad_bruta(db, ambito, hoy)
+    # (100 − 40) de la venta − 100 de la pieza perdida (ingreso fuera, costo hundido)
+    assert utilidad == -40.0
+    assert sin_costo == 0.0
+
+
+def test_utilidad_bruta_reingreso_nulo_cuenta_como_sin_reingreso(db, org, branch_a, cajero_a, products_setup):
+    variante = _v(products_setup)
+    _sin_costo(variante, Decimal("40"))
+    v = _venta(db, org, branch_a, cajero_a, variante, "100", costo="40")
+    dev = _devolucion(db, org, branch_a, cajero_a, v, "100")
+    db.add(SaleReturnItem(organization_id=org.id, return_id=dev.id, variant_id=variante.id,
+                          quantity=Decimal("1"), refund_amount=Decimal("100")))
+    db.commit()
+    # El ORM salta el None y aplica el default (True): el NULL de filas viejas se fuerza por SQL.
+    db.execute(update(SaleReturnItem).values(is_inventory_reentry=None))
+    db.commit()
+    assert db.query(SaleReturnItem).filter(SaleReturnItem.is_inventory_reentry.is_(None)).count() == 1
+    utilidad, _ = mv.utilidad_bruta(db, mv.Ambito(org.id, None, True), mv.periodo_preset("hoy"))
+    assert utilidad == -40.0
+
+
+def test_utilidad_bruta_devolucion_de_pieza_sin_costo_baja_venta_sin_costo(db, org, branch_a, cajero_a, products_setup):
+    variante = _v(products_setup)
+    _sin_costo(variante, None)
+    v = _venta(db, org, branch_a, cajero_a, variante, "70", costo="0")
+    ambito, hoy = mv.Ambito(org.id, None, True), mv.periodo_preset("hoy")
+    assert mv.utilidad_bruta(db, ambito, hoy) == (0.0, 70.0)          # antes de la devolución
+    dev = _devolucion(db, org, branch_a, cajero_a, v, "70")
+    db.add(SaleReturnItem(organization_id=org.id, return_id=dev.id, variant_id=variante.id,
+                          quantity=Decimal("1"), refund_amount=Decimal("70"), is_inventory_reentry=True))
+    db.commit()
+    utilidad, sin_costo = mv.utilidad_bruta(db, ambito, hoy)
+    assert sin_costo == 0.0          # la venta vivía aquí y se devolvió
+    assert utilidad == 0.0           # y nunca tocó la utilidad
+
+
+def test_utilidad_bruta_devolucion_sin_reingreso_de_pieza_sin_costo_tambien_baja_venta_sin_costo(db, org, branch_a, cajero_a, products_setup):
+    variante = _v(products_setup)
+    _sin_costo(variante, Decimal("0"))
+    v = _venta(db, org, branch_a, cajero_a, variante, "70", costo="0")
+    dev = _devolucion(db, org, branch_a, cajero_a, v, "30")
+    db.add(SaleReturnItem(organization_id=org.id, return_id=dev.id, variant_id=variante.id,
+                          quantity=Decimal("1"), refund_amount=Decimal("30"), is_inventory_reentry=False))
+    db.commit()
+    utilidad, sin_costo = mv.utilidad_bruta(db, mv.Ambito(org.id, None, True), mv.periodo_preset("hoy"))
+    assert (utilidad, sin_costo) == (0.0, 40.0)

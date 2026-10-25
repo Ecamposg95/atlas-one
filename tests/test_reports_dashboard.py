@@ -99,3 +99,22 @@ def test_command_center_global_y_sucursales_netos(client, db, org, branch_a, bra
     por_sucursal = {b["id"]: b["total_sales"] for b in d["branches"]}
     assert por_sucursal[branch_a.id] == 70.0 and por_sucursal[branch_b.id] == 200.0
     assert len(d["hourly_distribution"]) == 24
+
+
+def test_dashboard_rango_invertido_es_422(client, auth_admin_a):
+    r = client.get("/api/reports/dashboard?start_date=2026-10-20&end_date=2026-10-19", headers=auth_admin_a)
+    assert r.status_code == 422
+
+
+def test_command_center_rango_invertido_es_422(client, auth_admin_a):
+    r = client.get("/api/reports/command-center/stats?start_date=2026-10-20&end_date=2026-10-19", headers=auth_admin_a)
+    assert r.status_code == 422
+
+
+def test_dashboard_gerente_solo_su_sucursal_aunque_pida_otra(client, db, org, branch_a, branch_b, gerente_a, auth_gerente_a, products_setup):
+    _venta(db, org, branch_a, gerente_a, _v(products_setup), "100")
+    _venta(db, org, branch_b, gerente_a, _v(products_setup), "700")
+    hoy = mv.hoy_mx()
+    for q in ("", f"&branch_id={branch_b.id}", "&branch_id=0"):
+        d = client.get(f"/api/reports/dashboard?start_date={hoy}&end_date={hoy}{q}", headers=auth_gerente_a).json()
+        assert (d["kpis"]["sales"], d["kpis"]["orders"]) == (100.0, 1), q

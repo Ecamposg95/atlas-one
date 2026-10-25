@@ -128,9 +128,10 @@ def list_returns(
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization),
 ):
-    """Lista devoluciones de la organización. Fechas en día de México; sin
-    fechas, los últimos 30 días, salvo `status=PENDING` (lo pendiente no caduca).
-    Ámbito: roles de oficina ven toda la org o la sucursal pedida; los demás la suya."""
+    """Lista devoluciones de la organización. Fechas en día de México (una sola
+    fecha = ese día); sin fechas, todo el historial (la pantalla pondrá el rango
+    en la Fase 3). Ámbito: roles de oficina ven toda la org o la sucursal
+    pedida; los demás la suya."""
     from app.models.returns import SaleReturn, SaleReturnItem
     from sqlalchemy.orm import joinedload, selectinload
     from app.services import metricas_ventas as mv
@@ -150,20 +151,10 @@ def list_returns(
     if status:
         query = query.filter(SaleReturn.status == status)
 
-    if start_date is None and end_date is None and status != "PENDING":
-        periodo = mv.periodo_preset("30d")
-        start_date, end_date = periodo.inicio, periodo.fin
-    elif start_date is None or end_date is None:
-        # Con una sola fecha, la que falta copia a la otra (mismo criterio que /sales/stats).
-        if start_date is not None or end_date is not None:
-            start_date = start_date or end_date
-            end_date = end_date or start_date
-    if start_date and end_date and end_date < start_date:
-        raise HTTPException(status_code=422, detail="end_date no puede ser anterior a start_date")
-    if start_date:
-        query = query.filter(mv.dia_mx(SaleReturn.created_at) >= start_date)
-    if end_date:
-        query = query.filter(mv.dia_mx(SaleReturn.created_at) <= end_date)
+    if start_date or end_date:
+        periodo = mv.periodo_de_query(start_date, end_date)
+        query = query.filter(mv.dia_mx(SaleReturn.created_at) >= periodo.inicio,
+                             mv.dia_mx(SaleReturn.created_at) <= periodo.fin)
 
     from app.schemas.returns import SaleReturn as SaleReturnSchema
     ordered = query.order_by(SaleReturn.created_at.desc())

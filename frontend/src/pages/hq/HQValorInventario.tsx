@@ -96,8 +96,8 @@ export function HQValorInventario() {
         descripcion="Existencia de hoy a precio de venta y a costo, y cómo se reparte por departamento y marca. Sin instantáneas: lo que ves es lo que hay ahora."
       />
 
-      {!esGerente && (
-        <BarraFiltros accion={<button type="button" onClick={load} className="dax-btn-primary">Actualizar</button>}>
+      <BarraFiltros accion={<button type="button" onClick={load} className="dax-btn-primary">Actualizar</button>}>
+        {!esGerente && (
           <label className="flex flex-col text-xs text-dax-muted">
             Sucursal
             <select
@@ -113,8 +113,8 @@ export function HQValorInventario() {
               ))}
             </select>
           </label>
-        </BarraFiltros>
-      )}
+        )}
+      </BarraFiltros>
 
       {error && (
         <div className="dax-card rounded-xl border border-rose-500/30 bg-rose-500/5 p-4 flex items-start gap-3">
@@ -175,7 +175,7 @@ export function HQValorInventario() {
           onExportar={exportar(porMarca, depto ? `-${nombreArchivo(depto.nombre)}` : '')}
           aviso={depto ? (
             <p className="text-xs text-dax-muted">
-              Marcas en <strong className="text-dax-text">{depto.nombre}</strong>
+              Marcas en <strong className="text-dax-text">{depto.nombre}</strong> · % dentro del departamento
               <button type="button" className="dax-btn-ghost ml-2 text-xs" onClick={() => setDepto(null)}>Quitar</button>
             </p>
           ) : (

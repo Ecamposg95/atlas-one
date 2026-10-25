@@ -7,27 +7,25 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
 from decimal import Decimal
 from datetime import datetime, date, timedelta, timezone
-from typing import List, Dict, Any, Optional
-from zoneinfo import ZoneInfo
+from typing import Dict, Optional
 
 from app.services import metricas_ventas as mv
 
 # Alias para quien aún importa de aquí (reports_inicio, reports_valuacion).
-_MX = mv._MX
+_MX = mv.MX
 _today_mx = mv.hoy_mx
 _mx = mv.mx
 
 from app.core.database import get_db
-from app.services.cash_reconciliation import SALES_REPORT_STATUSES
 from app.models import (
-    SalesDocument, SalesLineItem, Payment, 
+    SalesDocument, SalesLineItem,
     ProductVariant, Customer, CashSession, DocumentStatus, CustomerLedgerEntry,
-    InboundShipment, Product, StockOnHand, Branch, SaleReturn
+    InboundShipment, Product, StockOnHand, Branch
 )
 from app.core.security import get_current_user
 from app.models import User
+from app.models.users import Role
 from app.models.cash import CashSessionStatus
-from app.models.sales import PaymentMethod
 from app.models.organization import BranchType
 from app.schemas.reports import AgingReportResponse
 from app.core.tenant_context import get_current_active_organization
@@ -219,10 +217,11 @@ def get_dashboard_stats(
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization)
 ):
-    """KPIs, tendencias y alertas del periodo. Venta neta y día de México por `app/services/metricas_ventas.py`; roles de oficina sin `branch_id` ven toda la organización."""
-    hoy = mv.hoy_mx()
-    periodo = mv.Periodo(start_date or hoy, end_date or hoy)
+    """KPIs, tendencias y alertas del periodo. Venta neta y día de México por `app/services/metricas_ventas.py`; roles de oficina sin `branch_id` ven toda la organización, salvo GERENTE (siempre su sucursal)."""
+    periodo = mv.periodo_de_query(start_date, end_date)      # una sola fecha = ese día; invertido = 422
     ambito = mv.resolver_ambito(current_user, org_id, branch_id)
+    if current_user.role == Role.GERENTE:   # branch-scoped como read_sales: la lista de abajo es de su sucursal
+        ambito = mv.Ambito(org_id, current_user.branch_id, False)
     filtros = mv.filtros_documentos(ambito, periodo)
 
     # 1. KPIs del periodo (neto) y comparativo del periodo anterior
@@ -249,7 +248,7 @@ def get_dashboard_stats(
     # 4. Cobros por método, netos de vuelto y devoluciones
     metodos = {k: {"total": m.total, "count": m.tickets} for k, m in mv.por_metodo(db, ambito, periodo).items()}
 
-    # 5. Top productos del periodo
+    # 5. Top productos del periodo (base mixta: KPIs netos, desgloses brutos; Fase 2 decide)
     top = mv.top_productos(db, ambito, periodo, limite=5)
 
     # 6. Alertas de inventario — el tope es el de la empresa (SP6, umbral único).
@@ -280,11 +279,11 @@ def get_dashboard_stats(
     transit_shipments = db.query(func.count(InboundShipment.id)).filter(
         InboundShipment.organization_id == org_id, InboundShipment.status != "RECEIVED").scalar() or 0
 
-    # 10. SKUs distintos vendidos
+    # 10. SKUs distintos vendidos (bruto: base mixta, Fase 2 decide)
     unique_skus_sold = db.query(func.count(func.distinct(SalesLineItem.variant_id)))\
         .join(SalesDocument).filter(*filtros).scalar() or 0
 
-    # 11. Mapa día-de-semana × hora
+    # 11. Mapa día-de-semana × hora (bruto: base mixta, Fase 2 decide)
     heatmap_raw = db.query(
         func.extract('dow', mv.mx(SalesDocument.created_at)).label("dow"),
         func.to_char(mv.mx(SalesDocument.created_at), 'HH24').label("hour"),
@@ -478,8 +477,7 @@ def get_command_center_stats(
     Mission Control Data Aggregation.
     Provides deep insights for multi-branch management.
     """
-    hoy = mv.hoy_mx()
-    periodo = mv.Periodo(start_date or hoy, end_date or hoy)
+    periodo = mv.periodo_de_query(start_date, end_date)      # una sola fecha = ese día; invertido = 422
     ambito = mv.Ambito(org_id, None, True)          # el centro de mando siempre es de toda la org
     sales_filters = mv.filtros_documentos(ambito, periodo)
 
@@ -512,7 +510,7 @@ def get_command_center_stats(
 
     total_items = db.query(func.sum(SalesLineItem.quantity)).join(SalesDocument)\
         .filter(*sales_filters).scalar() or 0
-    items_per_ticket = float(total_items) / total_tickets if total_tickets > 0 else 0
+    items_per_ticket = float(total_items) / total_tickets if total_tickets > 0 else 0   # bruto: base mixta, Fase 2 decide
 
     payment_map = {k: m.total for k, m in mv.por_metodo(db, ambito, periodo).items()}
     horas = mv.por_hora(db, ambito, periodo)

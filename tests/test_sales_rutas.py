@@ -14,4 +14,4 @@ def test_post_sales_sin_barra_llega_a_create_sale(client, org, auth_admin_a):
 
 def test_hq_sales_no_redirige_a_ruta_muerta(client):
     r = client.get("/hq/sales", follow_redirects=False)
-    assert r.status_code != 302 or r.headers.get("location") != "/hq/sales-log"
+    assert r.status_code != 302, r.text
