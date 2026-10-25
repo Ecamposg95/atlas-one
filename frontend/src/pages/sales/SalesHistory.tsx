@@ -185,6 +185,7 @@ export function SalesHistory() {
     setRango(r); setDesde(r.inicio); setHasta(r.fin); setPresetElegido(clave); setPage(0)
   }
   const aplicarFechas = () => {
+    if (!desde || !hasta) { toast.error('Elige la fecha inicial y la final.'); return }
     if (desde > hasta) { toast.error('La fecha inicial no puede ser mayor que la final.'); return }
     aplicar({ inicio: desde, fin: hasta }, null)
   }

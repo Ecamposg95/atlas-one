@@ -4,7 +4,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react'
 
-const { list, getStats, getBranches } = vi.hoisted(() => ({ list: vi.fn(), getStats: vi.fn(), getBranches: vi.fn() }))
+const { list, getStats, getBranches, telefono } = vi.hoisted(() => ({ list: vi.fn(), getStats: vi.fn(), getBranches: vi.fn(), telefono: { valor: false } }))
+vi.mock('../../../hooks/useIsMobile', () => ({ useEsTelefono: () => telefono.valor }))
 vi.mock('../../../api/sales', () => ({ salesApi: { list, getStats } }))
 vi.mock('../../../api/organization', () => ({ organizationApi: { getBranches } }))
 vi.mock('../../../api/printer', () => ({ printerApi: { getTicketBase64: vi.fn(), printViaAgent: vi.fn() } }))
@@ -17,6 +18,7 @@ vi.mock('../../../components/pos/modals/ReprintPinModal', () => ({ ReprintPinMod
 import { SalesHistory } from '../SalesHistory'
 import { useAuthStore } from '../../../store/authStore'
 import { rangoPreset } from '../../reports/presetsReportes'
+import { useToastStore } from '../../../store/toastStore'
 
 const hoy = rangoPreset('hoy')
 const VENTA = {
@@ -34,6 +36,8 @@ const pintar = () => render(<MemoryRouter><SalesHistory /></MemoryRouter>)
 const cabeceras = () => screen.getAllByRole('columnheader').map((th) => th.textContent)
 
 beforeEach(() => {
+  telefono.valor = false
+  useToastStore.setState({ toasts: [] })
   list.mockReset().mockResolvedValue({ items: [VENTA], total: 1, page: 0, pages: 1 })
   getStats.mockReset().mockResolvedValue(STATS)
   getBranches.mockReset().mockResolvedValue([SUC(1, 'Roma'), SUC(2, 'Condesa')])
@@ -141,5 +145,75 @@ describe('Ventas (/sales, fusión de HQSalesLog)', () => {
     fireEvent.click(screen.getByRole('button', { name: /Reintentar/ }))
     await screen.findByText('A-0041')
     expect(list).toHaveBeenCalledTimes(2)
+  })
+
+  it('si falla la lista en teléfono también muestra el error con Reintentar, no «Sin ventas»', async () => {
+    telefono.valor = true
+    usuario('CAJERO', 1)
+    list.mockRejectedValueOnce({ response: { data: { detail: 'Sin conexión con el servidor' } } })
+    pintar()
+    const alerta = await screen.findByRole('alert')
+    expect(alerta.textContent).toContain('Sin conexión con el servidor')
+    expect(screen.queryByText('Sin ventas en este periodo')).toBeNull()
+    expect(screen.queryAllByRole('columnheader')).toEqual([])
+    fireEvent.click(screen.getByRole('button', { name: /Reintentar/ }))
+    await screen.findByText('A-0041')
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('el gerente no ve selector de sucursal, no pide sucursales y no manda branch_id (el backend lo confina)', async () => {
+    usuario('GERENTE', 1)
+    pintar()
+    await screen.findByText('A-0041')
+    expect(screen.queryByLabelText('Sucursal')).toBeNull()
+    expect(getBranches).not.toHaveBeenCalled()
+    expect(list.mock.calls[0][0]).not.toHaveProperty('branch_id')
+    expect(getStats.mock.calls[0][0]).not.toHaveProperty('branch_id')
+    expect(cabeceras()).not.toContain('Sucursal')
+  })
+
+  it('la paginación pide la página siguiente (skip) y vuelve a la primera', async () => {
+    usuario('CAJERO', 1)
+    list.mockResolvedValue({ items: [VENTA], total: 250, page: 0, pages: 3 })
+    pintar()
+    await screen.findByText('A-0041')
+    expect(screen.getByText(/Pág\. 1 \/ 3/)).toBeTruthy()
+    expect((screen.getByRole('button', { name: /Anterior/ }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: /Siguiente/ }))
+    await waitFor(() => expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ skip: 100 })))
+    await screen.findByText(/Pág\. 2 \/ 3/)
+    fireEvent.click(screen.getByRole('button', { name: /Anterior/ }))
+    await waitFor(() => expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ skip: 0 })))
+  })
+
+  it('cambiar de preset pide el rango nuevo (en lista y estadísticas), vuelve a la página 0 y marca el preset', async () => {
+    usuario('CAJERO', 1)
+    list.mockResolvedValue({ items: [VENTA], total: 250, page: 0, pages: 3 })
+    pintar()
+    await screen.findByText('A-0041')
+    fireEvent.click(screen.getByRole('button', { name: /Siguiente/ }))
+    await waitFor(() => expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ skip: 100 })))
+    fireEvent.click(screen.getByRole('button', { name: '7 días' }))
+    const r = rangoPreset('7d')
+    await waitFor(() => expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ start_date: r.inicio, end_date: r.fin, skip: 0 })))
+    expect(getStats).toHaveBeenLastCalledWith({ start_date: r.inicio, end_date: r.fin })
+    expect(screen.getByRole('button', { name: '7 días' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: 'Hoy' }).getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('Filtrar con una fecha vacía avisa y no llama al servidor; con rango invertido también avisa', async () => {
+    usuario('CAJERO', 1)
+    pintar()
+    await screen.findByText('A-0041')
+    const llamadas = list.mock.calls.length
+    fireEvent.change(screen.getByLabelText('Desde'), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: /Filtrar/ }))
+    expect(useToastStore.getState().toasts.map((t) => t.message)).toContain('Elige la fecha inicial y la final.')
+    expect(list).toHaveBeenCalledTimes(llamadas)
+    fireEvent.change(screen.getByLabelText('Desde'), { target: { value: '2026-10-20' } })
+    fireEvent.change(screen.getByLabelText('Hasta'), { target: { value: '2026-10-10' } })
+    fireEvent.click(screen.getByRole('button', { name: /Filtrar/ }))
+    expect(useToastStore.getState().toasts.map((t) => t.message)).toContain('La fecha inicial no puede ser mayor que la final.')
+    expect(list).toHaveBeenCalledTimes(llamadas)
   })
 })

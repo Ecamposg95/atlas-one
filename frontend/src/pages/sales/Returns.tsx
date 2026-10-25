@@ -75,42 +75,62 @@ function ReturnsAdminView() {
   const [presetElegido, setPresetElegido] = useState<ClavePreset | null>('30d')
   const [pending, setPending] = useState<ReturnDocument[]>([])
   const [history, setHistory] = useState<ReturnDocument[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  // Contador de peticiones: una respuesta vieja (otra sucursal o periodo) no pisa a la nueva.
-  const reqId = useRef(0)
+  // Pendientes e Historial se piden por separado: si una falla, la otra bandeja sigue a la vista.
+  const [loadingPend, setLoadingPend] = useState(true)
+  const [loadingHist, setLoadingHist] = useState(true)
+  const [errorPend, setErrorPend] = useState<string | null>(null)
+  const [errorHist, setErrorHist] = useState<string | null>(null)
+  // Un contador por bandeja: una respuesta vieja (otra sucursal o periodo) no pisa a la nueva.
+  const reqPend = useRef(0)
+  const reqHist = useRef(0)
   const [selected, setSelected] = useState<ReturnDocument | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
   const [rejectingId, setRejectingId] = useState<string | null>(null)
   const [rejectReason, setRejectReason] = useState('')
 
-  const loadData = useCallback(async (bid: number | '', r: Rango) => {
-    const mio = ++reqId.current
-    setLoading(true)
-    setError(null)
+  // `branch_id` solo cuando un rol de oficina eligió sucursal. Sin él, `/returns/`
+  // (`resolver_ambito`; HQ_ROLES incluye GERENTE) da toda la organización a admin,
+  // dueño y gerente —como hoy— y a la cajera la suya.
+  const loadPendientes = useCallback(async (bid: number | '') => {
+    const mio = ++reqPend.current
+    setLoadingPend(true)
+    setErrorPend(null)
     try {
-      // `branch_id` solo cuando un rol de oficina eligió sucursal. Sin él, `/returns/`
-      // (`resolver_ambito`; HQ_ROLES incluye GERENTE) da toda la organización a admin,
-      // dueño y gerente —como hoy— y a la cajera la suya.
-      const ambito = bid !== '' ? { branch_id: bid } : {}
-      const [pendientes, historial] = await Promise.all([
-        returnsApi.list({ ...ambito, status: 'PENDING', limit: TOPE }),
-        returnsApi.list({ ...ambito, start_date: r.inicio, end_date: r.fin, limit: TOPE }),
-      ])
-      if (mio !== reqId.current) return
-      setPending(pendientes)
-      setHistory(historial)
+      const data = await returnsApi.list({ ...(bid !== '' ? { branch_id: bid } : {}), status: 'PENDING', limit: TOPE })
+      if (mio !== reqPend.current) return
+      setPending(data)
     } catch (err) {
-      if (mio !== reqId.current) return
+      if (mio !== reqPend.current) return
       // Un fallo no se disfraza de "sin devoluciones".
-      setPending([]); setHistory([])
-      setError(detalle(err, 'No se pudieron cargar las devoluciones. Vuelve a intentar en unos segundos.'))
+      setPending([])
+      setErrorPend(detalle(err, 'No se pudieron cargar las devoluciones. Vuelve a intentar en unos segundos.'))
     } finally {
-      if (mio === reqId.current) setLoading(false)
+      if (mio === reqPend.current) setLoadingPend(false)
     }
   }, [])
 
-  useEffect(() => { loadData(sucursal, rango) }, [loadData, sucursal, rango])
+  const loadHistorial = useCallback(async (bid: number | '', r: Rango) => {
+    const mio = ++reqHist.current
+    setLoadingHist(true)
+    setErrorHist(null)
+    try {
+      const data = await returnsApi.list({ ...(bid !== '' ? { branch_id: bid } : {}), start_date: r.inicio, end_date: r.fin, limit: TOPE })
+      if (mio !== reqHist.current) return
+      setHistory(data)
+    } catch (err) {
+      if (mio !== reqHist.current) return
+      setHistory([])
+      setErrorHist(detalle(err, 'No se pudo cargar el historial de devoluciones. Vuelve a intentar en unos segundos.'))
+    } finally {
+      if (mio === reqHist.current) setLoadingHist(false)
+    }
+  }, [])
+
+  // Pendientes: solo cambia con la sucursal. Historial: con la sucursal y el periodo
+  // (cambiar el preset ya no vuelve a pedir los pendientes).
+  useEffect(() => { loadPendientes(sucursal) }, [loadPendientes, sucursal])
+  useEffect(() => { loadHistorial(sucursal, rango) }, [loadHistorial, sucursal, rango])
+  const recargar = () => Promise.all([loadPendientes(sucursal), loadHistorial(sucursal, rango)])
 
   const aplicar = (r: Rango, clave: ClavePreset | null) => {
     setRango(r); setDesde(r.inicio); setHasta(r.fin); setPresetElegido(clave)
@@ -127,7 +147,7 @@ function ReturnsAdminView() {
     setActionLoading(true)
     try {
       await returnsApi.approve(id, force)
-      await loadData(sucursal, rango)
+      await recargar()
       setSelected(null)
       toast.success('Devolución aprobada')
     } catch (err) {
@@ -156,7 +176,7 @@ function ReturnsAdminView() {
     setActionLoading(true)
     try {
       await returnsApi.reject(id, reason)
-      await loadData(sucursal, rango)
+      await recargar()
       setSelected(null)
       setRejectingId(null)
       setRejectReason('')
@@ -166,18 +186,20 @@ function ReturnsAdminView() {
     } finally { setActionLoading(false) }
   }
 
+  const items = tab === 'pending' ? pending : history
+  const loading = tab === 'pending' ? loadingPend : loadingHist
+  const error = tab === 'pending' ? errorPend : errorHist
+  const textoVacio = tab === 'pending' ? 'No hay devoluciones pendientes' : 'Sin devoluciones en este periodo'
+
   // Mensaje de error con reintento (en lugar de la lista vacía).
   const mensajeError = error && (
     <div role="alert" className="p-8 text-center space-y-3">
       <p className="text-sm text-dax-danger">{error}</p>
-      <button type="button" onClick={() => loadData(sucursal, rango)} className="dax-btn-secondary text-xs">
+      <button type="button" onClick={() => { recargar() }} className="dax-btn-secondary text-xs">
         <i className="fa-solid fa-rotate-right" aria-hidden="true" /> Reintentar
       </button>
     </div>
   )
-
-  const items = tab === 'pending' ? pending : history
-  const textoVacio = tab === 'pending' ? 'No hay devoluciones pendientes' : 'Sin devoluciones en este periodo'
 
   return (
     <div className="space-y-5">
@@ -201,7 +223,7 @@ function ReturnsAdminView() {
                 {sucursales.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             )}
-            <button type="button" onClick={() => loadData(sucursal, rango)} className="dax-btn-secondary text-xs">
+            <button type="button" onClick={() => { recargar() }} className="dax-btn-secondary text-xs">
               <i className="fa-solid fa-rotate-right" aria-hidden="true" /> Actualizar
             </button>
           </>
@@ -220,7 +242,7 @@ function ReturnsAdminView() {
           >
             {t === 'pending' ? 'Pendientes' : 'Historial'}
             {t === 'pending' && pending.length > 0 && (
-              <span className="ml-1.5 rounded-full bg-dax-danger text-dax-on-accent text-[10px] font-black px-1.5 py-0.5">{pending.length}</span>
+              <span role="img" aria-label={`${pending.length} por aprobar`} className="ml-1.5 rounded-full bg-dax-danger text-dax-on-accent text-[10px] font-black px-1.5 py-0.5">{pending.length}</span>
             )}
           </button>
         ))}

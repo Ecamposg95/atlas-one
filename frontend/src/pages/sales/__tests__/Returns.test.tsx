@@ -17,6 +17,7 @@ import { confirm } from '../../../components/ui/ConfirmDialog'
 import { Returns } from '../Returns'
 import { useAuthStore } from '../../../store/authStore'
 import { rangoPreset } from '../../reports/presetsReportes'
+import { useToastStore } from '../../../store/toastStore'
 
 const r30 = rangoPreset('30d')
 const hoy = rangoPreset('hoy')
@@ -39,6 +40,7 @@ beforeEach(() => {
   approve.mockReset().mockResolvedValue(DEV('dev-000001', 'APPROVED'))
   reject.mockReset()
   getBranches.mockReset().mockResolvedValue([SUC(1, 'Roma'), SUC(2, 'Condesa')])
+  useToastStore.setState({ toasts: [] })
 })
 afterEach(cleanup)
 
@@ -93,8 +95,9 @@ describe('Devoluciones (/returns, fusión de HQReturns)', () => {
     await screen.findByText('DEV-000002')
     fireEvent.click(screen.getByRole('button', { name: 'Hoy' }))
     await waitFor(() => expect(list).toHaveBeenLastCalledWith({ start_date: hoy.inicio, end_date: hoy.fin, limit: 200 }))
-    expect(llamadasPendientes().length).toBeGreaterThanOrEqual(2)
-    for (const [p] of llamadasPendientes()) expect(p).not.toHaveProperty('start_date')
+    // Cambiar el preset NO vuelve a pedir los pendientes: una sola petición desde el montaje.
+    expect(llamadasPendientes()).toHaveLength(1)
+    expect(llamadasPendientes()[0][0]).not.toHaveProperty('start_date')
   })
   it('una respuesta vieja no pisa a la nueva: si la primera llega tarde, la bandeja muestra la de la sucursal elegida', async () => {
     usuario('ADMINISTRADOR')
@@ -186,6 +189,42 @@ describe('Devoluciones (/returns, fusión de HQReturns)', () => {
     await waitFor(() => expect(reject).toHaveBeenCalledWith('dev-000001', undefined))
   })
 
+  it('si falla solo el historial, los pendientes siguen a la vista y el historial muestra su error con Reintentar', async () => {
+    usuario('GERENTE', 1)
+    list.mockReset().mockImplementation(async (p?: { status?: string }) => {
+      if (p?.status === 'PENDING') return [DEV('dev-000001', 'PENDING')]
+      throw { response: { data: { detail: 'Historial caído' } } }
+    })
+    pintar()
+    await screen.findByText('DEV-000001')
+    expect(screen.queryByRole('alert')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Historial' }))
+    const alerta = await screen.findByRole('alert')
+    expect(alerta.textContent).toContain('Historial caído')
+    fireEvent.click(screen.getByRole('button', { name: /^Pendientes/ }))
+    expect(await screen.findByText('DEV-000001')).toBeTruthy()
+  })
+
+  it('si fallan solo los pendientes, el historial sigue a la vista', async () => {
+    usuario('GERENTE', 1)
+    list.mockReset().mockImplementation(async (p?: { status?: string }) => {
+      if (p?.status === 'PENDING') throw { response: { data: { detail: 'Pendientes caídos' } } }
+      return [DEV('dev-000002', 'APPROVED')]
+    })
+    pintar()
+    expect((await screen.findByRole('alert')).textContent).toContain('Pendientes caídos')
+    fireEvent.click(screen.getByRole('button', { name: 'Historial' }))
+    expect(await screen.findByText('DEV-000002')).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('el contador de pendientes se anuncia como «N por aprobar»', async () => {
+    usuario('GERENTE', 1)
+    pintar()
+    await screen.findByText('DEV-000001')
+    expect(screen.getByLabelText('1 por aprobar').textContent).toBe('1')
+  })
+
   it('una fecha vacía no llega al backend', async () => {
     usuario('GERENTE', 1)
     pintar()
@@ -196,5 +235,6 @@ describe('Devoluciones (/returns, fusión de HQReturns)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Aplicar' }))
     await new Promise((r) => setTimeout(r, 20))
     expect(list.mock.calls.length).toBe(antes)
+    expect(useToastStore.getState().toasts.map((t) => t.message)).toContain('Elige la fecha inicial y la final.')
   })
 })
