@@ -43,8 +43,10 @@ export interface ProductoAccionable {
  * Acciones disponibles para un producto, en el orden en que se pintan.
  *
  * Aprobar y rechazar solo tienen sentido mientras está `PENDING`; archivar y
- * restaurar son excluyentes según `is_active`. Con una sola sucursal la matriz
- * sobra (`conMatriz: false`): el formulario ya trae su sección de sucursal.
+ * restaurar son excluyentes según `is_active`. La matriz va siempre para HQ: archivar
+ * apaga el producto en cada sucursal y restaurar no lo reenciende, así que la matriz es la
+ * única vía para reactivarlo (el formulario de edición no trae sección de sucursal). La
+ * opción `conMatriz: false` queda para quien no deba ofrecerla.
  */
 export function accionesDeProducto(p: ProductoAccionable, opciones: { conMatriz?: boolean } = {}): ClaveAccionCatalogo[] {
   const claves: ClaveAccionCatalogo[] = opciones.conMatriz === false ? [] : ['matriz']

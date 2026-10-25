@@ -13,7 +13,7 @@ import { BarraFiltros } from '../../components/ui/BarraFiltros'
 import { ListaTarjetas } from '../../components/ui/ListaTarjetas'
 import { TarjetaFila } from '../../components/ui/TarjetaFila'
 import { useEsTelefono } from '../../hooks/useIsMobile'
-import { useModoBasico } from '../../store/enabledModulesStore'
+import { useModoBasico, useEnabledModulesStore } from '../../store/enabledModulesStore'
 import type { Product, Department, Brand } from '../../types/products'
 import { formatCurrency } from '../../utils/currency'
 import { sortByName } from '../../utils/sortByName'
@@ -320,15 +320,18 @@ function EstadoAprobacion({ p }: { p: Product }) {
  * Última columna. Fuera del catálogo: solo Editar (icono en la tabla; con texto
  * en la tarjeta, hijo directo de las acciones de `TarjetaFila` para sus 44 px).
  * Con `catalogo` (HQ en perfil completo): las acciones de `accionesDeProducto`
- * en orden —matriz (solo con varias sucursales), aprobar/rechazar (pendientes),
+ * en orden —matriz (siempre: es la única vía para reactivar sucursales tras restaurar),
+ * aprobar/rechazar (pendientes),
  * historial, editar, duplicar y archivar/restaurar— con `aria-label` «Acción — Producto».
  */
-function AccionesDeFila({ p, onEditar, conTexto = false, catalogo = false, conMatriz = true, onAccion }: {
+function AccionesDeFila({ p, onEditar, conTexto = false, catalogo = false, conMatriz = true, ocupado = false, onAccion }: {
   p: Product
   onEditar: (p: Product) => void
   conTexto?: boolean
   catalogo?: boolean
   conMatriz?: boolean
+  /** Hay una acción en curso: se deshabilitan los botones para no duplicarla. */
+  ocupado?: boolean
   onAccion?: (clave: ClaveAccionCatalogo, p: Product) => void
 }) {
   if (catalogo && onAccion) {
@@ -340,8 +343,9 @@ function AccionesDeFila({ p, onEditar, conTexto = false, catalogo = false, conMa
             <button
               key={clave}
               type="button"
+              disabled={ocupado}
               onClick={() => (clave === 'editar' ? onEditar(p) : onAccion(clave, p))}
-              className={`${meta.clase} ${conTexto ? 'text-xs' : 'dax-btn-icon text-xs'}`}
+              className={`${meta.clase} ${conTexto ? 'text-xs' : 'dax-btn-icon text-xs'} disabled:opacity-50`}
               title={meta.etiqueta}
               aria-label={`${meta.etiqueta} — ${p.name}`}
             >
@@ -397,15 +401,18 @@ function ProductsHQView() {
 
   // Catálogo (fusión de /admin/catalog, Fase 3): cifras, aprobación, archivados y acciones
   // por producto. Solo HQ en perfil completo: el básico escondía el Catálogo a propósito y
-  // lo que no se pinta no se consulta.
-  const catalogo = isHQ && !modoBasico
+  // lo que no se pinta no se consulta. Hasta que `/me/context` responde (`loaded`) el perfil
+  // vale 'completo' por defecto: sin esperar, un FREE en básico pediría marcas y cifras al
+  // montar y se corregiría después.
+  const perfilListo = useEnabledModulesStore((s) => s.loaded)
+  const catalogo = isHQ && perfilListo && !modoBasico
   const [brands, setBrands] = useState<Brand[]>([])
   const [brandId, setBrandId] = useState('')
   const [aprobacion, setAprobacion] = useState<FiltroAprobacion>('ALL')
   const [incluirArchivados, setIncluirArchivados] = useState(false)
   const [soloSinSucursal, setSoloSinSucursal] = useState(false)
   const [kpis, setKpis] = useState<Awaited<ReturnType<typeof productsApi.catalogKpis>> | null>(null)
-  const [kpisLoading, setKpisLoading] = useState(false)
+  const [kpisLoading, setKpisLoading] = useState(catalogo)   // esqueleto, no ceros, mientras llegan
   const [matrixProduct, setMatrixProduct] = useState<Product | null>(null)
   const [auditProduct, setAuditProduct] = useState<Product | null>(null)
 
@@ -499,12 +506,15 @@ function ProductsHQView() {
         .then(setCodigosFaltantes)
         .catch(() => setCodigosFaltantes(0))
     }
-    if (catalogo) {
-      productsApi.getBrands()
-        .then((b) => setBrands(sortByName(b)))
-        .catch(() => toast.error('No se pudieron cargar las marcas.'))
-    }
   }, [])
+
+  // Marcas del filtro: solo cuando el catálogo se pinta (perfil ya conocido y completo).
+  useEffect(() => {
+    if (!catalogo) return
+    productsApi.getBrands()
+      .then((b) => setBrands(sortByName(b)))
+      .catch(() => toast.error('No se pudieron cargar las marcas.'))
+  }, [catalogo])
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -529,7 +539,7 @@ function ProductsHQView() {
   const pages = Math.ceil(total / LIMIT)
 
   const openEdit = (p: Product) => setEditor({ mode: 'edit', productId: p.id })
-  const handleSaved = () => { setEditor(null); load(search, deptId, page) }
+  const handleSaved = () => { setEditor(null); load(search, deptId, page); cargarKpis() }
   const handleNewProductClick = () => setEditor({ mode: 'create' })
 
   // Acciones del catálogo (antes en AdminCatalog). Tras cada una se releen lista y cifras.
@@ -538,7 +548,12 @@ function ProductsHQView() {
     toast.error(typeof detail === 'string' ? detail : respaldo)
   }
   const recargarCatalogo = () => { load(search, deptId, page); cargarKpis() }
+  const [accionEnCurso, setAccionEnCurso] = useState(false)
   const correrAccion = async (clave: ClaveAccionCatalogo, p: Product) => {
+    setAccionEnCurso(true)
+    try { await ejecutarAccion(clave, p) } finally { setAccionEnCurso(false) }
+  }
+  const ejecutarAccion = async (clave: ClaveAccionCatalogo, p: Product) => {
     switch (clave) {
       case 'matriz': setMatrixProduct(p); return
       case 'historial': setAuditProduct(p); return
@@ -611,6 +626,7 @@ function ProductsHQView() {
     // desglose por talla lo muestre, y el contador para ocultar el botón.
     try {
       await load(search, deptId, page)
+      cargarKpis()
       setCodigosFaltantes(await productsApi.barcodesMissingCount())
     } catch {
       /* el catálogo se recarga solo al siguiente filtro o navegación */
@@ -811,7 +827,7 @@ function ProductsHQView() {
                       { etiqueta: 'Existencia', valor: <ExistenciaDeFila p={p} abierto={tallasAbiertas} className="max-md:min-h-[44px]" onToggle={() => setExpandedVariantsId(tallasAbiertas ? null : p.id)} /> },
                       ...(catalogo ? [{ etiqueta: 'Aprobación', valor: <EstadoAprobacion p={p} /> }] : []),
                     ]}
-                    acciones={canEdit ? <AccionesDeFila p={p} onEditar={openEdit} conTexto catalogo={catalogo} conMatriz={!unaSolaSucursal} onAccion={correrAccion} /> : undefined}
+                    acciones={canEdit ? <AccionesDeFila p={p} onEditar={openEdit} conTexto catalogo={catalogo} onAccion={correrAccion} ocupado={accionEnCurso} /> : undefined}
                   />
                   {tallasAbiertas && expandVariantRows([p]).map((row) => (
                     <TarjetaFila
@@ -969,7 +985,7 @@ function ProductsHQView() {
                         {catalogo && <td><EstadoAprobacion p={p} /></td>}
                         {canEdit && (
                           <td className="text-right">
-                            <AccionesDeFila p={p} onEditar={openEdit} catalogo={catalogo} conMatriz={!unaSolaSucursal} onAccion={correrAccion} />
+                            <AccionesDeFila p={p} onEditar={openEdit} catalogo={catalogo} onAccion={correrAccion} ocupado={accionEnCurso} />
                           </td>
                         )}
                       </tr>
@@ -1030,7 +1046,7 @@ function ProductsHQView() {
         <ImportModal
           isHQ={isHQ}
           onClose={() => setShowImport(false)}
-          onDone={() => { setShowImport(false); load(search, deptId, page) }}
+          onDone={() => { setShowImport(false); load(search, deptId, page); cargarKpis() }}
         />
       )}
       {editor && (

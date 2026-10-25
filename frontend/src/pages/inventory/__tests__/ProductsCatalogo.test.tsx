@@ -2,7 +2,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
-import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, cleanup, fireEvent, waitFor, act } from '@testing-library/react'
 
 const api = vi.hoisted(() => ({
   list: vi.fn(),
@@ -31,6 +31,7 @@ import { Products } from '../Products'
 import { useAuthStore } from '../../../store/authStore'
 import { useEnabledModulesStore } from '../../../store/enabledModulesStore'
 import { useBranchCountStore } from '../../../store/branchCountStore'
+import { useToastStore } from '../../../store/toastStore'
 
 const KPIS = { total_skus: 2, active_pos: 1, pending_approval: 1, no_branch: 0, critical_stock: 0, zero_stock: 0, threshold: 3 }
 const producto = (id: string, name: string, extra: Record<string, unknown>) => ({
@@ -70,7 +71,7 @@ describe('Productos: catálogo fusionado (HQ en perfil completo)', () => {
     await waitFor(() => expect(api.list).toHaveBeenLastCalledWith(expect.objectContaining({ brand_id: 'b1' })))
   })
 
-  it('un pendiente ofrece Aprobar y Rechazar; un archivado, Restaurar; con una sola tienda no hay Matriz', async () => {
+  it('un pendiente ofrece Aprobar y Rechazar; un archivado, Restaurar; la Matriz va siempre, también con una sola tienda', async () => {
     pintar()
     await screen.findByText('Blusa nueva')
     expect(screen.getByText('Pendiente')).toBeTruthy()
@@ -80,11 +81,24 @@ describe('Productos: catálogo fusionado (HQ en perfil completo)', () => {
     expect(screen.getByLabelText('Rechazar — Blusa nueva')).toBeTruthy()
     expect(screen.getByLabelText('Restaurar — Falda vieja')).toBeTruthy()
     expect(screen.queryByLabelText('Archivar — Falda vieja')).toBeNull()
-    expect(screen.queryByLabelText(/Matriz de sucursales/)).toBeNull()
+    // Archivar apaga el producto en cada sucursal y restaurar no lo reenciende: la matriz es la vía.
+    expect(screen.getByLabelText('Matriz de sucursales — Blusa nueva')).toBeTruthy()
+    expect(screen.getByLabelText('Matriz de sucursales — Falda vieja')).toBeTruthy()
     fireEvent.click(screen.getByLabelText('Aprobar — Blusa nueva'))
     await waitFor(() => expect(api.approve).toHaveBeenCalledWith('p1'))
     fireEvent.click(screen.getByLabelText('Archivar — Blusa nueva'))
     await waitFor(() => expect(api.archive).toHaveBeenCalledWith('p1'))
+  })
+
+  it('restaurar muestra el mensaje del servidor y relee la lista', async () => {
+    useToastStore.setState({ toasts: [] })
+    pintar()
+    await screen.findByText('Falda vieja')
+    const antes = api.list.mock.calls.length
+    fireEvent.click(screen.getByLabelText('Restaurar — Falda vieja'))
+    await waitFor(() => expect(api.restore).toHaveBeenCalledWith('p2'))
+    await waitFor(() => expect(useToastStore.getState().toasts.map((t) => t.message)).toContain('Restaurado'))
+    await waitFor(() => expect(api.list.mock.calls.length).toBeGreaterThan(antes))
   })
 
   it('con varias sucursales aparece la Matriz de sucursales y abre su modal', async () => {
@@ -113,5 +127,27 @@ describe('Productos: catálogo fusionado (HQ en perfil completo)', () => {
     pintar()
     expect(await screen.findByTestId('vista-sucursal')).toBeTruthy()
     expect(api.catalogKpis).not.toHaveBeenCalled()
+  })
+
+  it('hasta que el perfil carga no se piden marcas ni cifras: un básico no ve el parpadeo', async () => {
+    useEnabledModulesStore.setState({ loaded: false, perfilUi: 'completo' } as never)
+    pintar()
+    await screen.findByText('Blusa nueva')
+    await new Promise((r) => setTimeout(r, 400))   // pasa el debounce de 300 ms
+    expect(api.getBrands).not.toHaveBeenCalled()
+    expect(api.catalogKpis).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('kpis-catalogo')).toBeNull()
+    act(() => { useEnabledModulesStore.setState({ loaded: true, perfilUi: 'basico' } as never) })
+    await new Promise((r) => setTimeout(r, 400))
+    expect(api.getBrands).not.toHaveBeenCalled()
+    expect(api.catalogKpis).not.toHaveBeenCalled()
+  })
+
+  it('con el perfil completo ya cargado pide marcas y cifras una vez', async () => {
+    pintar()
+    await screen.findByText('Blusa nueva')
+    await waitFor(() => expect(api.catalogKpis).toHaveBeenCalled())
+    expect(api.getBrands).toHaveBeenCalledTimes(1)
+    expect(api.catalogKpis).toHaveBeenCalledTimes(1)
   })
 })
