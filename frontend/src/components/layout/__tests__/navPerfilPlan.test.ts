@@ -21,7 +21,7 @@ const menu = (role: Role, plan: PlanOrg | null, enabledModules = ATLAS_POS) =>
 // Lo que la dueña y la cajera de una tienda FREE usan a diario: intocable.
 const DIARIO_ADMIN = [
   '/hq/operations', '/hq/reports-hub', '/sales', '/products', '/labels', '/printer-settings',
-  '/cash-history', '/hq/sales', '/hq/returns', '/hq/inventory', '/admin/catalog',
+  '/cash-history', '/returns', '/inventory',
   '/users', '/hq/branches', '/organization',
 ]
 const DIARIO_CAJERA = [
@@ -86,7 +86,7 @@ describe('perfil FREE', () => {
   })
 
   it('esconder no quita acceso: el guard de ruta no depende del plan', () => {
-    expect(rolesConAcceso('/hq/inventory')).toContain('ADMINISTRADOR')
+    expect(rolesConAcceso('/inventory')).toContain('ADMINISTRADOR')
     expect(rolesConAcceso('/hr/me')).toContain('CAJERO')
   })
 

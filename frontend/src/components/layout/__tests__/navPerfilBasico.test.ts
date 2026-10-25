@@ -50,8 +50,17 @@ describe('menú en modo básico', () => {
   })
 
   it('una de paga forzada a básico también se recorta', () => {
-    expect(menu('ADMINISTRADOR', 'basico', ULTRA)).not.toContain('/hq/inventory')
+    expect(menu('ADMINISTRADOR', 'basico', ULTRA)).not.toContain('/inventory')
     expect(menu('ADMINISTRADOR', 'basico', ULTRA)).not.toContain('/customers')
+  })
+
+  it('Fase 3: en básico la dueña no ve Inventario ni Devoluciones (fusionadas), pero sí Ventas y Productos', () => {
+    const urls = menu('ADMINISTRADOR', 'basico')
+    expect(urls).not.toContain('/inventory')
+    expect(urls).not.toContain('/returns')
+    expect(urls).toContain('/sales')
+    expect(urls).toContain('/products')
+    expect(menu('ADMINISTRADOR', 'completo', ULTRA)).toEqual(expect.arrayContaining(['/inventory', '/returns']))
   })
 
   it('una FREE gastro conserva mesas y cocina: la lista esconde, no es blanca', () => {
@@ -62,7 +71,7 @@ describe('menú en modo básico', () => {
 
   it('esconder no es quitar acceso: rolesConAcceso no depende del perfil', () => {
     expect(rolesConAcceso('/customers')).toContain('CAJERO')
-    expect(rolesConAcceso('/hq/inventory')).toContain('ADMINISTRADOR')
+    expect(rolesConAcceso('/inventory')).toContain('ADMINISTRADOR')
   })
 
   it('sin perfil o completo no se esconde nada; sucursal y HQ tienen su lista', () => {
