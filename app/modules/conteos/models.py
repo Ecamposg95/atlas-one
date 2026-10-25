@@ -17,8 +17,11 @@ from app.core.database import Base
 from app.models.mixins import TenantMixin
 
 # Estado como String + constantes (CLAUDE.md §5: evitar enums de Postgres).
+# ABIERTO se cuenta; CERRADO congeló su reporte; CANCELADO se descartó sin
+# congelar nada (9 letras: cabe en String(10), sin migración).
 ABIERTO = "ABIERTO"
 CERRADO = "CERRADO"
+CANCELADO = "CANCELADO"
 
 
 class InventoryCount(Base, TenantMixin):

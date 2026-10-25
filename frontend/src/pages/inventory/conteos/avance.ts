@@ -1,4 +1,4 @@
-import type { Reporte } from '../../../api/conteos'
+import type { Conteo, Reporte } from '../../../api/conteos'
 
 /** Decimal del backend ("3.00") a número; vacío o basura = 0. */
 export function num(v: string | number | null | undefined): number {
@@ -11,6 +11,19 @@ export function num(v: string | number | null | undefined): number {
 export function porcentajeAvance(contadas: number, esperadas: number): number {
   if (esperadas <= 0) return 0
   return Math.min(100, Math.round((contadas / esperadas) * 100))
+}
+
+/** Etiqueta y color del estado de un conteo en la lista (abierto verde; cerrado y cancelado, grises). */
+export function estadoConteo(status: Conteo['status']): { texto: string; clase: string } {
+  if (status === 'ABIERTO') return { texto: 'Abierto', clase: 'text-emerald-400' }
+  if (status === 'CANCELADO') return { texto: 'Cancelado', clase: 'text-dax-faint' }
+  return { texto: 'Cerrado', clase: 'text-slate-400' }
+}
+
+/** Texto del diálogo de "Cancelar conteo": qué se descarta y qué se conserva. */
+export function textoCancelar(piezas: number): string {
+  const contadas = piezas === 1 ? '1 pieza' : `${piezas} piezas`
+  return `Se descarta lo contado (${contadas}). Los ajustes ya hechos en piso se conservan. No se puede deshacer.`
 }
 
 /** "faltan 3" / "falta 1" / "sobra 1" / "sobran 2" / "cuadra". */

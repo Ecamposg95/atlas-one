@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.models.inventory import StockOnHand
 from app.routers.inventory import aplicar_ajuste   # mismo kardex que /inventory/adjust
-from app.modules.conteos.models import ABIERTO, CERRADO, InventoryCount, InventoryCountLine
+from app.modules.conteos.models import ABIERTO, CANCELADO, CERRADO, InventoryCount, InventoryCountLine
 from app.modules.conteos.schemas import (
     AjusteAplicado, AjusteLineaResult, Avance, ConteoDetalle, ConteoRead, FilaDesconocido, FilaLista, FilaReporte, LineaRead,
     Lista, ProductoResumen, Reporte, ScanResult,
@@ -119,7 +119,7 @@ def _fuera_de_alcance(conteo: InventoryCount, v: ProductVariant) -> bool:
 # ── Líneas ───────────────────────────────────────────────────────────────────
 def _exigir_abierto(conteo: InventoryCount) -> None:
     if conteo.status != ABIERTO:
-        raise HTTPException(409, "Este conteo ya está cerrado.")
+        raise HTTPException(409, "Este conteo ya está cerrado o cancelado.")
 
 
 def _sumar_linea(db: Session, conteo: InventoryCount, qty: Decimal, user_id: Optional[int],
@@ -291,6 +291,8 @@ def aplicar(db: Session, conteo: InventoryCount, variant_ids: List[str],
     cerrado. Una venta posterior al cierre no se descuenta dos veces porque se
     aplica el delta, no el valor contado. Si la salida dejaría negativo, se
     recorta a 0 y se anota. Filas ya aplicadas se omiten (idempotente)."""
+    if conteo.status == CANCELADO:
+        raise HTTPException(409, "Este conteo fue cancelado.")
     if conteo.status != CERRADO or not conteo.resumen:
         raise HTTPException(409, "Primero cierra el conteo.")
     if not variant_ids:
@@ -452,6 +454,21 @@ def cerrar(db: Session, conteo: InventoryCount, user_id: Optional[int]) -> Repor
     db.commit()
     db.refresh(conteo)
     return rep
+
+
+def cancelar(db: Session, conteo: InventoryCount, user_id: Optional[int]) -> InventoryCount:
+    """Descarta un conteo ABIERTO. No congela `qty_sistema` ni `resumen` y NUNCA toca
+    `stock_on_hand`: lo contado se tira. Los ajustes ya hechos en piso con `/ajustar`
+    se conservan, porque son movimientos reales de kardex (cada uno con su renglón y
+    su autor) y revertirlos movería la existencia otra vez. Las líneas quedan como
+    rastro. Un CANCELADO ya no cuenta como abierto: deja libre la sucursal y el
+    departamento para empezar otro conteo."""
+    _exigir_abierto(conteo)
+    conteo.status = CANCELADO
+    conteo.closed_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(conteo)
+    return conteo
 
 
 # ── Lecturas ─────────────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 // frontend/src/pages/inventory/conteos/__tests__/avance.test.ts
 import { describe, it, expect } from 'vitest'
 
-import { num, porcentajeAvance, resumenSeleccion, seccionesReporte, seleccionInicial, seleccionTrasAplicar, textoDiferencia } from '../avance'
+import { estadoConteo, num, porcentajeAvance, resumenSeleccion, seccionesReporte, seleccionInicial, seleccionTrasAplicar, textoCancelar, textoDiferencia } from '../avance'
 import type { Reporte } from '../../../../api/conteos'
 
 describe('porcentajeAvance', () => {
@@ -79,5 +79,21 @@ describe('seleccionTrasAplicar', () => {
   it('quita las ya ajustadas y no re-marca las destildadas', () => {
     const r = { faltantes: [f('P', true), f('N', false), f('X', false)], sobrantes: [], fuera_de_alcance: [] } as never
     expect([...seleccionTrasAplicar(new Set(['P', 'N']), r)]).toEqual(['N'])
+  })
+})
+
+describe('estadoConteo', () => {
+  it('abierto en verde; cerrado y cancelado en gris, cada uno con su texto', () => {
+    expect(estadoConteo('ABIERTO')).toEqual({ texto: 'Abierto', clase: 'text-emerald-400' })
+    expect(estadoConteo('CERRADO')).toEqual({ texto: 'Cerrado', clase: 'text-slate-400' })
+    expect(estadoConteo('CANCELADO')).toEqual({ texto: 'Cancelado', clase: 'text-dax-faint' })
+  })
+})
+
+describe('textoCancelar', () => {
+  it('dice cuántas piezas se descartan (singular y plural) y que los ajustes en piso se conservan', () => {
+    expect(textoCancelar(3)).toBe('Se descarta lo contado (3 piezas). Los ajustes ya hechos en piso se conservan. No se puede deshacer.')
+    expect(textoCancelar(1)).toContain('(1 pieza)')
+    expect(textoCancelar(0)).toContain('(0 piezas)')
   })
 })

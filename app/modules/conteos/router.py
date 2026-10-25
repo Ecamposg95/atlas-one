@@ -158,6 +158,14 @@ def cerrar_conteo(conteo_id: int, db: Session = Depends(get_db), user: User = De
     return services.a_conteo_read(db, c, con_lineas=True)
 
 
+@router.post("/{conteo_id}/cancel", response_model=ConteoRead)
+def cancelar_conteo(conteo_id: int, db: Session = Depends(get_db), user: User = Depends(_admin),
+                    org_id: int = Depends(get_current_active_organization)):
+    c = _conteo_o_404(db, org_id, conteo_id)
+    services.cancelar(db, c, user.id)
+    return services.a_conteo_read(db, c)
+
+
 @router.get("/{conteo_id}/report", response_model=Reporte)
 def reporte_conteo(conteo_id: int, db: Session = Depends(get_db), _: User = Depends(_admin),
                    org_id: int = Depends(get_current_active_organization)):
