@@ -20,17 +20,17 @@ describe('csvValuacion', () => {
 
   it('cabecera según el criterio, una fila por grupo y TOTAL al final', () => {
     const l = lineas(csvValuacion(base))
-    expect(l[0]).toBe('Marca,Piezas,SKUs,Valor a venta,Valor a costo,Piezas sin costo')
-    expect(l[1]).toBe('Sin marca,14,2,5200.00,0.00,14')
-    expect(l[3]).toBe('TOTAL,19,3,10200.00,2000.00,14')
+    expect(l[0]).toBe('Marca,Piezas,SKUs,Valor a venta,% del valor,Valor a costo,Piezas sin costo')
+    expect(l[1]).toBe('Sin marca,14,2,5200.00,51.0,0.00,14')
+    expect(l[3]).toBe('TOTAL,19,3,10200.00,100.0,2000.00,14')
     expect(l).toHaveLength(4)
   })
 
   it('entrecomilla nombres con coma o comillas', () => {
     const l = lineas(csvValuacion(base))
-    expect(l[2]).toBe('"Dolce, Gabbana",5,1,5000.00,2000.00,0')
+    expect(l[2]).toBe('"Dolce, Gabbana",5,1,5000.00,49.0,2000.00,0')
     const conComillas = { ...base, grupos: [{ ...base.grupos[1], nombre: 'Bolsa "XL"' }] }
-    expect(lineas(csvValuacion(conComillas))[1]).toBe('"Bolsa ""XL""",5,1,5000.00,2000.00,0')
+    expect(lineas(csvValuacion(conComillas))[1]).toBe('"Bolsa ""XL""",5,1,5000.00,49.0,2000.00,0')
   })
 
   it('sin ve_costo no hay columna de costo (el gerente no exporta lo que no ve)', () => {
@@ -40,8 +40,17 @@ describe('csvValuacion', () => {
       grupos: base.grupos.map((g) => ({ ...g, valor_costo: null })),
     }
     const l = lineas(csvValuacion(gerente))
-    expect(l[0]).toBe('Departamento,Piezas,SKUs,Valor a venta,Piezas sin costo')
-    expect(l[1]).toBe('Sin marca,14,2,5200.00,14')
-    expect(l[3]).toBe('TOTAL,19,3,10200.00,14')
+    expect(l[0]).toBe('Departamento,Piezas,SKUs,Valor a venta,% del valor,Piezas sin costo')
+    expect(l[1]).toBe('Sin marca,14,2,5200.00,51.0,14')
+    expect(l[3]).toBe('TOTAL,19,3,10200.00,100.0,14')
+  })
+
+  it('sin valor total el porcentaje es 0.0 (no NaN)', () => {
+    const vacia: ValuacionInventario = {
+      ...base,
+      totales: { piezas: 0, skus: 0, valor_venta: 0, valor_costo: 0, piezas_sin_costo: 0, skus_sin_costo: 0 },
+      grupos: [],
+    }
+    expect(lineas(csvValuacion(vacia))[1]).toBe('TOTAL,0,0,0.00,0.0,0.00,0')
   })
 })

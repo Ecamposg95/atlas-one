@@ -92,14 +92,17 @@ def _ambito(current_user: User) -> tuple[bool, bool]:
     )
 
 
-def _consulta(db: Session, org_id: int, branch_id: Optional[int], columnas_grupo=()):
+def _consulta(db: Session, org_id: int, branch_id: Optional[int], columnas_grupo=(),
+              department_id: Optional[str] = None):
     """Existencias positivas de la org × variante × producto × sucursal.
 
     Sin productos ni variantes borrados (soft delete = `deleted_at`). Una
     existencia negativa (venta sin stock) es un error de inventario, no valor
     negativo: se excluye. Si no se pide sucursal, solo cuentan las que venden
     y siguen activas (`can_sell` e `is_active`): la bodega de una org multi-sucursal no es "la tienda"; con
-    `branch_id` explicito se puede mirar cualquiera.
+    `branch_id` explicito se puede mirar cualquiera. `department_id` acota a
+    un departamento (totales y grupos): asi la pantalla reparte las marcas
+    de un solo departamento.
     """
     q = (
         db.query(*columnas_grupo, *_AGREGADOS)
@@ -116,6 +119,8 @@ def _consulta(db: Session, org_id: int, branch_id: Optional[int], columnas_grupo
             Product.deleted_at.is_(None),
         )
     )
+    if department_id is not None:
+        q = q.filter(Product.department_id == department_id)
     if branch_id is not None:
         return q.filter(Branch.id == branch_id)
     return q.filter(Branch.can_sell == True, Branch.is_active.is_(True))  # noqa: E712
@@ -135,12 +140,13 @@ def _fila_a_dict(fila, ve_costo: bool) -> dict:
 def valor_inventario(
     agrupar: Agrupar = "sucursal",
     branch_id: Optional[int] = None,
+    department_id: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization),
 ):
-    """Valor de la tienda: totales de la organizacion (o de una sucursal) y
-    desglose por sucursal, departamento o marca."""
+    """Valor de la tienda: totales de la organizacion (o de una sucursal, o de
+    un departamento) y desglose por sucursal, departamento o marca."""
     ve_costo, solo_su_sucursal = _ambito(current_user)
     if solo_su_sucursal:
         if not current_user.branch_id:
@@ -153,14 +159,20 @@ def valor_inventario(
         ).first()
         if existe is None:
             raise HTTPException(status_code=404, detail="Sucursal no encontrada")
+    if department_id is not None:
+        existe_depto = db.query(Department.id).filter(
+            Department.id == department_id, Department.organization_id == org_id,
+        ).first()
+        if existe_depto is None:
+            raise HTTPException(status_code=404, detail="Departamento no encontrado")
 
-    fila = _consulta(db, org_id, branch_id).one()
+    fila = _consulta(db, org_id, branch_id, department_id=department_id).one()
     totales = ValuacionTotales(
         **_fila_a_dict(fila, ve_costo), skus_sin_costo=int(fila.skus_sin_costo or 0),
     )
 
     col_id, col_nombre, union, sin_nombre = _GRUPOS[agrupar]
-    q = _consulta(db, org_id, branch_id, (col_id, col_nombre))
+    q = _consulta(db, org_id, branch_id, (col_id, col_nombre), department_id=department_id)
     if union is not None:
         q = q.outerjoin(*union)
     filas = q.group_by(col_id, col_nombre).order_by(desc("valor_venta"), col_nombre).all()
@@ -174,6 +186,6 @@ def valor_inventario(
     ]
 
     return ValuacionInventarioResponse(
-        agrupar=agrupar, branch_id=branch_id, ve_costo=ve_costo,
+        agrupar=agrupar, branch_id=branch_id, department_id=department_id, ve_costo=ve_costo,
         totales=totales, grupos=grupos,
     )

@@ -425,3 +425,19 @@ def test_sucursales_null_al_pedir_una_sucursal_y_para_el_gerente(client, db, org
 def test_dias_sin_movimiento_fuera_de_rango_es_422(client, auth_admin):
     assert client.get(f"{INICIO}?completo=true&dias_sin_movimiento=0", headers=auth_admin).status_code == 422
     assert client.get(f"{INICIO}?completo=true&dias_sin_movimiento=400", headers=auth_admin).status_code == 422
+
+
+from app.models.returns import SaleReturn  # noqa: E402
+
+
+def test_inicio_hoy_es_neto_y_trae_devuelto(client, db, org, branch_a, cajero_a, auth_admin_a):
+    var = _variante(db, org, branch_a, "Gorra", "GOR-1", 5)
+    v = _venta(db, org, branch_a, cajero_a, var, "100")
+    db.add(SaleReturn(organization_id=org.id, sale_id=v.id, user_id=cajero_a.id, branch_id=branch_a.id,
+                      total_refunded=Decimal("40"), refund_method=PaymentMethod.CASH, reason="Prueba",
+                      status="APPROVED"))
+    db.commit()
+    d = client.get("/api/reports/inicio?completo=true", headers=auth_admin_a).json()
+    assert d["hoy"]["total"] == 60.0 and d["hoy"]["devuelto"] == 40.0 and d["hoy"]["tickets"] == 1
+    assert d["semana"]["total"] == 60.0
+    assert d["por_metodo_hoy"]["CASH"] == 60.0

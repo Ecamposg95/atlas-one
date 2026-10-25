@@ -50,6 +50,7 @@ class ValuacionGrupo(BaseModel):
 class ValuacionInventarioResponse(BaseModel):
     agrupar: str
     branch_id: Optional[int]
+    department_id: Optional[str] = None   # UUID del departamento al que se acotó; None = todos
     ve_costo: bool
     totales: ValuacionTotales
     grupos: List[ValuacionGrupo]
@@ -61,7 +62,8 @@ class ValuacionInventarioResponse(BaseModel):
 class PeriodoVentas(BaseModel):
     desde: date
     hasta: date
-    total: float
+    total: float        # venta NETA: cobradas menos devoluciones aprobadas del periodo
+    devuelto: float = 0.0
     tickets: int
 
 
@@ -138,7 +140,8 @@ class Pendientes(BaseModel):
 class SucursalInicio(BaseModel):
     branch_id: int
     nombre: str
-    ventas_hoy: float
+    ventas_hoy: float        # neta
+    devuelto_hoy: float = 0.0
     tickets_hoy: int
     corte: CorteInicio
     poca_existencia: int     # variantes ≤ umbral en esa sucursal

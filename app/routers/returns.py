@@ -117,10 +117,10 @@ def get_returns_for_sale(
 
 @router.get("/")
 def list_returns(
-    start_date: str = None,
-    end_date: str = None,
-    branch_id: int = None,
-    status: str = None,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    branch_id: Optional[int] = None,
+    status: Optional[str] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, le=200),
     paginate: bool = Query(False),
@@ -128,12 +128,12 @@ def list_returns(
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization),
 ):
-    """
-    Lista devoluciones con filtros. Scoped to current organization.
-    """
+    """Lista devoluciones de la organización. Fechas en día de México; sin
+    fechas, los últimos 30 días, salvo `status=PENDING` (lo pendiente no caduca).
+    Ámbito: roles de oficina ven toda la org o la sucursal pedida; los demás la suya."""
     from app.models.returns import SaleReturn, SaleReturnItem
     from sqlalchemy.orm import joinedload, selectinload
-    from sqlalchemy import or_
+    from app.services import metricas_ventas as mv
 
     query = db.query(SaleReturn).options(
         joinedload(SaleReturn.sale),
@@ -143,52 +143,35 @@ def list_returns(
         selectinload(SaleReturn.items).joinedload(SaleReturnItem.variant)
     ).filter(SaleReturn.organization_id == org_id)
 
-    # Role-based branch visibility (mirrors sales endpoint logic)
-    from app.models.users import PlatformRole
-    user_role_str = current_user.role.value if hasattr(current_user.role, 'value') else str(current_user.role)
-    is_hq_role = (
-        current_user.platform_role == PlatformRole.SUPERADMIN
-        or user_role_str in ["ADMINISTRADOR", "DUEÑO"]
-    )
-    if is_hq_role:
-        # Org-wide visibility; optional branch filter from query param
-        if branch_id:
-            query = query.filter(SaleReturn.branch_id == branch_id)
-    else:
-        # Branch-scoped (GERENTE, CAJERO, etc.)
-        query = query.filter(SaleReturn.branch_id == current_user.branch_id)
+    ambito = mv.resolver_ambito(current_user, org_id, branch_id)
+    if not ambito.toda_la_org:
+        query = query.filter(SaleReturn.branch_id == ambito.branch_id)
 
     if status:
         query = query.filter(SaleReturn.status == status)
 
+    if start_date is None and end_date is None and status != "PENDING":
+        periodo = mv.periodo_preset("30d")
+        start_date, end_date = periodo.inicio, periodo.fin
+    elif start_date is None or end_date is None:
+        # Con una sola fecha, la que falta copia a la otra (mismo criterio que /sales/stats).
+        if start_date is not None or end_date is not None:
+            start_date = start_date or end_date
+            end_date = end_date or start_date
+    if start_date and end_date and end_date < start_date:
+        raise HTTPException(status_code=422, detail="end_date no puede ser anterior a start_date")
     if start_date:
-        try:
-            query = query.filter(SaleReturn.created_at >= start_date)
-        except Exception:
-            pass
-
+        query = query.filter(mv.dia_mx(SaleReturn.created_at) >= start_date)
     if end_date:
-        try:
-            from datetime import datetime as _dt
-            end_dt = _dt.fromisoformat(end_date).replace(hour=23, minute=59, second=59, microsecond=999999)
-            query = query.filter(SaleReturn.created_at <= end_dt)
-        except Exception:
-            pass
+        query = query.filter(mv.dia_mx(SaleReturn.created_at) <= end_date)
 
     from app.schemas.returns import SaleReturn as SaleReturnSchema
-    try:
-        ordered = query.order_by(SaleReturn.created_at.desc())
-        if paginate:
-            total = ordered.count()
-            raw = ordered.offset(skip).limit(limit).all()
-            items = [SaleReturnSchema.model_validate(r) for r in raw]
-            return {"items": items, "total": total, "skip": skip, "limit": limit}
+    ordered = query.order_by(SaleReturn.created_at.desc())
+    if paginate:
+        total = ordered.count()
         raw = ordered.offset(skip).limit(limit).all()
-        return [SaleReturnSchema.model_validate(r) for r in raw]
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Error al listar devoluciones: {str(e)}")
+        return {"items": [SaleReturnSchema.model_validate(r) for r in raw], "total": total, "skip": skip, "limit": limit}
+    return [SaleReturnSchema.model_validate(r) for r in ordered.offset(skip).limit(limit).all()]
 
 @router.get("/{return_id}", response_model=SaleReturn)
 def get_return_by_id(

@@ -8,8 +8,8 @@ export const PAGINAS = [
   'hq/HQInventory.tsx', 'inventory/Products.tsx', 'core/AdminCatalog.tsx', 'hq/Inicio.tsx',
   'hq/HQReportsHub.tsx', 'hq/HQSalesLog.tsx', 'hq/HQReturns.tsx', 'hq/HQBranches.tsx', 'hq/HQValorInventario.tsx',
 ]
-/** Tienen tarjetas propias y no usan TarjetaFila. */
-export const SIN_TARJETA_FILA: string[] = ['core/AdminCatalog.tsx']
+/** Tienen tarjetas propias y no usan TarjetaFila (HQValorInventario las delega en `components/reports/DistribucionValor`). */
+export const SIN_TARJETA_FILA: string[] = ['core/AdminCatalog.tsx', 'hq/HQValorInventario.tsx']
 
 const fuente = (p: string) => readFileSync(resolve(__dirname, '..', p), 'utf8')
 // `grid-cols-3` o más sin prefijo sm:/md:/lg:/max-*: (1 y 2 columnas sí caben en 390 px).

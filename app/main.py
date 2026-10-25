@@ -322,13 +322,9 @@ async def sales_light_redirect():
 async def boxes_old_redirect():
     return RedirectResponse(url="/boxes", status_code=302)
 
-# Sprint 3 — rescate de 2 redirects que estaban en daxpos.py antes de su deprecación.
-# /hq/sales mantiene compat con bookmarks viejos; la ruta React es /hq/sales-log.
+# Sprint 3 — rescate de un redirect que estaba en daxpos.py antes de su deprecación.
 # /boxes redirige al tab de empaques en /brands (UX consolidada).
-@app.get("/hq/sales", include_in_schema=False)
-async def hq_sales_redirect():
-    return RedirectResponse(url="/hq/sales-log", status_code=302)
-
+# (/hq/sales ya no redirige: /hq/sales-log no existe en React; lo sirve la SPA.)
 @app.get("/boxes", include_in_schema=False)
 async def boxes_redirect():
     return RedirectResponse(url="/brands?tab=empaques", status_code=302)

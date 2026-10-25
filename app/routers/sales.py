@@ -11,7 +11,7 @@ import csv
 import io
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, case, false as sql_false
-from datetime import datetime, timezone, timedelta
+from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
 from typing import Dict, Any, List, Optional
 
@@ -61,6 +61,7 @@ from app.core.tenant_context import get_current_active_organization
 from app.models.organization import Organization
 from app.services.tax import compute_line_tax, quantize_amount, quantize_totals, resolve_org_tax_mode
 from app.services.card_surcharge import calcular_comision, pct_de_organizacion
+from app.services import metricas_ventas as mv
 from app.crud.products import get_variant_if_visible
 try:
     from zoneinfo import ZoneInfo
@@ -147,126 +148,36 @@ templates = Jinja2Templates(directory="app/templates")
 
 @router.get("/stats")
 def get_sales_stats(
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
-    branch_id: Optional[int] = None, # [NEW] HQ Filter
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    branch_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization)
 ):
-    """
-    Calcula KPIs de ventas: Total, Cantidad, Ticket Promedio, Desglose por Método.
-    """
-    # ATS-6: misma lógica de scoping que read_sales
-    _role_str = str(current_user.role.value) if hasattr(current_user.role, 'value') else str(current_user.role)
-    _is_hq = _role_str in ["ADMINISTRADOR", "DUEÑO"]
-    if hasattr(current_user, 'platform_role'):
-        _pr = str(current_user.platform_role.value) if hasattr(current_user.platform_role, 'value') else str(current_user.platform_role)
-        if _pr == "SUPERADMIN":
-            _is_hq = True
-
-    # Calcular target_branch_id según el rol
-    if _is_hq:
-        target_branch_id = branch_id if (branch_id and branch_id > 0) else None
-    else:
-        target_branch_id = current_user.branch_id
-
-    # Base Query
-    query = db.query(SalesDocument).filter(
-        SalesDocument.organization_id == org_id,
-        SalesDocument.status != DocumentStatus.CANCELLED,
-        SalesDocument.doc_type == DocumentType.INVOICE
-    )
-
-    if target_branch_id:
-        query = query.filter(SalesDocument.branch_id == target_branch_id)
-
-    if start_date:
-        if start_date.tzinfo is None:
-            start_date = start_date.replace(tzinfo=MX_TZ)
-        query = query.filter(SalesDocument.created_at >= start_date)
-    if end_date:
-        if end_date.tzinfo is None:
-            end_date = end_date.replace(tzinfo=MX_TZ)
-        end_date = end_date.replace(hour=23, minute=59, second=59, microsecond=999999)
-        query = query.filter(SalesDocument.created_at <= end_date)
-
-    # 1. KPIs Generales
-    total_sales = query.with_entities(func.sum(SalesDocument.total_amount)).scalar() or Decimal(0)
-    total_count = query.count()
-    avg_ticket = total_sales / total_count if total_count > 0 else Decimal(0)
-
-    # 2. Desglose por Método de Pago
-    payment_stats_query = (
-        db.query(Payment.method, func.sum(Payment.amount))
-        .join(SalesDocument)
-        .filter(
-            SalesDocument.organization_id == org_id,
-            SalesDocument.status != DocumentStatus.CANCELLED,
-            SalesDocument.doc_type == DocumentType.INVOICE
-        )
-    )
-
-    if target_branch_id:
-        payment_stats_query = payment_stats_query.filter(SalesDocument.branch_id == target_branch_id)
-
-    if start_date:
-        payment_stats_query = payment_stats_query.filter(SalesDocument.created_at >= start_date)
-    if end_date:
-        payment_stats_query = payment_stats_query.filter(SalesDocument.created_at <= end_date)
-        # end_date ya ajustado a 23:59:59 arriba
-
-    payment_stats = payment_stats_query.group_by(Payment.method).all()
-
-    methods_data = {method.value: float(amount) for method, amount in payment_stats}
-
-    # 3. Devoluciones — count + total refunded across the period
-    refunds_query = db.query(SaleReturn).filter(
-        SaleReturn.organization_id == org_id,
-        SaleReturn.status == "APPROVED",
-    )
-    if target_branch_id:
-        refunds_query = refunds_query.filter(SaleReturn.branch_id == target_branch_id)
-    if start_date:
-        refunds_query = refunds_query.filter(SaleReturn.created_at >= start_date)
-    if end_date:
-        refunds_query = refunds_query.filter(SaleReturn.created_at <= end_date)
-
-    refund_count = refunds_query.count()
-    refund_total = refunds_query.with_entities(
-        func.coalesce(func.sum(SaleReturn.total_refunded), Decimal(0))
-    ).scalar() or Decimal(0)
-
-    # 4. Hora pico — hour of day with most PAID sales in the period
-    peak_query = (
-        db.query(
-            func.extract('hour', func.timezone('America/Mexico_City', SalesDocument.created_at)).label('hr'),
-            func.count(SalesDocument.id).label('n'),
-        )
-        .filter(
-            SalesDocument.organization_id == org_id,
-            SalesDocument.status == DocumentStatus.PAID,
-            SalesDocument.doc_type == DocumentType.INVOICE,
-        )
-    )
-    if target_branch_id:
-        peak_query = peak_query.filter(SalesDocument.branch_id == target_branch_id)
-    if start_date:
-        peak_query = peak_query.filter(SalesDocument.created_at >= start_date)
-    if end_date:
-        peak_query = peak_query.filter(SalesDocument.created_at <= end_date)
-
-    peak_row = peak_query.group_by('hr').order_by(func.count(SalesDocument.id).desc()).first()
-    peak_hour = f"{int(peak_row.hr):02d}:00" if peak_row else None
-
+    """KPIs del listado de ventas: total neto, tickets, ticket promedio, métodos,
+    devoluciones y hora pico. Criterio único en `app/services/metricas_ventas.py`
+    (antes aquí sumaban pendientes y borradores)."""
+    hoy = mv.hoy_mx()
+    # La fecha que falta copia a la otra; un rango invertido es error del cliente (422).
+    inicio = start_date or end_date or hoy
+    fin = end_date or start_date or hoy
+    if fin < inicio:
+        raise HTTPException(status_code=422, detail="end_date no puede ser anterior a start_date")
+    periodo = mv.Periodo(inicio, fin)
+    ambito = mv.resolver_ambito(current_user, org_id, branch_id)
+    r = mv.resumen(db, ambito, periodo)
+    horas = mv.por_hora(db, ambito, periodo)
+    pico = max(horas, key=lambda h: (h.tickets, -h.hora))
     return {
-        "total_sales": float(total_sales),
-        "total_transactions": total_count,
-        "average_ticket": float(avg_ticket),
-        "payment_methods": methods_data,
-        "refund_count": int(refund_count),
-        "refund_total": float(refund_total),
-        "peak_hour": peak_hour,
+        "total_sales": r.neta,
+        "gross_sales": r.bruta,
+        "total_transactions": r.tickets,
+        "average_ticket": r.ticket_promedio,
+        "payment_methods": {k: m.total for k, m in mv.por_metodo(db, ambito, periodo).items()},
+        "refund_count": r.devoluciones,
+        "refund_total": r.devuelto,
+        "peak_hour": f"{pico.hora:02d}:00" if pico.tickets > 0 else None,
     }
 
 @router.get("", response_model=Dict[str, Any], include_in_schema=False)
@@ -365,7 +276,6 @@ def read_sales(
     items = [SaleRead.model_validate(s) for s in sales]
     return {"items": items, "total": total, "page": skip // limit if limit else 0, "pages": pages}
 
-@router.post("", response_model=Dict[str, Any], include_in_schema=False)
 def _line_description(variant, detallado: bool = False) -> str:
     """Descripcion que se CONGELA en `sales_lines.description`.
 
@@ -461,6 +371,7 @@ def _deuda_cargada_por_documento(
     return max(Decimal("0.00"), cargos - abonos)
 
 
+@router.post("", response_model=Dict[str, Any], include_in_schema=False)
 @router.post("/", response_model=Dict[str, Any])
 def create_sale(
     sale_in: SaleCreate,

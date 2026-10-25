@@ -11,15 +11,15 @@ paga las consultas de las secciones que no pinta. `/inicio-basico` es el alias
 del frontend anterior.
 
 Solo lectura. Reusa el criterio de los reportes: `SALES_REPORT_STATUSES` para
-"esto ya es venta", `get_daily_summary` para los cobros (descuenta el vuelto
-del efectivo) y `compute_expected_cash` para la caja. Ámbito como la valuación:
+"esto ya es venta", `metricas_ventas` leído directamente para los cobros
+(descuenta el vuelto del efectivo) y `compute_expected_cash` para la caja. Ámbito como la valuación:
 ADMIN/DUEÑO/SUPERADMIN ven la org o la sucursal que pidan; GERENTE, la suya.
 """
 from datetime import date, datetime, timedelta, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import case, desc, exists, func
+from sqlalchemy import desc, exists, func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -31,12 +31,13 @@ from app.models import (
 )
 from app.models.cash import CashSession, CashSessionStatus
 from app.models.users import PlatformRole, Role
-from app.routers.reports import _describe_name, _mx, _today_mx, get_daily_summary
+from app.routers.reports import _describe_name, _today_mx
 from app.schemas.reports import (
     CorteInicio, DiferenciaCaja, InicioResponse, Pendientes, PeriodoVentas, PocaExistencia,
     ProductoPocaExistencia, ProductoSinMovimiento, ProductoTop, SinMovimiento, SucursalInicio,
 )
 from app.services.cash_reconciliation import SALES_REPORT_STATUSES, compute_expected_cash
+from app.services import metricas_ventas as mv
 from app.services.existencias import umbral_poca_existencia
 
 router = APIRouter()
@@ -75,46 +76,18 @@ def _sucursal_del_inicio(db: Session, current_user: User, org_id: int, branch_id
     raise HTTPException(status_code=403, detail="Solo administrador, dueño o gerente pueden ver el inicio")
 
 
-def _filtros_venta(org_id: int, sucursal: Optional[int], desde: date, hasta: date) -> list:
-    filtros = [
-        SalesDocument.organization_id == org_id,
-        func.date(_mx(SalesDocument.created_at)) >= desde,
-        func.date(_mx(SalesDocument.created_at)) <= hasta,
-        SalesDocument.status.in_(SALES_REPORT_STATUSES),
-    ]
-    if sucursal is not None:
-        filtros.append(SalesDocument.branch_id == sucursal)
-    return filtros
+def _ambito(org_id: int, sucursal: Optional[int]) -> mv.Ambito:
+    return mv.Ambito(org_id, sucursal, sucursal is None)
 
 
 def _periodo(db: Session, org_id: int, sucursal: Optional[int], desde: date, hasta: date) -> PeriodoVentas:
-    fila = db.query(
-        func.count(SalesDocument.id).label("tickets"),
-        func.coalesce(func.sum(SalesDocument.total_amount), 0).label("total"),
-    ).filter(*_filtros_venta(org_id, sucursal, desde, hasta)).one()
-    return PeriodoVentas(desde=desde, hasta=hasta, total=round(float(fila.total or 0), 2),
-                         tickets=int(fila.tickets or 0))
+    r = mv.resumen(db, _ambito(org_id, sucursal), mv.Periodo(desde, hasta))
+    return PeriodoVentas(desde=desde, hasta=hasta, total=r.neta, devuelto=r.devuelto, tickets=r.tickets)
 
 
 def _top(db: Session, org_id: int, sucursal: Optional[int], desde: date, hasta: date) -> List[ProductoTop]:
-    filas = (
-        db.query(
-            SalesLineItem.description,
-            func.sum(SalesLineItem.quantity).label("qty"),
-            func.sum(SalesLineItem.total_line).label("importe"),
-        )
-        .join(SalesDocument, SalesDocument.id == SalesLineItem.document_id)
-        .filter(*_filtros_venta(org_id, sucursal, desde, hasta))
-        .group_by(SalesLineItem.description)
-        .order_by(desc("qty"), SalesLineItem.description)
-        .limit(MAX_TOP)
-        .all()
-    )
-    return [
-        ProductoTop(nombre=f.description or "", cantidad=round(float(f.qty or 0), 2),
-                    total=round(float(f.importe or 0), 2))
-        for f in filas
-    ]
+    return [ProductoTop(nombre=p.nombre, cantidad=p.cantidad, total=p.total)
+            for p in mv.top_productos(db, _ambito(org_id, sucursal), mv.Periodo(desde, hasta), limite=MAX_TOP)]
 
 
 def _poca_existencia(db: Session, org_id: int, sucursal: Optional[int], umbral: int) -> List[ProductoPocaExistencia]:
@@ -262,17 +235,7 @@ def _utilidad_bruta_hoy(db: Session, org_id: int, sucursal: Optional[int], hoy: 
     utilidad (lotes de Eleven por WhatsApp, Imaltzin). Mejor decir "sobre lo que
     tiene costo" y cuánto quedó fuera.
     """
-    con_costo = SalesLineItem.unit_cost > 0
-    fila = (
-        db.query(
-            func.sum(case((con_costo, SalesLineItem.total_line - SalesLineItem.unit_cost * SalesLineItem.quantity), else_=0)),
-            func.sum(case((con_costo, 0), else_=SalesLineItem.total_line)),
-        )
-        .join(SalesDocument, SalesDocument.id == SalesLineItem.document_id)
-        .filter(*_filtros_venta(org_id, sucursal, hoy, hoy))
-        .one()
-    )
-    return round(float(fila[0] or 0), 2), round(float(fila[1] or 0), 2)
+    return mv.utilidad_bruta(db, _ambito(org_id, sucursal), mv.Periodo(hoy, hoy))
 
 
 def _pendientes(db: Session, org_id: int, sucursal: Optional[int]) -> Pendientes:
@@ -326,16 +289,10 @@ def _sucursales(db: Session, org_id: int, hoy: date, umbral: int) -> Optional[Li
     )
     if len(sucursales) < 2:
         return None
-    ventas = {
-        b: (int(t or 0), float(total or 0))
-        for b, t, total in db.query(
-            SalesDocument.branch_id, func.count(SalesDocument.id),
-            func.coalesce(func.sum(SalesDocument.total_amount), 0),
-        ).filter(*_filtros_venta(org_id, None, hoy, hoy)).group_by(SalesDocument.branch_id).all()
-    }
+    por_sucursal = mv.por_sucursal(db, org_id, mv.Periodo(hoy, hoy))
     salida = []
     for b in sucursales:
-        tickets, total = ventas.get(b.id, (0, 0))
+        r = por_sucursal.get(b.id, mv.RESUMEN_VACIO)
         poca = (
             db.query(func.count(StockOnHand.id))
             .join(ProductVariant, ProductVariant.id == StockOnHand.variant_id)
@@ -347,7 +304,7 @@ def _sucursales(db: Session, org_id: int, hoy: date, umbral: int) -> Optional[Li
             .scalar()
         )
         salida.append(SucursalInicio(
-            branch_id=b.id, nombre=b.name, ventas_hoy=round(float(total or 0), 2), tickets_hoy=int(tickets or 0),
+            branch_id=b.id, nombre=b.name, ventas_hoy=r.neta, devuelto_hoy=r.devuelto, tickets_hoy=r.tickets,
             corte=_corte(db, org_id, b.id), poca_existencia=int(poca or 0),
         ))
     return salida
@@ -371,13 +328,7 @@ def inicio(
     ayer = hoy - timedelta(days=1)
     inicio_semana = hoy - timedelta(days=DIAS_SEMANA - 1)
 
-    # `branch_id=0` es "toda la organización" para los roles de oficina en
-    # get_daily_summary; el gerente llega aquí ya fijado a su sucursal.
-    resumen = get_daily_summary(
-        target_date=hoy, branch_id=0 if sucursal is None else sucursal,
-        db=db, current_user=current_user, org_id=org_id,
-    )
-    por_metodo = {str(getattr(m, "value", m)): round(float(v), 2) for m, v in resumen["payments"].items()}
+    por_metodo = {k: m.total for k, m in mv.por_metodo(db, _ambito(org_id, sucursal), mv.Periodo(hoy, hoy)).items()}
 
     umbral = umbral_poca_existencia(db, org_id)
 

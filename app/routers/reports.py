@@ -10,15 +10,12 @@ from datetime import datetime, date, timedelta, timezone
 from typing import List, Dict, Any, Optional
 from zoneinfo import ZoneInfo
 
-_MX = ZoneInfo("America/Mexico_City")
+from app.services import metricas_ventas as mv
 
-def _today_mx() -> date:
-    """Fecha actual en timezone Mexico/Ciudad de Mexico."""
-    return datetime.now(_MX).date()
-
-def _mx(col):
-    """Convierte una columna TIMESTAMPTZ de UTC a America/Mexico_City en SQL."""
-    return func.timezone("America/Mexico_City", col)
+# Alias para quien aún importa de aquí (reports_inicio, reports_valuacion).
+_MX = mv._MX
+_today_mx = mv.hoy_mx
+_mx = mv.mx
 
 from app.core.database import get_db
 from app.services.cash_reconciliation import SALES_REPORT_STATUSES
@@ -43,33 +40,6 @@ def _describe_name(name: str, variant_name: Optional[str]) -> str:
     etiqueta = (variant_name or "").strip()
     return f"{name} ({etiqueta})" if etiqueta and etiqueta != "Estándar" else name
 
-# Roles de oficina central: los unicos que pueden mirar una sucursal que no es
-# la suya, o la organizacion entera.
-HQ_ROLES = ("ADMINISTRADOR", "GERENTE", "DUEÑO")
-
-
-def _resolver_sucursal(current_user: User, branch_id):
-    """Ambito de un reporte por sucursal: `(sucursal, toda_la_organizacion)`.
-
-    `branch_id=0` significa "toda la organizacion" y solo lo honra un rol de
-    oficina central; para cualquier otro rol el parametro se ignora y se queda
-    en su propia sucursal.
-
-    El segundo valor es explicito a proposito. Antes el guard era
-    `if target_branch_id`, que trata `None` --"este usuario no tiene sucursal
-    asignada", `User.branch_id` es nullable-- igual que el `0` de "toda la
-    organizacion": un VENDEDOR sin sucursal pasaba de no ver nada a ver la
-    venta, la utilidad y el desglose de pagos del negocio completo. Con la
-    bandera aparte, `None` sigue filtrando `branch_id IS NULL` (cero filas) y
-    solo el `0` de un rol de oficina central levanta el filtro.
-    """
-    if current_user.role in HQ_ROLES:
-        if branch_id == 0:
-            return None, True
-        if branch_id:
-            return branch_id, False
-    return current_user.branch_id, False
-
 
 router = APIRouter()
 
@@ -81,91 +51,29 @@ def get_daily_summary(
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization)
 ):
-    """Resumen de ventas, métodos de pago y utilidad del día."""
-    if not target_date:
-        target_date = _today_mx()
-
-    target_branch_id, toda_la_org = _resolver_sucursal(current_user, branch_id)
-    filtros_sucursal = (
-        [] if toda_la_org else [SalesDocument.branch_id == target_branch_id]
-    )
-
-    # 1. Ventas Totales por Estatus
-    sales_query = db.query(
-        func.count(SalesDocument.id).label("count"),
-        func.sum(SalesDocument.total_amount).label("total")
-    ).filter(
-        SalesDocument.organization_id == org_id,
-        func.date(_mx(SalesDocument.created_at)) == target_date,
-        *filtros_sucursal,
-        SalesDocument.status.in_(SALES_REPORT_STATUSES)
-    ).first()
-
-    # 2. Desglose por Métodos de Pago
-    payments_breakdown = db.query(
-        Payment.method,
-        func.sum(Payment.amount).label("total")
-    ).join(SalesDocument).filter(
-        SalesDocument.organization_id == org_id,
-        func.date(_mx(Payment.created_at)) == target_date,
-        *filtros_sucursal,
-        SalesDocument.status.in_(SALES_REPORT_STATUSES)
-    ).group_by(Payment.method).all()
-
-    # 3. Top 5 Productos más vendidos
-    top_products = db.query(
-        SalesLineItem.description,
-        func.sum(SalesLineItem.quantity).label("qty")
-    ).join(SalesDocument).filter(
-        SalesDocument.organization_id == org_id,
-        func.date(_mx(SalesDocument.created_at)) == target_date,
-        *filtros_sucursal,
-        SalesDocument.status.in_(SALES_REPORT_STATUSES)
-    ).group_by(SalesLineItem.description).order_by(desc("qty")).limit(5).all()
-
-    # 2.b El vuelto no es ingreso. `Payment.amount` guarda lo que el cliente
-    # ENTREGO, no lo que se quedó en el cajón, así que el efectivo del día salía
-    # inflado y no cuadraba contra la venta. El corte de caja ya aplica este
-    # criterio (`net_cash = gross_cash - change_given`, en
-    # app/services/cash_reconciliation.py); aquí se replica el criterio, no la
-    # fórmula, porque el resumen agrupa por día y el corte por sesión.
-    vuelto_del_dia = db.query(
-        func.coalesce(func.sum(SalesDocument.change_given), 0)
-    ).filter(
-        SalesDocument.organization_id == org_id,
-        func.date(_mx(SalesDocument.created_at)) == target_date,
-        *filtros_sucursal,
-        SalesDocument.status.in_(SALES_REPORT_STATUSES)
-    ).scalar() or Decimal(0)
-
-    pagos = {p.method: Decimal(str(p.total or 0)) for p in payments_breakdown}
-    if PaymentMethod.CASH in pagos:
-        pagos[PaymentMethod.CASH] -= Decimal(str(vuelto_del_dia))
-
-    # 4. Cálculo de Utilidad Bruta (Venta - Costo)
-    # `coalesce(unit_cost, 0)`: en SQL cualquier aritmética con NULL da NULL y
-    # SUM lo ignora, así que una línea con costo desconocido (catálogos
-    # importados: Imaltzin) desaparecía ENTERA de la utilidad — ni su margen
-    # ni su ingreso. Auditoría A-8.
-    profit_data = db.query(
-        func.sum(
-            SalesLineItem.total_line
-            - (func.coalesce(SalesLineItem.unit_cost, 0) * SalesLineItem.quantity)
-        )
-    ).join(SalesDocument).filter(
-        SalesDocument.organization_id == org_id,
-        func.date(_mx(SalesDocument.created_at)) == target_date,
-        *filtros_sucursal,
-        SalesDocument.status.in_(SALES_REPORT_STATUSES)
-    ).scalar() or Decimal(0)
-
+    """Resumen del día: venta neta (cobradas menos devoluciones aprobadas),
+    cobros por método (sin vuelto, netos de devoluciones), utilidad bruta y lo
+    más vendido. Criterio único en `app/services/metricas_ventas.py`."""
+    periodo = mv.Periodo(target_date, target_date) if target_date else mv.periodo_preset("hoy")
+    ambito = mv.resolver_ambito(current_user, org_id, branch_id)
+    r = mv.resumen(db, ambito, periodo)
+    # Contrato A-8 de este endpoint: la línea sin costo suma su ingreso entero
+    # (costo 0). `utilidad_bruta` separa lo que tiene costo de lo que no; juntas
+    # dan `total_line - coalesce(costo, 0) * cantidad` solo sin devoluciones
+    # aprobadas; con devoluciones la cifra también netea el margen devuelto,
+    # igual que el ingreso.
+    utilidad, sin_costo = mv.utilidad_bruta(db, ambito, periodo)
     return {
-        "date": target_date,
-        "transactions_count": sales_query.count or 0,
-        "total_revenue": float(sales_query.total or 0),
-        "gross_profit": float(profit_data),
-        "payments": {m: float(v) for m, v in pagos.items()},
-        "top_selling_items": [{"name": p.description, "quantity": float(p.qty)} for p in top_products]
+        "date": periodo.inicio,
+        "transactions_count": r.tickets,
+        "total_revenue": r.neta,
+        "gross_revenue": r.bruta,
+        "returns_total": r.devuelto,
+        "returns_count": r.devoluciones,
+        "gross_profit": round(utilidad + sin_costo, 2),
+        "payments": {k: m.total for k, m in mv.por_metodo(db, ambito, periodo).items()},
+        "top_selling_items": [{"name": p.nombre, "quantity": p.cantidad}
+                              for p in mv.top_productos(db, ambito, periodo, limite=5)],
     }
 
 @router.get("/audit/discrepancies")
@@ -311,124 +219,43 @@ def get_dashboard_stats(
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization)
 ):
-    """
-    Endpoint robusto para el Dashboard y Reportes.
-    Retorna KPIs, Tendencias y Alertas.
-    Si no se envían fechas, usa 'hoy'.
-    """
-    if not start_date:
-        start_date = _today_mx()
-    if not end_date:
-        end_date = _today_mx()
+    """KPIs, tendencias y alertas del periodo. Venta neta y día de México por `app/services/metricas_ventas.py`; roles de oficina sin `branch_id` ven toda la organización."""
+    hoy = mv.hoy_mx()
+    periodo = mv.Periodo(start_date or hoy, end_date or hoy)
+    ambito = mv.resolver_ambito(current_user, org_id, branch_id)
+    filtros = mv.filtros_documentos(ambito, periodo)
 
-    # Determine Scope
-    # Bug fix: user.role es Enum Role — `role in [strings]` siempre False.
-    # Usar _is_admin() que compara contra Role enum directo.
-    is_hq_user = _is_admin(current_user)
+    # 1. KPIs del periodo (neto) y comparativo del periodo anterior
+    actual = mv.resumen(db, ambito, periodo)
+    anterior = mv.resumen(db, ambito, periodo.anterior())
+    pendientes = {
+        st: db.query(func.count(SalesDocument.id)).filter(
+            SalesDocument.organization_id == org_id, SalesDocument.status == st,
+            mv.dia_mx(SalesDocument.created_at) >= periodo.inicio,
+            mv.dia_mx(SalesDocument.created_at) <= periodo.fin,
+            *([] if ambito.toda_la_org else [SalesDocument.branch_id == ambito.branch_id]),
+        ).scalar() or 0
+        for st in (DocumentStatus.PENDING, DocumentStatus.DRAFT)
+    }
 
-    # Determine Target Branch — default: user's own branch
-    target_branch_id = current_user.branch_id
+    # 2. Tendencia por día de México (antes agrupaba por día UTC)
+    dias = mv.por_dia(db, ambito, periodo)
+    dias_prev = mv.por_dia(db, ambito, periodo.anterior())
+    etiquetas = [d.fecha.strftime("%a %d") for d in dias]
 
-    if is_hq_user:
-        if branch_id == 0:
-            # 0 = ALL BRANCHES (Global View)
-            target_branch_id = None
-        elif branch_id:
-            target_branch_id = branch_id
-        # else: admin sin param → target queda como user.branch_id
-        # (si admin tiene branch_id=None → global view automática)
-    
-    # Base Filters
-    filters = [
-        SalesDocument.organization_id == org_id,
-        func.date(_mx(SalesDocument.created_at)) >= start_date,
-        func.date(_mx(SalesDocument.created_at)) <= end_date
-    ]
-    
-    # Apply Branch Filter if target exists
-    if target_branch_id:
-        filters.append(SalesDocument.branch_id == target_branch_id)
+    # 3. Por hora: las 24 (quien pinta recorta)
+    horas = mv.por_hora(db, ambito, periodo)
 
+    # 4. Cobros por método, netos de vuelto y devoluciones
+    metodos = {k: {"total": m.total, "count": m.tickets} for k, m in mv.por_metodo(db, ambito, periodo).items()}
 
-    # 1. KPIs de HOY
-    # Ventas pagadas hoy
-    sales_filters = filters + [SalesDocument.status == DocumentStatus.PAID]
-    
-    today_sales_stats = db.query(
-        func.count(SalesDocument.id).label("count"),
-        func.sum(SalesDocument.total_amount).label("total")
-    ).filter(*sales_filters).first()
-    
-    today_total = float(today_sales_stats.total or 0)
-    today_count = today_sales_stats.count or 0
-    today_avg = today_total / today_count if today_count > 0 else 0.0
+    # 5. Top productos del periodo
+    top = mv.top_productos(db, ambito, periodo, limite=5)
 
-    # Estado de Piso (Tickets abiertos)
-    pending_filters = filters + [SalesDocument.status == DocumentStatus.PENDING]
-    pending_count = db.query(func.count(SalesDocument.id)).filter(*pending_filters).scalar() or 0
-    
-    draft_filters = filters + [SalesDocument.status == DocumentStatus.DRAFT]
-    draft_count = db.query(func.count(SalesDocument.id)).filter(*draft_filters).scalar() or 0
-
-    # 2. Tendencia (Rango Seleccionado)
-    # 2. Tendencia (Rango Seleccionado)
-    trend_data = db.query(
-        func.date(SalesDocument.created_at).label("day"),
-        func.sum(SalesDocument.total_amount).label("total")
-    ).filter(*sales_filters).group_by("day").order_by("day").all()
-    
-    # Rellenar días vacíos
-    trend_map = {str(r.day): float(r.total) for r in trend_data}
-    chart_trend_labels = []
-    chart_trend_data = []
-    
-    delta = end_date - start_date
-    for i in range(delta.days + 1):
-        d = start_date + timedelta(days=i)
-        d_str = str(d)
-        chart_trend_labels.append(d.strftime("%a %d")) # Mon 05
-        chart_trend_data.append(trend_map.get(d_str, 0.0))
-
-    # 3. Ventas por Hora (Hoy, en timezone México)
-    hourly_data = db.query(
-        func.to_char(_mx(SalesDocument.created_at), 'HH24').label("hour"),
-        func.sum(SalesDocument.total_amount).label("total")
-    ).filter(*sales_filters).group_by("hour").all()
-    
-    hourly_map = {int(r.hour): float(r.total) for r in hourly_data}
-    chart_hourly_labels = []
-    chart_hourly_data = []
-    for h in range(8, 22): 
-        chart_hourly_labels.append(f"{h}:00")
-        chart_hourly_data.append(hourly_map.get(h, 0.0))
-
-    # 4. Métodos de Pago (Hoy)
-    # 4. Métodos de Pago (Hoy)
-    payments_data = db.query(
-        Payment.method,
-        func.sum(Payment.amount).label("total")
-    ).join(SalesDocument).filter(*sales_filters).group_by(Payment.method).all()
-    
-    payment_map = {p.method: float(p.total) for p in payments_data}
-    
-    # 5. Top Productos (Hoy)
-    # 5. Top Productos (Hoy)
-    top_products = db.query(
-        SalesLineItem.description,
-        func.sum(SalesLineItem.quantity).label("qty")
-    ).join(SalesDocument).filter(*sales_filters).group_by(SalesLineItem.description).order_by(desc(func.sum(SalesLineItem.quantity))).limit(5).all()
-
-    # 6. Alertas de Inventario — el tope es el de la empresa (SP6, umbral único).
-    # Mismo ámbito que el resto del endpoint: `target_branch_id` (None = toda la
-    # org con branch_id=0 para roles de oficina; la propia para los demás).
-    # Antes el admin veía las alertas de TODA la org aunque pidiera una sucursal
-    # y el detalle de Sucursales no cuadraba con su tarjeta.
+    # 6. Alertas de inventario — el tope es el de la empresa (SP6, umbral único).
     umbral = umbral_poca_existencia(db, org_id)
     _low_stock_q = db.query(
-        Product.name,
-        ProductVariant.sku,
-        ProductVariant.variant_name,
-        StockOnHand.qty_on_hand
+        Product.name, ProductVariant.sku, ProductVariant.variant_name, StockOnHand.qty_on_hand,
     ).join(ProductVariant, Product.id == ProductVariant.product_id)\
      .join(StockOnHand, ProductVariant.id == StockOnHand.variant_id)\
      .filter(
@@ -440,127 +267,80 @@ def get_dashboard_stats(
         Product.deleted_at.is_(None),
         ProductVariant.deleted_at.is_(None),
     )
-    if target_branch_id is not None:
-        _low_stock_q = _low_stock_q.filter(StockOnHand.branch_id == target_branch_id)
+    if not ambito.toda_la_org:
+        _low_stock_q = _low_stock_q.filter(StockOnHand.branch_id == ambito.branch_id)
     low_stock_query = _low_stock_q.order_by(StockOnHand.qty_on_hand.asc()).limit(10).all()
 
-    # 7. Ventas Recientes (Limit 10)
-    # 7. Ventas Recientes (Limit 10)
-    recent_sales = db.query(SalesDocument).filter(*sales_filters).order_by(desc(SalesDocument.created_at)).limit(10).all()
+    # 7. Ventas recientes
+    recent_sales = db.query(SalesDocument).filter(*filtros).order_by(desc(SalesDocument.created_at)).limit(10).all()
 
-    # 8. Total Products count
+    # 8. Productos activos y 9. entradas en tránsito
     total_products = db.query(func.count(Product.id)).filter(
-        Product.organization_id == org_id,
-        Product.is_active == True
-    ).scalar() or 0
-
-    # 9. Logística: Entradas Activas
+        Product.organization_id == org_id, Product.is_active == True).scalar() or 0
     transit_shipments = db.query(func.count(InboundShipment.id)).filter(
-        InboundShipment.organization_id == org_id,
-        InboundShipment.status != "RECEIVED"
-    ).scalar() or 0
+        InboundShipment.organization_id == org_id, InboundShipment.status != "RECEIVED").scalar() or 0
 
-    # 10. SKUs únicos vendidos en el rango (para KPI "Productos Vendidos")
+    # 10. SKUs distintos vendidos
     unique_skus_sold = db.query(func.count(func.distinct(SalesLineItem.variant_id)))\
-        .join(SalesDocument).filter(*sales_filters).scalar() or 0
+        .join(SalesDocument).filter(*filtros).scalar() or 0
 
-    # 11. Tendencia del período inmediatamente anterior (mismo largo) para comparativa
-    delta_days = (end_date - start_date).days
-    prev_end = start_date - timedelta(days=1)
-    prev_start = prev_end - timedelta(days=delta_days)
-
-    prev_filters = [
-        SalesDocument.organization_id == org_id,
-        func.date(_mx(SalesDocument.created_at)) >= prev_start,
-        func.date(_mx(SalesDocument.created_at)) <= prev_end,
-        SalesDocument.status == DocumentStatus.PAID,
-    ]
-    if target_branch_id:
-        prev_filters.append(SalesDocument.branch_id == target_branch_id)
-
-    prev_trend_data = db.query(
-        func.date(_mx(SalesDocument.created_at)).label("day"),
-        func.sum(SalesDocument.total_amount).label("total"),
-    ).filter(*prev_filters).group_by("day").order_by("day").all()
-    prev_trend_map = {str(r.day): float(r.total) for r in prev_trend_data}
-    chart_trend_previous = []
-    for i in range(delta_days + 1):
-        d = prev_start + timedelta(days=i)
-        chart_trend_previous.append(prev_trend_map.get(str(d), 0.0))
-
-    prev_total_sales = sum(chart_trend_previous)
-    prev_count = db.query(func.count(SalesDocument.id)).filter(*prev_filters).scalar() or 0
-    prev_avg = (prev_total_sales / prev_count) if prev_count else 0.0
-
-    # 12. Heatmap día-de-semana × hora (0-6 dom-sab, 8-21 hrs)
+    # 11. Mapa día-de-semana × hora
     heatmap_raw = db.query(
-        func.extract('dow', _mx(SalesDocument.created_at)).label("dow"),
-        func.to_char(_mx(SalesDocument.created_at), 'HH24').label("hour"),
+        func.extract('dow', mv.mx(SalesDocument.created_at)).label("dow"),
+        func.to_char(mv.mx(SalesDocument.created_at), 'HH24').label("hour"),
         func.sum(SalesDocument.total_amount).label("amount"),
         func.count(SalesDocument.id).label("tickets"),
-    ).filter(*sales_filters).group_by("dow", "hour").all()
-
+    ).filter(*filtros).group_by("dow", "hour").all()
     heatmap_list = [
-        {
-            "day": int(r.dow or 0),
-            "hour": int(r.hour),
-            "amount": float(r.amount or 0),
-            "tickets": int(r.tickets or 0),
-        }
+        {"day": int(r.dow or 0), "hour": int(r.hour), "amount": float(r.amount or 0), "tickets": int(r.tickets or 0)}
         for r in heatmap_raw
     ]
 
-    # 13. Top products with per-day trend array (trend over the range)
-    # For each of the top products (by qty), fetch daily qty so frontend can render sparklines.
+    # 12. Serie diaria de cada top (para la gráfica de proporción)
     top_product_trends: dict[str, list[float]] = {}
-    if top_products:
-        top_names = [p.description for p in top_products]
-        tp_trend_rows = db.query(
+    if top:
+        nombres = [p.nombre for p in top]
+        filas = db.query(
             SalesLineItem.description,
-            func.date(_mx(SalesDocument.created_at)).label("day"),
+            mv.dia_mx(SalesDocument.created_at).label("day"),
             func.sum(SalesLineItem.quantity).label("qty"),
-        ).join(SalesDocument).filter(
-            *sales_filters,
-            SalesLineItem.description.in_(top_names),
-        ).group_by(SalesLineItem.description, "day").all()
-
-        # Initialize zero-filled series per product
-        for name in top_names:
-            top_product_trends[name] = [0.0] * (delta_days + 1)
-
-        for r in tp_trend_rows:
-            idx = (r.day - start_date).days
-            if 0 <= idx <= delta_days and r.description in top_product_trends:
-                top_product_trends[r.description][idx] = float(r.qty or 0)
+        ).join(SalesDocument).filter(*filtros, SalesLineItem.description.in_(nombres))\
+         .group_by(SalesLineItem.description, "day").all()
+        indice = {str(f): i for i, f in enumerate(periodo.fechas())}
+        for n in nombres:
+            top_product_trends[n] = [0.0] * periodo.dias
+        for r in filas:
+            i = indice.get(str(r.day))
+            if i is not None and r.description in top_product_trends:
+                top_product_trends[r.description][i] = float(r.qty or 0)
 
     return {
         "kpis": {
-            "sales": today_total,
-            "orders": today_count,
-            "avg_ticket": today_avg,
-            "pending": pending_count,
-            "draft": draft_count,
+            "sales": actual.neta,
+            "gross_sales": actual.bruta,
+            "returns": actual.devuelto,
+            "returns_count": actual.devoluciones,
+            "orders": actual.tickets,
+            "avg_ticket": actual.ticket_promedio,
+            "pending": int(pendientes[DocumentStatus.PENDING]),
+            "draft": int(pendientes[DocumentStatus.DRAFT]),
             "total_products": total_products,
             "transit_shipments": transit_shipments,
             "unique_skus_sold": int(unique_skus_sold),
-            "prev_sales": prev_total_sales,
-            "prev_orders": int(prev_count),
-            "prev_avg_ticket": prev_avg,
+            "prev_sales": anterior.neta,
+            "prev_orders": anterior.tickets,
+            "prev_avg_ticket": anterior.ticket_promedio,
+            "prev_returns": anterior.devuelto,
         },
         "charts": {
-            "trend": {"labels": chart_trend_labels, "data": chart_trend_data},
-            "trend_previous": {"labels": chart_trend_labels, "data": chart_trend_previous},
-            "hourly": {"labels": chart_hourly_labels, "data": chart_hourly_data},
-            "payments": payment_map,
+            "trend": {"labels": etiquetas, "data": [d.neta for d in dias]},
+            "trend_previous": {"labels": etiquetas, "data": [d.neta for d in dias_prev]},
+            "hourly": {"labels": [f"{h.hora}:00" for h in horas], "data": [h.neta for h in horas]},
+            "payments": metodos,
             "heatmap": heatmap_list,
         },
         "top_products": [
-            {
-                "name": p.description,
-                "qty": float(p.qty),
-                "trend": top_product_trends.get(p.description, []),
-            }
-            for p in top_products
+            {"name": p.nombre, "qty": p.cantidad, "trend": top_product_trends.get(p.nombre, [])} for p in top
         ],
         "low_stock": [
             {"name": _describe_name(p.name, p.variant_name), "sku": p.sku or "", "stock": float(p.qty_on_hand)}
@@ -571,10 +351,10 @@ def get_dashboard_stats(
                 "folio": f"{s.series or ''}-{s.folio}",
                 "total": float(s.total_amount),
                 "time": s.created_at.astimezone(_MX).strftime("%H:%M"),
-                "customer": s.customer_name or "General"
+                "customer": s.customer_name or "General",
             }
             for s in recent_sales
-        ]
+        ],
     }
 
 @router.get("/sales-by-hour")
@@ -594,49 +374,21 @@ def get_sales_by_hour(
         "current_hour": 15,
         "current_hour_amount": 4321.0,
         "current_hour_tickets": 12,
-        "hourly": [{"hour": 8, "amount": 0.0, "tickets": 0}, ...]  # 8-21 hrs
+        "hourly": [{"hour": 0, "amount": 0.0, "tickets": 0}, ...]  # 0-23 hrs
     }
     """
-    if not date:
-        date = _today_mx()
-
-    target_branch_id, toda_la_org = _resolver_sucursal(current_user, branch_id)
-
-    filters = [
-        SalesDocument.organization_id == org_id,
-        func.date(_mx(SalesDocument.created_at)) == date,
-        SalesDocument.status == DocumentStatus.PAID,
-    ]
-    if not toda_la_org:
-        filters.append(SalesDocument.branch_id == target_branch_id)
-
-    rows = db.query(
-        func.to_char(_mx(SalesDocument.created_at), 'HH24').label("hour"),
-        func.sum(SalesDocument.total_amount).label("amount"),
-        func.count(SalesDocument.id).label("tickets"),
-    ).filter(*filters).group_by("hour").all()
-
-    by_hour = {int(r.hour): (float(r.amount or 0), int(r.tickets or 0)) for r in rows}
-    hourly = [
-        {"hour": h, "amount": by_hour.get(h, (0.0, 0))[0], "tickets": by_hour.get(h, (0.0, 0))[1]}
-        for h in range(8, 22)
-    ]
-
-    now_mx = datetime.now(_MX)
-    current_hour = now_mx.hour
-    current_amount = 0.0
-    current_tickets = 0
-    if date == _today_mx() and current_hour in by_hour:
-        current_amount, current_tickets = by_hour[current_hour]
-
+    dia = date or mv.hoy_mx()
+    ambito = mv.resolver_ambito(current_user, org_id, branch_id)
+    horas = mv.por_hora(db, ambito, mv.Periodo(dia, dia))
+    hora_actual = datetime.now(_MX).hour
+    actual = horas[hora_actual] if dia == mv.hoy_mx() else None
     return {
-        "date": str(date),
-        "current_hour": current_hour,
-        "current_hour_amount": current_amount,
-        "current_hour_tickets": current_tickets,
-        "hourly": hourly,
+        "date": str(dia),
+        "current_hour": hora_actual,
+        "current_hour_amount": actual.neta if actual else 0.0,
+        "current_hour_tickets": actual.tickets if actual else 0,
+        "hourly": [{"hour": h.hora, "amount": h.neta, "tickets": h.tickets} for h in horas],
     }
-
 
 @router.get("/by-waiter")
 def get_sales_by_waiter(
@@ -726,102 +478,50 @@ def get_command_center_stats(
     Mission Control Data Aggregation.
     Provides deep insights for multi-branch management.
     """
-    if not start_date: start_date = _today_mx()
-    if not end_date: end_date = _today_mx()
+    hoy = mv.hoy_mx()
+    periodo = mv.Periodo(start_date or hoy, end_date or hoy)
+    ambito = mv.Ambito(org_id, None, True)          # el centro de mando siempre es de toda la org
+    sales_filters = mv.filtros_documentos(ambito, periodo)
 
-    # --- 1. GLOBAL KPIS (Aggregated) ---
-    # Sales Filter
-    sales_filters = [
-        SalesDocument.organization_id == org_id,
-        func.date(_mx(SalesDocument.created_at)) >= start_date,
-        func.date(_mx(SalesDocument.created_at)) <= end_date,
-        SalesDocument.status == DocumentStatus.PAID
-    ]
-
-    # Total Sales & Tickets
-    global_kpis = db.query(
-        func.sum(SalesDocument.total_amount).label("sales"),
-        func.count(SalesDocument.id).label("tickets"),
-        func.sum(func.coalesce(SalesDocument.total_amount,0) - func.coalesce(SalesDocument.tax_amount,0)).label("net_sales") # Net
-    ).filter(*sales_filters).first()
-
-    total_sales = float(global_kpis.sales or 0)
-    total_tickets = global_kpis.tickets or 0
-    avg_ticket = total_sales / total_tickets if total_tickets > 0 else 0
-
-    # 1a. Growth Calculation
-    delta = end_date - start_date
-    prev_end = start_date - timedelta(days=1)
-    prev_start = prev_end - delta
-    
-    prev_sales_filters = [
-        SalesDocument.organization_id == org_id,
-        func.date(_mx(SalesDocument.created_at)) >= prev_start,
-        func.date(_mx(SalesDocument.created_at)) <= prev_end,
-        SalesDocument.status == DocumentStatus.PAID
-    ]
-    prev_total = db.query(func.sum(SalesDocument.total_amount)).filter(*prev_sales_filters).scalar() or 0
-    prev_total = float(prev_total)
-    
-    sales_growth = 0.0
-    if prev_total > 0:
-        sales_growth = ((total_sales - prev_total) / prev_total) * 100
+    actual = mv.resumen(db, ambito, periodo)
+    anterior = mv.resumen(db, ambito, periodo.anterior())
+    total_sales = actual.neta
+    total_tickets = actual.tickets
+    avg_ticket = actual.ticket_promedio
+    if anterior.neta > 0:
+        sales_growth = ((total_sales - anterior.neta) / anterior.neta) * 100
     elif total_sales > 0:
-        sales_growth = 100.0 # From zero to hero
+        sales_growth = 100.0
+    else:
+        sales_growth = 0.0
 
-    # Cancellations (Global)
-    cancel_filters = [
-         SalesDocument.organization_id == org_id,
-         func.date(_mx(SalesDocument.created_at)) >= start_date,
-         func.date(_mx(SalesDocument.created_at)) <= end_date,
-         SalesDocument.status == DocumentStatus.CANCELLED
-    ]
+    # Canceladas del periodo (informativo)
     cancel_stats = db.query(
         func.count(SalesDocument.id).label("count"),
         func.sum(SalesDocument.total_amount).label("total")
-    ).filter(*cancel_filters).first()
+    ).filter(
+        SalesDocument.organization_id == org_id,
+        mv.dia_mx(SalesDocument.created_at) >= periodo.inicio,
+        mv.dia_mx(SalesDocument.created_at) <= periodo.fin,
+        SalesDocument.status == DocumentStatus.CANCELLED,
+    ).first()
     cancel_count = cancel_stats.count or 0
     cancel_total = float(cancel_stats.total or 0)
 
-    # Returns (Global)
-    return_filters = [
-        SaleReturn.organization_id == org_id,
-        func.date(_mx(SaleReturn.created_at)) >= start_date,
-        func.date(_mx(SaleReturn.created_at)) <= end_date,
-        SaleReturn.status == "APPROVED"
-    ]
-    returns_total = db.query(func.sum(SaleReturn.total_refunded)).filter(*return_filters).scalar() or 0
-    returns_total = float(returns_total)
+    returns_total = actual.devuelto
 
-    # Items Per Ticket
     total_items = db.query(func.sum(SalesLineItem.quantity)).join(SalesDocument)\
         .filter(*sales_filters).scalar() or 0
     items_per_ticket = float(total_items) / total_tickets if total_tickets > 0 else 0
 
-    # Payment Methods Global
-    payments = db.query(
-        Payment.method,
-        func.sum(Payment.amount).label("total")
-    ).join(SalesDocument).filter(*sales_filters).group_by(Payment.method).all()
-    payment_map = {p.method: float(p.total) for p in payments}
-
-    # Hourly Sales Global (en timezone México)
-    hourly_data = db.query(
-        func.to_char(_mx(SalesDocument.created_at), 'HH24').label("hour"),
-        func.sum(SalesDocument.total_amount).label("total")
-    ).filter(*sales_filters).group_by("hour").all()
-    hourly_map = {int(r.hour): float(r.total) for r in hourly_data}
+    payment_map = {k: m.total for k, m in mv.por_metodo(db, ambito, periodo).items()}
+    horas = mv.por_hora(db, ambito, periodo)
 
     # --- 2. BRANCH BREAKDOWN ---
     # Aggregate queries (no N+1): sales-per-branch, open-sessions, critical-stock.
     branches_db = db.query(Branch).filter(Branch.organization_id == org_id).all()
 
-    sales_by_branch = dict(
-        db.query(
-            SalesDocument.branch_id,
-            func.coalesce(func.sum(SalesDocument.total_amount), 0),
-        ).filter(*sales_filters).group_by(SalesDocument.branch_id).all()
-    )
+    por_sucursal = mv.por_sucursal(db, org_id, periodo)
 
     branch_ids = [b.id for b in branches_db]
     sessions_by_branch: Dict[int, list] = {}
@@ -852,7 +552,7 @@ def get_command_center_stats(
 
     branches_data = []
     for b in branches_db:
-        b_sales = float(sales_by_branch.get(b.id, 0) or 0)
+        b_sales = por_sucursal.get(b.id, mv.RESUMEN_VACIO).neta
         b_sessions = sessions_by_branch.get(b.id, [])
         open_sessions = len(b_sessions)
         status = "ONLINE" if open_sessions > 0 or b_sales > 0 else "OFFLINE"
@@ -924,7 +624,7 @@ def get_command_center_stats(
             "sales_growth": sales_growth
         },
         "payment_methods": payment_map,
-        "hourly_distribution": [{"hour": h, "amount": hourly_map.get(h, 0)} for h in range(8, 22)],
+        "hourly_distribution": [{"hour": h.hora, "amount": h.neta} for h in horas],
         "branches": branches_data,
         # IDs of branches that contributed to the aggregation — helps debug
         # claims that a branch is missing from the HQ totals.
