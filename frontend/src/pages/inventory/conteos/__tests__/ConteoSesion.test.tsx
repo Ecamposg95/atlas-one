@@ -80,12 +80,27 @@ describe('ConteoSesion: Cancelar conteo', () => {
   })
 
   it('si el servidor rechaza, muestra el motivo y se queda en la sesión', async () => {
-    cancelar.mockRejectedValue({ response: { data: { detail: 'Este conteo ya está cerrado o cancelado.' } } })
+    cancelar.mockRejectedValue({ response: { status: 500, data: { detail: 'Error interno' } } })
     pintar()
     fireEvent.click(await screen.findByRole('button', { name: 'Cancelar conteo' }))
     fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Cancelar conteo' }))
-    await waitFor(() => expect(avisos()).toEqual(['error:Este conteo ya está cerrado o cancelado.']))
+    await waitFor(() => expect(avisos()).toEqual(['error:Error interno']))
     expect(navigate).not.toHaveBeenCalled()
+    expect(ver).toHaveBeenCalledTimes(1)   // un fallo que no es 409 no relee
+  })
+
+  it('un 409 (otro ya lo cerró o canceló) relee el conteo: la pantalla se pone al día y redirige', async () => {
+    cancelar.mockRejectedValue({ response: { status: 409, data: { detail: 'Este conteo ya está cerrado o cancelado.' } } })
+    pintar()
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancelar conteo' }))
+    ver.mockResolvedValue(detalle('CANCELADO'))   // lo que ve la relectura tras el 409
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Cancelar conteo' }))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/inventory/conteos', { replace: true }))
+    expect(ver).toHaveBeenCalledTimes(2)
+    expect(avisos().sort()).toEqual([
+      'error:Este conteo ya está cerrado o cancelado.',
+      'info:Este conteo fue cancelado',
+    ])
   })
 
   it('abrir por URL un conteo cancelado regresa a la lista con un solo aviso y sin botones', async () => {
@@ -97,11 +112,18 @@ describe('ConteoSesion: Cancelar conteo', () => {
     expect(screen.queryByRole('button', { name: 'Cancelar conteo' })).toBeNull()
   })
 
-  it('un conteo abierto trae los dos botones, "Cancelar conteo" en rojo', async () => {
+  it('un conteo abierto trae los dos botones, "Cancelar conteo" en rojo, repartiéndose el ancho en teléfono', async () => {
     pintar()
     const cancelarBtn = await screen.findByRole('button', { name: 'Cancelar conteo' })
+    const cerrarBtn = screen.getByRole('button', { name: 'Cerrar conteo' })
     expect(cancelarBtn.className).toContain('dax-btn-danger')
-    expect(screen.getByRole('button', { name: 'Cerrar conteo' }).className).toContain('dax-btn-secondary')
+    expect(cerrarBtn.className).toContain('dax-btn-secondary')
+    // Mismo grupo; el ancho (jsdom no lo mide) se reparte con flex-1 y el alto táctil con max-sm:min-h-[44px].
+    expect(cancelarBtn.parentElement).toBe(cerrarBtn.parentElement)
+    for (const b of [cancelarBtn, cerrarBtn]) {
+      expect(b.className).toContain('flex-1')
+      expect(b.className).toContain('max-sm:min-h-[44px]')
+    }
     expect(navigate).not.toHaveBeenCalled()
   })
 })

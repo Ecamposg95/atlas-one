@@ -301,7 +301,7 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 
 ### `/inventory/conteos` — Conteos de inventario 📱
 - **Archivo:** `pages/inventory/conteos/Conteos.tsx`
-- **Propósito:** Lista de conteos físicos de la organización (abiertos, cerrados y cancelados) con su avance; un conteo "Cancelado" (gris) no abre nada al tocarlo; botón para iniciar uno (sucursal, recordada en el teléfono, + departamento opcional; vacío = toda la tienda). Un 409 del servidor avisa que ya hay uno abierto de esa sucursal y departamento.
+- **Propósito:** Lista de conteos físicos de la organización (abiertos, cerrados y cancelados) con su avance; un conteo "Cancelado" (gris, sin avance: "—") no abre nada al tocarlo; botón para iniciar uno (sucursal, recordada en el teléfono, + departamento opcional; vacío = toda la tienda). Un 409 del servidor avisa que ya hay uno abierto de esa sucursal y departamento.
 - **Quién la ve:** Admin y Dueño — módulo `inventory`. Menú "Conteo" (grupo Inventario); **oculto en modo básico** (`OCULTAS_BASICO_HQ`).
 - **Datos/API:** `conteosApi.listar/crear` (`GET`/`POST /api/inventory/counts/`), `organizationApi.getBranches`, `productsApi.getDepartments`. Cliente en `api/conteos.ts`.
 

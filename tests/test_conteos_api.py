@@ -4,7 +4,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.models.inventory import StockOnHand
+from app.models.inventory import InventoryMovement, StockOnHand
 from app.models.modules import Module, OrganizationModule
 from app.models.organization import Organization
 from app.models.products import Department, Product, ProductVariant
@@ -185,6 +185,7 @@ def test_cancelar_conteo_abierto(client, db, org, branch_a, auth_admin, tienda):
     cid = _crear(client, auth_admin, org, branch_a, tienda["playeras"]).json()["id"]
     h = _h(auth_admin, org)
     client.post(f"/api/inventory/counts/{cid}/scan", headers=h, json={"code": "2017000000013"})
+    movimientos = db.query(InventoryMovement).filter_by(organization_id=org.id).count()
     r = client.post(f"/api/inventory/counts/{cid}/cancel", headers=h)
     assert r.status_code == 200, r.text
     c = r.json()
@@ -197,6 +198,7 @@ def test_cancelar_conteo_abierto(client, db, org, branch_a, auth_admin, tienda):
     assert all(l.qty_sistema is None for l in db.query(InventoryCountLine).filter_by(count_id=cid))
     stock = db.query(StockOnHand).filter_by(variant_id=tienda["v"].id, branch_id=branch_a.id).one()
     assert stock.qty_on_hand == Decimal("3")
+    assert db.query(InventoryMovement).filter_by(organization_id=org.id).count() == movimientos
 
 
 def test_cancelar_conteo_cerrado_o_cancelado_es_409(client, org, branch_a, auth_admin, tienda):
@@ -228,8 +230,8 @@ def test_conteo_cancelado_no_se_edita(client, org, branch_a, auth_admin, tienda)
                         json={"qty_contada": "5"}).status_code == 409
     assert client.delete(f"/api/inventory/counts/{cid}/lines/{lid}", headers=h).status_code == 409
     assert client.post(f"/api/inventory/counts/{cid}/lines/{lid}/ajustar", headers=h).status_code == 409
-    assert client.post(f"/api/inventory/counts/{cid}/apply", headers=h,
-                       json={"variant_ids": [tienda["v"].id]}).status_code == 409
+    r = client.post(f"/api/inventory/counts/{cid}/apply", headers=h, json={"variant_ids": [tienda["v"].id]})
+    assert r.status_code == 409 and r.json()["detail"] == "Este conteo fue cancelado."
     # Las lecturas siguen: las líneas quedan como rastro.
     r = client.get(f"/api/inventory/counts/{cid}", headers=h)
     assert r.status_code == 200 and [l["qty_contada"] for l in r.json()["lineas"]] == ["1"]
@@ -244,6 +246,30 @@ def test_cancelar_libera_sucursal_y_departamento(client, org, branch_a, auth_adm
     assert client.post(f"/api/inventory/counts/{primero}/cancel", headers=h).status_code == 200
     r = _crear(client, auth_admin, org, branch_a, tienda["playeras"])
     assert r.status_code == 201 and r.json()["id"] != primero and r.json()["status"] == "ABIERTO"
+
+
+def test_cancelar_conserva_los_ajustes_hechos_en_piso(client, db, org, branch_a, auth_admin, tienda):
+    """Lo que promete el diálogo: lo contado se descarta, pero un ajuste en piso ya es kardex real."""
+    h = _h(auth_admin, org)
+    cid = _crear(client, auth_admin, org, branch_a, tienda["playeras"]).json()["id"]
+    lid = client.post(f"/api/inventory/counts/{cid}/scan", headers=h,
+                      json={"code": "2017000000013"}).json()["linea"]["id"]
+    # Contó 1 y el sistema dice 3: el ajuste en piso deja la existencia en 1 (movimiento de -2).
+    r = client.post(f"/api/inventory/counts/{cid}/lines/{lid}/ajustar", headers=h)
+    assert r.status_code == 200, r.text
+    mov_id = r.json()["movimiento_id"]
+    antes = db.query(InventoryMovement).filter_by(organization_id=org.id).count()
+    r = client.post(f"/api/inventory/counts/{cid}/cancel", headers=h)
+    assert r.status_code == 200 and r.json()["status"] == "CANCELADO"
+    db.expire_all()
+    stock = db.query(StockOnHand).filter_by(variant_id=tienda["v"].id, branch_id=branch_a.id).one()
+    assert stock.qty_on_hand == Decimal("1")        # el ajuste se conserva, no se revierte
+    mov = db.query(InventoryMovement).filter_by(id=mov_id).one()
+    assert mov.reference == "Conteo" and mov.qty_change == Decimal("-2") and mov.qty_after == Decimal("1")
+    assert db.query(InventoryMovement).filter_by(organization_id=org.id).count() == antes
+    # La línea sigue siendo rastro, con su marca de ajustada.
+    lineas = client.get(f"/api/inventory/counts/{cid}", headers=h).json()["lineas"]
+    assert [(l["qty_contada"], l["ajustada"]) for l in lineas] == [("1", True)]
 
 
 def test_cancelar_conteo_de_otra_org_es_404(client, db, org, branch_a, auth_admin, tienda):

@@ -16,7 +16,7 @@ export function porcentajeAvance(contadas: number, esperadas: number): number {
 /** Etiqueta y color del estado de un conteo en la lista (abierto verde; cerrado y cancelado, grises). */
 export function estadoConteo(status: Conteo['status']): { texto: string; clase: string } {
   if (status === 'ABIERTO') return { texto: 'Abierto', clase: 'text-emerald-400' }
-  if (status === 'CANCELADO') return { texto: 'Cancelado', clase: 'text-slate-500' }
+  if (status === 'CANCELADO') return { texto: 'Cancelado', clase: 'text-dax-faint' }
   return { texto: 'Cerrado', clase: 'text-slate-400' }
 }
 

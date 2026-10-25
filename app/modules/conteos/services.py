@@ -291,6 +291,8 @@ def aplicar(db: Session, conteo: InventoryCount, variant_ids: List[str],
     cerrado. Una venta posterior al cierre no se descuenta dos veces porque se
     aplica el delta, no el valor contado. Si la salida dejaría negativo, se
     recorta a 0 y se anota. Filas ya aplicadas se omiten (idempotente)."""
+    if conteo.status == CANCELADO:
+        raise HTTPException(409, "Este conteo fue cancelado.")
     if conteo.status != CERRADO or not conteo.resumen:
         raise HTTPException(409, "Primero cierra el conteo.")
     if not variant_ids:

@@ -249,6 +249,9 @@ export function ConteoSesion() {
       navigate('/inventory/conteos')
     } catch (e: any) {
       cancelandoRef.current = false
+      // 409: alguien más lo cerró o canceló. Releer para que la pantalla se ponga al día
+      // (un cancelado redirige solo; un cerrado manda al reporte) y luego explicar por qué.
+      if (e?.response?.status === 409) await recargar()
       toast.error(errorDetailText(e?.response?.data?.detail, 'No se pudo cancelar'))
     }
   }
@@ -316,14 +319,15 @@ export function ConteoSesion() {
   return (
     <div className={`pb-24 ${panel ? 'lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-4 lg:items-start' : 'space-y-4'}`}>
     <div className="space-y-4 min-w-0">
-      <div className="flex items-center justify-between gap-3">
+      {/* Teléfono: título arriba y los dos botones repartiéndose el ancho; desde `sm`, en una fila. */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h1 className="text-xl font-black text-white">{conteo.department_name ?? 'Toda la tienda'}</h1>
           <p className="text-xs text-slate-400">{conteo.branch_name}{conteo.notes ? ` · ${conteo.notes}` : ''}</p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <button onClick={cancelarConteo} className="dax-btn-danger text-xs">Cancelar conteo</button>
-          <button onClick={cerrar} className="dax-btn-secondary text-xs">Cerrar conteo</button>
+        <div className="flex w-full gap-2 sm:w-auto sm:shrink-0 sm:items-center">
+          <button onClick={cancelarConteo} className="dax-btn-danger text-xs flex-1 justify-center max-sm:min-h-[44px] sm:flex-initial">Cancelar conteo</button>
+          <button onClick={cerrar} className="dax-btn-secondary text-xs flex-1 justify-center max-sm:min-h-[44px] sm:flex-initial">Cerrar conteo</button>
         </div>
       </div>
 

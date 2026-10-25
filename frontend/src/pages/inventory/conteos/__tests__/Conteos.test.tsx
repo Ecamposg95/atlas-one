@@ -49,12 +49,16 @@ describe('Conteos (lista) con un conteo cancelado', () => {
     anchoDePantalla(false)
     pintar()
     const cancelado = await screen.findByText('Cancelado')
-    expect(cancelado.className).toContain('text-slate-500')
+    expect(cancelado.className).toContain('text-dax-faint')
     expect(screen.getByText('Abierto').className).toContain('text-emerald-400')
     expect(screen.getByText('Cerrado').className).toContain('text-slate-400')
 
     const fila = cancelado.closest('tr')!
     expect(fila.className).not.toContain('cursor-pointer')
+    // Sin avance: lo contado se descartó. Los demás siguen con su "x / y piezas · z%".
+    expect(fila.textContent).toContain('—')
+    expect(fila.textContent).not.toContain('piezas')
+    expect(screen.getByText('Playeras').closest('tr')!.textContent).toContain('5 / 10 piezas · 50%')
     fireEvent.click(fila)
     fireEvent.click(screen.getByText('Gorras'))
     expect(navigate).not.toHaveBeenCalled()
@@ -74,7 +78,12 @@ describe('Conteos (lista) con un conteo cancelado', () => {
     fireEvent.click(screen.getByText('Gorras'))
     expect(navigate).not.toHaveBeenCalled()
 
+    const tarjeta = cancelado.closest('article')!
+    expect(tarjeta.textContent).toContain('—')
+    expect(tarjeta.textContent).not.toContain('piezas')
+
     const abierto = screen.getByText('Abierto').closest('button')!
+    expect(abierto.textContent).toContain('5 / 10 piezas · 50%')
     fireEvent.click(abierto)
     expect(navigate).toHaveBeenCalledWith('/inventory/conteos/1')
   })

@@ -97,8 +97,11 @@ export function Conteos() {
     navigate(c.status === 'ABIERTO' ? `/inventory/conteos/${c.id}` : `/inventory/conteos/${c.id}/reporte`)
   }
 
-  const avanceTxt = (c: Conteo) =>
-    `${num(c.avance.contadas_piezas)} / ${num(c.avance.esperadas_piezas)} piezas · ${porcentajeAvance(c.avance.contadas_variantes, c.avance.esperadas_variantes)}%`
+  // Un cancelado no tiene avance que mostrar: lo contado se descartó.
+  const avanceTxt = (c: Conteo) => {
+    if (c.status === 'CANCELADO') return '—'
+    return `${num(c.avance.contadas_piezas)} / ${num(c.avance.esperadas_piezas)} piezas · ${porcentajeAvance(c.avance.contadas_variantes, c.avance.esperadas_variantes)}%`
+  }
 
   return (
     <div className="space-y-4 pb-24">

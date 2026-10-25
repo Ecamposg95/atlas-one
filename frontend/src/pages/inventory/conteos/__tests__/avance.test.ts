@@ -86,7 +86,7 @@ describe('estadoConteo', () => {
   it('abierto en verde; cerrado y cancelado en gris, cada uno con su texto', () => {
     expect(estadoConteo('ABIERTO')).toEqual({ texto: 'Abierto', clase: 'text-emerald-400' })
     expect(estadoConteo('CERRADO')).toEqual({ texto: 'Cerrado', clase: 'text-slate-400' })
-    expect(estadoConteo('CANCELADO')).toEqual({ texto: 'Cancelado', clase: 'text-slate-500' })
+    expect(estadoConteo('CANCELADO')).toEqual({ texto: 'Cancelado', clase: 'text-dax-faint' })
   })
 })
 
