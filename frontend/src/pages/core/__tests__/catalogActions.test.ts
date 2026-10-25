@@ -33,7 +33,7 @@ describe('accionesDeProducto', () => {
     }
   })
 
-  it('con conMatriz: false no ofrece la matriz (una sola tienda)', () => {
+  it('con la opción explícita conMatriz: false no ofrece la matriz (Products ya no la usa: la matriz va siempre para HQ)', () => {
     expect(accionesDeProducto({ approval_status: 'APPROVED', is_active: true }, { conMatriz: false }))
       .toEqual(['historial', 'editar', 'duplicar', 'archivar'])
   })

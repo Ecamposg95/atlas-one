@@ -500,23 +500,32 @@ function ProductsHQView() {
       .catch(() => toast.error('No se pudieron cargar los departamentos.'))
     // Silencioso a propósito: si el contador falla, el botón simplemente no
     // aparece — no es motivo para molestar con un toast al abrir el catálogo.
-    // En básico el botón no existe: no se pide el contador.
-    if (!modoBasico) {
-      productsApi.barcodesMissingCount()
-        .then(setCodigosFaltantes)
-        .catch(() => setCodigosFaltantes(0))
-    }
   }, [])
 
+  // En básico el botón no existe: no se pide el contador. Con el mismo gate del perfil que el
+  // catálogo: antes de saber si es básico no se consulta (un FREE no debe verlo ni un instante).
+  useEffect(() => {
+    if (!perfilListo || modoBasico) return
+    productsApi.barcodesMissingCount()
+      .then(setCodigosFaltantes)
+      .catch(() => setCodigosFaltantes(0))
+  }, [perfilListo, modoBasico])
+
   // Marcas del filtro: solo cuando el catálogo se pinta (perfil ya conocido y completo).
+  // También enciende el esqueleto de las cifras: en recarga dura el perfil llega tarde y, sin
+  // esto, las tarjetas pintarían ceros en los 300 ms antes de que salga la primera petición.
   useEffect(() => {
     if (!catalogo) return
+    setKpisLoading(true)
     productsApi.getBrands()
       .then((b) => setBrands(sortByName(b)))
       .catch(() => toast.error('No se pudieron cargar las marcas.'))
   }, [catalogo])
 
   useEffect(() => {
+    // HQ espera a conocer el perfil: la identidad de `load` cambia al llegar (`catalogo`) y,
+    // sin esperar, la lista se pediría dos veces en recarga dura.
+    if (isHQ && !perfilListo) return
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
       setPage(0)
@@ -524,7 +533,7 @@ function ProductsHQView() {
       cargarKpis()
     }, 300)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
-  }, [search, deptId, load, cargarKpis])
+  }, [search, deptId, load, cargarKpis, isHQ, perfilListo])
 
   // Refetch list whenever we navigate back to this page (e.g., after saving
   // a product in the page form /products/:id/edit). location.key changes on every navigation event,
@@ -533,6 +542,7 @@ function ProductsHQView() {
   useEffect(() => {
     if (isFirstRender.current) { isFirstRender.current = false; return }
     load(search, deptId, page)
+    cargarKpis()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.key])
 
