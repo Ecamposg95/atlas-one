@@ -62,6 +62,7 @@ describe('HQValorInventario — distribución del valor', () => {
     await within(marcas).findByText('Gucci')
     expect(within(marcas).getByText('51.0%')).toBeTruthy()        // Sin marca 5200 / 10200
     expect(screen.getAllByText('$10,200.00').length).toBeGreaterThan(0)   // tarjeta de totales y pie de cada panel
+    expect(screen.getByLabelText('Sucursal')).toBeTruthy()          // el admin sí elige sucursal
   })
 
   it('elegir un departamento acota las marcas a ese departamento y se puede quitar', async () => {
@@ -72,6 +73,7 @@ describe('HQValorInventario — distribución del valor', () => {
     const marcas = screen.getByTestId('distribucion-marca')
     await within(marcas).findByText(/Marcas en/)
     expect(within(marcas).getByText('Bolsas')).toBeTruthy()
+    expect(within(marcas).getByText(/% dentro del departamento/)).toBeTruthy()   // base del porcentaje
     await waitFor(() => expect(within(marcas).queryByText('Sin marca')).toBeNull())
     fireEvent.click(within(marcas).getByRole('button', { name: 'Quitar' }))
     await within(marcas).findByText('Sin marca')
@@ -104,6 +106,7 @@ describe('HQValorInventario — distribución del valor', () => {
     const deptos = await screen.findByTestId('distribucion-departamento')
     await within(deptos).findByText('Bolsas')
     expect(screen.queryByLabelText('Sucursal')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Actualizar' })).toBeTruthy()   // conserva el botón sin el selector
     const cabeceras = within(deptos).getAllByRole('columnheader').map((th) => th.textContent)
     expect(cabeceras).not.toContain('Valor a costo')
     expect(cabeceras).toContain('% del valor')

@@ -137,7 +137,7 @@ export function DistribucionValor({
                       </span>
                     </td>
                     {veCosto && <td className="p-3 text-right tabular-nums">{formatCurrency(g.valor_costo ?? 0)}</td>}
-                    <td className={`p-3 text-right tabular-nums ${g.piezas_sin_costo > 0 ? 'text-amber-400' : ''}`}>{piezasTxt(g.piezas_sin_costo)}</td>
+                    <td className={`p-3 text-right tabular-nums ${g.piezas_sin_costo > 0 ? 'text-dax-warning' : ''}`}>{piezasTxt(g.piezas_sin_costo)}</td>
                   </tr>
                 )
               })}
