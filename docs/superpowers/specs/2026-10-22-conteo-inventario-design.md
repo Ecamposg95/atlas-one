@@ -44,7 +44,7 @@ tablas las crea `create_all`; no hay ALTER en `railway_init.py`.
 | `id` | Integer PK | |
 | `branch_id` | Integer FK `branches.id` NOT NULL | sucursal contada |
 | `department_id` | String(36) FK `departments.id` NULL | NULL = toda la tienda |
-| `status` | String(10) NOT NULL | `ABIERTO` / `CERRADO` (constantes Python, no enum DB) |
+| `status` | String(10) NOT NULL | `ABIERTO` / `CERRADO` / `CANCELADO` (constantes Python, no enum DB; `CANCELADO` desde 2026-10-24, ver §13) |
 | `notes` | String NULL | "Playeras, pared izquierda" |
 | `created_by_user_id` | Integer FK `users.id` NULL | |
 | `created_at` | DateTime tz, `server_default=now()` | |
@@ -244,3 +244,12 @@ Pedido tras usar el conteo en tienda: ver más datos por fila, corregir más cos
 - **Fila de la lista**: nombre de venta; debajo marca · modelo · color; debajo SKU · código de barras (o "sin código"); columnas talla, departamento, precio, sistema y contado. En teléfono la tarjeta lleva lo mismo en subtítulo y datos. El costo **no** se muestra (solo se edita).
 - **Escritorio (≥ 1024)**: dos columnas. Izquierda a todo lo ancho: avance, entrada de la pistola, lista. Derecha, panel fijo (`sticky`): última lectura y la ficha de la pieza, que se abre sola con cada lectura salvo que se esté corrigiendo otra; no es un modal, la pistola sigue palomeando. Teléfono y tablet: apilado como antes, ficha en modal. Mismo componente (`FichaProducto`, prop `modo`).
 - **Ficha completa**, dos bloques y solo viaja lo que cambió (`ficha.ts::cambiosFicha`): *Producto* (nombre, marca, modelo, descripción, departamento, foto con el cargador del catálogo) → `PUT /api/products/{id}` + `POST /{id}/image`; *Esta talla* (talla, color, código de barras, precio, costo) → `PUT /api/products/variants/{id}`. Un código repetido devuelve el 409 del catálogo tal cual. Tras guardar la fila queda `corregida` y la lista se recarga; si el cambio de departamento saca la pieza de la lista, la ficha se cierra y se avisa.
+
+## 13. Ajuste 2026-10-24: cancelar conteo
+
+Pedido: un botón para cancelar un conteo abierto (por ejemplo, uno abierto por error o con la sucursal equivocada), sin pasar por el cierre.
+
+- **Estado nuevo `CANCELADO`** (`POST /{id}/cancel`, solo ADMINISTRADOR/DUEÑO, solo desde ABIERTO; 409 si ya estaba CERRADO o CANCELADO). Fija `closed_at`. Sin cambio de esquema: `status` es `String(10)` y `CANCELADO` tiene 9 letras.
+- **Se descarta lo contado**: no se congela `qty_sistema` ni `resumen`, no se aplica nada y `stock_on_hand` no se toca. Los ajustes en piso ya hechos con `/ajustar` se conservan: son movimientos de kardex reales. Las líneas quedan como rastro y las lecturas (`GET /{id}`, `/lista`, `/report`) no cambian.
+- **Se comporta como cerrado** para escanear, editar líneas, ajustar y aplicar (409). La unicidad de §3 solo mira ABIERTO, así que cancelar deja libre la sucursal+departamento para abrir otro conteo.
+- **Pantalla**: botón "Cancelar conteo" (`dax-btn-danger`) junto a "Cerrar conteo", con `ConfirmDialog`; la lista pinta "Cancelado" (gris) y esa fila no abre la sesión; si alguien abre por URL la sesión de un cancelado, se vuelve a la lista con un aviso.

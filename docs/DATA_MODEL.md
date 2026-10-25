@@ -107,7 +107,7 @@ mismo orden que ya existía, con el PIN como primer intento.
 ## Conteos de inventario (`modules/conteos/models.py`)
 | Tabla | PK | Propósito |
 |---|---|---|
-| `inventory_counts` | Int | Sesión de conteo: `branch_id`, `department_id` (`String(36)`, NULL = toda la tienda), `status` (`ABIERTO`/`CERRADO`, String), `notes`, `created_by_user_id`, `created_at`, `closed_at`, `resumen` (Text) + `organization_id` (`TenantMixin`) |
+| `inventory_counts` | Int | Sesión de conteo: `branch_id`, `department_id` (`String(36)`, NULL = toda la tienda), `status` (`ABIERTO`/`CERRADO`/`CANCELADO`, String(10)), `notes`, `created_by_user_id`, `created_at`, `closed_at`, `resumen` (Text) + `organization_id` (`TenantMixin`) |
 | `inventory_count_lines` | Int | Una línea por variante o por código desconocido: `count_id`, `variant_id` (`String(36)`, NULL = desconocido), `codigo`, `qty_contada` `Numeric(10,2)`, `qty_sistema` `Numeric(10,2)`, `corregida` `Boolean` (default false; la ficha de la pieza se corrigió durante el conteo), `created_by_user_id`, `created_at`, `updated_at` + `organization_id` |
 
 - `UniqueConstraint(count_id, variant_id)` (`uq_count_line_variant`) y `UniqueConstraint(count_id, codigo)` (`uq_count_line_codigo`): escanear dos veces la misma talla o el mismo código desconocido suma a la misma línea (NULL no choca en ninguna de las dos).

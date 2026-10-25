@@ -165,7 +165,7 @@ Conteo físico de una sucursal (y opcionalmente un departamento) con escáner. S
 
 | Método | Ruta | Body | Respuesta | Reglas |
 |---|---|---|---|---|
-| POST | `/` | `{branch_id?, department_id?, notes?}` | 201 `ConteoRead` (con `avance`) | Sin `branch_id` usa la del usuario; 422 si no hay ninguna. **409** si ya hay un conteo ABIERTO de esa sucursal+departamento. 404 si sucursal/departamento no son de la org |
+| POST | `/` | `{branch_id?, department_id?, notes?}` | 201 `ConteoRead` (con `avance`) | Sin `branch_id` usa la del usuario; 422 si no hay ninguna. **409** si ya hay un conteo ABIERTO de esa sucursal+departamento (uno CERRADO o CANCELADO no cuenta). 404 si sucursal/departamento no son de la org |
 | GET | `/` | query `status?`, `branch_id?` | lista `ConteoRead`, más reciente primero | — |
 | GET | `/{id}` | — | `ConteoDetalle` (`ConteoRead` + `lineas`) | 404 cross-org |
 | POST | `/{id}/scan` | `{code}` | `{resultado: contado\|ambiguo\|desconocido, linea?, producto?, qty_sistema?, fuera_de_alcance, candidatos}` | +1 a la línea de la variante; varias coincidencias → `ambiguo` sin contar; sin coincidencia → línea por código (`desconocido`). 422 código vacío; 409 si está cerrado |
@@ -174,6 +174,7 @@ Conteo físico de una sucursal (y opcionalmente un departamento) con escáner. S
 | DELETE | `/{id}/lines/{line_id}` | — | 204 | Equivale a fijar 0 |
 | GET | `/{id}/lista` | — | `{filas: [{producto, sistema, contado, estado: pendiente\|revisado\|diferencia, corregida, line_id}], totales: {total, revisados, pendientes, con_diferencia, corregidas}}` | Lista completa del alcance (departamento o tienda) con su estado de paloma, para la sesión "lista primero". 404 cross-org |
 | POST | `/{id}/close` | — | `ConteoDetalle` | **Congela**: guarda `qty_sistema` en cada línea, `status=CERRADO`, `closed_at` y el reporte en `resumen`. Cerrado ya no admite escaneos ni ediciones (409) |
+| POST | `/{id}/cancel` | — | `ConteoRead` | **Descarta** un conteo ABIERTO: `status=CANCELADO` y `closed_at`; no congela `qty_sistema` ni `resumen` y **nunca toca `stock_on_hand`**. Los ajustes ya hechos en piso se conservan (son movimientos de kardex reales) y las líneas quedan como rastro. Un cancelado se comporta como cerrado para escanear/editar/ajustar/aplicar (409) y libera la sucursal+departamento para abrir otro conteo. **409** si ya estaba CERRADO o CANCELADO; 403 a quien no sea admin/dueño; 404 cross-org |
 | POST | `/{id}/lines/{line_id}/ajustar` | — | `{linea, qty_sistema, movimiento_id}` | Ajuste en piso (conteo ABIERTO): `delta = qty_contada − existencia actual`; mueve el kardex (ADJUSTMENT_IN/OUT, `reference="Conteo"`) y marca `ajustada_at`. **409** si ya cuadra |
 | POST | `/{id}/apply` | `{variant_ids: [...]}` | `Reporte` (con `ajustes[]`, `aplicado_en`) | Aplica al kardex las tallas elegidas de un conteo CERRADO. **El delta está congelado** (`qty_contada − qty_sistema` al cierre), no la existencia de hoy; una salida mayor a la existencia se recorta a 0 (`recortado`). Ya ajustadas se omiten |
 | GET | `/{id}/report` | — | `{estado, generado_en, alcance, totales, faltantes, sobrantes, fuera_de_alcance, desconocidos}` | Abierto: se calcula con la existencia actual; cerrado: sobre las líneas congeladas. Filas ordenadas por diferencia absoluta |
