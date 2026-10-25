@@ -28,7 +28,7 @@ from app.models.users import PlatformRole
 from app.services.cash_reconciliation import SALES_REPORT_STATUSES
 
 ZONA = "America/Mexico_City"
-_MX = ZoneInfo(ZONA)
+MX = ZoneInfo(ZONA)
 
 # Roles de oficina: pueden mirar otra sucursal o la organización entera.
 # GERENTE está aquí desde `app/routers/reports.py` de siempre; no se amplía.
@@ -38,7 +38,7 @@ PRESETS = ("hoy", "ayer", "7d", "30d", "mes")
 
 
 def hoy_mx() -> date:
-    return datetime.now(_MX).date()
+    return datetime.now(MX).date()
 
 
 def mx(col):

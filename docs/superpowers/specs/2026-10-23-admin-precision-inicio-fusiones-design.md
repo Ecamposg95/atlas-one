@@ -105,9 +105,11 @@ def top_productos(db, ambito, periodo, limite=10) -> list[ProductoTop]
   `ticket_promedio = venta_neta / tickets` (0 si no hay tickets).
 - Por método: `Payment.amount` agrupado por `method`, menos `SalesDocument.change_given` en
   `CASH`, menos `total_refunded` por `refund_method` de las devoluciones aprobadas.
-- Utilidad bruta: igual que hoy en `/reports/inicio` (líneas con costo), menos el costo de lo
-  devuelto que reingresó (`SaleReturnItem.is_inventory_reentry`); `venta_sin_costo` se sigue
-  reportando aparte.
+- Utilidad bruta: igual que hoy en `/reports/inicio` (líneas con costo), menos lo devuelto
+  por tres ramas según el costo de la variante y `SaleReturnItem.is_inventory_reentry`: con
+  costo y reingreso resta `reembolso − costo × cantidad`; con costo y sin reingreso (falso o
+  nulo) resta el reembolso entero (la pieza se perdió); sin costo, con o sin reingreso, baja
+  `venta_sin_costo` en el reembolso. `venta_sin_costo` se sigue reportando aparte.
 - Día de México en toda comparación de fechas (`_mx` de `app/routers/reports.py` se mueve al
   servicio). Las series por día y por hora agrupan sobre la misma expresión que filtra.
 
@@ -129,12 +131,12 @@ devuelve las 24 horas (0 a 23) con `neta` y `tickets`; es el frontend quien reco
 | Endpoint | Cambio |
 |---|---|
 | `GET /reports/inicio` | `hoy`, `ayer`, `semana`, `por_metodo_hoy`, `utilidad_bruta_hoy`, `top_semana`, `sucursales[].ventas_hoy` salen del servicio. Campos nuevos: `hoy.devuelto`, `ayer.devuelto`, `semana.devuelto`, `tendencia` (§3.1) y `por_hora_hoy` (§3.1) |
-| `GET /reports/dashboard` | `kpis.sales` es neta; `kpis.returns` nuevo; `kpis.pending`/`draft` se conservan como informativos; `charts.trend` por día de México; `charts.hourly` con las 24 horas; `charts.payments` neto de cambio y devoluciones; ámbito por `resolver_ambito` |
+| `GET /reports/dashboard` | `kpis.sales` es neta; `kpis.returns` nuevo; `kpis.pending`/`draft` se conservan como informativos; `charts.trend` por día de México; `charts.hourly` con las 24 horas; `charts.payments` neto de cambio y devoluciones; ámbito por `resolver_ambito`, salvo GERENTE: siempre su sucursal (ignora `branch_id`, como la lista de ventas) |
 | `GET /reports/daily-summary` | Mismos campos, calculados por el servicio |
 | `GET /reports/sales-by-hour` | Mismos campos, 24 horas |
 | `GET /reports/command-center/stats` | `global.total_sales` neta; `returns_total` = `devuelto`; `branches[].total_sales` neta |
-| `GET /sales/stats` | Mismos campos, calculados por el servicio (deja de sumar PENDING/DRAFT) |
-| `GET /returns/` | `start_date`/`end_date` como `date` en día de México; sin fechas, los últimos 30 días; `branch_id` por `resolver_ambito` |
+| `GET /sales/stats` | Mismos campos, calculados por el servicio (deja de sumar PENDING/DRAFT); GERENTE: siempre su sucursal (ignora `branch_id`, como la lista de ventas) |
+| `GET /returns/` | `start_date`/`end_date` como `date` en día de México (una sola fecha = ese día, invertido = 422); sin fechas, todo el historial (la pantalla pondrá el rango en la Fase 3); `branch_id` por `resolver_ambito` |
 
 La caja (`/cash/*`) no cambia: el corte es por turno y se concilia con sus propios pagos.
 

@@ -324,7 +324,6 @@ async def boxes_old_redirect():
 
 # Sprint 3 — rescate de un redirect que estaba en daxpos.py antes de su deprecación.
 # /boxes redirige al tab de empaques en /brands (UX consolidada).
-# (/hq/sales ya no redirige: /hq/sales-log no existe en React; lo sirve la SPA.)
 @app.get("/boxes", include_in_schema=False)
 async def boxes_redirect():
     return RedirectResponse(url="/brands?tab=empaques", status_code=302)
