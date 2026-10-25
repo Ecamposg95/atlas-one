@@ -27,7 +27,6 @@ const NotFoundPage = lazy(() => import('./pages/NotFound').then(m => ({ default:
 // HQ / Admin
 // Reportes (Fase 2 del admin): una sola pantalla para HQ y sucursal; chart.js va en su chunk, no en el de entrada.
 const Reportes        = lazy(() => import('./pages/reports/Reportes').then(m => ({ default: m.Reportes })))
-const HQInventory     = lazy(() => import('./pages/hq/HQInventory').then(m => ({ default: m.HQInventory })))
 const HQBranches      = lazy(() => import('./pages/hq/HQBranches').then(m => ({ default: m.HQBranches })))
 const HQValorInventario = lazy(() => import('./pages/hq/HQValorInventario').then(m => ({ default: m.HQValorInventario })))
 // Inicio del dueño (SP6): chunk propio sin chart.js; básico y completo son la misma pantalla.
@@ -278,7 +277,7 @@ export default function App() {
             {/* Fase 3 del admin: Ventas, Devoluciones e Inventario son una sola pantalla en la URL corta; las viejas redirigen con su consulta. */}
             <Route path="sales" element={<RedirigirConQuery a="/sales" />} />
             <Route path="returns" element={<RedirigirConQuery a="/returns" />} />
-            <Route path="inventory" element={<RutaPorRol url="/hq/inventory"><Suspense fallback={<PageLoader />}><HQInventory /></Suspense></RutaPorRol>} />
+            <Route path="inventory" element={<RedirigirConQuery a="/inventory" />} />
             <Route path="valor-inventario" element={<RutaPorRol url="/hq/valor-inventario"><Suspense fallback={<PageLoader />}><HQValorInventario /></Suspense></RutaPorRol>} />
             <Route path="branches" element={<RutaPorRol url="/hq/branches"><Suspense fallback={<PageLoader />}><HQBranches /></Suspense></RutaPorRol>} />
             <Route path="branches/:branchId" element={<RutaPorRol url="/hq/branches"><Suspense fallback={<PageLoader />}><HQBranches /></Suspense></RutaPorRol>} />

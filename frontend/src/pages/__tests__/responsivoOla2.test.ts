@@ -5,7 +5,7 @@ import { resolve } from 'node:path'
 /** Pantallas de la ola 2 del responsivo (catálogo y personas) y, desde SP6, todo el grupo HQ; desde la Fase 2 del admin, Reportes. */
 export const PAGINAS = [
   'core/Brands.tsx', 'core/Departments.tsx', 'core/Users.tsx', 'crm/Customers.tsx', 'inventory/Inventory.tsx',
-  'hq/HQInventory.tsx', 'inventory/Products.tsx', 'core/AdminCatalog.tsx', 'hq/Inicio.tsx',
+  'inventory/Products.tsx', 'core/AdminCatalog.tsx', 'hq/Inicio.tsx',
   'reports/Reportes.tsx', 'sales/SalesHistory.tsx', 'sales/Returns.tsx', 'hq/HQBranches.tsx', 'hq/HQValorInventario.tsx',
 ]
 /** Tienen tarjetas propias y no usan TarjetaFila (HQValorInventario las delega en `components/reports/DistribucionValor`). */
@@ -29,7 +29,7 @@ describe('ola 2 responsiva: catálogo y personas', () => {
     expect(sinExcepciones(s)).not.toMatch(REJILLA_SIN_PREFIJO)
     expect(s).not.toMatch(/hidden md:block|md:hidden/)
   })
-  it.each(['inventory/Inventory.tsx', 'hq/HQInventory.tsx'])('%s: las dos tablas están tras el condicional', (p) => {
+  it.each(['inventory/Inventory.tsx'])('%s: las dos tablas están tras el condicional', (p) => {
     const s = fuente(p)
     expect((s.match(/<table/g) ?? []).length).toBe(2)
     expect((s.match(/esTelefono \?/g) ?? []).length).toBe(2)

@@ -23,8 +23,8 @@ const PENDIENTES = [
   'pages/core/Users.tsx', 'pages/core/catalogActions.ts',
   'pages/finance/CashHistory.tsx', 'pages/finance/Expenses.tsx', 'pages/finance/Purchases.tsx',
   'pages/home/GastroHomeDay.tsx', 'pages/home/PresetHome.tsx',
-  'pages/hq/HQBranches.tsx', 'pages/hq/HQInventory.tsx',
-  'pages/inventory/Boxes.tsx', 'pages/inventory/Inventory.tsx', 'pages/inventory/Logistics.tsx', 'pages/inventory/Products.tsx',
+  'pages/hq/HQBranches.tsx',
+  'pages/inventory/Boxes.tsx', 'pages/inventory/Logistics.tsx', 'pages/inventory/Products.tsx',
   'pages/inventory/conteos/BuscadorVariante.tsx', 'pages/inventory/conteos/ConteoReporte.tsx', 'pages/inventory/conteos/avance.ts',
   'pages/inventory/conteos/ConteoSesion.tsx', 'pages/inventory/conteos/Conteos.tsx',
   'pages/inventory/conteos/FichaProducto.tsx', 'pages/inventory/conteos/ListaDepartamento.tsx',
@@ -42,7 +42,7 @@ const LIMPIOS = [
   'pages/hq/Inicio.tsx', 'pages/hq/InicioGraficas.tsx', 'pages/reports/Reportes.tsx', 'pages/reports/presetsReportes.ts',
   'components/reports/Heatmap.tsx', 'components/reports/ValorTiendaCard.tsx', 'components/ui/KpiCard.tsx',
   // Fase 3 (fusiones): las pantallas que sobreviven se reescribieron solo con tokens.
-  'pages/sales/SalesHistory.tsx', 'pages/sales/Returns.tsx',
+  'pages/sales/SalesHistory.tsx', 'pages/sales/Returns.tsx', 'pages/inventory/Inventory.tsx',
 ]
 
 function archivos(dir: string): string[] {

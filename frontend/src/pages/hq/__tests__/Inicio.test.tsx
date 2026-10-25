@@ -158,7 +158,7 @@ describe('Inicio', () => {
     expect(screen.getByTestId('cifra-utilidad').textContent).toContain('$400.00')
     expect(screen.getByTestId('cifra-utilidad').textContent).toContain('sobre $1,000.00 con costo · $234.50 vendidos sin costo')
     expect(screen.getByText(/No se mueve \(sin venta en 30 días\)/)).toBeTruthy()
-    expect(screen.getByText('Abrigo largo').closest('a')?.getAttribute('href')).toBe('/hq/inventory?q=ABR-1&variant=v9')
+    expect(screen.getByText('Abrigo largo').closest('a')?.getAttribute('href')).toBe('/inventory?q=ABR-1&variant=v9')
     expect(screen.getByText('2 devoluciones por aprobar →').getAttribute('href')).toBe('/returns')
     expect(screen.getByText(/1 turno abierto desde hace más de un día/)).toBeTruthy()
     expect(screen.getByText('Lupita')).toBeTruthy()
@@ -281,22 +281,23 @@ describe('Inicio', () => {
     expect(inicio).toHaveBeenCalledWith({ completo: false })
   })
 
-  it('en básico los enlaces van a Productos y Mis ventas, nunca a pantallas HQ escondidas', async () => {
+  it('en básico los enlaces van a Productos y Ventas, nunca a Inventario ni Devoluciones (escondidas en básico)', async () => {
     pintar()
     await screen.findByTestId('cifra-hoy')
     const hrefs = Array.from(document.querySelectorAll('a')).map((a) => a.getAttribute('href'))
     expect(hrefs).toContain('/products')
     expect(hrefs).toContain('/sales')
-    expect(hrefs.some((h) => h?.startsWith('/hq/inventory') || h?.startsWith('/hq/sales'))).toBe(false)
+    expect(hrefs.some((h) => h?.startsWith('/inventory') || h?.startsWith('/returns') || h?.startsWith('/hq/inventory') || h?.startsWith('/hq/sales'))).toBe(false)
     expect(screen.getByText('Falda negra').closest('a')?.getAttribute('href')).toBe('/products')
   })
 
-  it('en completo los mismos enlaces abren Existencias y Ventas HQ', async () => {
+  it('en completo los mismos enlaces abren el kardex en Inventario y la pantalla de Ventas', async () => {
     perfil('completo')
     inicio.mockResolvedValue(COMPLETO)
     pintar()
     await screen.findByTestId('cifra-hoy')
-    expect(screen.getByText('Falda negra').closest('a')?.getAttribute('href')).toBe('/hq/inventory?q=FAL-1&variant=v1')
+    expect(screen.getByText('Falda negra').closest('a')?.getAttribute('href')).toBe('/inventory?q=FAL-1&variant=v1')
     expect(screen.getByText('Ver ventas →').getAttribute('href')).toBe('/sales')
+    expect(screen.getAllByText('Ver inventario →').length).toBeGreaterThan(0)
   })
 })
