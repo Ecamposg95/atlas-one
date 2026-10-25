@@ -246,7 +246,8 @@ def test_alias_inicio_basico_sigue_respondiendo(client, db, org, branch_a, admin
     assert a == b
     assert a["hoy"]["total"] == 100.0
     assert set(a) == {"branch_id", "hoy", "ayer", "semana", "por_metodo_hoy", "top_semana", "poca_existencia", "corte",
-                      "sin_movimiento", "pendientes", "sucursales", "utilidad_bruta_hoy", "venta_sin_costo_hoy"}
+                      "sin_movimiento", "pendientes", "sucursales", "utilidad_bruta_hoy", "venta_sin_costo_hoy", "venta_con_costo_hoy",
+                      "tendencia", "por_hora_hoy", "utilidad_bruta_ayer"}
 
 
 def test_sin_completo_las_secciones_nuevas_son_null(client, db, org, branch_a, admin_user, auth_admin):
@@ -441,3 +442,105 @@ def test_inicio_hoy_es_neto_y_trae_devuelto(client, db, org, branch_a, cajero_a,
     assert d["hoy"]["total"] == 60.0 and d["hoy"]["devuelto"] == 40.0 and d["hoy"]["tickets"] == 1
     assert d["semana"]["total"] == 60.0
     assert d["por_metodo_hoy"]["CASH"] == 60.0
+
+
+# ── Fase 2 (spec 2026-10-23 §3.1): tendencia de 7 días, horas de hoy y utilidad de ayer ──
+
+def test_inicio_completo_trae_tendencia_de_7_dias_y_los_7_anteriores(client, db, org, branch_a, admin_user, auth_admin):
+    v = _variante(db, org, branch_a, "Blusa", "BLU-1", 50)
+    tarde = _venta(db, org, branch_a, admin_user, v, "100")
+    tarde.created_at = _instante(0, hora=19)        # 01:00 UTC de mañana: sigue siendo hoy en México
+    _venta(db, org, branch_a, admin_user, v, "70", dias_atras=6)      # primer día del tramo actual
+    _venta(db, org, branch_a, admin_user, v, "999", dias_atras=7)     # último día del comparativo
+    _venta(db, org, branch_a, admin_user, v, "5", dias_atras=14)      # fuera de los dos tramos
+    db.commit()
+
+    t = client.get(f"{INICIO}?completo=true", headers=auth_admin).json()["tendencia"]
+
+    hoy = datetime.now(_MX).date()
+    assert [d["fecha"] for d in t["dias"]] == [str(hoy - timedelta(days=6 - i)) for i in range(7)]
+    assert [d["neta"] for d in t["dias"]] == [70.0, 0.0, 0.0, 0.0, 0.0, 0.0, 100.0]
+    assert [d["tickets"] for d in t["dias"]] == [1, 0, 0, 0, 0, 0, 1]
+    assert [d["fecha"] for d in t["anterior"]] == [str(hoy - timedelta(days=13 - i)) for i in range(7)]
+    assert [d["neta"] for d in t["anterior"]] == [0.0] * 6 + [999.0]
+
+
+def test_inicio_tendencia_respeta_la_sucursal_pedida(client, db, org, branch_a, branch_b, admin_user, auth_admin):
+    v = _variante(db, org, branch_a, "Blusa", "BLU-1", 50)
+    _venta(db, org, branch_a, admin_user, v, "100")
+    _venta(db, org, branch_b, admin_user, v, "700")
+    t = client.get(f"{INICIO}?completo=true&branch_id={branch_a.id}", headers=auth_admin).json()["tendencia"]
+    assert t["dias"][-1]["neta"] == 100.0
+    assert client.get(f"{INICIO}?completo=true", headers=auth_admin).json()["tendencia"]["dias"][-1]["neta"] == 800.0
+
+
+def test_inicio_por_hora_hoy_trae_24_horas_en_hora_de_mexico(client, db, org, branch_a, admin_user, auth_admin):
+    v = _variante(db, org, branch_a, "Blusa", "BLU-1", 50)
+    tarde = _venta(db, org, branch_a, admin_user, v, "100")
+    tarde.created_at = _instante(0, hora=19)
+    dev = SaleReturn(organization_id=org.id, sale_id=tarde.id, user_id=admin_user.id, branch_id=branch_a.id,
+                     total_refunded=Decimal("40"), refund_method=PaymentMethod.CASH, reason="Prueba", status="APPROVED")
+    dev.created_at = _instante(0, hora=20)
+    db.add(dev)
+    db.commit()
+
+    h = client.get(f"{INICIO}?completo=true", headers=auth_admin).json()["por_hora_hoy"]
+
+    assert [x["hora"] for x in h] == list(range(24))
+    assert h[19] == {"hora": 19, "neta": 100.0, "tickets": 1}
+    assert h[20] == {"hora": 20, "neta": -40.0, "tickets": 0}   # la devolución resta en su hora
+
+
+def test_inicio_sin_completo_no_trae_tendencia_horas_ni_utilidad_de_ayer(client, db, org, branch_a, admin_user, auth_admin):
+    _variante(db, org, branch_a, "Blusa", "BLU-1", 50)
+    db.commit()
+    d = client.get(INICIO, headers=auth_admin).json()
+    assert d["tendencia"] is None and d["por_hora_hoy"] is None and d["utilidad_bruta_ayer"] is None
+
+
+def test_inicio_utilidad_bruta_ayer_para_admin_y_null_para_gerente(client, db, org, branch_a, admin_user, gerente_a, auth_admin, auth_gerente_a):
+    v = _variante(db, org, branch_a, "Blusa", "BLU-1", 50)
+    _venta(db, org, branch_a, admin_user, v, "100", cantidad=2, dias_atras=1)   # 100 − 10 × 2 = 80
+    d = client.get(f"{INICIO}?completo=true", headers=auth_admin).json()
+    assert d["utilidad_bruta_ayer"] == 80.0
+    assert client.get(f"{INICIO}?completo=true", headers=auth_gerente_a).json()["utilidad_bruta_ayer"] is None
+
+
+# ── Ola final: la misma base de utilidad bruta en Inicio y Reportes ──
+
+def test_inicio_venta_con_costo_hoy_es_la_base_de_la_utilidad(client, db, org, branch_a, admin_user, gerente_a, auth_admin, auth_gerente_a):
+    v = _variante(db, org, branch_a, "Blusa", "BLU-1", 50)
+    _venta(db, org, branch_a, admin_user, v, "100", cantidad=2)   # con costo (unit_cost 10)
+    sin = _venta(db, org, branch_a, admin_user, v, "500")         # sin costo: fuera de la base
+    for r in db.query(SalesLineItem).filter(SalesLineItem.document_id == sin.id).all():
+        r.unit_cost = None
+    db.commit()
+
+    d = client.get(f"{INICIO}?completo=true", headers=auth_admin).json()
+    assert d["venta_con_costo_hoy"] == 100.0
+    assert (d["utilidad_bruta_hoy"], d["venta_sin_costo_hoy"]) == (80.0, 500.0)
+    assert client.get(f"{INICIO}?completo=true", headers=auth_gerente_a).json()["venta_con_costo_hoy"] is None
+    assert client.get(INICIO, headers=auth_admin).json()["venta_con_costo_hoy"] is None
+
+
+# ── Ola final (T1): gerente y org sin ventas en tendencia y horas ──
+
+def test_inicio_gerente_tendencia_y_horas_solo_de_su_sucursal(client, db, org, branch_a, branch_b, admin_user, gerente_a, auth_gerente_a):
+    v = _variante(db, org, branch_a, "Blusa", "BLU-1", 50)
+    _venta(db, org, branch_a, admin_user, v, "100")
+    _venta(db, org, branch_b, admin_user, v, "700")
+
+    d = client.get(f"{INICIO}?completo=true&branch_id={branch_b.id}", headers=auth_gerente_a).json()
+
+    assert d["tendencia"]["dias"][-1]["neta"] == 100.0
+    assert sum(h["neta"] for h in d["por_hora_hoy"]) == 100.0
+
+
+def test_inicio_org_sin_ventas_trae_7_dias_y_24_horas_en_cero(client, db, org, branch_a, auth_admin):
+    db.commit()
+    d = client.get(f"{INICIO}?completo=true", headers=auth_admin).json()
+    assert [x["neta"] for x in d["tendencia"]["dias"]] == [0.0] * 7
+    assert [x["tickets"] for x in d["tendencia"]["dias"]] == [0] * 7
+    assert len(d["tendencia"]["anterior"]) == 7
+    assert [h["hora"] for h in d["por_hora_hoy"]] == list(range(24))
+    assert all(h["neta"] == 0.0 and h["tickets"] == 0 for h in d["por_hora_hoy"])

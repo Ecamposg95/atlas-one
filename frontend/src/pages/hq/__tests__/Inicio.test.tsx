@@ -2,25 +2,35 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
-import { render, screen, cleanup } from '@testing-library/react'
+import { render, screen, cleanup, within } from '@testing-library/react'
 
-const { inicio, valorInventario } = vi.hoisted(() => ({ inicio: vi.fn(), valorInventario: vi.fn() }))
+const { inicio, valorInventario, falla } = vi.hoisted(() => ({ inicio: vi.fn(), valorInventario: vi.fn(), falla: { secciones: new Set<string>() } }))
 vi.mock('../../../api/reports', () => ({ reportsApi: { inicio, valorInventario } }))
+// El módulo perezoso de gráficas se sustituye por un marcador: aquí se prueba
+// CUÁNDO se monta (perfil), no el dibujo (eso es de InicioGraficas.test.tsx).
+vi.mock('../InicioGraficas', () => ({
+  InicioGraficas: ({ seccion }: { seccion: string }) => {
+    if (falla.secciones.has(seccion)) throw new Error(`falló la gráfica ${seccion}`)
+    return <div data-testid={`grafica-${seccion}`} />
+  },
+}))
 
 import { Inicio } from '../Inicio'
 import { useEnabledModulesStore } from '../../../store/enabledModulesStore'
 
+const dia = (n: number) => `2026-10-${String(n).padStart(2, '0')}`
 // La forma exacta de GET /reports/inicio sin `completo` (modo básico).
 const DATOS = {
   branch_id: null,
-  hoy: { desde: '2026-10-19', hasta: '2026-10-19', total: 1234.5, tickets: 12 },
-  ayer: { desde: '2026-10-18', hasta: '2026-10-18', total: 800, tickets: 1 },
-  semana: { desde: '2026-10-13', hasta: '2026-10-19', total: 9000, tickets: 70 },
+  hoy: { desde: dia(19), hasta: dia(19), total: 1234.5, devuelto: 0, tickets: 12 },
+  ayer: { desde: dia(18), hasta: dia(18), total: 800, devuelto: 0, tickets: 1 },
+  semana: { desde: dia(13), hasta: dia(19), total: 9000, devuelto: 0, tickets: 70 },
   por_metodo_hoy: { CARD: 234.5, CASH: 1000 },
   top_semana: [{ nombre: 'Blusa roja', cantidad: 14, total: 1400 }],
   poca_existencia: { umbral: 3, productos: [{ variant_id: 'v1', nombre: 'Falda negra', sku: 'FAL-1', existencia: 1 }] },
   corte: { estado: 'abierto', cajera: 'Mirna', abierto_en: '2026-10-19T15:00:00+00:00', cerrado_en: null, efectivo_esperado: 1500, efectivo_contado: null },
-  sin_movimiento: null, pendientes: null, sucursales: null, utilidad_bruta_hoy: null, venta_sin_costo_hoy: null,
+  sin_movimiento: null, pendientes: null, sucursales: null, utilidad_bruta_hoy: null, venta_sin_costo_hoy: null, venta_con_costo_hoy: null,
+  tendencia: null, por_hora_hoy: null, utilidad_bruta_ayer: null,
 }
 // Lo que trae `completo=true` para una org de paga con dos sucursales.
 const COMPLETO = {
@@ -31,10 +41,16 @@ const COMPLETO = {
     diferencias_caja: [{ session_id: 7, sucursal: 'Roma', cajera: 'Lupita', cerrado_en: '2026-10-18T23:00:00+00:00', esperado: 500, contado: 480, diferencia: -20 }],
   },
   sucursales: [
-    { branch_id: 1, nombre: 'Roma', ventas_hoy: 1000, tickets_hoy: 9, corte: DATOS.corte, poca_existencia: 2 },
-    { branch_id: 2, nombre: 'Condesa', ventas_hoy: 234.5, tickets_hoy: 3, corte: { ...DATOS.corte, estado: 'sin_turno' }, poca_existencia: 0 },
+    { branch_id: 1, nombre: 'Roma', ventas_hoy: 1000, devuelto_hoy: 0, tickets_hoy: 9, corte: DATOS.corte, poca_existencia: 2 },
+    { branch_id: 2, nombre: 'Condesa', ventas_hoy: 234.5, devuelto_hoy: 0, tickets_hoy: 3, corte: { ...DATOS.corte, estado: 'sin_turno' }, poca_existencia: 0 },
   ],
-  utilidad_bruta_hoy: 400, venta_sin_costo_hoy: 234.5,
+  utilidad_bruta_hoy: 400, venta_sin_costo_hoy: 234.5, venta_con_costo_hoy: 1000, utilidad_bruta_ayer: 300,
+  // 7 días terminando hoy (antier = índice 4 → 1000) y los 7 previos (suman 7500).
+  tendencia: {
+    dias: [500, 900, 1100, 1300, 1000, 800, 1234.5].map((neta, i) => ({ fecha: dia(13 + i), neta, tickets: i + 1 })),
+    anterior: [1000, 1000, 1000, 1000, 1000, 1000, 1500].map((neta, i) => ({ fecha: dia(6 + i), neta, tickets: 1 })),
+  },
+  por_hora_hoy: Array.from({ length: 24 }, (_, h) => ({ hora: h, neta: h === 12 ? 1234.5 : 0, tickets: h === 12 ? 12 : 0 })),
 }
 const VALUACION = {
   agrupar: 'sucursal', branch_id: null, ve_costo: true, grupos: [],
@@ -42,8 +58,10 @@ const VALUACION = {
 }
 const pintar = () => render(<MemoryRouter><Inicio /></MemoryRouter>)
 const perfil = (perfilUi: 'basico' | 'completo') => useEnabledModulesStore.setState({ loaded: true, perfilUi })
+const variacionDe = (testId: string) => within(screen.getByTestId(testId)).queryByTestId('variacion')
 
 beforeEach(() => {
+  falla.secciones.clear()
   perfil('basico')
   inicio.mockReset().mockResolvedValue(DATOS)
   valorInventario.mockReset().mockResolvedValue(VALUACION)
@@ -66,6 +84,12 @@ describe('Inicio', () => {
     expect(hoy.textContent).toContain('12 ventas')
     expect(screen.getByTestId('cifra-ayer').textContent).toContain('1 venta')
     expect(screen.getByTestId('cifra-semana').textContent).toContain('$9,000.00')
+  })
+
+  it('hoy con devoluciones dice cuánto se devolvió', async () => {
+    inicio.mockResolvedValue({ ...DATOS, hoy: { ...DATOS.hoy, total: 1194.5, devuelto: 40 } })
+    pintar()
+    expect((await screen.findByTestId('cifra-hoy')).textContent).toContain('12 ventas · $40.00 devuelto')
   })
 
   it('cobros de hoy con efectivo primero', async () => {
@@ -115,6 +139,16 @@ describe('Inicio', () => {
     expect(screen.queryByTestId('cifra-utilidad')).toBeNull()
   })
 
+  it('en básico no monta ninguna gráfica (el chunk charts no baja) ni muestra variaciones', async () => {
+    pintar()
+    await screen.findByTestId('cifra-hoy')
+    await new Promise((r) => setTimeout(r, 20))
+    expect(document.querySelector('[data-testid^="grafica-"]')).toBeNull()
+    expect(screen.queryByText('Cargando gráfica…')).toBeNull()
+    // Spec §3.1: en básico solo cambian las cifras a netas; ninguna lleva variación.
+    expect(document.querySelector('[data-testid="variacion"]')).toBeNull()
+  })
+
   it('en completo pide completo=true y pinta las tres secciones y la utilidad', async () => {
     perfil('completo')
     inicio.mockResolvedValue(COMPLETO)
@@ -134,12 +168,106 @@ describe('Inicio', () => {
     expect(sucursales.querySelector('a')?.getAttribute('href')).toBe('/hq/branches/1')
   })
 
+  it('en completo monta las cuatro gráficas y conserva la lista de métodos y la caja', async () => {
+    perfil('completo')
+    inicio.mockResolvedValue(COMPLETO)
+    pintar()
+    for (const s of ['tendencia', 'metodos', 'horas', 'sucursales']) expect(await screen.findByTestId(`grafica-${s}`)).toBeTruthy()
+    expect(screen.getAllByTestId('metodo')).toHaveLength(2)
+    expect(screen.getByTestId('corte').textContent).toContain('Turno abierto')
+    expect(screen.getByText('Ver corte →').className).toContain('max-md:min-h-[44px]')
+  })
+
+  it('si una gráfica falla (chunk o chart.js) las demás, las cifras, la caja y los pendientes siguen', async () => {
+    const silencio = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      falla.secciones.add('metodos')
+      perfil('completo')
+      inicio.mockResolvedValue(COMPLETO)
+      pintar()
+      expect(await screen.findByTestId('grafica-tendencia')).toBeTruthy()
+      expect(await screen.findByTestId('grafica-horas')).toBeTruthy()
+      expect(await screen.findByTestId('grafica-sucursales')).toBeTruthy()
+      expect(screen.queryByTestId('grafica-metodos')).toBeNull()
+      expect(screen.getByTestId('cifra-hoy').textContent).toContain('$1,234.50')
+      expect(screen.getAllByTestId('metodo')).toHaveLength(2)
+      expect(screen.getByTestId('corte').textContent).toContain('Turno abierto')
+      expect(screen.getByTestId('pendientes')).toBeTruthy()
+    } finally { silencio.mockRestore() }
+  })
+
+  it('si fallan todas las gráficas el Inicio no se cae', async () => {
+    const silencio = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      for (const s of ['tendencia', 'metodos', 'horas', 'sucursales']) falla.secciones.add(s)
+      perfil('completo')
+      inicio.mockResolvedValue(COMPLETO)
+      pintar()
+      await screen.findByTestId('cifra-hoy')
+      await new Promise((r) => setTimeout(r, 20))
+      expect(document.querySelector('[data-testid^="grafica-"]')).toBeNull()
+      expect(screen.getByTestId('corte').textContent).toContain('Turno abierto')
+      expect(screen.getByTestId('sucursales').textContent).toContain('Roma')
+      expect(screen.getByTestId('pendientes')).toBeTruthy()
+    } finally { silencio.mockRestore() }
+  })
+
+  it('con tres cifras la rejilla es de 3 columnas desde sm; con cuatro, 2 y luego 4', async () => {
+    pintar()
+    expect((await screen.findByTestId('cifra-hoy')).parentElement?.className).toMatch(/\bsm:grid-cols-3\b/)
+    cleanup()
+    perfil('completo')
+    inicio.mockResolvedValue(COMPLETO)
+    pintar()
+    const clases = (await screen.findByTestId('cifra-utilidad')).parentElement?.className ?? ''
+    expect(clases).toMatch(/\bsm:grid-cols-2\b/)
+    expect(clases).toMatch(/\blg:grid-cols-4\b/)
+  })
+
+  it('la utilidad solo se muestra si hay venta con costo: sin costos capturados (0) o servidor viejo (campo ausente) no hay tarjeta', async () => {
+    perfil('completo')
+    inicio.mockResolvedValue({ ...COMPLETO, utilidad_bruta_hoy: 0, venta_con_costo_hoy: 0, venta_sin_costo_hoy: 1234.5 })
+    pintar()
+    await screen.findByTestId('cifra-hoy')
+    expect(screen.queryByTestId('cifra-utilidad')).toBeNull()
+    cleanup()
+    const { venta_con_costo_hoy: _omitido, ...viejo } = COMPLETO
+    inicio.mockResolvedValue(viejo)
+    pintar()
+    await screen.findByTestId('cifra-hoy')
+    expect(screen.queryByTestId('cifra-utilidad')).toBeNull()
+  })
+
+  it('variaciones: hoy vs ayer, ayer vs antier, 7 días vs semana anterior, utilidad vs ayer', async () => {
+    perfil('completo')
+    inicio.mockResolvedValue(COMPLETO)
+    pintar()
+    await screen.findByTestId('cifra-hoy')
+    expect(variacionDe('cifra-hoy')?.textContent).toBe('Sube ▲ 54 % vs ayer')                // 1234.5 vs 800
+    expect(variacionDe('cifra-ayer')?.textContent).toBe('Baja ▼ 20 % vs antier')             // 800 vs 1000
+    expect(variacionDe('cifra-semana')?.textContent).toBe('Sube ▲ 20 % vs semana anterior')  // 9000 vs 7500
+    expect(variacionDe('cifra-utilidad')?.textContent).toBe('Sube ▲ 33 % vs ayer')           // 400 vs 300
+  })
+
+  it('completo sin tendencia (servidor viejo) cae al diseño sin gráficas', async () => {
+    perfil('completo')
+    inicio.mockResolvedValue({ ...COMPLETO, tendencia: null, por_hora_hoy: null })
+    pintar()
+    await screen.findByTestId('cifra-hoy')
+    await new Promise((r) => setTimeout(r, 20))
+    expect(screen.queryByTestId('grafica-tendencia')).toBeNull()
+    expect(screen.queryByTestId('grafica-horas')).toBeNull()
+    expect(screen.getAllByTestId('metodo')).toHaveLength(2)
+    expect(variacionDe('cifra-ayer')).toBeNull()
+  })
+
   it('completo con una sola sucursal y nada pendiente: sin sección de sucursales y "Nada pendiente"', async () => {
     perfil('completo')
     inicio.mockResolvedValue({ ...COMPLETO, sucursales: null, pendientes: { devoluciones: 0, turnos_abiertos: 0, diferencias_caja: [] } })
     pintar()
     await screen.findByTestId('cifra-hoy')
     expect(screen.queryByTestId('sucursales')).toBeNull()
+    expect(screen.queryByTestId('grafica-sucursales')).toBeNull()
     expect(screen.getByText('Nada pendiente.')).toBeTruthy()
   })
 

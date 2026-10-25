@@ -343,15 +343,11 @@
   html.light .bg-slate-600  { background-color: #e8e5dd !important; }
 
   /* bg-slate-900 con opacidad — todos los slash variants */
-  html.light .bg-slate-900\/80,
   html.light .bg-slate-900\/60,
-  html.light .bg-slate-900\/50,
   html.light .bg-slate-900\/40,
-  html.light .bg-slate-900\/30,
-  html.light .bg-slate-900\/20 { background-color: rgba(251,250,246,0.97) !important; }
+  html.light .bg-slate-900\/30 { background-color: rgba(251,250,246,0.97) !important; }
 
   /* bg-slate-800 con opacidad */
-  html.light .bg-slate-800\/80,
   html.light .bg-slate-800\/60,
   html.light .bg-slate-800\/50,
   html.light .bg-slate-800\/40,
@@ -359,21 +355,16 @@
   html.light .bg-slate-800\/20 { background-color: rgba(242,239,231,0.9) !important; }
 
   /* bg-slate-700 con opacidad */
-  html.light .bg-slate-700\/80,
   html.light .bg-slate-700\/60,
   html.light .bg-slate-700\/50,
-  html.light .bg-slate-700\/30,
-  html.light .bg-slate-700\/20 { background-color: rgba(232,229,221,0.8) !important; }
+  html.light .bg-slate-700\/30 { background-color: rgba(232,229,221,0.8) !important; }
 
   /* Borders oscuros → cálidos claros */
   html.light .border-slate-700,
-  html.light .border-slate-800,
-  html.light .border-slate-900  { border-color: rgba(127,102,82,0.24) !important; }
+  html.light .border-slate-800  { border-color: rgba(127,102,82,0.24) !important; }
 
   html.light .border-slate-700\/50,
-  html.light .border-slate-700\/30,
-  html.light .border-white\/10,
-  html.light .border-white\/5   { border-color: rgba(127,102,82,0.14) !important; }
+  html.light .border-slate-700\/30 { border-color: rgba(127,102,82,0.14) !important; }
 
   /* Textos claros (para fondos oscuros) → ink cálido en modo claro */
   html.light .text-slate-100,
@@ -386,24 +377,16 @@
   html.light .text-slate-600    { color: #2a2a28 !important; }
   html.light .text-slate-700    { color: #0b0b0b !important; }
 
-  /* hover:text-* en modo claro */
-  html.light .hover\:text-white:hover     { color: #0b0b0b !important; }
-  html.light .hover\:text-slate-300:hover { color: #0b0b0b !important; }
-  html.light .hover\:text-slate-400:hover { color: #6b6b66 !important; }
-
   /* Hover states de botones/tabs con fondo oscuro */
   html.light .hover\:bg-slate-700:hover  { background-color: #e8e5dd !important; }
   html.light .hover\:bg-slate-800:hover  { background-color: #f2efe7 !important; }
   html.light .hover\:bg-slate-600:hover  { background-color: #e8e5dd !important; }
-  html.light .hover\:bg-white\/5:hover   { background-color: rgba(160,120,80,0.06) !important; }
   html.light .hover\:bg-white\/10:hover  { background-color: rgba(160,120,80,0.09) !important; }
 
   /* Ring/focus states */
-  html.light .ring-slate-700,
-  html.light .ring-slate-800    { --tw-ring-color: rgba(127,102,82,0.4) !important; }
+  html.light .ring-slate-700    { --tw-ring-color: rgba(127,102,82,0.4) !important; }
 
   /* Divide lines */
-  html.light .divide-slate-700 > * + *,
   html.light .divide-slate-800 > * + * { border-color: rgba(127,102,82,0.18) !important; }
 
   /* Input/select dark backgrounds en páginas */
@@ -415,9 +398,8 @@
     border-color: rgba(127,102,82,0.28) !important;
   }
 
-  /* border-slate-700/30, /20, /40, /60 — divisores de filas y secciones */
+  /* border-slate-700/30, /40, /60 — divisores de filas y secciones */
   html.light .border-slate-700\/30,
-  html.light .border-slate-700\/20,
   html.light .border-slate-700\/40,
   html.light .border-slate-700\/60 { border-color: rgba(127,102,82,0.16) !important; }
 
@@ -430,8 +412,7 @@
   html.light .bg-slate-800\/50  { background-color: rgba(160,120,80,0.09) !important; }
 
   /* bg-black — backdrop de modales */
-  html.light .bg-black\/70,
-  html.light .bg-black\/80 { background-color: rgba(40,32,24,0.42) !important; }
+  html.light .bg-black\/70 { background-color: rgba(40,32,24,0.42) !important; }
 
   /* hover:text-white en contexto light */
   html.light .hover\:text-white:hover { color: var(--dax-text) !important; }

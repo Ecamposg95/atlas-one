@@ -35,7 +35,7 @@ plan). El `PUT /api/organization/` de la tienda lo descarta. La tienda lo ve al 
 | POS | descuentos, botón Cliente, dólares, editar producto, forzar precio por pieza (el alta usa el formulario único en todos los perfiles; en básico sale corto por `campos_producto`) | `pages/pos/opcionesPos.ts` |
 | Formulario de producto | marca, descripción, unidad, foto, tasa de IVA, empaques, tallas (y la matriz con una sola sucursal) | `app/modules/products/campos.py` (`OCULTOS_BASICO`) |
 | Productos | importador, plantilla, etiquetas CSV, generar códigos, rejilla | `pages/inventory/Products.tsx`, `components/branch/ProductsBranchView.tsx` |
-| Inicio y Reportes de la dueña | `/hq/operations` → `hq/Inicio` con solo las secciones de hoy (pide `completo=false`: no se mueve, pendientes, sucursales y utilidad no se consultan); `/hq/reports-hub` → `finance/Reports` | `pages/hq/Inicio.tsx` (`perfilUi`), `App.tsx` (`<PorPerfil>`) |
+| Inicio y Reportes de la dueña | `/hq/operations` → `hq/Inicio` con solo las secciones de hoy (pide `completo=false`: no se mueve, pendientes, sucursales y utilidad no se consultan); `/hq/reports-hub` → `reports/Reportes` (la misma pantalla que en completo; el selector de sucursal solo aparece con más de una) | `pages/hq/Inicio.tsx` (`perfilUi`; en básico no monta `InicioGraficas`) |
 | Empresa | logo, dólares, comisión y lo boutique del ticket bajo "Más opciones"; aparece el tope de "Se está acabando" | `pages/core/Organization.tsx` (`<MasOpciones>`) |
 
 Un dato que ya existe (una marca, un descuento de un ticket pausado) se sigue viendo.

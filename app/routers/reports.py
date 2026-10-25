@@ -68,6 +68,8 @@ def get_daily_summary(
         "gross_revenue": r.bruta,
         "returns_total": r.devuelto,
         "returns_count": r.devoluciones,
+        # `gross_profit` de este endpoint es el contrato A-8 (suma lo sin costo con costo 0);
+        # el de `/dashboard` es solo sobre renglones con costo. No son comparables entre sí.
         "gross_profit": round(utilidad + sin_costo, 2),
         "payments": {k: m.total for k, m in mv.por_metodo(db, ambito, periodo).items()},
         "top_selling_items": [{"name": p.nombre, "quantity": p.cantidad}
@@ -237,6 +239,15 @@ def get_dashboard_stats(
         for st in (DocumentStatus.PENDING, DocumentStatus.DRAFT)
     }
 
+    # 1b. Utilidad bruta del periodo y del anterior: solo renglones con costo, menos lo
+    # devuelto por el costo de su variante (metricas_ventas.utilidad_bruta). Quien no ve
+    # costos (gerente) recibe None en los cuatro.
+    utilidad = utilidad_prev = sin_costo = con_costo = None
+    if mv.ve_costos(current_user):
+        utilidad, sin_costo = mv.utilidad_bruta(db, ambito, periodo)
+        con_costo = mv.venta_con_costo(db, ambito, periodo)
+        utilidad_prev, _ = mv.utilidad_bruta(db, ambito, periodo.anterior())
+
     # 2. Tendencia por día de México (antes agrupaba por día UTC)
     dias = mv.por_dia(db, ambito, periodo)
     dias_prev = mv.por_dia(db, ambito, periodo.anterior())
@@ -248,8 +259,8 @@ def get_dashboard_stats(
     # 4. Cobros por método, netos de vuelto y devoluciones
     metodos = {k: {"total": m.total, "count": m.tickets} for k, m in mv.por_metodo(db, ambito, periodo).items()}
 
-    # 5. Top productos del periodo (base mixta: KPIs netos, desgloses brutos; Fase 2 decide)
-    top = mv.top_productos(db, ambito, periodo, limite=5)
+    # 5. Top productos del periodo, por piezas, con su importe (Reportes pinta hasta 10)
+    top = mv.top_productos(db, ambito, periodo, limite=10)
 
     # 6. Alertas de inventario — el tope es el de la empresa (SP6, umbral único).
     umbral = umbral_poca_existencia(db, org_id)
@@ -330,6 +341,13 @@ def get_dashboard_stats(
             "prev_orders": anterior.tickets,
             "prev_avg_ticket": anterior.ticket_promedio,
             "prev_returns": anterior.devuelto,
+            # OJO: aquí `gross_profit` es SOLO sobre renglones con costo (los sin costo van
+            # en `sales_without_cost`); en `/daily-summary` es el contrato A-8, que suma
+            # la línea sin costo con costo 0. Mismo nombre, dos significados.
+            "gross_profit": utilidad,
+            "prev_gross_profit": utilidad_prev,
+            "sales_without_cost": sin_costo,
+            "sales_with_cost": con_costo,
         },
         "charts": {
             "trend": {"labels": etiquetas, "data": [d.neta for d in dias]},
@@ -339,7 +357,7 @@ def get_dashboard_stats(
             "heatmap": heatmap_list,
         },
         "top_products": [
-            {"name": p.nombre, "qty": p.cantidad, "trend": top_product_trends.get(p.nombre, [])} for p in top
+            {"name": p.nombre, "qty": p.cantidad, "total": p.total, "trend": top_product_trends.get(p.nombre, [])} for p in top
         ],
         "low_stock": [
             {"name": _describe_name(p.name, p.variant_name), "sku": p.sku or "", "stock": float(p.qty_on_hand)}

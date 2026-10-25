@@ -11,6 +11,7 @@ import { formatCurrency } from '../../utils/currency'
  * importado sin costos nunca se lea como "mi tienda vale $0". Con el costo
  * completo, la cifra grande es el costo (lo invertido) y la venta queda al
  * lado. `valorCosto === null` = el rol no ve costos (gerente): venta y piezas.
+ * Solo tokens `dax-*` (Fase 2, spec 2026-10-23 §3.4).
  */
 export interface ValorTiendaCardProps {
   valorVenta: number
@@ -37,41 +38,41 @@ export function ValorTiendaCard({
 
   return (
     <section
-      className="dax-card p-5 rounded-2xl border-t-2 border-t-amber-500/50 relative overflow-hidden"
+      className="dax-card p-5 rounded-2xl border-t-2 border-t-dax-accent relative overflow-hidden"
       aria-label="Valor de la tienda"
       data-testid="valor-tienda"
     >
       <div className="flex justify-between items-start gap-2 mb-1">
-        <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Valor de la tienda</p>
-        <Link to="/hq/valor-inventario" className="text-[10px] font-bold text-amber-400 hover:underline whitespace-nowrap max-md:inline-flex max-md:items-center max-md:min-h-[44px]">
+        <p className="dax-section-title">Valor de la tienda</p>
+        <Link to="/hq/valor-inventario" className="text-[10px] font-bold text-dax-accent-text hover:underline whitespace-nowrap max-md:inline-flex max-md:items-center max-md:min-h-[44px]">
           Ver desglose →
         </Link>
       </div>
       {error ? (
-        <p className="text-sm text-rose-300">{error}</p>
+        <p className="text-sm text-dax-danger">{error}</p>
       ) : cargando ? (
-        <p className="text-sm text-slate-500">Calculando…</p>
+        <p className="text-sm text-dax-faint">Calculando…</p>
       ) : (
         <>
-          <p className="text-[9px] uppercase tracking-wider text-slate-500">{etiquetaPrincipal}</p>
-          <h2 className="text-2xl md:text-3xl font-bold text-white tabular-nums" data-testid="valor-principal">
+          <p className="dax-kpi-label">{etiquetaPrincipal}</p>
+          <h2 className="text-2xl md:text-3xl font-bold text-dax-text tabular-nums" data-testid="valor-principal">
             {formatCurrency(principal)}
           </h2>
           <div className="mt-1 flex flex-wrap justify-between gap-x-3 gap-y-1 text-xs font-mono">
-            <span className="text-slate-400">{piezasTxt(piezas)}</span>
+            <span className="text-dax-muted">{piezasTxt(piezas)}</span>
             {valorCosto !== null && !costoPrincipal && (
-              <span className="text-slate-400">
-                A costo: <span className="text-white font-bold tabular-nums" data-testid="valor-costo">{formatCurrency(valorCosto)}</span>
+              <span className="text-dax-muted">
+                A costo: <span className="text-dax-text font-bold tabular-nums" data-testid="valor-costo">{formatCurrency(valorCosto)}</span>
               </span>
             )}
             {costoPrincipal && (
-              <span className="text-slate-400">
-                A venta: <span className="text-white font-bold tabular-nums" data-testid="valor-venta">{formatCurrency(valorVenta)}</span>
+              <span className="text-dax-muted">
+                A venta: <span className="text-dax-text font-bold tabular-nums" data-testid="valor-venta">{formatCurrency(valorVenta)}</span>
               </span>
             )}
           </div>
           {costoIncompleto && valorCosto !== null && (
-            <p className="mt-1 text-[10px] font-bold text-amber-400" role="status">
+            <p className="mt-1 text-[10px] font-bold text-dax-warning" role="status">
               {piezasTxt(piezasSinCosto)} sin costo ({skusSinCosto} {skusSinCosto === 1 ? 'SKU' : 'SKUs'}): el valor a costo está incompleto.
             </p>
           )}

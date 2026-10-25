@@ -2,7 +2,11 @@ import client from './client'
 
 export interface DashboardData {
   kpis: {
+    /** Venta NETA del periodo (cobradas − devoluciones aprobadas). */
     sales: number
+    gross_sales?: number
+    returns?: number
+    returns_count?: number
     orders: number
     avg_ticket: number
     pending: number
@@ -10,10 +14,17 @@ export interface DashboardData {
     total_products: number
     transit_shipments: number
     unique_skus_sold?: number
-    // Previous-period comparatives (added 2026-04 for ultra redesign).
+    // Comparativo del periodo anterior (mismo largo).
     prev_sales?: number
     prev_orders?: number
     prev_avg_ticket?: number
+    prev_returns?: number
+    /** Utilidad bruta solo sobre renglones con costo; null para roles sin costos (gerente). */
+    gross_profit?: number | null
+    prev_gross_profit?: number | null
+    /** Lo vendido en renglones sin costo (fuera de la utilidad). */
+    sales_without_cost?: number | null
+    sales_with_cost?: number | null
   }
   charts: {
     trend: { labels: string[]; data: number[] }
@@ -24,8 +35,8 @@ export interface DashboardData {
     // day: 0=Sunday ... 6=Saturday (PostgreSQL extract(dow)).
     heatmap?: { day: number; hour: number; amount: number; tickets: number }[]
   }
-  // `trend` (optional): daily unit-qty series aligned to the date range.
-  top_products: { name: string; qty: number; trend?: number[] }[]
+  // `total` = importe (Fase 2); `trend` (opcional): piezas por día alineadas al rango.
+  top_products: { name: string; qty: number; total?: number; trend?: number[] }[]
   low_stock: { name: string; sku: string; stock: number }[]
   recent_sales: { folio: string; total: number; time: string; customer: string }[]
 }
@@ -139,7 +150,9 @@ export interface ValuacionInventario {
 export interface PeriodoVentas {
   desde: string
   hasta: string
+  /** Venta NETA: cobradas menos devoluciones aprobadas del periodo. */
   total: number
+  devuelto: number
   tickets: number
 }
 
@@ -190,10 +203,30 @@ export interface DiferenciaCaja {
 export interface SucursalInicio {
   branch_id: number
   nombre: string
+  /** Neta. */
   ventas_hoy: number
+  devuelto_hoy: number
   tickets_hoy: number
   corte: CorteInicio
   poca_existencia: number
+}
+
+export interface DiaTendencia {
+  fecha: string
+  neta: number
+  tickets: number
+}
+
+/** Hoy y los 6 anteriores (`dias`) y los 7 previos (`anterior`), netos, día de México. */
+export interface Tendencia {
+  dias: DiaTendencia[]
+  anterior: DiaTendencia[]
+}
+
+export interface HoraInicio {
+  hora: number
+  neta: number
+  tickets: number
 }
 
 /** GET /reports/inicio (SP6). Las secciones nuevas solo llegan con `completo: true`; en básico son null. */
@@ -215,6 +248,14 @@ export interface Inicio {
   utilidad_bruta_hoy: number | null
   /** Lo vendido hoy en renglones sin costo (fuera de la utilidad). */
   venta_sin_costo_hoy: number | null
+  /** Base de la utilidad: importe bruto de los renglones con costo (la misma de `kpis.sales_with_cost` de Reportes). */
+  venta_con_costo_hoy: number | null
+  /** Fase 2: solo con `completo: true` (el Inicio básico no pinta gráficas); null en básico. */
+  tendencia: Tendencia | null
+  /** 24 horas de hoy; el frontend recorta la ventana con `recortarHoras`. */
+  por_hora_hoy: HoraInicio[] | null
+  /** Para la variación de la utilidad de hoy; null sin `completo` o sin costos. */
+  utilidad_bruta_ayer: number | null
 }
 
 export const reportsApi = {

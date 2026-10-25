@@ -2,20 +2,16 @@ import { useMemo, useState } from 'react'
 import { formatCurrency } from '../../utils/currency'
 
 /**
- * SalesHeatmap — weekday × hour grid with green intensity.
- *
- * PostgreSQL convention: day 0=Sunday ... 6=Saturday. We re-order so Mon
- * sits at the top (matches es-MX calendar ergonomics). Hours default to
- * 8h..21h to mirror the backend business-hours window.
- *
- * Color scale is eyeballed from `bg-emerald-500` with progressive alpha,
- * NOT computed at runtime — keeps Tailwind's JIT happy. We bucket each
- * cell's `amount / max` into 5 discrete intensities.
+ * SalesHeatmap — rejilla día de la semana × hora (spec 2026-10-23 §3.2),
+ * pintada con el verde del tema: la intensidad es `amount / max` en cinco
+ * escalones de `color-mix(var(--dax-success) N%)`, así se repinta sola en
+ * claro y oscuro. Convención de PostgreSQL: day 0 = domingo … 6 = sábado;
+ * aquí el lunes va arriba. La ventana de horas la decide quien llama
+ * (`recortarHoras` del kit); por defecto 9..21.
  */
-
 export interface HeatmapCell {
-  day: number // 0..6 (0=Sunday)
-  hour: number // 0..23
+  day: number   // 0..6 (0 = domingo)
+  hour: number  // 0..23
   amount: number
   tickets: number
 }
@@ -26,24 +22,28 @@ interface Props {
   hourEnd?: number
 }
 
-// Order that puts Monday first (L, M, X, J, V, S, D).
 const WEEK_ORDER_PG = [1, 2, 3, 4, 5, 6, 0]
 const WEEK_LABELS = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
+const WEEK_CORTO = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 const WEEK_LONG = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
 
-// Pre-baked Tailwind classes (no runtime interpolation — JIT-safe).
-const INTENSITY_CLASSES = [
-  'bg-slate-800/30',
-  'bg-emerald-500/20',
-  'bg-emerald-500/40',
-  'bg-emerald-500/60',
-  'bg-emerald-500/80',
-  'bg-emerald-500',
-]
+/** Porcentaje del verde del tema por escalón (0 = sin venta). */
+export const INTENSIDAD = [0, 20, 40, 60, 80, 100]
 
-export function SalesHeatmap({ data, hourStart = 8, hourEnd = 21 }: Props) {
+export function escalon(ratio: number): number {
+  if (!(ratio > 0)) return 0
+  if (ratio < 0.2) return 1
+  if (ratio < 0.4) return 2
+  if (ratio < 0.6) return 3
+  if (ratio < 0.8) return 4
+  return 5
+}
+
+const fondo = (pct: number) => `color-mix(in srgb, var(--dax-success) ${pct}%, transparent)`
+
+export function SalesHeatmap({ data, hourStart = 9, hourEnd = 21 }: Props) {
   const hours = useMemo(
-    () => Array.from({ length: hourEnd - hourStart + 1 }, (_, i) => hourStart + i),
+    () => Array.from({ length: Math.max(0, hourEnd - hourStart + 1) }, (_, i) => hourStart + i),
     [hourStart, hourEnd],
   )
 
@@ -51,8 +51,7 @@ export function SalesHeatmap({ data, hourStart = 8, hourEnd = 21 }: Props) {
     const map = new Map<string, HeatmapCell>()
     let max = 0
     for (const c of data) {
-      const key = `${c.day}-${c.hour}`
-      map.set(key, c)
+      map.set(`${c.day}-${c.hour}`, c)
       if (c.amount > max) max = c.amount
     }
     return { cells: map, maxAmount: max }
@@ -68,33 +67,29 @@ export function SalesHeatmap({ data, hourStart = 8, hourEnd = 21 }: Props) {
             <tr>
               <th className="w-6" />
               {hours.map((h) => (
-                <th key={h} className="text-[9px] font-mono font-bold text-slate-600 text-center">
-                  {h}
-                </th>
+                <th key={h} className="text-[9px] font-mono font-bold text-dax-faint text-center">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {WEEK_ORDER_PG.map((pgDay, rowIdx) => (
               <tr key={pgDay}>
-                <td className="text-[10px] font-bold text-slate-500 pr-1 w-6 text-right align-middle">
-                  {WEEK_LABELS[rowIdx]}
-                </td>
+                <td className="text-[10px] font-bold text-dax-muted pr-1 w-6 text-right align-middle">{WEEK_LABELS[rowIdx]}</td>
                 {hours.map((h) => {
                   const c = cells.get(`${pgDay}-${h}`)
                   const amt = c?.amount ?? 0
-                  const ratio = maxAmount > 0 ? amt / maxAmount : 0
-                  const bucket = ratio === 0
-                    ? 0
-                    : ratio < 0.2 ? 1
-                    : ratio < 0.4 ? 2
-                    : ratio < 0.6 ? 3
-                    : ratio < 0.8 ? 4
-                    : 5
+                  const pct = INTENSIDAD[escalon(maxAmount > 0 ? amt / maxAmount : 0)]
+                  const tickets = c?.tickets ?? 0
+                  const descripcion = `${WEEK_CORTO[rowIdx]} ${h}:00 · ${formatCurrency(amt)} · ${tickets} ${tickets === 1 ? 'ticket' : 'tickets'}`
                   return (
                     <td
                       key={`${pgDay}-${h}`}
-                      className={`relative h-6 rounded-sm ${INTENSITY_CLASSES[bucket]} cursor-pointer transition-all duration-200 hover:ring-2 hover:ring-emerald-300 hover:scale-110`}
+                      title={descripcion}
+                      aria-label={descripcion}
+                      data-testid={`celda-${pgDay}-${h}`}
+                      data-intensidad={pct}
+                      className={`relative h-6 rounded-sm cursor-pointer transition-all duration-200 hover:ring-2 hover:ring-dax-accent ${pct === 0 ? 'bg-dax-elevated' : ''}`}
+                      style={pct > 0 ? { background: fondo(pct) } : undefined} /* estilo dinámico: la intensidad es el dato */
                       onMouseEnter={() => setHover({ dayIdx: rowIdx, hour: h, amount: amt, tickets: c?.tickets ?? 0 })}
                       onMouseLeave={() => setHover(null)}
                     />
@@ -107,20 +102,21 @@ export function SalesHeatmap({ data, hourStart = 8, hourEnd = 21 }: Props) {
       </div>
 
       <div className="mt-3 flex items-center justify-end gap-1.5">
-        <span className="text-[9px] font-bold uppercase tracking-wider text-slate-600">Menos</span>
-        {INTENSITY_CLASSES.map((cls, i) => (
-          <div key={i} className={`h-2 w-4 rounded-sm ${cls}`} />
+        <span className="text-[9px] font-bold uppercase tracking-wider text-dax-faint">Menos</span>
+        {INTENSIDAD.map((pct) => (
+          <div key={pct} className={`h-2 w-4 rounded-sm ${pct === 0 ? 'bg-dax-elevated' : ''}`}
+            style={pct > 0 ? { background: fondo(pct) } : undefined} /* estilo dinámico: la leyenda repite los escalones */ />
         ))}
-        <span className="text-[9px] font-bold uppercase tracking-wider text-slate-600">Más</span>
+        <span className="text-[9px] font-bold uppercase tracking-wider text-dax-faint">Más</span>
       </div>
 
       {hover && (
-        <div className="pointer-events-none absolute top-0 right-0 bg-slate-950/95 border border-emerald-500/40 rounded-lg px-3 py-2 shadow-lg shadow-emerald-500/10 z-10">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+        <div role="tooltip" className="pointer-events-none absolute top-0 right-0 bg-dax-card border border-dax-border rounded-lg px-3 py-2 shadow-lg z-10">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-dax-success">
             {WEEK_LONG[hover.dayIdx]} · {hover.hour}:00
           </p>
-          <p className="text-sm font-black tabular-nums text-white">{formatCurrency(hover.amount)}</p>
-          <p className="text-[10px] text-slate-400">{hover.tickets} {hover.tickets === 1 ? 'ticket' : 'tickets'}</p>
+          <p className="text-sm font-black tabular-nums text-dax-text">{formatCurrency(hover.amount)}</p>
+          <p className="text-[10px] text-dax-muted">{hover.tickets} {hover.tickets === 1 ? 'ticket' : 'tickets'}</p>
         </div>
       )}
     </div>

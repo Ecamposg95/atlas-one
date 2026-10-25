@@ -147,9 +147,31 @@ class SucursalInicio(BaseModel):
     poca_existencia: int     # variantes ≤ umbral en esa sucursal
 
 
+class DiaTendencia(BaseModel):
+    fecha: date
+    neta: float      # cobradas − devoluciones aprobadas de ese día (día de México)
+    tickets: int
+
+
+class Tendencia(BaseModel):
+    dias: List[DiaTendencia]       # hoy y los 6 anteriores, en orden
+    anterior: List[DiaTendencia]   # los 7 días previos a `dias`, en orden
+
+
+class HoraInicio(BaseModel):
+    hora: int        # 0..23, hora de México
+    neta: float
+    tickets: int
+
+
 class InicioResponse(InicioBasicoResponse):
     sin_movimiento: Optional[SinMovimiento] = None
     pendientes: Optional[Pendientes] = None
     sucursales: Optional[List[SucursalInicio]] = None   # None = una sola sucursal o ámbito de una
     utilidad_bruta_hoy: Optional[float] = None          # None = sin `completo` o rol sin costos; SOLO renglones con costo
     venta_sin_costo_hoy: Optional[float] = None         # lo vendido hoy en renglones sin costo (fuera de la utilidad)
+    venta_con_costo_hoy: Optional[float] = None         # base de la utilidad: importe de renglones con costo (igual que `kpis.sales_with_cost` de Reportes)
+    # Fase 2 (spec §3.1): solo con `completo=true`; el Inicio básico no pinta gráficas y no las paga.
+    tendencia: Optional[Tendencia] = None
+    por_hora_hoy: Optional[List[HoraInicio]] = None     # 24 renglones; el frontend recorta la ventana
+    utilidad_bruta_ayer: Optional[float] = None         # para la variación de la utilidad de hoy; None sin costos

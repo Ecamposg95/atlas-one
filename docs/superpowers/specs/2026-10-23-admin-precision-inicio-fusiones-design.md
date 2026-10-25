@@ -1,6 +1,6 @@
 # Vista del administrador: precisión, Inicio con gráficas y fusiones — diseño
 
-**Fecha:** 2026-10-23 · **Estado:** fase 1 implementada en `feat/admin-metricas-ventas`, pendiente de fusión ·
+**Fecha:** 2026-10-23 · **Estado:** fases 1 y 2 implementadas (fase 2 en `feat/admin-fase2-inicio-reportes`, pendiente de fusión); fase 3 (fusiones y menú) pendiente ·
 **Caso guía:** Eleven Fashion (org 17, una sucursal, ULTRA+) y las orgs FREE de una sucursal
 (Kaory, Coqueta, Imaltzin). **Quién lo usa:** ADMINISTRADOR y DUEÑO en escritorio; cajera y
 gerente heredan las pantallas fusionadas.

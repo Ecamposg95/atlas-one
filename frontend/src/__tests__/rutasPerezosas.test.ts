@@ -8,6 +8,9 @@ import { describe, it, expect } from 'vitest'
 const PEREZOSOS: Record<string, () => Promise<Record<string, unknown>>> = {
   MobileLayout: () => import('../components/layout/MobileLayout'),
   NotFoundPage: () => import('../pages/NotFound'),
+  // Fase 2 del admin: las gráficas del Inicio solo bajan en perfil completo.
+  InicioGraficas: () => import('../pages/hq/InicioGraficas'),
+  Reportes: () => import('../pages/reports/Reportes'),
   // Añadir aquí cada módulo que salga del chunk de entrada en esta tarea.
 }
 
