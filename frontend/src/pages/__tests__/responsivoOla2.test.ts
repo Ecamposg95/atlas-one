@@ -2,11 +2,11 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-/** Pantallas de la ola 2 del responsivo (catálogo y personas) y, desde SP6, todo el grupo HQ. */
+/** Pantallas de la ola 2 del responsivo (catálogo y personas) y, desde SP6, todo el grupo HQ; desde la Fase 2 del admin, Reportes. */
 export const PAGINAS = [
   'core/Brands.tsx', 'core/Departments.tsx', 'core/Users.tsx', 'crm/Customers.tsx', 'inventory/Inventory.tsx',
   'hq/HQInventory.tsx', 'inventory/Products.tsx', 'core/AdminCatalog.tsx', 'hq/Inicio.tsx',
-  'hq/HQReportsHub.tsx', 'hq/HQSalesLog.tsx', 'hq/HQReturns.tsx', 'hq/HQBranches.tsx', 'hq/HQValorInventario.tsx',
+  'reports/Reportes.tsx', 'hq/HQSalesLog.tsx', 'hq/HQReturns.tsx', 'hq/HQBranches.tsx', 'hq/HQValorInventario.tsx',
 ]
 /** Tienen tarjetas propias y no usan TarjetaFila (HQValorInventario las delega en `components/reports/DistribucionValor`). */
 export const SIN_TARJETA_FILA: string[] = ['core/AdminCatalog.tsx', 'hq/HQValorInventario.tsx']

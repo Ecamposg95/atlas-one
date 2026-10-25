@@ -12,7 +12,6 @@ const _savedTheme = localStorage.getItem('atlas_theme') ?? 'dark'
 document.documentElement.classList.add(_savedTheme)
 import { Layout } from './components/layout/Layout'
 import { RequireRole, RutaPorRol } from './components/layout/RequireRole'
-import { PorPerfil } from './components/layout/PorPerfil'
 
 import { LoginPage } from './pages/Login'
 
@@ -25,7 +24,8 @@ const MobileLayout = lazy(() => import('./components/layout/MobileLayout').then(
 const NotFoundPage = lazy(() => import('./pages/NotFound').then(m => ({ default: m.NotFoundPage })))
 
 // HQ / Admin
-const HQReportsHub    = lazy(() => import('./pages/hq/HQReportsHub').then(m => ({ default: m.HQReportsHub })))
+// Reportes (Fase 2 del admin): una sola pantalla para HQ y sucursal; chart.js va en su chunk, no en el de entrada.
+const Reportes        = lazy(() => import('./pages/reports/Reportes').then(m => ({ default: m.Reportes })))
 const HQSalesLog      = lazy(() => import('./pages/hq/HQSalesLog').then(m => ({ default: m.HQSalesLog })))
 const HQReturns       = lazy(() => import('./pages/hq/HQReturns').then(m => ({ default: m.HQReturns })))
 const HQInventory     = lazy(() => import('./pages/hq/HQInventory').then(m => ({ default: m.HQInventory })))
@@ -67,7 +67,6 @@ const Seguimiento     = lazy(() => import('./pages/sales/Seguimiento').then(m =>
 // Finance
 const Purchases       = lazy(() => import('./pages/finance/Purchases').then(m => ({ default: m.Purchases })))
 const Expenses        = lazy(() => import('./pages/finance/Expenses').then(m => ({ default: m.Expenses })))
-const Reports         = lazy(() => import('./pages/finance/Reports').then(m => ({ default: m.Reports })))
 const CashHistory     = lazy(() => import('./pages/finance/CashHistory').then(m => ({ default: m.CashHistory })))
 
 // Inventory
@@ -274,9 +273,9 @@ export default function App() {
 
           {/* HQ */}
           <Route path="hq">
-            {/* Modo básico (FREE): Inicio corto y los Reportes de la cajera; las de paga, lo de siempre. */}
+            {/* Inicio: la misma pantalla en básico y completo (decide con perfilUi). Reportes: una para todos; aquí con selector de sucursal. */}
             <Route path="operations" element={<RutaPorRol url="/hq/operations"><Suspense fallback={<PageLoader />}><Inicio /></Suspense></RutaPorRol>} />
-            <Route path="reports-hub" element={<RutaPorRol url="/hq/reports-hub"><Suspense fallback={<PageLoader />}><PorPerfil basico={<Reports />} completo={<HQReportsHub />} /></Suspense></RutaPorRol>} />
+            <Route path="reports-hub" element={<RutaPorRol url="/hq/reports-hub"><Suspense fallback={<PageLoader />}><Reportes conSucursales /></Suspense></RutaPorRol>} />
             <Route path="sales" element={<RutaPorRol url="/hq/sales"><Suspense fallback={<PageLoader />}><HQSalesLog /></Suspense></RutaPorRol>} />
             <Route path="returns" element={<RutaPorRol url="/hq/returns"><Suspense fallback={<PageLoader />}><HQReturns /></Suspense></RutaPorRol>} />
             <Route path="inventory" element={<RutaPorRol url="/hq/inventory"><Suspense fallback={<PageLoader />}><HQInventory /></Suspense></RutaPorRol>} />
@@ -337,7 +336,7 @@ export default function App() {
           {/* Finanzas */}
           <Route path="purchases"    element={<RutaPorRol url="/purchases"><Suspense fallback={<PageLoader />}><Purchases /></Suspense></RutaPorRol>} />
           <Route path="expenses"     element={<RutaPorRol url="/expenses"><Suspense fallback={<PageLoader />}><Expenses /></Suspense></RutaPorRol>} />
-          <Route path="reports"      element={<RutaPorRol url="/reports"><Suspense fallback={<PageLoader />}><Reports /></Suspense></RutaPorRol>} />
+          <Route path="reports"      element={<RutaPorRol url="/reports"><Suspense fallback={<PageLoader />}><Reportes /></Suspense></RutaPorRol>} />
           <Route path="cash-history" element={<RutaPorRol url="/cash-history"><Suspense fallback={<PageLoader />}><CashHistory /></Suspense></RutaPorRol>} />
 
           {/* Inventario */}

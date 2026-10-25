@@ -28,7 +28,7 @@ Tres árboles bajo `<BrowserRouter>`:
 **Roles tenant:** `ADMINISTRADOR`, `DUEÑO` (HQ, ven todo), `GERENTE`, `CAJERO` (sucursal), `VENDEDOR` (móvil), `SOPORTE_OPERATIVO`, `CLIENTE` (portal). **Platform:** `SUPERADMIN`, `SUPPORT` (via `platform_role`).
 
 ### Tema
-Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.light`/`.dark` en `<html>`. La app arranca en oscuro; un shim `html.light` con `!important` remapea las clases `slate/white` hardcodeadas. **La mayoría de vistas son dark-first**; las que respetan el tema claro de verdad son pocas (Reports, HQReportsHub, MobileOwnerDashboard). El panel Platform usa su propio tema (`platform-v2.css`, tokens `--p-*`).
+Tokens CSS `--dax-*` + clases `.dax-*` en `index.css`, modo claro/oscuro por `.light`/`.dark` en `<html>`. La app arranca en oscuro; un shim `html.light` con `!important` remapea las clases `slate/white` hardcodeadas. **La mayoría de vistas son dark-first**; las que respetan el tema de verdad son pocas: desde la Fase 2 del admin (2026-10-24) el Inicio, Reportes y el kit `components/graficas` se pintan solo con tokens `dax-*` (guardia `src/__tests__/coloresPorTokens.test.ts`), más MobileOwnerDashboard. El panel Platform usa su propio tema (`platform-v2.css`, tokens `--p-*`).
 
 ### Stores (Zustand, `store/`)
 - `authStore` — user, token, org, branch, `hydrated`, `platform_role`.
@@ -55,8 +55,8 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 | `/quotes`, `/quotes/new` | `sales/Quotes`, `QuoteMaker` | Admin, Dueño | quotes |
 | `/returns` | `sales/Returns` | Gerente, Cajero | returns |
 | `/seguimiento` | `sales/Seguimiento` | Admin, Dueño | quotes |
-| `/hq/operations` | `hq/Inicio` (básico y completo: misma pantalla, menos secciones en básico) | Admin, Dueño | pos |
-| `/hq/reports-hub` | `hq/HQReportsHub` · en modo básico `finance/Reports` | Admin, Dueño | pos |
+| `/hq/operations` | `hq/Inicio` (básico y completo: misma pantalla; en completo monta las cuatro gráficas de `hq/InicioGraficas` con `lazy()`) | Admin, Dueño | pos |
+| `/hq/reports-hub` | `reports/Reportes` (con selector de sucursal; básico y completo) | Admin, Dueño | pos |
 | `/hq/sales` | `hq/HQSalesLog` | Admin, Dueño | pos |
 | `/hq/returns` | `hq/HQReturns` | Admin, Dueño | returns |
 | `/hq/inventory` | `hq/HQInventory` | Admin | inventory |
@@ -71,7 +71,7 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 | `/departments`, `/brands` | `core/Departments`, `Brands` | Admin | catalog (hideForGastro) |
 | `/cash-history` | `finance/CashHistory` | Gerente, Cajero | cash_management |
 | `/expenses`, `/purchases` | `finance/Expenses`, `Purchases` | Admin, Dueño | payments |
-| `/reports` | `finance/Reports` | Gerente | — |
+| `/reports` | `reports/Reportes` (fijado a la sucursal del usuario) | Gerente | — |
 | `/customers` | `crm/Customers` | Admin, Dueño | crm |
 | `/hr`, `/hr/me` | `hr/HR`, `HRMe` | Admin / todos | — |
 | `/portal` | `portal/Portal` | Cliente | — |
@@ -239,16 +239,17 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 > **SP6 (2026-10-21, `docs/superpowers/specs/2026-10-21-sp6-vista-dueno-design.md`):** el grupo HQ se rediseñó a partir de las 8 preguntas del dueño; cada pantalla responde a una. Las pantallas Operaciones, Control y Detalle de sucursal desaparecieron. Guardias: `pages/__tests__/hqSinEstilosInline.test.ts` (sin `style={{` en `pages/hq`, salvo líneas `estilo dinámico`), `responsivoOla2.test.ts` (todo HQ con `useEsTelefono`, `CabeceraPagina`, `TarjetaFila`), `overlaysFueraDelKit.test.ts` (cero overlays a mano en HQ).
 
 ### `/hq/operations` — Inicio ("¿Cómo voy?") 📱
-- **Archivo:** `pages/hq/Inicio.tsx` (chunk propio, sin chart.js). Es la misma pantalla en básico y en completo: espera `enabledModulesStore.loaded` y decide con `perfilUi`.
-- **Propósito:** responder las preguntas del dueño al entrar. Secciones: 1 vendido hoy/ayer/7 días y cobros de hoy (+ utilidad bruta de hoy en completo) · 2 caja · 8 pendientes (devoluciones por aprobar, turnos abiertos > 24 h, cortes que no cuadraron en 7 días) · 4 se está acabando (tope de Empresa) · 6 lo más vendido · 5 no se mueve (sin venta en 30 días, importe parado) · 7 sucursales (solo con más de una que vende) · 3 valor de la tienda (`ValorTiendaCard`). En básico solo 1, 2, 3, 4 y 6.
-- **Datos/API:** `reportsApi.inicio({ completo: !modoBasico })` (`GET /reports/inicio`) y `reportsApi.valorInventario`.
+- **Archivo:** `pages/hq/Inicio.tsx` (chunk propio, sin chart.js) + `pages/hq/InicioGraficas.tsx` (las cuatro gráficas, cargado con `lazy()` solo en perfil completo). Es la misma pantalla en básico y en completo: espera `enabledModulesStore.loaded` y decide con `perfilUi`.
+- **Propósito:** responder las preguntas del dueño al entrar. Orden en escritorio (rejilla de 12 columnas, apilado en teléfono): 1 cifras Hoy / Ayer / 7 días / Utilidad bruta de hoy con variación (▲/▼ vs ayer, vs antier, vs semana anterior; `components/ui/KpiCard`) · 2 tendencia de 7 días (línea, la semana anterior en gris) y cómo te pagaron (dona con el total al centro + lista) · 3 ventas por hora de hoy (barras, la hora actual en acento) y caja · 4 pendientes · 5 se está acabando y lo más vendido · 6 no se mueve · 7 sucursales (barras horizontales + tarjetas; solo con más de una que vende) · valor de la tienda (`ValorTiendaCard`). En básico: cifras (solo Hoy con variación), lista de métodos, caja, se acaba, lo más vendido y valor de la tienda; **sin gráficas y sin bajar el chunk `charts`**.
+- **Datos/API:** `reportsApi.inicio({ completo: !modoBasico })` (`GET /reports/inicio`: con `completo`, `tendencia`, `por_hora_hoy`, `utilidad_bruta_ayer`) y `reportsApi.valorInventario`.
 - **Responsivo:** kit `ui/`; tablas en escritorio y `TarjetaFila` bajo 768. Filas de "se acaba"/"no se mueve" enlazan a `/hq/inventory?q=<sku>&variant=<id>`.
+- **Tema:** solo tokens `dax-*` (`coloresPorTokens.test.ts`); las gráficas leen los tokens con `useTemaGrafica` y se repintan al cambiar de tema.
 
 ### `/hq/reports-hub` — Reportes 📱
-- **Archivo:** `pages/hq/HQReportsHub.tsx`; en modo básico `PorPerfil` monta `finance/Reports`.
-- **Propósito:** siete reportes con nombre y pregunta: Resumen del periodo · Ritmo de hoy · Tendencia · Cómo me pagan · Día y hora · Sucursales (solo con > 1) · Lo más vendido. Única pantalla HQ con gráficas (chart.js).
-- **Datos/API:** `reportsApi.dashboard/commandCenterStats/salesByHour/exportCsv`, `organizationApi.getBranches`.
-- **Notas:** respeta `useTheme`. "Poca existencia" ya no está aquí (vive en el Inicio y en Existencias).
+- **Archivo:** `pages/reports/Reportes.tsx` (`<Reportes conSucursales />`; la misma pantalla que `/reports`). Sustituye a `hq/HQReportsHub.tsx` y `finance/Reports.tsx` (borrados 2026-10-24).
+- **Propósito:** periodos y comparativos (lo de hoy vive en el Inicio). Barra `Hoy · Ayer · 7 días · 30 días · Este mes` + rango a mano (`pages/reports/presetsReportes.ts`, mismos tramos que `metricas_ventas.periodo_preset`); sucursal (solo con más de una); Exportar CSV. Cifras con variación vs el periodo anterior: venta neta, tickets, ticket promedio, devoluciones (al alza en rojo), utilidad bruta (solo si algo de lo vendido tiene costo). ¿Cómo fue cada día? (línea con el periodo anterior en gris) · ¿Cómo me pagaron? (dona + lista) · ¿A qué hora vendo más? (barras, promedio por hora del periodo) · ¿Qué días y a qué horas? (`components/reports/Heatmap`, tokens) · ¿Cómo va cada sucursal? (barras horizontales, solo con selector y más de una) · ¿Qué se vendió más? (tabla con barra de proporción del importe; `TarjetaFila` en teléfono).
+- **Datos/API:** `reportsApi.dashboard` (una llamada) y, solo con selector, `reportsApi.commandCenterStats` y `organizationApi.getBranches`; `reportsApi.exportCsv`.
+- **Notas:** sin velocímetro, conteo animado ni sondeo cada 30 s. Gráficas del kit `components/graficas` (chart.js en el chunk `charts`, fuera de la ruta crítica del POS).
 
 ### `/hq/sales` — Ventas 📱
 - **Archivo:** `pages/hq/HQSalesLog.tsx`
@@ -396,11 +397,10 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Datos/API:** `purchasesApi.list/getStats/create/updateStatus/getById/receive`.
 
 ### `/reports` — Reportes 📱
-- **Archivo:** `pages/finance/Reports.tsx` (219 líneas)
-- **Propósito:** Dashboard de ventas por rango: KPIs, ventas por hora, métodos, top productos, ventas recientes.
+- **Archivo:** `pages/reports/Reportes.tsx` (`<Reportes />`, fijado a la sucursal del usuario: el backend la impone a cajera y gerente).
+- **Propósito:** la misma pantalla que `/hq/reports-hub` sin selector de sucursal ni comparativa de sucursales (no llama a `/reports/command-center/stats`).
 - **Quién la ve:** Gerente.
-- **Datos/API:** `reportsApi.dashboard`.
-- **Notas:** **Consciente del tema** (`useTheme` para la gráfica). Chart.js.
+- **Datos/API:** `reportsApi.dashboard`, `reportsApi.exportCsv`.
 
 ### `/customers` — Clientes 📱
 - **Archivo:** `pages/crm/Customers.tsx` (236 líneas)
