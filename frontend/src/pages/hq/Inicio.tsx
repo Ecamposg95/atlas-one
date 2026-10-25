@@ -6,6 +6,7 @@ import { ValorTiendaCard } from '../../components/reports/ValorTiendaCard'
 import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
 import { DaxCard } from '../../components/ui/DaxCard'
 import { KpiCard } from '../../components/ui/KpiCard'
+import { LimiteDeError } from '../../components/ui/LimiteDeError'
 import { ListaTarjetas } from '../../components/ui/ListaTarjetas'
 import { TarjetaFila } from '../../components/ui/TarjetaFila'
 import { Spinner } from '../../components/ui/Spinner'
@@ -71,12 +72,17 @@ const Th = ({ children, der }: { children: ReactNode; der?: boolean }) => (
 const cabecera = 'text-left text-[10px] uppercase tracking-widest text-dax-faint'
 const fila = 'border-t border-dax-border-dim'
 
-/** Una gráfica del módulo perezoso; solo se monta en perfil completo. */
+/** Una gráfica del módulo perezoso; solo se monta en perfil completo. Suspense cubre
+ *  la carga y LimiteDeError el fallo (chunk que no baja tras un redespliegue, red caída,
+ *  error al dibujar): una gráfica rota se queda en blanco sin tirar el Inicio ni a sus
+ *  hermanas; las cifras, la caja y las listas siguen. */
 function Grafica({ seccion, datos }: { seccion: SeccionGrafica; datos: DatosInicio }) {
   return (
-    <Suspense fallback={<p className="text-xs text-dax-faint py-10 text-center">Cargando gráfica…</p>}>
-      <InicioGraficas seccion={seccion} datos={datos} />
-    </Suspense>
+    <LimiteDeError onError={() => { /* sin gráfica; la pantalla ya tiene las cifras y las listas */ }}>
+      <Suspense fallback={<p className="text-xs text-dax-faint py-10 text-center">Cargando gráfica…</p>}>
+        <InicioGraficas seccion={seccion} datos={datos} />
+      </Suspense>
+    </LimiteDeError>
   )
 }
 
@@ -376,7 +382,7 @@ export function Inicio() {
       ) : (
         <>
           {/* 1 · Cifras */}
-          <div className={`grid grid-cols-1 sm:grid-cols-2 ${conUtilidad ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-3`}>
+          <div className={`grid grid-cols-1 ${conUtilidad ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-3'} gap-3`}>
             <KpiCard etiqueta="Hoy" valor={formatCurrency(datos.hoy.total)}
               detalle={devueltoHoy > 0 ? `${ventas(datos.hoy.tickets)} · ${formatCurrency(devueltoHoy)} devuelto` : ventas(datos.hoy.tickets)}
               variacion={conVariacion ? variacion(datos.hoy.total, datos.ayer.total, 'vs ayer') : undefined} data-testid="cifra-hoy" />

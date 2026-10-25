@@ -4,12 +4,15 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import { render, screen, cleanup, within } from '@testing-library/react'
 
-const { inicio, valorInventario } = vi.hoisted(() => ({ inicio: vi.fn(), valorInventario: vi.fn() }))
+const { inicio, valorInventario, falla } = vi.hoisted(() => ({ inicio: vi.fn(), valorInventario: vi.fn(), falla: { secciones: new Set<string>() } }))
 vi.mock('../../../api/reports', () => ({ reportsApi: { inicio, valorInventario } }))
 // El módulo perezoso de gráficas se sustituye por un marcador: aquí se prueba
 // CUÁNDO se monta (perfil), no el dibujo (eso es de InicioGraficas.test.tsx).
 vi.mock('../InicioGraficas', () => ({
-  InicioGraficas: ({ seccion }: { seccion: string }) => <div data-testid={`grafica-${seccion}`} />,
+  InicioGraficas: ({ seccion }: { seccion: string }) => {
+    if (falla.secciones.has(seccion)) throw new Error(`falló la gráfica ${seccion}`)
+    return <div data-testid={`grafica-${seccion}`} />
+  },
 }))
 
 import { Inicio } from '../Inicio'
@@ -58,6 +61,7 @@ const perfil = (perfilUi: 'basico' | 'completo') => useEnabledModulesStore.setSt
 const variacionDe = (testId: string) => within(screen.getByTestId(testId)).queryByTestId('variacion')
 
 beforeEach(() => {
+  falla.secciones.clear()
   perfil('basico')
   inicio.mockReset().mockResolvedValue(DATOS)
   valorInventario.mockReset().mockResolvedValue(VALUACION)
@@ -172,6 +176,52 @@ describe('Inicio', () => {
     expect(screen.getAllByTestId('metodo')).toHaveLength(2)
     expect(screen.getByTestId('corte').textContent).toContain('Turno abierto')
     expect(screen.getByText('Ver corte →').className).toContain('max-md:min-h-[44px]')
+  })
+
+  it('si una gráfica falla (chunk o chart.js) las demás, las cifras, la caja y los pendientes siguen', async () => {
+    const silencio = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      falla.secciones.add('metodos')
+      perfil('completo')
+      inicio.mockResolvedValue(COMPLETO)
+      pintar()
+      expect(await screen.findByTestId('grafica-tendencia')).toBeTruthy()
+      expect(await screen.findByTestId('grafica-horas')).toBeTruthy()
+      expect(await screen.findByTestId('grafica-sucursales')).toBeTruthy()
+      expect(screen.queryByTestId('grafica-metodos')).toBeNull()
+      expect(screen.getByTestId('cifra-hoy').textContent).toContain('$1,234.50')
+      expect(screen.getAllByTestId('metodo')).toHaveLength(2)
+      expect(screen.getByTestId('corte').textContent).toContain('Turno abierto')
+      expect(screen.getByTestId('pendientes')).toBeTruthy()
+    } finally { silencio.mockRestore() }
+  })
+
+  it('si fallan todas las gráficas el Inicio no se cae', async () => {
+    const silencio = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      for (const s of ['tendencia', 'metodos', 'horas', 'sucursales']) falla.secciones.add(s)
+      perfil('completo')
+      inicio.mockResolvedValue(COMPLETO)
+      pintar()
+      await screen.findByTestId('cifra-hoy')
+      await new Promise((r) => setTimeout(r, 20))
+      expect(document.querySelector('[data-testid^="grafica-"]')).toBeNull()
+      expect(screen.getByTestId('corte').textContent).toContain('Turno abierto')
+      expect(screen.getByTestId('sucursales').textContent).toContain('Roma')
+      expect(screen.getByTestId('pendientes')).toBeTruthy()
+    } finally { silencio.mockRestore() }
+  })
+
+  it('con tres cifras la rejilla es de 3 columnas desde sm; con cuatro, 2 y luego 4', async () => {
+    pintar()
+    expect((await screen.findByTestId('cifra-hoy')).parentElement?.className).toMatch(/\bsm:grid-cols-3\b/)
+    cleanup()
+    perfil('completo')
+    inicio.mockResolvedValue(COMPLETO)
+    pintar()
+    const clases = (await screen.findByTestId('cifra-utilidad')).parentElement?.className ?? ''
+    expect(clases).toMatch(/\bsm:grid-cols-2\b/)
+    expect(clases).toMatch(/\blg:grid-cols-4\b/)
   })
 
   it('variaciones: hoy vs ayer, ayer vs antier, 7 días vs semana anterior, utilidad vs ayer', async () => {
