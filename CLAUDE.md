@@ -141,7 +141,7 @@ Edita `scripts/init_presets_v2.py` (seed de `industry_presets`) y/o el fallback 
 
 ### Esconder algo en modo básico
 - El perfil (`basico` | `completo`) sale de `app/services/perfil_ui.py::perfil_efectivo` (solo `FREE` explícito → básico; plan NULL/vacío/desconocido o de paga → completo; la plataforma lo fuerza con `organization.perfil_ui`) y viaja en `/me/context.perfil_ui`. En pantalla: `useModoBasico()`.
-- Menú: `OCULTAS_BASICO_SUCURSAL` / `OCULTAS_BASICO_HQ` en `components/layout/navPerfilBasico.ts`. POS: banderas de `opcionesPorPerfil` (`pages/pos/opcionesPos.ts`). Campos del producto: `OCULTOS_BASICO` en `app/modules/products/campos.py`. Pantalla entera: `<PorPerfil basico completo>` en `App.tsx`. Una sección: `<MasOpciones activo={modoBasico}>`.
+- Menú: `OCULTAS_BASICO_SUCURSAL` / `OCULTAS_BASICO_HQ` en `components/layout/navPerfilBasico.ts`. POS: banderas de `opcionesPorPerfil` (`pages/pos/opcionesPos.ts`). Campos del producto: `OCULTOS_BASICO` en `app/modules/products/campos.py`. Pantalla entera: `<PorPerfil basico completo>` donde una ruta deba cambiar de componente por perfil; hoy ninguna ruta de `App.tsx` lo usa (Inicio y Reportes son una sola pantalla que se adapta). Una sección: `<MasOpciones activo={modoBasico}>`.
 - Siempre render condicional (nunca `hidden`), sin tocar el backend, y lo que ya trae un dato se sigue viendo. Detalle: `docs/modo-basico.md`.
 
 ---

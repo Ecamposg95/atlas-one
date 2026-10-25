@@ -14,9 +14,9 @@ import { join, resolve } from 'node:path'
 const raiz = resolve(__dirname, '..')
 const CARPETAS = ['pages/hq', 'pages/home', 'pages/finance', 'pages/sales', 'pages/inventory', 'pages/core',
   'pages/reports', 'components/reports', 'components/graficas']
-const PROHIBIDAS = /(?<![\w-])(?:text-white|text-slate-\d{2,3}|bg-slate-\d{2,3}|border-slate-\d{2,3})(?![\w-])|#[0-9a-fA-F]{6}\b/
+const PROHIBIDAS = /(?<![\w-])(?:text-white|text-slate-\d{2,3}|bg-slate-\d{2,3}|border-slate-\d{2,3})(?![\w-])|#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b/
 /** Cualquier color de la paleta de Tailwind (los archivos de esta fase no usan ninguno). */
-const PALETA = /(?<![\w-])(?:(?:hover|focus|active|dark|group-hover|max-md|sm|md|lg):)*(?:text|bg|border|ring|from|to|via|fill|stroke)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|white|black)(?:-\d{2,3})?(?:\/\d{1,3})?(?![\w-])/
+const PALETA = /(?<![\w-])(?:(?:hover|focus|active|dark|group-hover|max-md|sm|md|lg):)*(?:text|bg|border|ring-offset|ring|from|to|via|fill|stroke|divide|shadow|placeholder|outline)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|white|black)(?:-\d{2,3})?(?:\/\d{1,3})?(?![\w-])/
 
 const PENDIENTES = [
   'pages/core/AdminCatalog.tsx', 'pages/core/Brands.tsx', 'pages/core/Departments.tsx', 'pages/core/Organization.tsx',
@@ -36,7 +36,8 @@ const PENDIENTES = [
 /** chart.js pinta en canvas y no entiende `var()`: `tema.ts` necesita un color concreto
  *  de respaldo por si el token falta. Es el único hex permitido en estas carpetas. */
 const RESPALDOS_DEL_CANVAS = ['components/graficas/tema.ts']
-/** Lo que esta fase creó o reescribió: cero colores fijos, de ninguna paleta. */
+/** Lo que esta fase creó o reescribió: cero colores fijos, de ninguna paleta, y sin hex.
+ *  `KpiCard.tsx` (components/ui) entra por aquí y no por CARPETAS: no se escanea toda `ui/`. */
 const LIMPIOS = [
   'pages/hq/Inicio.tsx', 'pages/hq/InicioGraficas.tsx', 'pages/reports/Reportes.tsx', 'pages/reports/presetsReportes.ts',
   'components/reports/Heatmap.tsx', 'components/reports/ValorTiendaCard.tsx', 'components/ui/KpiCard.tsx',
@@ -72,6 +73,10 @@ describe('colores por tokens (spec §3.4)', () => {
       .filter(({ hallazgos }) => hallazgos.length > 0)
       .map(({ f, hallazgos }) => `${f}: ${[...new Set(hallazgos)].join(', ')}`)
     expect(culpables).toEqual([])
+  })
+
+  it('los archivos de la Fase 2 tampoco llevan hex ni text-white/slate (LIMPIOS fuera de las carpetas escaneadas)', () => {
+    expect(LIMPIOS.filter((f) => PROHIBIDAS.test(fuente(f)))).toEqual([])
   })
 
   it('el modo claro no gana sobrescrituras !important nuevas', () => {
