@@ -31,7 +31,7 @@ const DASH = {
   kpis: {
     sales: 9000, gross_sales: 9400, returns: 400, returns_count: 2, orders: 70, avg_ticket: 128.57, pending: 0, draft: 0,
     total_products: 10, transit_shipments: 0, prev_sales: 7500, prev_orders: 60, prev_avg_ticket: 125, prev_returns: 100,
-    gross_profit: 3000, prev_gross_profit: 2000, sales_without_cost: 400,
+    gross_profit: 3000, prev_gross_profit: 2000, sales_without_cost: 400, sales_with_cost: 9000,
   },
   charts: {
     trend: { labels: ['a', 'b', 'c', 'd', 'e', 'f', 'g'], data: [1, 2, 3, 4, 5, 6, 7] },
@@ -60,7 +60,7 @@ beforeEach(() => {
   exportCsv.mockReset().mockResolvedValue(undefined)
   getBranches.mockReset().mockResolvedValue([SUC(1, 'Roma'), SUC(2, 'Condesa')])
 })
-afterEach(cleanup)
+afterEach(() => { cleanup(); vi.useRealTimers() })
 
 describe('Reportes', () => {
   it('arranca en 7 días y pide ese rango al dashboard sin sucursal', async () => {
@@ -93,15 +93,27 @@ describe('Reportes', () => {
   })
 
   it('oculta la utilidad bruta sin costo o sin permiso', async () => {
-    dashboard.mockResolvedValue({ ...DASH, kpis: { ...DASH.kpis, gross_profit: null, prev_gross_profit: null, sales_without_cost: null } })
+    dashboard.mockResolvedValue({ ...DASH, kpis: { ...DASH.kpis, gross_profit: null, prev_gross_profit: null, sales_without_cost: null, sales_with_cost: null } })
     render(<Reportes />)
     await screen.findByTestId('kpi-venta')
     expect(screen.queryByTestId('kpi-utilidad')).toBeNull()
     cleanup()
-    dashboard.mockResolvedValue({ ...DASH, kpis: { ...DASH.kpis, gross_profit: 0, sales_without_cost: 9400 } })   // nada de lo vendido tiene costo
+    dashboard.mockResolvedValue({ ...DASH, kpis: { ...DASH.kpis, gross_profit: 0, sales_without_cost: 9000, sales_with_cost: 0 } })   // org sin costos, con devoluciones (400): no aparece
     render(<Reportes />)
     await screen.findByTestId('kpi-venta')
     expect(screen.queryByTestId('kpi-utilidad')).toBeNull()
+  })
+
+  it('el día 1 "Este mes" y "Hoy" coinciden: se queda pulsado el que se eligió', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 10, 1, 12, 0, 0) })
+    render(<Reportes />)
+    await screen.findByTestId('kpi-venta')
+    fireEvent.click(screen.getByRole('button', { name: 'Este mes' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Este mes' }).getAttribute('aria-pressed')).toBe('true'))
+    expect(screen.getByRole('button', { name: 'Hoy' }).getAttribute('aria-pressed')).toBe('false')
+    fireEvent.click(screen.getByRole('button', { name: 'Hoy' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Hoy' }).getAttribute('aria-pressed')).toBe('true'))
+    expect(screen.getByRole('button', { name: 'Este mes' }).getAttribute('aria-pressed')).toBe('false')
   })
 
   it('"Este mes" manda del 1 a hoy', async () => {
@@ -143,6 +155,18 @@ describe('Reportes', () => {
     expect(metodos[0]).toContain('$5,000.00')
   })
 
+  it('la dona omite métodos en cero pero la lista los conserva; OTHER se llama Otros', async () => {
+    dashboard.mockResolvedValue({ ...DASH, charts: { ...DASH.charts, payments: {
+      ...DASH.charts.payments, TRANSFER: { total: 0, count: 0 }, OTHER: { total: 300, count: 2 },
+    } } })
+    render(<Reportes />)
+    const dona = await screen.findByTestId('grafica-dona')
+    expect(dona.getAttribute('data-partes')).toBe('Efectivo=5000|Tarjeta=4000|Otros=300')
+    const nombres = screen.getAllByTestId('metodo').map((li) => li.textContent ?? '')
+    expect(nombres).toHaveLength(4)
+    expect(nombres.some((t) => t.includes('Transferencia'))).toBe(true)
+  })
+
   it('lo más vendido: producto, piezas e importe', async () => {
     render(<Reportes />)
     const top = await screen.findByTestId('top')
@@ -161,6 +185,7 @@ describe('Reportes', () => {
     expect(suc.textContent).not.toContain('Bodega')
     fireEvent.change(selector, { target: { value: '2' } })
     await waitFor(() => expect(dashboard).toHaveBeenLastCalledWith({ start_date: r7.inicio, end_date: r7.fin, branch_id: 2 }))
+    expect(commandCenterStats).toHaveBeenCalledTimes(1)   // la comparativa no depende de la sucursal elegida
   })
 
   it('con selector pero una sola sucursal no hay selector ni sección', async () => {
@@ -183,10 +208,17 @@ describe('Reportes', () => {
   })
 
   it('Exportar CSV manda el rango vigente', async () => {
-    render(<Reportes />)
+    render(<Reportes conSucursales />)
     await screen.findByTestId('kpi-venta')
     fireEvent.click(screen.getByRole('button', { name: /Exportar CSV/ }))
     await waitFor(() => expect(exportCsv).toHaveBeenCalledWith({ start_date: r7.inicio, end_date: r7.fin, branch_id: undefined }))
+  })
+
+  it('sin conSucursales no hay botón de exportar (el CSV del gerente saldría de toda la org)', async () => {
+    render(<Reportes />)
+    await screen.findByTestId('kpi-venta')
+    expect(screen.queryByRole('button', { name: /Exportar CSV/ })).toBeNull()
+    expect(exportCsv).not.toHaveBeenCalled()
   })
 
   it('un rango invertido no llama al servidor y avisa', async () => {

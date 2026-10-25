@@ -18,7 +18,7 @@ import { formatCurrency } from '../../utils/currency'
 import { errorDetailText } from '../../utils/errorDetail'
 import { variacion } from '../../utils/variacion'
 import {
-  PRESETS, diasDelRango, etiquetaRango, etiquetasTendencia, presetActivo, rangoPreset, type Rango,
+  PRESETS, diasDelRango, etiquetaRango, etiquetasTendencia, presetActivo, rangoPreset, type ClavePreset, type Rango,
 } from './presetsReportes'
 
 /**
@@ -33,8 +33,8 @@ import {
  * Sustituye a `finance/Reports.tsx` y `hq/HQReportsHub.tsx`; sin velocímetro,
  * conteo animado ni sondeo cada 30 s. Solo tokens `dax-*`.
  */
-const METODOS: Record<string, string> = { CASH: 'Efectivo', CARD: 'Tarjeta', TRANSFER: 'Transferencia' }
-const ORDEN_METODOS = ['CASH', 'CARD', 'TRANSFER']
+const METODOS: Record<string, string> = { CASH: 'Efectivo', CARD: 'Tarjeta', TRANSFER: 'Transferencia', OTHER: 'Otros' }
+const ORDEN_METODOS = ['CASH', 'CARD', 'TRANSFER', 'OTHER']
 const piezas = (n: number) => {
   const r = Math.round(n * 100) / 100
   return `${r.toLocaleString('es-MX')} ${r === 1 ? 'pieza' : 'piezas'}`
@@ -59,6 +59,8 @@ export function Reportes({ conSucursales = false }: { conSucursales?: boolean })
   const [rango, setRango] = useState<Rango>(() => rangoPreset('7d'))
   const [desde, setDesde] = useState(rango.inicio)
   const [hasta, setHasta] = useState(rango.fin)
+  // En el día 1 del mes «Este mes» y «Hoy» son el mismo rango: se recuerda cuál se pulsó.
+  const [presetElegido, setPresetElegido] = useState<ClavePreset | null>(null)
   const [sucursal, setSucursal] = useState<number | ''>('')
   const [sucursales, setSucursales] = useState<Branch[]>([])
   const [data, setData] = useState<DashboardData | null>(null)
@@ -82,15 +84,8 @@ export function Reportes({ conSucursales = false }: { conSucursales?: boolean })
       start_date: rango.inicio, end_date: rango.fin,
       ...(conSucursales && sucursal !== '' ? { branch_id: sucursal } : {}),
     }
-    const peticiones: Promise<unknown>[] = [reportsApi.dashboard(params).then((d) => { if (vivo) setData(d) })]
-    if (conSucursales) {
-      peticiones.push(
-        reportsApi.commandCenterStats({ start_date: rango.inicio, end_date: rango.fin })
-          .then((c) => { if (vivo) setCc(c) })
-          .catch(() => { if (vivo) setCc(null) }),
-      )
-    }
-    Promise.all(peticiones)
+    reportsApi.dashboard(params)
+      .then((d) => { if (vivo) setData(d) })
       .catch((e: any) => {
         if (!vivo) return
         setData(null)
@@ -100,7 +95,17 @@ export function Reportes({ conSucursales = false }: { conSucursales?: boolean })
     return () => { vivo = false }
   }, [rango, sucursal, conSucursales])
 
-  const aplicar = (r: Rango) => { setDesde(r.inicio); setHasta(r.fin); setRango(r) }
+  // La comparativa de sucursales es de toda la organización: no depende de la sucursal elegida.
+  useEffect(() => {
+    if (!conSucursales) return
+    let vivo = true
+    reportsApi.commandCenterStats({ start_date: rango.inicio, end_date: rango.fin })
+      .then((c) => { if (vivo) setCc(c) })
+      .catch(() => { if (vivo) setCc(null) })
+    return () => { vivo = false }
+  }, [rango, conSucursales])
+
+  const aplicar = (r: Rango, preset: ClavePreset | null = null) => { setDesde(r.inicio); setHasta(r.fin); setPresetElegido(preset); setRango(r) }
   const aplicarFechas = () => {
     if (!desde || !hasta) return
     if (hasta < desde) { setError('La fecha final no puede ser anterior a la inicial.'); return }
@@ -111,7 +116,7 @@ export function Reportes({ conSucursales = false }: { conSucursales?: boolean })
     try {
       await reportsApi.exportCsv({
         start_date: rango.inicio, end_date: rango.fin,
-        branch_id: conSucursales && sucursal !== '' ? sucursal : undefined,
+        branch_id: sucursal !== '' ? sucursal : undefined,
       })
     } catch {
       setError('No se pudo exportar el CSV.')
@@ -120,12 +125,17 @@ export function Reportes({ conSucursales = false }: { conSucursales?: boolean })
     }
   }
 
-  const activo = presetActivo(rango)
+  const elegidoVigente = presetElegido !== null && (() => {
+    const r = rangoPreset(presetElegido)
+    return r.inicio === rango.inicio && r.fin === rango.fin
+  })()
+  const activo = elegidoVigente ? presetElegido : presetActivo(rango)
   const dias = diasDelRango(rango)
   const etiquetaPeriodo = etiquetaRango(rango)
   const k = data?.kpis
-  // "Tiene costos": algo de lo vendido en el periodo lleva costo (spec §3.2).
-  const conCosto = k ? Math.max(0, (k.gross_sales ?? k.sales) - (k.sales_without_cost ?? 0)) : 0
+  // "Tiene costos": el servidor suma los renglones con costo (misma base que la utilidad);
+  // restar `sales_without_cost` de la venta del documento mezclaba propinas y devoluciones.
+  const conCosto = k?.sales_with_cost ?? 0
   const conUtilidad = k?.gross_profit != null && conCosto > 0
 
   const metodos = useMemo(() => {
@@ -152,7 +162,8 @@ export function Reportes({ conSucursales = false }: { conSucursales?: boolean })
     { nombre: 'Este periodo', valores: tendencia?.data ?? [] },
     ...(previa ? [{ nombre: 'Periodo anterior', valores: previa.data, comparativo: true }] : []),
   ], [tendencia, previa])
-  const partesDona = useMemo(() => metodos.map((m) => ({ nombre: m.nombre, valor: m.total, color: m.color })), [metodos])
+  // La dona solo pinta partes positivas; la lista de abajo sigue mostrando todos los métodos.
+  const partesDona = useMemo(() => metodos.filter((m) => m.total > 0).map((m) => ({ nombre: m.nombre, valor: m.total, color: m.color })), [metodos])
 
   const sucursalesCc = useMemo(() => {
     if (!conSucursales || !cc) return []
@@ -171,12 +182,13 @@ export function Reportes({ conSucursales = false }: { conSucursales?: boolean })
       <CabeceraPagina
         titulo={<h1 className="text-2xl font-black text-dax-text">Reportes</h1>}
         descripcion="Periodos y comparativos contra el periodo anterior. Lo de hoy está en el Inicio."
-        acciones={(
+        // El CSV es de oficina: el endpoint trata al gerente como HQ, así que `/reports` no lo ofrece.
+        acciones={conSucursales ? (
           <button type="button" onClick={exportar} disabled={exportando || cargando || !data} className="dax-btn-secondary text-xs">
             <i className={`fa-solid ${exportando ? 'fa-spinner fa-spin' : 'fa-file-arrow-down'}`} aria-hidden="true" />{' '}
             {exportando ? 'Exportando…' : 'Exportar CSV'}
           </button>
-        )}
+        ) : undefined}
       />
 
       <BarraFiltros
@@ -188,7 +200,7 @@ export function Reportes({ conSucursales = false }: { conSucursales?: boolean })
             <button
               key={p.clave}
               type="button"
-              onClick={() => aplicar(rangoPreset(p.clave))}
+              onClick={() => aplicar(rangoPreset(p.clave), p.clave)}
               aria-pressed={activo === p.clave}
               className={`${activo === p.clave ? 'dax-btn-primary' : 'dax-btn-secondary'} text-xs max-sm:min-h-[44px]`}
             >
@@ -225,7 +237,7 @@ export function Reportes({ conSucursales = false }: { conSucursales?: boolean })
           <div className={`grid grid-cols-1 sm:grid-cols-2 ${conUtilidad ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-3`}>
             <KpiCard etiqueta="Venta neta" valor={formatCurrency(k.sales)} detalle={etiquetaPeriodo}
               variacion={variacion(k.sales, k.prev_sales ?? 0, 'vs periodo anterior')} data-testid="kpi-venta" />
-            <KpiCard etiqueta="Tickets" valor={String(k.orders)} detalle={plural(k.orders, 'venta', 'ventas')}
+            <KpiCard etiqueta="Tickets" valor={String(k.orders)}
               variacion={variacion(k.orders, k.prev_orders ?? 0, 'vs periodo anterior')} data-testid="kpi-tickets" />
             <KpiCard etiqueta="Ticket promedio" valor={formatCurrency(k.avg_ticket)}
               variacion={variacion(k.avg_ticket, k.prev_avg_ticket ?? 0, 'vs periodo anterior')} data-testid="kpi-promedio" />
