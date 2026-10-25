@@ -55,7 +55,7 @@
 | Gates del menú | `/returns` sigue sin `module:` y `/inventory` sin `hideForGastro`: un solo ítem sirve a todos los roles y giros. |
 | Ruta `/inventory` | sigue sin `RutaPorRol` (hoy cualquier rol autenticado llega desde «Ajustar»); solo se añade al menú de ADMIN/DUEÑO. |
 | Productos en básico | nada del Catálogo viejo (`isHQ && !modoBasico`). |
-| Matriz de sucursales | solo con más de una sucursal (`!esTiendaUnica`); con una, el formulario ya trae su sección de sucursal. |
+| Matriz de sucursales | siempre para HQ en perfil completo (ruling 2026-10-25): archivar apaga el producto en cada sucursal y restaurar no lo reenciende, y el formulario de edición no trae sección de sucursal, así que la matriz es la única vía para reactivarlo. (Al redactar el plan se pensó solo con más de una sucursal, `!esTiendaUnica`.) |
 | Vista de cuadrícula de Productos | conserva solo Editar; las acciones de catálogo viven en la lista. |
 | Exportar, duplicar, cifras y filtro por marca | se conservan de `AdminCatalog` solo para HQ en perfil completo (la spec §4.1 no marca duplicar ni cifras como «solo HQ»: desviación aceptada, cajera y gerente siguen en `ProductsBranchView`; la Tarea 6 la anota en la spec). Productos sin sucursal llevan un `Badge` «Sin sucursal» visible. |
 | `DELETE /products/{id}` | nuevo `productsApi.archive(id)` (antes `client.delete` con import dinámico). |
