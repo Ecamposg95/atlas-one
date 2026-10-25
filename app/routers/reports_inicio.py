@@ -14,6 +14,10 @@ Solo lectura. Reusa el criterio de los reportes: `SALES_REPORT_STATUSES` para
 "esto ya es venta", `metricas_ventas` leído directamente para los cobros
 (descuenta el vuelto del efectivo) y `compute_expected_cash` para la caja. Ámbito como la valuación:
 ADMIN/DUEÑO/SUPERADMIN ven la org o la sucursal que pidan; GERENTE, la suya.
+
+Fase 2 (2026-10-24): con `completo=true` también viajan `tendencia` (7 días y
+los 7 previos, para la línea y las variaciones), `por_hora_hoy` (24 horas) y
+`utilidad_bruta_ayer`. En básico van en None y no se consultan.
 """
 from datetime import date, datetime, timedelta, timezone
 from typing import List, Optional
@@ -33,8 +37,9 @@ from app.models.cash import CashSession, CashSessionStatus
 from app.models.users import PlatformRole, Role
 from app.routers.reports import _describe_name, _today_mx
 from app.schemas.reports import (
-    CorteInicio, DiferenciaCaja, InicioResponse, Pendientes, PeriodoVentas, PocaExistencia,
-    ProductoPocaExistencia, ProductoSinMovimiento, ProductoTop, SinMovimiento, SucursalInicio,
+    CorteInicio, DiaTendencia, DiferenciaCaja, HoraInicio, InicioResponse, Pendientes, PeriodoVentas,
+    PocaExistencia, ProductoPocaExistencia, ProductoSinMovimiento, ProductoTop, SinMovimiento, SucursalInicio,
+    Tendencia,
 )
 from app.services.cash_reconciliation import SALES_REPORT_STATUSES, compute_expected_cash
 from app.services import metricas_ventas as mv
@@ -238,6 +243,23 @@ def _utilidad_bruta_hoy(db: Session, org_id: int, sucursal: Optional[int], hoy: 
     return mv.utilidad_bruta(db, _ambito(org_id, sucursal), mv.Periodo(hoy, hoy))
 
 
+def _tendencia(db: Session, org_id: int, sucursal: Optional[int], hoy: date) -> Tendencia:
+    """Venta neta por día: hoy y los 6 anteriores, y los 7 previos como comparativo."""
+    periodo = mv.Periodo(hoy - timedelta(days=DIAS_SEMANA - 1), hoy)
+    ambito = _ambito(org_id, sucursal)
+
+    def _dias(filas) -> List[DiaTendencia]:
+        return [DiaTendencia(fecha=d.fecha, neta=d.neta, tickets=d.tickets) for d in filas]
+
+    return Tendencia(dias=_dias(mv.por_dia(db, ambito, periodo)),
+                     anterior=_dias(mv.por_dia(db, ambito, periodo.anterior())))
+
+
+def _por_hora_hoy(db: Session, org_id: int, sucursal: Optional[int], hoy: date) -> List[HoraInicio]:
+    return [HoraInicio(hora=h.hora, neta=h.neta, tickets=h.tickets)
+            for h in mv.por_hora(db, _ambito(org_id, sucursal), mv.Periodo(hoy, hoy))]
+
+
 def _pendientes(db: Session, org_id: int, sucursal: Optional[int]) -> Pendientes:
     """Lo que el dueño tiene que atender: devoluciones por aprobar, turnos que
     nadie cerró y cortes recientes que no cuadraron (esperado recalculado,
@@ -346,8 +368,11 @@ def inicio(
         return respuesta
     respuesta.sin_movimiento = _sin_movimiento(db, org_id, sucursal, dias_sin_movimiento)
     respuesta.pendientes = _pendientes(db, org_id, sucursal)
+    respuesta.tendencia = _tendencia(db, org_id, sucursal, hoy)
+    respuesta.por_hora_hoy = _por_hora_hoy(db, org_id, sucursal, hoy)
     # El gerente ya viene fijado a su sucursal: la sección de sucursales no aplica.
     respuesta.sucursales = _sucursales(db, org_id, hoy, umbral) if sucursal is None else None
     if _ve_costos(current_user):
         respuesta.utilidad_bruta_hoy, respuesta.venta_sin_costo_hoy = _utilidad_bruta_hoy(db, org_id, sucursal, hoy)
+        respuesta.utilidad_bruta_ayer, _ = mv.utilidad_bruta(db, _ambito(org_id, sucursal), mv.Periodo(ayer, ayer))
     return respuesta
