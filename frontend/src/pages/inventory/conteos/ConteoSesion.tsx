@@ -12,7 +12,7 @@ import { useIsMobile } from '../../../hooks/useIsMobile'
 import { toast } from '../../../store/toastStore'
 import { errorDetailText } from '../../../utils/errorDetail'
 import { isNativeDetectorAvailable, normalizeTyped } from '../../scanner/barcodeReader'
-import { num, porcentajeAvance } from './avance'
+import { num, porcentajeAvance, textoCancelar } from './avance'
 import { BuscadorVariante } from './BuscadorVariante'
 import { FichaProducto } from './FichaProducto'
 import { ListaDepartamento } from './ListaDepartamento'
@@ -102,6 +102,17 @@ export function ConteoSesion() {
     } catch (e: any) { toast.error(errorDetailText(e?.response?.data?.detail, 'No se pudo abrir el conteo')); return null }
   }, [conteoId])
   useEffect(() => { void recargar() }, [recargar])
+
+  // Un conteo cancelado (desde otro dispositivo o por URL) no tiene pantalla de sesión: se vuelve a
+  // la lista con un aviso. El aviso sale de un efecto, no del render. Quien acaba de cancelar ya
+  // recibió su propio toast y navegó: `cancelandoRef` evita el aviso doble.
+  const cancelado = conteo?.status === 'CANCELADO'
+  const cancelandoRef = useRef(false)
+  useEffect(() => {
+    if (!cancelado || cancelandoRef.current) return
+    toast.info('Este conteo fue cancelado')
+    navigate('/inventory/conteos', { replace: true })
+  }, [cancelado, navigate])
 
   const escanearUno = useCallback(async (code: string) => {
     setPausado(true)   // solo detiene la cámara; la pistola no depende de esto
@@ -220,7 +231,30 @@ export function ConteoSesion() {
     catch (e: any) { toast.error(errorDetailText(e?.response?.data?.detail, 'No se pudo cerrar')) }
   }
 
+  const cancelarConteo = async () => {
+    if (!conteo) return
+    // Todo lo contado: líneas del departamento, de otros departamentos y códigos desconocidos.
+    const piezas = conteo.lineas.reduce((suma, l) => suma + num(l.qty_contada), 0)
+    const ok = await confirm({
+      title: 'Cancelar el conteo',
+      message: textoCancelar(piezas),
+      confirmText: 'Cancelar conteo', cancelText: 'Volver', variant: 'danger',
+    })
+    if (!ok) { enfocarEntrada(); return }
+    try {
+      cancelandoRef.current = true
+      lector.stop()
+      await conteosApi.cancelar(conteoId)
+      toast.success('Conteo cancelado')
+      navigate('/inventory/conteos')
+    } catch (e: any) {
+      cancelandoRef.current = false
+      toast.error(errorDetailText(e?.response?.data?.detail, 'No se pudo cancelar'))
+    }
+  }
+
   if (!conteo || !lista) return <Spinner />
+  if (conteo.status === 'CANCELADO') return null   // el efecto de arriba ya redirige
   if (conteo.status === 'CERRADO') { navigate(`/inventory/conteos/${conteoId}/reporte`, { replace: true }); return null }
 
   const fresco = (p: ProductoResumen | null) => (p ? lista.filas.find((f) => f.producto.variant_id === p.variant_id)?.producto ?? p : p)
@@ -283,11 +317,14 @@ export function ConteoSesion() {
     <div className={`pb-24 ${panel ? 'lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-4 lg:items-start' : 'space-y-4'}`}>
     <div className="space-y-4 min-w-0">
       <div className="flex items-center justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <h1 className="text-xl font-black text-white">{conteo.department_name ?? 'Toda la tienda'}</h1>
           <p className="text-xs text-slate-400">{conteo.branch_name}{conteo.notes ? ` · ${conteo.notes}` : ''}</p>
         </div>
-        <button onClick={cerrar} className="dax-btn-secondary text-xs">Cerrar conteo</button>
+        <div className="flex shrink-0 items-center gap-2">
+          <button onClick={cancelarConteo} className="dax-btn-danger text-xs">Cancelar conteo</button>
+          <button onClick={cerrar} className="dax-btn-secondary text-xs">Cerrar conteo</button>
+        </div>
       </div>
 
       <DaxCard>

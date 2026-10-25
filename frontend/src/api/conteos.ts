@@ -49,7 +49,7 @@ export interface Conteo {
   branch_name: string | null
   department_id: string | null
   department_name: string | null
-  status: 'ABIERTO' | 'CERRADO'
+  status: 'ABIERTO' | 'CERRADO' | 'CANCELADO'
   notes: string | null
   created_by: string | null
   created_at: string | null
@@ -119,7 +119,7 @@ export interface AjusteLineaResult {
 }
 
 export interface Reporte {
-  estado: 'ABIERTO' | 'CERRADO'
+  estado: 'ABIERTO' | 'CERRADO' | 'CANCELADO'
   generado_en: string
   alcance: { sucursal: string | null; departamento: string | null }
   totales: Record<string, string | number>
@@ -170,6 +170,11 @@ export const conteosApi = {
   },
   cerrar: async (id: number): Promise<ConteoDetalle> => {
     const { data } = await client.post<ConteoDetalle>(`/inventory/counts/${id}/close`)
+    return data
+  },
+  /** Descarta un conteo abierto: no congela nada ni toca existencias (los ajustes en piso se conservan). */
+  cancelar: async (id: number): Promise<Conteo> => {
+    const { data } = await client.post<Conteo>(`/inventory/counts/${id}/cancel`)
     return data
   },
   ajustarLinea: async (id: number, lineId: number): Promise<AjusteLineaResult> => {

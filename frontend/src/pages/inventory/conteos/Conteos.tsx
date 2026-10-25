@@ -16,13 +16,14 @@ import { toast } from '../../../store/toastStore'
 import type { Branch } from '../../../types/auth'
 import type { Department } from '../../../types/products'
 import { errorDetailText } from '../../../utils/errorDetail'
-import { num, porcentajeAvance } from './avance'
+import { estadoConteo, num, porcentajeAvance } from './avance'
 
 /**
  * Conteo de inventario — lista de sesiones y alta de una nueva.
  *
  * Una sesión es una sucursal y un departamento (o toda la tienda). Abierta
- * entra a la pantalla de escaneo; cerrada, al reporte. La sucursal se
+ * entra a la pantalla de escaneo; cerrada, al reporte; cancelada no abre nada
+ * (se descartó sin congelar reporte). La sucursal se
  * recuerda en el dispositivo con la misma clave que el Escáner.
  * Diseño: docs/superpowers/specs/2026-10-22-conteo-inventario-design.md §6.
  */
@@ -90,7 +91,11 @@ export function Conteos() {
     }
   }
 
-  const ir = (c: Conteo) => navigate(c.status === 'ABIERTO' ? `/inventory/conteos/${c.id}` : `/inventory/conteos/${c.id}/reporte`)
+  const abrible = (c: Conteo) => c.status !== 'CANCELADO'
+  const ir = (c: Conteo) => {
+    if (!abrible(c)) return
+    navigate(c.status === 'ABIERTO' ? `/inventory/conteos/${c.id}` : `/inventory/conteos/${c.id}/reporte`)
+  }
 
   const avanceTxt = (c: Conteo) =>
     `${num(c.avance.contadas_piezas)} / ${num(c.avance.esperadas_piezas)} piezas · ${porcentajeAvance(c.avance.contadas_variantes, c.avance.esperadas_variantes)}%`
@@ -110,16 +115,19 @@ export function Conteos() {
 
       {conteos === null ? <Spinner /> : esTelefono ? (
         <ListaTarjetas vacio={conteos.length === 0} textoVacio="Todavía no hay conteos. Abre el primero.">
-          {conteos.map((c) => (
+          {conteos.map((c) => {
+            const estado = estadoConteo(c.status)
+            return (
             <TarjetaFila
               key={c.id}
               titulo={c.department_name ?? 'Toda la tienda'}
               subtitulo={`${c.branch_name ?? ''} · ${fecha(c.created_at)}${c.created_by ? ` · ${c.created_by}` : ''}`}
-              estado={<span className={c.status === 'ABIERTO' ? 'text-emerald-400' : 'text-slate-400'}>{c.status === 'ABIERTO' ? 'Abierto' : 'Cerrado'}</span>}
+              estado={<span className={estado.clase}>{estado.texto}</span>}
               datos={[{ etiqueta: 'Avance', valor: avanceTxt(c) }]}
-              onClick={() => ir(c)}
+              onClick={abrible(c) ? () => ir(c) : undefined}
             />
-          ))}
+            )
+          })}
         </ListaTarjetas>
       ) : (
         <DaxCard padding={false}>
@@ -129,16 +137,20 @@ export function Conteos() {
             </thead>
             <tbody>
               {conteos.length === 0 && <tr><td colSpan={6} className="p-6 text-center text-slate-400">Todavía no hay conteos. Abre el primero.</td></tr>}
-              {conteos.map((c) => (
-                <tr key={c.id} className="border-t border-slate-800 hover:bg-slate-800/40 cursor-pointer" onClick={() => ir(c)}>
+              {conteos.map((c) => {
+                const estado = estadoConteo(c.status)
+                return (
+                <tr key={c.id} className={`border-t border-slate-800 ${abrible(c) ? 'hover:bg-slate-800/40 cursor-pointer' : ''}`}
+                  onClick={abrible(c) ? () => ir(c) : undefined}>
                   <td className="p-3 text-white font-semibold">{c.department_name ?? 'Toda la tienda'}</td>
                   <td className="p-3 text-slate-300">{c.branch_name}</td>
                   <td className="p-3 text-slate-300">{fecha(c.created_at)}{c.created_by ? ` · ${c.created_by}` : ''}</td>
                   <td className="p-3 text-slate-300">{avanceTxt(c)}</td>
-                  <td className={`p-3 ${c.status === 'ABIERTO' ? 'text-emerald-400' : 'text-slate-400'}`}>{c.status === 'ABIERTO' ? 'Abierto' : 'Cerrado'}</td>
-                  <td className="p-3 text-right"><i className="fa-solid fa-chevron-right text-slate-500" /></td>
+                  <td className={`p-3 ${estado.clase}`}>{estado.texto}</td>
+                  <td className="p-3 text-right">{abrible(c) && <i className="fa-solid fa-chevron-right text-slate-500" />}</td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         </DaxCard>
