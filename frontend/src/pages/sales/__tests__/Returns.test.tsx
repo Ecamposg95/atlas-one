@@ -13,6 +13,7 @@ vi.mock('../../../api/organization', () => ({ organizationApi: { getBranches } }
 vi.mock('../../../components/branch/ReturnsBranchView', () => ({ ReturnsBranchView: () => <div data-testid="asistente-cajera" /> }))
 vi.mock('../../../components/ui/ConfirmDialog', () => ({ confirm: vi.fn(async () => true) }))
 
+import { confirm } from '../../../components/ui/ConfirmDialog'
 import { Returns } from '../Returns'
 import { useAuthStore } from '../../../store/authStore'
 import { rangoPreset } from '../../reports/presetsReportes'
@@ -41,6 +42,13 @@ beforeEach(() => {
 })
 afterEach(cleanup)
 
+const abrirDetalle = async () => {
+  await screen.findByText('DEV-000001')
+  fireEvent.click(screen.getByLabelText('Ver detalle de DEV-000001'))
+  return within(await screen.findByRole('dialog'))
+}
+const DETALLE_ALTO = { response: { data: { detail: 'Devolución en EFECTIVO de monto alto (12000) — confirma con force=True (umbral 10000).' } } }
+
 describe('Devoluciones (/returns, fusión de HQReturns)', () => {
   it('la cajera ve el asistente de sucursal, no la bandeja', () => {
     usuario('CAJERO', 1)
@@ -54,8 +62,8 @@ describe('Devoluciones (/returns, fusión de HQReturns)', () => {
     pintar()
     await screen.findByText('DEV-000001')
     expect(getBranches).not.toHaveBeenCalled()
-    expect(list).toHaveBeenCalledWith({ status: 'PENDING' })
-    expect(list).toHaveBeenCalledWith({ start_date: r30.inicio, end_date: r30.fin })
+    expect(list).toHaveBeenCalledWith({ status: 'PENDING', limit: 200 })
+    expect(list).toHaveBeenCalledWith({ start_date: r30.inicio, end_date: r30.fin, limit: 200 })
     expect(screen.queryByLabelText('Sucursal')).toBeNull()
     expect(screen.getAllByRole('columnheader').map((th) => th.textContent)).toContain('Sucursal')
     expect(screen.getByText('Roma')).toBeTruthy()
@@ -73,8 +81,8 @@ describe('Devoluciones (/returns, fusión de HQReturns)', () => {
     const selector = await screen.findByLabelText('Sucursal')
     expect(screen.getAllByRole('columnheader').map((th) => th.textContent)).toContain('Sucursal')
     fireEvent.change(selector, { target: { value: '2' } })
-    await waitFor(() => expect(list).toHaveBeenCalledWith({ branch_id: 2, status: 'PENDING' }))
-    expect(list).toHaveBeenCalledWith({ branch_id: 2, start_date: r30.inicio, end_date: r30.fin })
+    await waitFor(() => expect(list).toHaveBeenCalledWith({ branch_id: 2, status: 'PENDING', limit: 200 }))
+    expect(list).toHaveBeenCalledWith({ branch_id: 2, start_date: r30.inicio, end_date: r30.fin, limit: 200 })
   })
 
   it('en Historial, el preset Hoy acota solo el historial; los pendientes se siguen pidiendo completos', async () => {
@@ -84,7 +92,7 @@ describe('Devoluciones (/returns, fusión de HQReturns)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Historial' }))
     await screen.findByText('DEV-000002')
     fireEvent.click(screen.getByRole('button', { name: 'Hoy' }))
-    await waitFor(() => expect(list).toHaveBeenLastCalledWith({ start_date: hoy.inicio, end_date: hoy.fin }))
+    await waitFor(() => expect(list).toHaveBeenLastCalledWith({ start_date: hoy.inicio, end_date: hoy.fin, limit: 200 }))
     expect(llamadasPendientes().length).toBeGreaterThanOrEqual(2)
     for (const [p] of llamadasPendientes()) expect(p).not.toHaveProperty('start_date')
   })
@@ -119,5 +127,74 @@ describe('Devoluciones (/returns, fusión de HQReturns)', () => {
     expect(screen.queryByText('No hay devoluciones pendientes')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /Reintentar/ }))
     await screen.findByText('DEV-000001')
+  })
+  it('tras aprobar recarga la lista y cierra el detalle', async () => {
+    usuario('GERENTE', 1)
+    pintar()
+    const dialogo = await abrirDetalle()
+    const antes = list.mock.calls.length
+    fireEvent.click(dialogo.getByRole('button', { name: /Aprobar/ }))
+    await waitFor(() => expect(approve).toHaveBeenCalledWith('dev-000001', false))
+    await waitFor(() => expect(list.mock.calls.length).toBeGreaterThan(antes))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  })
+
+  it('efectivo alto: el backend pide force, se confirma con el diálogo de la app y se reintenta con force=true', async () => {
+    usuario('GERENTE', 1)
+    approve.mockReset().mockRejectedValueOnce(DETALLE_ALTO).mockResolvedValue(DEV('dev-000001', 'APPROVED'))
+    vi.mocked(confirm).mockClear()
+    pintar()
+    const dialogo = await abrirDetalle()
+    fireEvent.click(dialogo.getByRole('button', { name: /Aprobar/ }))
+    await waitFor(() => expect(approve).toHaveBeenCalledWith('dev-000001', true))
+    expect(confirm).toHaveBeenCalledTimes(1)
+    expect(approve).toHaveBeenCalledTimes(2)
+    expect(approve).toHaveBeenNthCalledWith(1, 'dev-000001', false)
+  })
+
+  it('efectivo alto: si se cancela la confirmación no hay segundo approve', async () => {
+    usuario('GERENTE', 1)
+    approve.mockReset().mockRejectedValueOnce(DETALLE_ALTO)
+    vi.mocked(confirm).mockClear()
+    vi.mocked(confirm).mockResolvedValueOnce(false)
+    pintar()
+    const dialogo = await abrirDetalle()
+    fireEvent.click(dialogo.getByRole('button', { name: /Aprobar/ }))
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1))
+    await new Promise((r) => setTimeout(r, 20))
+    expect(approve).toHaveBeenCalledTimes(1)
+  })
+
+  it('rechazar con motivo manda el motivo recortado', async () => {
+    usuario('GERENTE', 1)
+    reject.mockResolvedValue(DEV('dev-000001', 'PENDING'))
+    pintar()
+    const dialogo = await abrirDetalle()
+    fireEvent.click(dialogo.getByRole('button', { name: /Rechazar/ }))
+    fireEvent.change(await screen.findByLabelText(/Motivo \(opcional\)/), { target: { value: '  motivo  ' } })
+    fireEvent.click(screen.getByRole('button', { name: /Confirmar rechazo/ }))
+    await waitFor(() => expect(reject).toHaveBeenCalledWith('dev-000001', 'motivo'))
+  })
+
+  it('rechazar sin motivo manda undefined', async () => {
+    usuario('GERENTE', 1)
+    reject.mockResolvedValue(DEV('dev-000001', 'PENDING'))
+    pintar()
+    const dialogo = await abrirDetalle()
+    fireEvent.click(dialogo.getByRole('button', { name: /Rechazar/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Confirmar rechazo/ }))
+    await waitFor(() => expect(reject).toHaveBeenCalledWith('dev-000001', undefined))
+  })
+
+  it('una fecha vacía no llega al backend', async () => {
+    usuario('GERENTE', 1)
+    pintar()
+    await screen.findByText('DEV-000001')
+    fireEvent.click(screen.getByRole('button', { name: 'Historial' }))
+    const antes = list.mock.calls.length
+    fireEvent.change(screen.getByLabelText('Desde'), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar' }))
+    await new Promise((r) => setTimeout(r, 20))
+    expect(list.mock.calls.length).toBe(antes)
   })
 })

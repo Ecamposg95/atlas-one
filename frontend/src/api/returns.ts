@@ -73,7 +73,7 @@ export interface CreateReturnPayload {
 }
 
 export const returnsApi = {
-  list: async (params?: { status?: ReturnStatus; branch_id?: number; start_date?: string; end_date?: string }): Promise<ReturnDocument[]> => {
+  list: async (params?: { status?: ReturnStatus; branch_id?: number; start_date?: string; end_date?: string; limit?: number }): Promise<ReturnDocument[]> => {
     const { data } = await client.get<ReturnDocument[]>('/returns/', { params })
     return Array.isArray(data) ? data : (data as any)?.items ?? []
   },

@@ -33,6 +33,8 @@ import { PRESETS, presetActivo, rangoPreset, type ClavePreset, type Rango } from
  * `pages/hq/HQReturns.tsx`. Solo tokens `dax-*` (coloresPorTokens, LIMPIOS).
  */
 
+// Tope del backend (`le=200`); el default de 50 recortaría pendientes viejos.
+const TOPE = 200
 const CAN_APPROVE = ['ADMINISTRADOR', 'DUEÑO', 'GERENTE']
 type Pestana = 'pending' | 'history'
 
@@ -92,8 +94,8 @@ function ReturnsAdminView() {
       // dueño y gerente —como hoy— y a la cajera la suya.
       const ambito = bid !== '' ? { branch_id: bid } : {}
       const [pendientes, historial] = await Promise.all([
-        returnsApi.list({ ...ambito, status: 'PENDING' }),
-        returnsApi.list({ ...ambito, start_date: r.inicio, end_date: r.fin }),
+        returnsApi.list({ ...ambito, status: 'PENDING', limit: TOPE }),
+        returnsApi.list({ ...ambito, start_date: r.inicio, end_date: r.fin, limit: TOPE }),
       ])
       if (mio !== reqId.current) return
       setPending(pendientes)
@@ -114,6 +116,7 @@ function ReturnsAdminView() {
     setRango(r); setDesde(r.inicio); setHasta(r.fin); setPresetElegido(clave)
   }
   const aplicarFechas = () => {
+    if (!desde || !hasta) { toast.error('Elige la fecha inicial y la final.'); return }
     if (desde > hasta) { toast.error('La fecha inicial no puede ser mayor que la final.'); return }
     aplicar({ inicio: desde, fin: hasta }, null)
   }
@@ -141,7 +144,7 @@ function ReturnsAdminView() {
         })
         if (ok) {
           setActionLoading(false)
-          return handleApprove(id, true)
+          return await handleApprove(id, true)
         }
       } else {
         toast.error(texto)
