@@ -56,9 +56,6 @@ DIAS_DIFERENCIAS = 7
 HORAS_TURNO_VIEJO = 24
 
 
-_ve_costos = mv.ve_costos
-
-
 def _sucursal_del_inicio(db: Session, current_user: User, org_id: int, branch_id: Optional[int]) -> Optional[int]:
     """Sucursal que mira el inicio; None = toda la organización.
 
@@ -371,7 +368,8 @@ def inicio(
     respuesta.por_hora_hoy = _por_hora_hoy(db, org_id, sucursal, hoy)
     # El gerente ya viene fijado a su sucursal: la sección de sucursales no aplica.
     respuesta.sucursales = _sucursales(db, org_id, hoy, umbral) if sucursal is None else None
-    if _ve_costos(current_user):
+    if mv.ve_costos(current_user):
         respuesta.utilidad_bruta_hoy, respuesta.venta_sin_costo_hoy = _utilidad_bruta_hoy(db, org_id, sucursal, hoy)
+        respuesta.venta_con_costo_hoy = mv.venta_con_costo(db, _ambito(org_id, sucursal), mv.Periodo(hoy, hoy))
         respuesta.utilidad_bruta_ayer, _ = mv.utilidad_bruta(db, _ambito(org_id, sucursal), mv.Periodo(ayer, ayer))
     return respuesta

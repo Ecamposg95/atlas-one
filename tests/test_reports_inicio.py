@@ -246,7 +246,7 @@ def test_alias_inicio_basico_sigue_respondiendo(client, db, org, branch_a, admin
     assert a == b
     assert a["hoy"]["total"] == 100.0
     assert set(a) == {"branch_id", "hoy", "ayer", "semana", "por_metodo_hoy", "top_semana", "poca_existencia", "corte",
-                      "sin_movimiento", "pendientes", "sucursales", "utilidad_bruta_hoy", "venta_sin_costo_hoy",
+                      "sin_movimiento", "pendientes", "sucursales", "utilidad_bruta_hoy", "venta_sin_costo_hoy", "venta_con_costo_hoy",
                       "tendencia", "por_hora_hoy", "utilidad_bruta_ayer"}
 
 
@@ -504,3 +504,43 @@ def test_inicio_utilidad_bruta_ayer_para_admin_y_null_para_gerente(client, db, o
     d = client.get(f"{INICIO}?completo=true", headers=auth_admin).json()
     assert d["utilidad_bruta_ayer"] == 80.0
     assert client.get(f"{INICIO}?completo=true", headers=auth_gerente_a).json()["utilidad_bruta_ayer"] is None
+
+
+# ── Ola final: la misma base de utilidad bruta en Inicio y Reportes ──
+
+def test_inicio_venta_con_costo_hoy_es_la_base_de_la_utilidad(client, db, org, branch_a, admin_user, gerente_a, auth_admin, auth_gerente_a):
+    v = _variante(db, org, branch_a, "Blusa", "BLU-1", 50)
+    _venta(db, org, branch_a, admin_user, v, "100", cantidad=2)   # con costo (unit_cost 10)
+    sin = _venta(db, org, branch_a, admin_user, v, "500")         # sin costo: fuera de la base
+    for r in db.query(SalesLineItem).filter(SalesLineItem.document_id == sin.id).all():
+        r.unit_cost = None
+    db.commit()
+
+    d = client.get(f"{INICIO}?completo=true", headers=auth_admin).json()
+    assert d["venta_con_costo_hoy"] == 100.0
+    assert (d["utilidad_bruta_hoy"], d["venta_sin_costo_hoy"]) == (80.0, 500.0)
+    assert client.get(f"{INICIO}?completo=true", headers=auth_gerente_a).json()["venta_con_costo_hoy"] is None
+    assert client.get(INICIO, headers=auth_admin).json()["venta_con_costo_hoy"] is None
+
+
+# ── Ola final (T1): gerente y org sin ventas en tendencia y horas ──
+
+def test_inicio_gerente_tendencia_y_horas_solo_de_su_sucursal(client, db, org, branch_a, branch_b, admin_user, gerente_a, auth_gerente_a):
+    v = _variante(db, org, branch_a, "Blusa", "BLU-1", 50)
+    _venta(db, org, branch_a, admin_user, v, "100")
+    _venta(db, org, branch_b, admin_user, v, "700")
+
+    d = client.get(f"{INICIO}?completo=true&branch_id={branch_b.id}", headers=auth_gerente_a).json()
+
+    assert d["tendencia"]["dias"][-1]["neta"] == 100.0
+    assert sum(h["neta"] for h in d["por_hora_hoy"]) == 100.0
+
+
+def test_inicio_org_sin_ventas_trae_7_dias_y_24_horas_en_cero(client, db, org, branch_a, auth_admin):
+    db.commit()
+    d = client.get(f"{INICIO}?completo=true", headers=auth_admin).json()
+    assert [x["neta"] for x in d["tendencia"]["dias"]] == [0.0] * 7
+    assert [x["tickets"] for x in d["tendencia"]["dias"]] == [0] * 7
+    assert len(d["tendencia"]["anterior"]) == 7
+    assert [h["hora"] for h in d["por_hora_hoy"]] == list(range(24))
+    assert all(h["neta"] == 0.0 and h["tickets"] == 0 for h in d["por_hora_hoy"])

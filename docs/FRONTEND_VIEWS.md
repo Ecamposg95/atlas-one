@@ -71,7 +71,7 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 | `/departments`, `/brands` | `core/Departments`, `Brands` | Admin | catalog (hideForGastro) |
 | `/cash-history` | `finance/CashHistory` | Gerente, Cajero | cash_management |
 | `/expenses`, `/purchases` | `finance/Expenses`, `Purchases` | Admin, Dueño | payments |
-| `/reports` | `reports/Reportes` (fijado a la sucursal del usuario) | Gerente | — |
+| `/reports` | `reports/Reportes` (fijado a la sucursal del usuario; el CAJERO no tiene la ruta en `ROLE_ROUTES` y, si entrara por API, el backend fija su sucursal) | Gerente | — |
 | `/customers` | `crm/Customers` | Admin, Dueño | crm |
 | `/hr`, `/hr/me` | `hr/HR`, `HRMe` | Admin / todos | — |
 | `/portal` | `portal/Portal` | Cliente | — |

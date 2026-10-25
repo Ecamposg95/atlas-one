@@ -68,6 +68,8 @@ def get_daily_summary(
         "gross_revenue": r.bruta,
         "returns_total": r.devuelto,
         "returns_count": r.devoluciones,
+        # `gross_profit` de este endpoint es el contrato A-8 (suma lo sin costo con costo 0);
+        # el de `/dashboard` es solo sobre renglones con costo. No son comparables entre sí.
         "gross_profit": round(utilidad + sin_costo, 2),
         "payments": {k: m.total for k, m in mv.por_metodo(db, ambito, periodo).items()},
         "top_selling_items": [{"name": p.nombre, "quantity": p.cantidad}
@@ -339,6 +341,9 @@ def get_dashboard_stats(
             "prev_orders": anterior.tickets,
             "prev_avg_ticket": anterior.ticket_promedio,
             "prev_returns": anterior.devuelto,
+            # OJO: aquí `gross_profit` es SOLO sobre renglones con costo (los sin costo van
+            # en `sales_without_cost`); en `/daily-summary` es el contrato A-8, que suma
+            # la línea sin costo con costo 0. Mismo nombre, dos significados.
             "gross_profit": utilidad,
             "prev_gross_profit": utilidad_prev,
             "sales_without_cost": sin_costo,
