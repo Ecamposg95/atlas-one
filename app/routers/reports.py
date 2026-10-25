@@ -26,6 +26,7 @@ from app.models import (
 )
 from app.core.security import get_current_user
 from app.models import User
+from app.models.users import Role
 from app.models.cash import CashSessionStatus
 from app.models.sales import PaymentMethod
 from app.models.organization import BranchType
@@ -219,10 +220,11 @@ def get_dashboard_stats(
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization)
 ):
-    """KPIs, tendencias y alertas del periodo. Venta neta y día de México por `app/services/metricas_ventas.py`; roles de oficina sin `branch_id` ven toda la organización."""
-    hoy = mv.hoy_mx()
-    periodo = mv.Periodo(start_date or hoy, end_date or hoy)
+    """KPIs, tendencias y alertas del periodo. Venta neta y día de México por `app/services/metricas_ventas.py`; roles de oficina sin `branch_id` ven toda la organización, salvo GERENTE (siempre su sucursal)."""
+    periodo = mv.periodo_de_query(start_date, end_date)      # una sola fecha = ese día; invertido = 422
     ambito = mv.resolver_ambito(current_user, org_id, branch_id)
+    if current_user.role == Role.GERENTE:   # branch-scoped como read_sales: la lista de abajo es de su sucursal
+        ambito = mv.Ambito(org_id, current_user.branch_id, False)
     filtros = mv.filtros_documentos(ambito, periodo)
 
     # 1. KPIs del periodo (neto) y comparativo del periodo anterior
@@ -478,8 +480,7 @@ def get_command_center_stats(
     Mission Control Data Aggregation.
     Provides deep insights for multi-branch management.
     """
-    hoy = mv.hoy_mx()
-    periodo = mv.Periodo(start_date or hoy, end_date or hoy)
+    periodo = mv.periodo_de_query(start_date, end_date)      # una sola fecha = ese día; invertido = 422
     ambito = mv.Ambito(org_id, None, True)          # el centro de mando siempre es de toda la org
     sales_filters = mv.filtros_documentos(ambito, periodo)
 

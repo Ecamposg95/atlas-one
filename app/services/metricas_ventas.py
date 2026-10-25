@@ -16,7 +16,8 @@ from decimal import Decimal
 from typing import Dict, List, Optional
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import case, desc, func
+from fastapi import HTTPException
+from sqlalchemy import case, desc, func, or_
 from sqlalchemy.orm import Session
 
 from app.models import Payment, SaleReturn, SalesDocument, SalesLineItem, User
@@ -83,6 +84,17 @@ def periodo_preset(clave: str, hoy: Optional[date] = None) -> Periodo:
     if clave == "mes":
         return Periodo(hoy.replace(day=1), hoy)
     raise ValueError(f"Periodo desconocido: {clave!r} (válidos: {', '.join(PRESETS)})")
+
+
+def periodo_de_query(start_date: Optional[date], end_date: Optional[date], hoy: Optional[date] = None) -> Periodo:
+    """Periodo a partir de los query params de un endpoint: la fecha que falte
+    copia a la otra (una sola fecha = ese día; ninguna = hoy); fin < inicio → 422."""
+    hoy = hoy or hoy_mx()
+    inicio = start_date or end_date or hoy
+    fin = end_date or start_date or hoy
+    if fin < inicio:
+        raise HTTPException(status_code=422, detail="end_date no puede ser anterior a start_date")
+    return Periodo(inicio, fin)
 
 
 @dataclass(frozen=True)
@@ -316,9 +328,16 @@ def top_productos(db: Session, ambito: Ambito, periodo: Periodo, limite: int = 5
 
 
 def utilidad_bruta(db: Session, ambito: Ambito, periodo: Periodo) -> tuple:
-    """(utilidad SOLO sobre renglones con costo, menos lo devuelto que reingresó
-    con costo; venta del periodo en renglones sin costo). Con `coalesce(costo, 0)`
-    una pieza sin costo parecía 100 % de utilidad."""
+    """(utilidad SOLO sobre renglones con costo; venta del periodo en renglones
+    sin costo). Con `coalesce(costo, 0)` una pieza sin costo parecía 100 % de
+    utilidad. Las devoluciones aprobadas del periodo se descuentan por el costo
+    de su variante, en tres ramas:
+    - con costo y con reingreso: utilidad -= reembolso - costo x cantidad
+      (la pieza volvió al stock, solo se pierde el margen);
+    - con costo y SIN reingreso (False o NULL): utilidad -= reembolso
+      (ingreso fuera y costo hundido: la pieza se perdió);
+    - variante sin costo (NULL o <= 0), con o sin reingreso: venta_sin_costo -=
+      reembolso (su venta vivía en venta_sin_costo y no toca la utilidad)."""
     con_costo = SalesLineItem.unit_cost > 0
     fila = (
         db.query(
@@ -328,13 +347,22 @@ def utilidad_bruta(db: Session, ambito: Ambito, periodo: Periodo) -> tuple:
         .join(SalesDocument, SalesDocument.id == SalesLineItem.document_id)
         .filter(*filtros_documentos(ambito, periodo)).one()
     )
-    reingresado = (
-        db.query(func.coalesce(func.sum(SaleReturnItem.refund_amount - ProductVariant.cost * SaleReturnItem.quantity), 0))
+    variante_con_costo = ProductVariant.cost > 0
+    con_reingreso = SaleReturnItem.is_inventory_reentry.is_(True)
+    sin_reingreso = or_(SaleReturnItem.is_inventory_reentry.is_(None), SaleReturnItem.is_inventory_reentry.is_(False))
+    margen_reingresado = SaleReturnItem.refund_amount - ProductVariant.cost * SaleReturnItem.quantity
+    devoluciones = (
+        db.query(
+            func.coalesce(func.sum(case(
+                (variante_con_costo & con_reingreso, margen_reingresado),
+                (variante_con_costo & sin_reingreso, SaleReturnItem.refund_amount),
+                else_=0)), 0),
+            func.coalesce(func.sum(case((variante_con_costo, 0), else_=SaleReturnItem.refund_amount)), 0),
+        )
         .select_from(SaleReturnItem)
         .join(SaleReturn, SaleReturn.id == SaleReturnItem.return_id)
         .join(ProductVariant, ProductVariant.id == SaleReturnItem.variant_id)
-        .filter(*filtros_devoluciones(ambito, periodo), SaleReturnItem.is_inventory_reentry.is_(True),
-                ProductVariant.cost > 0)
-        .scalar()
+        .filter(*filtros_devoluciones(ambito, periodo))
+        .one()
     )
-    return round(_f(fila[0]) - _f(reingresado), 2), _f(fila[1])
+    return round(_f(fila[0]) - _f(devoluciones[0]), 2), round(_f(fila[1]) - _f(devoluciones[1]), 2)

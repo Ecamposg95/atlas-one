@@ -72,15 +72,16 @@ def test_sales_stats_cajera_solo_su_sucursal(client, db, org, branch_a, branch_b
     assert s["total_sales"] == 100.0
 
 
-def test_returns_lista_por_dia_de_mexico_y_30_dias_por_defecto(client, db, org, branch_a, cajero_a, auth_admin_a, products_setup):
+def test_returns_lista_por_dia_de_mexico_y_sin_fechas_todo_el_historial(client, db, org, branch_a, cajero_a, auth_admin_a, products_setup):
     hoy = mv.hoy_mx()
     v = _venta(db, org, branch_a, cajero_a, _v(products_setup), "100", dia=hoy - timedelta(days=40))
     vieja = _devolucion(db, org, branch_a, cajero_a, v, "10", dia=hoy - timedelta(days=40))
     reciente = _devolucion(db, org, branch_a, cajero_a, v, "20", dia=hoy)
     pendiente_vieja = _devolucion(db, org, branch_a, cajero_a, v, "5", dia=hoy - timedelta(days=40), status="PENDING")
 
+    # Sin fechas no hay filtro (como antes de esta rama): se ve también la devolución vieja.
     ids = {r["id"] for r in client.get("/api/returns/", headers=auth_admin_a).json()}
-    assert reciente.id in ids and vieja.id not in ids
+    assert {reciente.id, vieja.id, pendiente_vieja.id} <= ids
 
     ids = {r["id"] for r in client.get("/api/returns/?status=PENDING", headers=auth_admin_a).json()}
     assert ids == {pendiente_vieja.id}
@@ -90,6 +91,10 @@ def test_returns_lista_por_dia_de_mexico_y_30_dias_por_defecto(client, db, org, 
     assert {vieja.id, reciente.id, pendiente_vieja.id} <= ids
 
     ids = {r["id"] for r in client.get(f"/api/returns/?start_date={hoy}&end_date={hoy}", headers=auth_admin_a).json()}
+    assert ids == {reciente.id}
+
+    # Una sola fecha = ese día.
+    ids = {r["id"] for r in client.get(f"/api/returns/?end_date={hoy}", headers=auth_admin_a).json()}
     assert ids == {reciente.id}
 
 
@@ -116,3 +121,13 @@ def test_sales_stats_sin_ventas_promedio_cero_y_sin_hora_pico(client, auth_admin
     s = client.get(f"/api/sales/stats?start_date={dia}&end_date={dia}", headers=auth_admin_a).json()
     assert s["total_sales"] == 0 and s["average_ticket"] == 0
     assert s["peak_hour"] is None
+
+
+def test_sales_stats_gerente_solo_su_sucursal_aunque_pida_otra(client, db, org, branch_a, branch_b, gerente_a, auth_gerente_a, products_setup):
+    db.add(OrganizationModule(organization_id=org.id, module_key="pos", is_enabled=True))  # el gerente pasa por el candado del módulo
+    db.commit()
+    _venta(db, org, branch_a, gerente_a, _v(products_setup), "100")
+    _venta(db, org, branch_b, gerente_a, _v(products_setup), "700")
+    for q in ("", f"?branch_id={branch_b.id}", "?branch_id=0"):
+        s = client.get(f"/api/sales/stats{q}", headers=auth_gerente_a).json()
+        assert (s["total_sales"], s["total_transactions"]) == (100.0, 1), q

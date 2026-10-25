@@ -61,6 +61,7 @@ from app.core.tenant_context import get_current_active_organization
 from app.models.organization import Organization
 from app.services.tax import compute_line_tax, quantize_amount, quantize_totals, resolve_org_tax_mode
 from app.services.card_surcharge import calcular_comision, pct_de_organizacion
+from app.models.users import Role
 from app.services import metricas_ventas as mv
 from app.crud.products import get_variant_if_visible
 try:
@@ -157,15 +158,12 @@ def get_sales_stats(
 ):
     """KPIs del listado de ventas: total neto, tickets, ticket promedio, métodos,
     devoluciones y hora pico. Criterio único en `app/services/metricas_ventas.py`
-    (antes aquí sumaban pendientes y borradores)."""
-    hoy = mv.hoy_mx()
-    # La fecha que falta copia a la otra; un rango invertido es error del cliente (422).
-    inicio = start_date or end_date or hoy
-    fin = end_date or start_date or hoy
-    if fin < inicio:
-        raise HTTPException(status_code=422, detail="end_date no puede ser anterior a start_date")
-    periodo = mv.Periodo(inicio, fin)
+    (antes aquí sumaban pendientes y borradores). ADMINISTRADOR/DUEÑO sin
+    `branch_id` ven toda la organización; GERENTE siempre su sucursal."""
+    periodo = mv.periodo_de_query(start_date, end_date)      # una sola fecha = ese día; invertido = 422
     ambito = mv.resolver_ambito(current_user, org_id, branch_id)
+    if current_user.role == Role.GERENTE:   # branch-scoped como read_sales: la lista de abajo es de su sucursal
+        ambito = mv.Ambito(org_id, current_user.branch_id, False)
     r = mv.resumen(db, ambito, periodo)
     horas = mv.por_hora(db, ambito, periodo)
     pico = max(horas, key=lambda h: (h.tickets, -h.hora))
