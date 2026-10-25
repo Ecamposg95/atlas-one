@@ -41,6 +41,12 @@ export function Inventory() {
   const esTelefono = useEsTelefono()
   // Costo e importe a costo solo para quien ve costos (misma regla que la valuación: ADMIN/DUEÑO).
   const veCosto = esRolHq(useAuthStore((s) => s.user?.role))
+  const usuarioBranchId = useAuthStore((s) => s.user?.branch_id) ?? null
+  const usuarioBranchName = useAuthStore((s) => s.user?.branch_name) ?? null
+  const sucursalActivaId = useAuthStore((s) => s.branch?.id) ?? null
+  // Sucursal del kardex: el rol de oficina mira la activa (o la suya); el resto, siempre la suya.
+  // Un admin sin sucursal propia vería un kardex vacío si no se pidiera una explícita.
+  const sucursalKardex = (veCosto ? sucursalActivaId ?? usuarioBranchId : usuarioBranchId) ?? undefined
   const [soloSinCosto, setSoloSinCosto] = useState(false)
   const [search, setSearch] = useState('')
   const [products, setProducts] = useState<Product[]>([])
@@ -57,6 +63,16 @@ export function Inventory() {
   const [adjReason, setAdjReason] = useState('')
   const [adjBranch, setAdjBranch] = useState('')
   const [adjSaving, setAdjSaving] = useState(false)
+  // Debounce del buscador: una petición por pausa al teclear, no una por letra.
+  const debounceBusqueda = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => { if (debounceBusqueda.current) clearTimeout(debounceBusqueda.current) }, [])
+  const alTeclear = (valor: string) => {
+    setSearch(valor)
+    if (debounceBusqueda.current) clearTimeout(debounceBusqueda.current)
+    // Borrar el texto limpia al instante (y descarta lo que venía en camino).
+    if (!valor.trim()) { doSearch(valor); return }
+    debounceBusqueda.current = setTimeout(() => doSearch(valor), 300)
+  }
 
   // Todas las sucursales (también las que no venden): el ajuste puede ir a una bodega.
   useEffect(() => {
@@ -71,7 +87,7 @@ export function Inventory() {
     try {
       const res = await productsApi.search(q, 0, 30)
       const items = res.items ?? []
-      if (mio !== reqId.current) return items
+      if (mio !== reqId.current) return []
       setProducts(items)
       return items
     } catch (e: unknown) {
@@ -100,11 +116,17 @@ export function Inventory() {
     { piezas: 0, venta: 0, costo: 0 },
   )
 
+  // Contador propio del kardex: abrir otra talla (o cerrar) deja sin efecto al kardex que venía en camino.
+  const kardexReq = useRef(0)
   const openDetail = async (row: InventoryRow) => {
+    const mio = ++kardexReq.current
     setSelected(row)
     setKardexLoading(true)
-    try { setKardex(await inventoryApi.getKardex(row.variant.id)) }
-    catch { setKardex([]) } finally { setKardexLoading(false) }
+    try {
+      const movimientos = await inventoryApi.getKardex(row.variant.id, sucursalKardex)
+      if (mio === kardexReq.current) setKardex(movimientos)
+    } catch { if (mio === kardexReq.current) setKardex([]) }
+    finally { if (mio === kardexReq.current) setKardexLoading(false) }
   }
 
   // Entrada con ?variant=<id>&q=<sku> (el "Ajustar" del editor de variantes, el Inicio
@@ -122,28 +144,43 @@ export function Inventory() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // El backend fuerza la sucursal del usuario a quien no es ADMIN/DUEÑO (inventory.py, /adjust):
+  // el select de esos roles queda fijo en la suya en vez de ofrecer una que se ignoraría.
+  const sucursalAjuste = veCosto ? adjBranch : usuarioBranchId ? String(usuarioBranchId) : ''
+
   const handleAdjust = async () => {
-    if (!selected || !adjQty || !adjReason || !adjBranch) return
+    if (!selected || !adjQty || !adjReason || !sucursalAjuste) return
     setAdjSaving(true)
+    const variantId = selected.variant.id
+    const sucursalId = Number(sucursalAjuste)
+    // El `try` cierra justo tras el POST: lo de después ya no puede decir "no se guardó nada".
     try {
       await inventoryApi.createAdjustment({
-        variant_id: selected.variant.id,
+        variant_id: variantId,
         quantity: parseInt(adjQty),
-        branch_id: Number(adjBranch),
+        branch_id: sucursalId,
         reason: adjReason,
       })
-      setAdjustModal(false); setAdjQty(''); setAdjReason(''); setAdjBranch('')
-      // Recargar la tabla: sin esto la existencia del renglón seguía mostrando
-      // la de antes del ajuste hasta que el usuario volvía a buscar.
-      const frescos = await doSearch(search)
-      const actualizado = expandVariantRows(frescos).find((r) => r.variant.id === selected.variant.id)
-      if (actualizado) setSelected(actualizado)
-      setKardex(await inventoryApi.getKardex(selected.variant.id))
     } catch (e: unknown) {
       toast.error(errorDetailText(
         (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail,
         'No se pudo ajustar la existencia. No se guardó nada: revisa la cantidad y el motivo, y vuelve a intentar.',
       ))
+      setAdjSaving(false)
+      return
+    }
+    toast.success('Ajuste guardado')
+    setAdjustModal(false); setAdjQty(''); setAdjReason(''); setAdjBranch('')
+    try {
+      // Recargar la tabla: sin esto la existencia del renglón seguía mostrando
+      // la de antes del ajuste hasta que el usuario volvía a buscar.
+      const frescos = await doSearch(search)
+      const actualizado = expandVariantRows(frescos).find((r) => r.variant.id === variantId)
+      if (actualizado) setSelected(actualizado)
+      // El kardex de la sucursal AJUSTADA (no la del usuario, que puede ser otra).
+      setKardex(await inventoryApi.getKardex(variantId, sucursalId))
+    } catch {
+      toast.warning('Ajuste guardado; no se pudo refrescar el kardex')
     } finally { setAdjSaving(false) }
   }
 
@@ -162,7 +199,8 @@ export function Inventory() {
         <input
           type="text" placeholder="Buscar producto por nombre o SKU..."
           value={search}
-          onChange={(e) => { setSearch(e.target.value); doSearch(e.target.value) }}
+          aria-label="Buscar producto por nombre o SKU"
+          onChange={(e) => alTeclear(e.target.value)}
           className="dax-input flex-1 min-w-[12rem] text-sm" />
         {veCosto && (
           <label className="flex items-center gap-2 text-xs text-dax-muted max-md:min-h-[44px] cursor-pointer">
@@ -190,6 +228,13 @@ export function Inventory() {
         <DaxCard padding={false}>
           {esTelefono ? (
             <ListaTarjetas className="p-3">
+              {/* Los totales de la tabla, en una tarjeta resumen para teléfono. */}
+              <div data-testid="totales-telefono" className="rounded-lg bg-dax-elevated p-3 text-xs font-bold text-dax-text flex flex-wrap gap-x-4 gap-y-1">
+                <span>Total de lo listado</span>
+                <span className="tabular-nums">{totales.piezas} pzas</span>
+                <span className="tabular-nums">{formatCurrency(totales.venta)} a venta</span>
+                {veCosto && <span className="tabular-nums">{formatCurrency(totales.costo)} a costo</span>}
+              </div>
               {rows.map((row) => (
                 <TarjetaFila key={row.variant.id}
                   titulo={row.label}
@@ -352,7 +397,7 @@ export function Inventory() {
           footer={
             <>
               <button type="button" onClick={() => setAdjustModal(false)} className="dax-btn-secondary flex-1">Cancelar</button>
-              <button type="button" onClick={handleAdjust} disabled={adjSaving || !adjQty || !adjReason || !adjBranch} className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
+              <button type="button" onClick={handleAdjust} disabled={adjSaving || !adjQty || !adjReason || !sucursalAjuste} className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
                 {adjSaving ? <i className="fa-solid fa-spinner fa-spin" aria-hidden="true" /> : <><i className="fa-solid fa-check" aria-hidden="true" /> Ajustar</>}
               </button>
             </>
@@ -362,8 +407,13 @@ export function Inventory() {
           <div className="space-y-3">
             <div>
               <label className="dax-label" htmlFor="ajuste-sucursal">Sucursal</label>
-              <select id="ajuste-sucursal" value={adjBranch} onChange={(e) => setAdjBranch(e.target.value)} className="dax-input w-full">
+              <select id="ajuste-sucursal" value={sucursalAjuste} onChange={(e) => setAdjBranch(e.target.value)}
+                disabled={!veCosto} className="dax-input w-full">
                 <option value="">Seleccionar...</option>
+                {/* Si la lista de sucursales aún no llega, la propia se ofrece igual para que el valor no quede huérfano. */}
+                {!veCosto && usuarioBranchId && !branches.some((b) => b.id === usuarioBranchId) && (
+                  <option value={usuarioBranchId}>{usuarioBranchName ?? `Sucursal ${usuarioBranchId}`}</option>
+                )}
                 {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </div>
