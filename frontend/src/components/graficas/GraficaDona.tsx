@@ -17,7 +17,7 @@ export interface ParteDona {
  * negativa (más devuelto que cobrado) se pinta como 0: un gajo negativo no
  * existe; la lista bajo la dona sí enseña el número real.
  */
-export function GraficaDona({ partes, centro, alto = 224 }: { partes: ParteDona[]; centro?: ReactNode; alto?: number }) {
+export function GraficaDona({ partes, centro, alto = 224, ariaLabel }: { partes: ParteDona[]; centro?: ReactNode; alto?: number; ariaLabel?: string }) {
   const tema = useTemaGrafica()
   const valores = useMemo(() => partes.map((p) => Math.max(0, p.valor)), [partes])
   const total = valores.reduce((s, v) => s + v, 0)
@@ -56,7 +56,7 @@ export function GraficaDona({ partes, centro, alto = 224 }: { partes: ParteDona[
 
   return (
     <div className="relative" style={{ height: alto }}>
-      <Doughnut data={data} options={opciones} />
+      <Doughnut data={data} options={opciones} role={ariaLabel ? 'img' : undefined} aria-label={ariaLabel} />
       {centro && (
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">{centro}</div>
       )}

@@ -26,7 +26,7 @@ export function KpiCard({ etiqueta, valor, detalle, variacion, tono, 'data-testi
   return (
     <div className="dax-card p-4" data-testid={testId}>
       <p className="dax-kpi-label">{etiqueta}</p>
-      <p className={`dax-kpi-value mt-1 ${tono ? TONO[tono] : ''}`}>{valor}</p>
+      <p className={tono ? `dax-kpi-value mt-1 ${TONO[tono]}` : 'dax-kpi-value mt-1'}>{valor}</p>
       {variacion && <TextoVariacion v={variacion} />}
       {detalle != null && detalle !== '' && <p className="text-xs text-dax-muted mt-1">{detalle}</p>}
     </div>
@@ -40,6 +40,7 @@ function TextoVariacion({ v }: { v: Variacion }) {
   const bien = v.invertida ? !sube : sube
   return (
     <p className={`text-xs font-bold tabular-nums mt-1 ${bien ? 'text-dax-success' : 'text-dax-danger'}`} data-testid="variacion">
+      <span className="sr-only">{sube ? 'Sube' : 'Baja'} </span>
       <span aria-hidden="true">{sube ? '▲' : '▼'}</span> {Math.abs(v.pct)} %{' '}
       <span className="font-normal text-dax-muted">{v.texto}</span>
     </p>

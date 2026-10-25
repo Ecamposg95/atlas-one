@@ -17,10 +17,12 @@ export interface GraficaBarrasProps {
   alto?: number
   /** Nombre de la serie en el tooltip. */
   nombre?: string
+  /** Texto corto para lectores de pantalla: el canvas va como `role="img"`. */
+  ariaLabel?: string
 }
 
 /** Barras planas (spec §3.3): un solo color por barra, sin degradados; ejes con `dineroCorto`. */
-export function GraficaBarras({ etiquetas, valores, resaltar = null, horizontal = false, alto = 224, nombre = 'Venta' }: GraficaBarrasProps) {
+export function GraficaBarras({ etiquetas, valores, resaltar = null, horizontal = false, alto = 224, nombre = 'Venta', ariaLabel }: GraficaBarrasProps) {
   const tema = useTemaGrafica()
   const data = useMemo<ChartData<'bar'>>(() => ({
     labels: etiquetas,
@@ -58,5 +60,5 @@ export function GraficaBarras({ etiquetas, valores, resaltar = null, horizontal 
         },
   }), [tema, horizontal, nombre])
 
-  return <div style={{ height: alto }}><Bar data={data} options={opciones} /></div>
+  return <div style={{ height: alto }}><Bar data={data} options={opciones} role={ariaLabel ? 'img' : undefined} aria-label={ariaLabel} /></div>
 }

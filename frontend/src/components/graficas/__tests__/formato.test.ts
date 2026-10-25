@@ -9,6 +9,14 @@ describe('dineroCorto', () => {
     expect(dineroCorto(3_400_000)).toBe('$3.4M')
     expect(dineroCorto(0)).toBe('$0')
   })
+  it('redondea en los umbrales: 999.5 es $1.0k, 999 950 es $1.0M y -0.4 es $0 sin signo', () => {
+    expect(dineroCorto(999.4)).toBe('$999')
+    expect(dineroCorto(999.5)).toBe('$1.0k')
+    expect(dineroCorto(999_949)).toBe('$999.9k')
+    expect(dineroCorto(999_950)).toBe('$1.0M')
+    expect(dineroCorto(-0.4)).toBe('$0')
+    expect(dineroCorto(-999.5)).toBe('-$1.0k')
+  })
   it('negativos con signo delante (un día con más devoluciones que ventas)', () => {
     expect(dineroCorto(-1234)).toBe('-$1.2k')
     expect(dineroCorto(-40)).toBe('-$40')
@@ -29,6 +37,13 @@ describe('recortarHoras (spec §2.1: min(9, primera con venta) .. max(21, últim
   })
   it('una devolución (neta negativa) también cuenta como movimiento', () => {
     expect(recortarHoras(horas({ 6: -40 }))).toEqual({ desde: 6, hasta: 21 })
+  })
+})
+
+describe('recortarHoras con tickets', () => {
+  it('una hora con tickets abre la ventana aunque su neta sea 0 (venta y devolución iguales)', () => {
+    const horas = Array.from({ length: 24 }, (_, h) => ({ hora: h, neta: 0, tickets: h === 7 ? 1 : 0 }))
+    expect(recortarHoras(horas)).toEqual({ desde: 7, hasta: 21 })
   })
 })
 

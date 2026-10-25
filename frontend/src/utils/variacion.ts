@@ -16,6 +16,7 @@ export interface Variacion {
  * contra cero es "igual" (0).
  */
 export function porcentajeVariacion(actual: number, anterior: number): number | null {
+  if (!Number.isFinite(actual)) return null
   if (anterior === 0 && actual === 0) return 0
   if (!(anterior > 0)) return null
   return Math.round(((actual - anterior) / anterior) * 100)

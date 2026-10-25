@@ -16,6 +16,10 @@ describe('porcentajeVariacion', () => {
     expect(porcentajeVariacion(50, 0)).toBeNull()
     expect(porcentajeVariacion(50, -10)).toBeNull()
   })
+  it('una cifra que no es finita no tiene variación', () => {
+    expect(porcentajeVariacion(NaN, 100)).toBeNull()
+    expect(porcentajeVariacion(Infinity, 100)).toBeNull()
+  })
   it('cero contra cero es igual, no "sin referencia"', () => {
     expect(porcentajeVariacion(0, 0)).toBe(0)
   })

@@ -24,6 +24,7 @@ interface Props {
 
 const WEEK_ORDER_PG = [1, 2, 3, 4, 5, 6, 0]
 const WEEK_LABELS = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
+const WEEK_CORTO = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 const WEEK_LONG = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
 
 /** Porcentaje del verde del tema por escalón (0 = sin venta). */
@@ -78,9 +79,13 @@ export function SalesHeatmap({ data, hourStart = 9, hourEnd = 21 }: Props) {
                   const c = cells.get(`${pgDay}-${h}`)
                   const amt = c?.amount ?? 0
                   const pct = INTENSIDAD[escalon(maxAmount > 0 ? amt / maxAmount : 0)]
+                  const tickets = c?.tickets ?? 0
+                  const descripcion = `${WEEK_CORTO[rowIdx]} ${h}:00 · ${formatCurrency(amt)} · ${tickets} ${tickets === 1 ? 'ticket' : 'tickets'}`
                   return (
                     <td
                       key={`${pgDay}-${h}`}
+                      title={descripcion}
+                      aria-label={descripcion}
                       data-testid={`celda-${pgDay}-${h}`}
                       data-intensidad={pct}
                       className={`relative h-6 rounded-sm cursor-pointer transition-all duration-200 hover:ring-2 hover:ring-dax-accent ${pct === 0 ? 'bg-dax-elevated' : ''}`}

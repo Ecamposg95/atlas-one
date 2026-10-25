@@ -15,7 +15,7 @@ export interface SerieLinea {
 }
 
 /** Línea plana (spec §3.3): acento para la serie principal, tenue para el comparativo, sin relleno. */
-export function GraficaLinea({ etiquetas, series, alto = 224 }: { etiquetas: string[]; series: SerieLinea[]; alto?: number }) {
+export function GraficaLinea({ etiquetas, series, alto = 224, ariaLabel }: { etiquetas: string[]; series: SerieLinea[]; alto?: number; ariaLabel?: string }) {
   const tema = useTemaGrafica()
   const data = useMemo<ChartData<'line'>>(() => ({
     labels: etiquetas,
@@ -55,5 +55,5 @@ export function GraficaLinea({ etiquetas, series, alto = 224 }: { etiquetas: str
     },
   }), [tema])
 
-  return <div style={{ height: alto }}><Line data={data} options={opciones} /></div>
+  return <div style={{ height: alto }}><Line data={data} options={opciones} role={ariaLabel ? 'img' : undefined} aria-label={ariaLabel} /></div>
 }

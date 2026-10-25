@@ -11,6 +11,7 @@ vi.mock('react-chartjs-2', () => {
   type Props = { data: { labels?: unknown[]; datasets: Record<string, unknown>[] }; options: Record<string, any> }
   const volcar = (id: string) => (p: Props) => (
     <div data-testid={id} data-datasets={JSON.stringify(p.data.datasets)} data-labels={JSON.stringify(p.data.labels)}
+      role={(p as any).role} aria-label={(p as any)['aria-label']}
       data-animacion={String(p.options.animation?.duration)} data-eje={String(p.options.indexAxis)} data-cutout={String(p.options.cutout)} />
   )
   return { Line: volcar('line'), Bar: volcar('bar'), Doughnut: volcar('dona') }
@@ -36,6 +37,24 @@ describe('GraficaLinea', () => {
     expect(principal.borderDash).toBeUndefined()
     expect(comparativo).toMatchObject({ label: 'Semana anterior', borderColor: '#999999', borderDash: [4, 4], fill: false })
     expect(screen.getByTestId('line').getAttribute('data-animacion')).toBe('300')
+  })
+})
+
+describe('ariaLabel', () => {
+  it('las tres gráficas pasan role="img" y aria-label al canvas; sin él no ponen ninguno', () => {
+    render(<>
+      <GraficaLinea etiquetas={['l']} series={[{ nombre: 'a', valores: [1] }]} ariaLabel="Línea de prueba" />
+      <GraficaBarras etiquetas={['a']} valores={[1]} ariaLabel="Barras de prueba" />
+      <GraficaDona partes={[{ nombre: 'a', valor: 1, color: '#111111' }]} ariaLabel="Dona de prueba" />
+    </>)
+    for (const [id, texto] of [['line', 'Línea de prueba'], ['bar', 'Barras de prueba'], ['dona', 'Dona de prueba']]) {
+      expect(screen.getByTestId(id).getAttribute('role')).toBe('img')
+      expect(screen.getByTestId(id).getAttribute('aria-label')).toBe(texto)
+    }
+    cleanup()
+    render(<GraficaBarras etiquetas={['a']} valores={[1]} />)
+    expect(screen.getByTestId('bar').getAttribute('role')).toBeNull()
+    expect(screen.getByTestId('bar').getAttribute('aria-label')).toBeNull()
   })
 })
 

@@ -42,6 +42,21 @@ describe('KpiCard', () => {
     expect(v.textContent).toContain('▲ 300 %')
     expect(v.className).toContain('text-dax-danger')
   })
+  it('invertida y a la baja (devoluciones bajan) es buena noticia: success, y dice "Baja" para lectores de pantalla', () => {
+    render(<KpiCard etiqueta="Devoluciones" valor="$100" variacion={{ pct: -50, texto: 'vs periodo anterior', invertida: true }} />)
+    const v = screen.getByTestId('variacion')
+    expect(v.className).toContain('text-dax-success')
+    expect(v.querySelector('.sr-only')?.textContent).toBe('Baja ')
+  })
+  it('la flecha lleva su "Sube" oculto a la vista, para lectores de pantalla', () => {
+    render(<KpiCard etiqueta="Hoy" valor="$1" variacion={{ pct: 12, texto: 'vs ayer' }} />)
+    expect(screen.getByTestId('variacion').querySelector('.sr-only')?.textContent).toBe('Sube ')
+    expect(screen.getByTestId('variacion').querySelector('[aria-hidden="true"]')?.textContent).toBe('▲')
+  })
+  it('sin tono el valor no deja espacio final en la clase', () => {
+    render(<KpiCard etiqueta="Hoy" valor="$1" data-testid="k" />)
+    expect(screen.getByTestId('k').querySelector('.dax-kpi-value')?.className).toBe('dax-kpi-value mt-1')
+  })
   it('el tono colorea el valor', () => {
     render(<KpiCard etiqueta="Utilidad" valor="$400" tono="success" data-testid="k" />)
     expect(screen.getByTestId('k').querySelector('.dax-kpi-value')?.className).toContain('text-dax-success')

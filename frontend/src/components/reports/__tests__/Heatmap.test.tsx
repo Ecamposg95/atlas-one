@@ -20,6 +20,15 @@ describe('SalesHeatmap', () => {
     expect(container.querySelectorAll('thead th')).toHaveLength(12)   // 1 vacío + 10..20
   })
 
+  it('cada celda se describe con día, hora, importe y tickets (title y aria-label)', () => {
+    render(<SalesHeatmap data={DATA} />)
+    const c = screen.getByTestId('celda-1-12')
+    expect(c.getAttribute('title')).toBe('Lun 12:00 · $1,000.00 · 4 tickets')
+    expect(c.getAttribute('aria-label')).toBe('Lun 12:00 · $1,000.00 · 4 tickets')
+    expect(screen.getByTestId('celda-5-18').getAttribute('title')).toBe('Vie 18:00 · $300.00 · 1 ticket')
+    expect(screen.getByTestId('celda-2-12').getAttribute('title')).toBe('Mar 12:00 · $0.00 · 0 tickets')
+  })
+
   it('la intensidad es el dato: 100 % el máximo, 40 % para 0.3 del máximo, 0 sin venta', () => {
     render(<SalesHeatmap data={DATA} />)
     expect(screen.getByTestId('celda-1-12').getAttribute('data-intensidad')).toBe('100')
