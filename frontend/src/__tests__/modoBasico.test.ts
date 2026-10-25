@@ -7,7 +7,7 @@ const src = (p: string) => readFileSync(resolve(__dirname, '..', p), 'utf8')
 /** Archivos nuevos del modo básico: render condicional, nunca `hidden`. Cada tarea añade los suyos. */
 const NUEVOS = [
   'pages/pos/opcionesPos.ts', 'components/pos/AltaRapidaProducto.tsx', 'components/layout/navPerfilBasico.ts',
-  'pages/hq/Inicio.tsx', 'components/layout/PorPerfil.tsx',
+  'pages/hq/Inicio.tsx', 'pages/hq/InicioGraficas.tsx', 'components/layout/PorPerfil.tsx',
   'components/ui/MasOpciones.tsx', 'pages/platform/SelectorPerfilUi.tsx',
 ]
 
@@ -25,7 +25,11 @@ describe('modo básico: carga y render condicional', () => {
     expect(app).toMatch(/path="operations"[^\n]*<Inicio \/>/)
     expect(app).not.toMatch(/HQOperations|InicioBasico/)
     expect(app).toMatch(/<PorPerfil basico=\{<Reports \/>\} completo=\{<HQReportsHub \/>\} \/>/)
-    expect(src('pages/hq/Inicio.tsx')).not.toMatch(/chart\.js|react-chartjs-2/)
+    // El Inicio solo llega a las gráficas por lazy(): chart.js no viaja en su chunk.
+    const inicio = src('pages/hq/Inicio.tsx')
+    expect(inicio).not.toMatch(/chart\.js|react-chartjs-2|components\/graficas/)
+    expect(inicio).toMatch(/lazy\(\(\) => import\('\.\/InicioGraficas'\)/)
+    expect(inicio).not.toMatch(/^import \{[^}]*\} from '\.\/InicioGraficas'/m)   // solo `import type`
   })
 
   it('el alta se precarga y va dentro de un límite de error (el carrito no se pierde)', () => {
