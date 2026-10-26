@@ -21,6 +21,21 @@ export interface NavItem {
   hideForGastro?: boolean
 }
 
+/**
+ * URL del ítem que debe encenderse en el sidebar para la ruta actual. Un ítem
+ * aplica si su URL es la ruta o un prefijo de ella por segmentos; entre varios
+ * que apliquen (`/inventory` y `/inventory/conteos`, `/quotes` y
+ * `/quotes/new`) gana la más larga, para que el sidebar encienda uno solo.
+ */
+export function urlActiva(pathname: string, urls: string[]): string | null {
+  let mejor: string | null = null
+  for (const u of urls) {
+    const aplica = pathname === u || pathname.startsWith(u + '/')
+    if (aplica && (mejor === null || u.length > mejor.length)) mejor = u
+  }
+  return mejor
+}
+
 export interface NavVisibilityOptions {
   role: Role
   /** URLs que ROLE_ROUTES permite a este rol. */
