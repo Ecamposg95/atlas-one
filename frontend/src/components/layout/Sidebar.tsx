@@ -7,7 +7,7 @@ import { returnsApi } from '../../api/returns'
 import { confirm } from '../ui/ConfirmDialog'
 import { useTheme } from '../../context/ThemeContext'
 import type { Role } from '../../types/auth'
-import { BRANCH_ROLES, visibleNavItems, type NavItem } from './navVisibility'
+import { BRANCH_ROLES, urlActiva, visibleNavItems, type NavItem } from './navVisibility'
 import {
   ALL_NAV, ROLE_ROUTES, HQ_NAV_GROUPS, BRANCH_NAV_GROUPS,
   GROUP_COLOR, DEFAULT_GROUP_COLOR, URL_COLOR, GASTRO_PRESETS,
@@ -142,6 +142,7 @@ function NavPill({ item, active, color, pendingReturns }: {
 // ── BRANCH NAV — full-width rectangle buttons ───────────────────
 function BranchNav({ items, pendingReturns }: { items: NavItem[]; pendingReturns: number }) {
   const { pathname } = useLocation()
+  const activa = urlActiva(pathname, items.map((it) => it.url))
   const grouped: { header: string; items: NavItem[] }[] = []
   const placed = new Set<string>()
 
@@ -171,7 +172,7 @@ function BranchNav({ items, pendingReturns }: { items: NavItem[]; pendingReturns
                   <NavPill
                     key={item.url}
                     item={item}
-                    active={pathname === item.url || pathname.startsWith(item.url + '/')}
+                    active={item.url === activa}
                     color={color}
                     pendingReturns={pendingReturns}
                   />
@@ -188,6 +189,7 @@ function BranchNav({ items, pendingReturns }: { items: NavItem[]; pendingReturns
 // ── HQ NAV — lista agrupada + etiquetada (admin/dueño), más legible ──
 function HQNav({ items, pendingReturns }: { items: NavItem[]; pendingReturns: number }) {
   const { pathname } = useLocation()
+  const activa = urlActiva(pathname, items.map((it) => it.url))
   const grouped: { header: string; items: NavItem[] }[] = []
   const placed = new Set<string>()
 
@@ -216,7 +218,7 @@ function HQNav({ items, pendingReturns }: { items: NavItem[]; pendingReturns: nu
                   <NavPill
                     key={item.url}
                     item={item}
-                    active={pathname === item.url || pathname.startsWith(item.url + '/')}
+                    active={item.url === activa}
                     color={color}
                     pendingReturns={pendingReturns}
                   />
@@ -457,6 +459,7 @@ function MatrixSidebar({ items, logout, isBranchRole }: { items: NavItem[]; logo
 // ── ICON RAIL (contraído) ───────────────────────────────────────
 function IconRail({ items, logout }: { items: NavItem[]; logout: () => void }) {
   const { pathname } = useLocation()
+  const activa = urlActiva(pathname, items.map((it) => it.url))
   const { user, org, branch } = useAuthStore()
   const unaSolaSucursal = esTiendaUnica(useBranchCountStore((s) => s.count))
   const role = (user?.role ?? 'CAJERO') as Role
@@ -521,7 +524,7 @@ function IconRail({ items, logout }: { items: NavItem[]; logout: () => void }) {
       {/* Icon column */}
       <nav style={{ flex: 1, overflowY: 'auto', padding: '6px' }}>
         {items.map((item) => {
-          const active = pathname === item.url || pathname.startsWith(item.url + '/')
+          const active = item.url === activa
           const showReturnsBadge = RETURNS_URLS.has(item.url) && pendingReturns > 0
           const color = URL_COLOR[item.url] ?? DEFAULT_GROUP_COLOR
           return (
