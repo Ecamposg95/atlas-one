@@ -46,6 +46,7 @@ class DatosEtiqueta:
     price_text: str = ""
     size: str = ""
     color: str = ""
+    gender: str = ""  # solo lo llena lo que no tiene talla (cinturones)
 
     @property
     def price_display(self) -> str:
@@ -119,7 +120,7 @@ def layout(product: DatosEtiqueta, spec: Optional[BarcodeSpec] = None) -> list[E
         Text(MARGIN, 34, 18, fit_text(product.name, 18, TEXT_WIDTH)),
     ]
     variant = fit_text(
-        " / ".join(x for x in (zpl_safe(product.size), zpl_safe(product.color)) if x),
+        " / ".join(x for x in (zpl_safe(product.size), zpl_safe(product.color), zpl_safe(product.gender)) if x),
         15,
         TEXT_WIDTH,
     )
