@@ -181,3 +181,17 @@ def test_layout_es_la_misma_fuente_que_el_zpl():
     for elemento in elementos:
         if not isinstance(elemento, Bars):
             assert f"^FO{elemento.x},{elemento.y}" in ETIQUETA_CHAMARRA
+
+
+# ── Género (prendas sin talla) ───────────────────────────────────────────────
+def test_genero_va_en_el_renglon_de_talla_y_color():
+    """Un cinturón no trae talla ni color: el renglón lleva el género para que
+    la tienda distinga el de hombre del de mujer al etiquetar."""
+    datos = DatosEtiqueta(sku="LV-CINT-MUJ", name="Cinturón", brand="Louis Vuitton",
+                          barcode="2017000000013", gender="Mujer")
+    assert "^FO12,56^A0N,15,15^FDMujer^FS" in build_label(datos)
+
+
+def test_etiqueta_con_talla_no_cambia():
+    """Sin género la etiqueta sale carácter por carácter igual que antes."""
+    assert build_label(CHAMARRA) == ETIQUETA_CHAMARRA

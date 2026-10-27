@@ -28,6 +28,9 @@ NO_VISIBLE = "No disponible para tu sucursal"
 
 Par = Tuple[Product, ProductVariant]
 
+# Cómo se lee `products.gender` en la etiqueta (los cuatro que acepta el backend).
+GENEROS = {"HOMBRE": "Hombre", "MUJER": "Mujer", "UNISEX": "Unisex", "NINO": "Niño"}
+
 
 def _texto(valor: Optional[str]) -> str:
     return (valor or "").strip()
@@ -38,16 +41,20 @@ def datos_de_variante(producto: Product, variante: ProductVariant) -> DatosEtiqu
 
     El renglón del nombre lleva prenda + modelo SIN la marca: la marca ya tiene
     su propio renglón arriba y repetirla se come el ancho útil (384 dots).
+    Lo que no tiene talla (cinturones) lleva el género en el renglón de talla y
+    color; la ropa sigue igual.
     """
     marca = producto.brand.name if producto.brand else ""
+    talla = _texto(variante.size)
     return DatosEtiqueta(
         sku=_texto(variante.sku),
         name=sale_name(None, _texto(producto.name), producto.model),
         brand=_texto(marca),
         barcode=_texto(variante.barcode),
         price=Decimal(str(variante.price or 0)),
-        size=_texto(variante.size),
+        size=talla,
         color=_texto(variante.color),
+        gender="" if talla else GENEROS.get(_texto(producto.gender), ""),
     )
 
 
