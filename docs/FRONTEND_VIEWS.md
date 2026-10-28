@@ -377,7 +377,7 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Datos/API:** `reportsApi.dashboard`, `reportsApi.exportCsv`.
 
 ### `/customers` — Clientes 📱
-- **Archivo:** `pages/crm/Customers.tsx` (236 líneas)
+- **Archivo:** `pages/crm/Customers.tsx` (abono con método y referencia, filtro "Con deuda"; 2026-10-28)
 - **Propósito:** Directorio con crédito/cuenta corriente: lista buscable con saldo, estado de cuenta (ledger) y registro de abonos.
 - **Quién la ve:** Admin, Dueño — módulo `crm`.
 - **Datos/API:** `customersApi.getAll/getStats/getStatement/pay`.

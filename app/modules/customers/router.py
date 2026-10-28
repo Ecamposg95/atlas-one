@@ -420,46 +420,33 @@ def get_customer_unpaid_documents(
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization)
 ):
+    """Tickets del cliente que todavía deben algo, del más viejo al más nuevo.
+
+    El saldo de cada ticket sale del ledger (`services.saldo_documento`): lo
+    que cargó menos lo abonado, incluido lo que un abono libre le repartió.
+    Antes se calculaba `total − pagos` sobre cualquier documento, así que un
+    ticket cancelado o un pedido que nunca cargó nada seguían apareciendo
+    "por cobrar". Útil para elegir a qué ticket aplicar un abono.
     """
-    Obtiene los documentos de venta (Orders/Quotes convertidos) que tienen saldo pendiente.
-    Útil para seleccionar a qué documento aplicar un pago específico.
-    """
-    from app.models import SalesDocument, DocumentStatus, DocumentType
-    
+    from app.modules.customers.services import documentos_abiertos
+
     customer = db.query(Customer).filter(Customer.id == customer_id, Customer.organization_id == org_id).first()
     if not customer:
         raise HTTPException(404, "Cliente no encontrado")
-    
-    # Get documents that are PENDING or PAID but linked to credit sales
-    # For simplicity, we'll get all documents for this customer that might have balance
-    docs = db.query(SalesDocument).filter(
-        SalesDocument.customer_id == customer_id,
-        SalesDocument.organization_id == org_id,
-        SalesDocument.doc_type.in_([DocumentType.ORDER, DocumentType.INVOICE])
-    ).order_by(desc(SalesDocument.created_at)).limit(50).all()
-    
+
     results = []
-    for doc in docs:
-        # Calculate payments made to this document
-        from app.models import Payment
-        payments_sum = db.query(func.sum(Payment.amount)).filter(
-            Payment.sales_document_id == doc.id
-        ).scalar() or 0
-        
-        balance = float(doc.total_amount) - float(payments_sum)
-        
-        # Only include if there's a balance
-        if balance > 0.01:
-            results.append({
-                "id": doc.id,
-                "folio": f"{doc.series}-{doc.folio}" if doc.series and doc.folio else doc.id,
-                "created_at": doc.created_at.isoformat(),
-                "total_amount": float(doc.total_amount),
-                "paid_amount": float(payments_sum),
-                "balance": balance,
-                "doc_type": doc.doc_type.value
-            })
-    
+    for abierto in documentos_abiertos(db, org_id=org_id, customer=customer):
+        doc = abierto.documento
+        total = Decimal(str(doc.total_amount or 0))
+        results.append({
+            "id": doc.id,
+            "folio": abierto.folio,
+            "created_at": doc.created_at.isoformat() if doc.created_at else None,
+            "total_amount": float(total),
+            "paid_amount": float(max(Decimal("0.00"), total - abierto.saldo)),
+            "balance": float(abierto.saldo),
+            "doc_type": getattr(doc.doc_type, "value", doc.doc_type),
+        })
     return results
 
 # Recibir un abono es cobrar en el mostrador, y cobrar es de la cajera: este
@@ -496,16 +483,9 @@ def register_customer_payment(
     if payment_in.amount <= 0:
         raise HTTPException(400, "El monto del pago debe ser mayor a cero")
 
-    # ATS-37: Overpayment guard — solo aplica cuando el abono está vinculado a un documento específico.
-    # Abonos generales ("saldo a favor") sin documento se permiten siempre (balance puede volverse negativo).
-    if payment_in.sales_document_id and payment_in.amount > customer.current_balance:
-        raise HTTPException(
-            status_code=422,
-            detail=f"El monto del abono (${payment_in.amount}) excede el saldo pendiente del cliente (${customer.current_balance})."
-        )
+    from app.modules.customers.services import aplicar_abono, saldo_documento
 
     # Validate document if provided
-    doc_reference = None
     doc = None
     if payment_in.sales_document_id:
         doc = db.query(SalesDocument).filter(
@@ -517,7 +497,17 @@ def register_customer_payment(
         if not doc:
             raise HTTPException(404, "Documento de venta no encontrado o no pertenece al cliente")
 
-        doc_reference = f"{doc.series}-{doc.folio}" if doc.series and doc.folio else doc.id
+        # ATS-37: el abono a un ticket no puede exceder lo que ESE ticket debe.
+        # Antes se comparaba contra el saldo total del cliente, así que con dos
+        # tickets fiados se podía "abonar" a uno más de lo que valía. Los
+        # abonos libres (sin documento) se permiten siempre: lo que sobre queda
+        # como saldo a favor.
+        saldo_doc = saldo_documento(db, org_id=org_id, documento=doc, customer_id=customer.id)
+        if payment_in.amount > saldo_doc + Decimal("0.01"):
+            raise HTTPException(
+                status_code=422,
+                detail=f"El monto del abono (${payment_in.amount}) excede lo que debe el ticket (${saldo_doc})."
+            )
 
     from app.models.sales import Payment as SalesPayment, DocumentStatus, PaymentMethod as SalesPaymentMethod
     try:
@@ -566,22 +556,22 @@ def register_customer_payment(
             detail="Debes abrir caja antes de cobrar en efectivo",
         )
 
-    # 1. Actualizar saldo (restar el abono)
-    customer.current_balance -= payment_in.amount
-
-    # 2. Registrar en el Ledger (Kardex de dinero)
-    description = f"PAGO RECIBIDO: {payment_in.reference or 'Abono'}"
-    if doc_reference:
-        description = f"ABONO A TICKET {doc_reference}: {payment_in.reference or payment_in.method}"
-
-    new_entry = CustomerLedgerEntry(
-        customer_id=customer.id,
-        sales_document_id=payment_in.sales_document_id,  # Link to document
-        amount=-payment_in.amount,  # Negativo porque reduce la deuda
-        description=description,
-        organization_id=org_id
+    # 1 y 2. Bajar el saldo y asentarlo en el ledger, ticket por ticket.
+    # Con documento, todo va a ese ticket; sin documento (abono libre) se
+    # reparte del ticket más viejo al más nuevo y cada ticket que se cubre
+    # pasa a PAID. Antes el abono libre bajaba el saldo y dejaba todos los
+    # tickets PENDING para siempre, y el ticket solo se marcaba PAID cuando
+    # el saldo TOTAL del cliente llegaba a cero (con dos tickets fiados,
+    # liquidar el primero no lo cerraba).
+    asientos = aplicar_abono(
+        db,
+        org_id=org_id,
+        customer=customer,
+        amount=payment_in.amount,
+        documento=doc,
+        referencia=payment_in.reference or payment_in.method,
     )
-    db.add(new_entry)
+    new_entry = asientos[0]
 
     # ATS-37: Create a Payment record linked to the SalesDocument
     # (`method_enum` y `cash_session_id_value` se resolvieron arriba, antes de
@@ -597,10 +587,6 @@ def register_customer_payment(
         cash_session_id=cash_session_id_value,
     )
     db.add(payment_record)
-
-    # ATS-37: Mark document as PAID when the customer balance is fully covered
-    if doc is not None and customer.current_balance <= 0:
-        doc.status = DocumentStatus.PAID
 
     db.commit()
     db.refresh(new_entry)

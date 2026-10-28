@@ -25,6 +25,7 @@
 ## 🗂️ Historial / generado (no es referencia)
 
 - [`audits/`](audits/) — auditorías fechadas (tenant-isolation, platform-orgs, cajero-visibility). Snapshots/baselines, no estado actual.
+- [`AUDITORIA-CRM-CREDITO-2026-10-28.md`](AUDITORIA-CRM-CREDITO-2026-10-28.md) — auditoría del crédito a clientes (fiar, abonos, cancelación, devoluciones, antigüedad): 9 hallazgos corregidos y lo que queda para el diseño del módulo.
 - [`AUDITORIA-2026-09-22.md`](AUDITORIA-2026-09-22.md) — auditoría funcional del 2026-09-22 (36 hallazgos backend + 43 frontend): qué se corrigió el mismo día y qué queda abierto, con archivo:línea.
 - [`CHANGELOG-2026-09-boutique.md`](CHANGELOG-2026-09-boutique.md) — bitácora fechada de lo construido para el preset boutique (2026-09-16 → 2026-09-22).
 - `superpowers/` — specs, plans y runbooks por feature (historial de ejecución).
