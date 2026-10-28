@@ -16,6 +16,7 @@ import { useExchangeRateStore } from '../../store/exchangeRateStore'
 import { usdSummary } from '../../utils/usd'
 import { useCapacidad, useEnabledModulesStore } from '../../store/enabledModulesStore'
 import { opcionesPorPerfil } from '../../pages/pos/opcionesPos'
+import { customersApi } from '../../api/customers'
 
 type PaymentMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'MIXED'
 
@@ -38,6 +39,19 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
   const itemCount = usePOSStore((s) => s.itemCount())
   const globalDiscount = usePOSStore((s) => s.globalDiscount)
   const globalDiscountAmount = usePOSStore((s) => s.globalDiscountAmount())
+  // Saldo del cliente del CRM elegido: la cajera ve cuánto debe antes de
+  // fiarle más. Un nombre libre no tiene ficha ni saldo. Si el CRM no
+  // responde, el chip se queda sin saldo y el cobro sigue igual.
+  const customerId = usePOSStore((s) => s.customerId)
+  const [saldoCliente, setSaldoCliente] = useState<number | null>(null)
+  useEffect(() => {
+    if (customerId == null) { setSaldoCliente(null); return }
+    let vivo = true
+    customersApi.getById(customerId)
+      .then((c) => { if (vivo) setSaldoCliente(c.current_balance ?? 0) })
+      .catch(() => { if (vivo) setSaldoCliente(null) })
+    return () => { vivo = false }
+  }, [customerId])
   const setGlobalDiscount = usePOSStore((s) => s.setGlobalDiscount)
   const tip = usePOSStore((s) => s.tip)
   const setTip = usePOSStore((s) => s.setTip)
@@ -389,6 +403,14 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
           >
             {customerName}
           </span>
+          )}
+          {saldoCliente != null && saldoCliente !== 0 && (
+            <span
+              className={`text-xs font-semibold tabular-nums whitespace-nowrap ${saldoCliente > 0 ? 'text-dax-danger' : 'text-dax-success'}`}
+              title={saldoCliente > 0 ? 'Saldo que debe el cliente' : 'Saldo a favor del cliente'}
+            >
+              {saldoCliente > 0 ? 'Debe ' : 'A favor '}{formatCurrency(Math.abs(saldoCliente))}
+            </span>
           )}
           <button
             onClick={onClearCustomer}

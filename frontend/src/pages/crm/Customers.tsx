@@ -44,6 +44,9 @@ export function Customers() {
   const [ledgerLoading, setLedgerLoading] = useState(false)
   const [payModal, setPayModal] = useState<PayModal | null>(null)
   const [payAmount, setPayAmount] = useState('')
+  const [payMethod, setPayMethod] = useState<'CASH' | 'CARD' | 'TRANSFER'>('CASH')
+  const [payReference, setPayReference] = useState('')
+  const [soloDeuda, setSoloDeuda] = useState(false)
   const [payLoading, setPayLoading] = useState(false)
   const payInputRef = useRef<HTMLInputElement>(null)
   // El Modal del kit enfoca su primer control (cerrar) al montar y pisa autoFocus;
@@ -68,19 +71,23 @@ export function Customers() {
   const [loadError, setLoadError] = useState(false)
   const LIMIT = 50
 
-  const load = useCallback(async (q: string, pg: number) => {
+  const load = useCallback(async (q: string, pg: number, deuda: boolean = soloDeuda) => {
     setLoading(true)
     setLoadError(false)
     try {
-      const res = await customersApi.getAll({ search: q || undefined, skip: pg * LIMIT, limit: LIMIT })
+      const res = await customersApi.getAll({
+        search: q || undefined, skip: pg * LIMIT, limit: LIMIT,
+        balance_filter: deuda ? 'debt' : undefined,
+      })
       setCustomers(res.items ?? [])
       setTotal(res.total ?? 0)
     } catch { setLoadError(true) } finally { setLoading(false) }
-  }, [])
+  }, [soloDeuda])
 
   useEffect(() => {
     customersApi.getStats().then(setStats).catch(() => {})
     load('', 0)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const onSearch = (val: string) => {
@@ -98,12 +105,18 @@ export function Customers() {
     } catch { setLedger([]) } finally { setLedgerLoading(false) }
   }
 
+  const cerrarPago = () => { setPayModal(null); setPayAmount(''); setPayMethod('CASH'); setPayReference('') }
+
   const handlePay = async () => {
     if (!payModal || !payAmount) return
     setPayLoading(true)
     try {
-      await customersApi.pay(payModal.id, { amount: parseFloat(payAmount) })
-      setPayModal(null); setPayAmount('')
+      await customersApi.pay(payModal.id, {
+        amount: parseFloat(payAmount),
+        method: payMethod,
+        reference: payReference.trim() || undefined,
+      })
+      cerrarPago()
       await customersApi.getStats().then(setStats).catch(() => {})
       load(search, page)
       if (selected?.id === payModal.id) openDetail({ ...selected })
@@ -183,6 +196,14 @@ export function Customers() {
           type="text" placeholder="Buscar por nombre, teléfono, RFC..."
           value={search} onChange={(e) => onSearch(e.target.value)}
           className="dax-input flex-1 text-sm" />
+        <button
+          onClick={() => { const v = !soloDeuda; setSoloDeuda(v); setPage(0); load(search, 0, v) }}
+          className={`${soloDeuda ? 'dax-btn-primary' : 'dax-btn-secondary'} text-sm whitespace-nowrap`}
+          aria-pressed={soloDeuda}
+          title="Mostrar solo clientes que deben"
+        >
+          <i className="fa-solid fa-exclamation-circle" /> Con deuda
+        </button>
         <button onClick={() => setFormModal({ open: true, customer: null })} className="dax-btn-primary text-sm whitespace-nowrap max-md:w-full max-md:min-h-[44px] justify-center">
           <i className="fa-solid fa-user-plus" /> Nuevo cliente
         </button>
@@ -363,9 +384,9 @@ export function Customers() {
 
       {/* Modal pago */}
       {payModal && (
-        <Modal open onClose={() => { setPayModal(null); setPayAmount('') }} size="sm" title="Registrar Pago"
+        <Modal open onClose={cerrarPago} size="sm" title="Registrar abono"
           footer={<>
-            <button onClick={() => { setPayModal(null); setPayAmount('') }} className="dax-btn-secondary flex-1">Cancelar</button>
+            <button onClick={cerrarPago} className="dax-btn-secondary flex-1">Cancelar</button>
             <button onClick={handlePay} disabled={!payAmount || payLoading} className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
               {payLoading ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Confirmar</>}
             </button>
@@ -377,6 +398,24 @@ export function Customers() {
               <input type="number" step="0.01" value={payAmount} onChange={(e) => setPayAmount(e.target.value)}
                 placeholder="0.00" className="dax-input w-full text-lg font-bold" ref={payInputRef} />
             </div>
+            <div>
+              <label htmlFor="abono-metodo" className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Método</label>
+              {/* Antes todo abono entraba como efectivo: una transferencia quedaba en el cajón y descuadraba el corte. */}
+              <select id="abono-metodo" value={payMethod} onChange={(e) => setPayMethod(e.target.value as 'CASH' | 'CARD' | 'TRANSFER')}
+                className="dax-input w-full text-sm">
+                <option value="CASH">Efectivo</option>
+                <option value="CARD">Tarjeta</option>
+                <option value="TRANSFER">Transferencia</option>
+              </select>
+            </div>
+            {payMethod !== 'CASH' && (
+              <div>
+                <label htmlFor="abono-referencia" className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Referencia</label>
+                <input id="abono-referencia" type="text" value={payReference} onChange={(e) => setPayReference(e.target.value)}
+                  placeholder={payMethod === 'TRANSFER' ? 'Folio de la transferencia' : 'Últimos dígitos / autorización'} className="dax-input w-full text-sm" />
+              </div>
+            )}
+            <p className="text-xs text-slate-500">Sin ticket elegido, el abono se aplica del ticket más viejo al más nuevo; lo que sobre queda a favor.</p>
           </div>
         </Modal>
       )}

@@ -251,6 +251,22 @@ def approve_return(db: Session, return_id: str, supervisor_id: int,
             )
             db.add(movement)
 
+    # 4b. Venta fiada: lo devuelto baja primero la deuda del cliente.
+    # Antes una devolución en efectivo sobre una venta a crédito le entregaba
+    # dinero a un cliente que no había pagado la mercancía, y su deuda seguía
+    # intacta. Solo lo que exceda la deuda viva se entrega por el método
+    # elegido (auditoría del crédito, 2026-10-28).
+    from app.modules.customers.services import aplicar_devolucion_a_saldo, deuda_cargada_por_documento
+    aplicado_a_saldo = aplicar_devolucion_a_saldo(
+        db, org_id=db_return.organization_id, documento=sale, monto=refund_amount,
+        descripcion=f"Devolución #{db_return.id[:8].upper()} aplicada al saldo",
+    )
+    a_entregar = refund_amount - aplicado_a_saldo
+    db.flush()
+    sigue_debiendo = bool(sale.customer_id) and deuda_cargada_por_documento(
+        db, org_id=db_return.organization_id, documento=sale, customer_id=sale.customer_id,
+    ) > Decimal("0")
+
     # 5. Update Sale Status (Check if fully or partially refunded)
     # Query all approved returns for this sale
     all_returned_items = db.query(SaleReturnItem).join(SaleReturn).filter(
@@ -274,6 +290,10 @@ def approve_return(db: Session, return_id: str, supervisor_id: int,
             
     if fully_refunded:
         sale.status = DocumentStatus.REFUNDED_TOTAL
+    elif sigue_debiendo:
+        # Devolvió parte pero sigue debiendo el resto: la venta sigue por
+        # cobrar (y fuera de la venta neta, como toda venta a crédito).
+        sale.status = DocumentStatus.PENDING
     elif any_refunded:
         sale.status = DocumentStatus.REFUNDED_PARTIAL
     else:
@@ -286,7 +306,7 @@ def approve_return(db: Session, return_id: str, supervisor_id: int,
     # se creó la devolución (que puede estar cerrada o ser cross-day).
     # Si el aprobador no tiene sesión OPEN: error claro, dinero no sale
     # del cajón sin trazabilidad.
-    if db_return.refund_method == PaymentMethod.CASH:
+    if db_return.refund_method == PaymentMethod.CASH and a_entregar > Decimal("0"):
         from app.models.cash import CashSession, CashSessionStatus, CashMovement
         # Prioridad de asignación del CashMovement OUT:
         #   1) Sesión OPEN del aprobador en este branch (cajero/gerente con caja)
@@ -355,7 +375,7 @@ def approve_return(db: Session, return_id: str, supervisor_id: int,
         cash_mov = CashMovement(
             session_id=target_session_id,
             type='OUT',
-            amount=db_return.total_refunded,
+            amount=a_entregar,
             reason=f"Devolución #{db_return.id[:8].upper()} - {db_return.reason}{reason_suffix}",
             # Ronda de correcciones 1 de Task 4: sin esto, cada devolución
             # en efectivo nace con autor NULL — no es una fila histórica,

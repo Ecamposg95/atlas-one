@@ -336,37 +336,14 @@ def _deuda_cargada_por_documento(
 ) -> Decimal:
     """Cuánto de la cuenta del cliente cargó ESTE documento y sigue vivo.
 
-    El saldo del cliente lo mueven varios caminos (checkout a crédito, abono
-    en caja, cancelación), y solo `customer_ledger_entries` guarda cuál movió
-    qué. Sumamos los asientos de este documento: los cargos (+) menos lo ya
-    abonado (−). Sin asientos, este documento nunca cargó nada — el caso de
-    los pedidos que crea `app/routers/quotes.py`, que nacen PENDING con
-    `customer_id` sin tocar el saldo.
-
-    Un asiento de cargo nace hoy con `sales_document_id` (ver el bloque de
-    "Crédito Cliente" de `create_sale`, que corre después del flush justamente
-    para poder enlazarlo). Los cargos anteriores a esa corrección quedaron sin
-    enlace: si el documento solo tiene abonos, el cargo existió aunque no esté
-    enlazado, y ahí sí caemos a la fórmula vieja (`total_amount`) para no
-    dejarle al cliente una deuda que ya pagó.
+    La regla vive en `app.modules.customers.services.deuda_cargada_por_documento`
+    desde la auditoría del crédito (2026-10-28), porque el CRM, la cancelación
+    y las devoluciones la necesitan igual; este nombre se conserva para los
+    tests y lectores que ya lo conocían.
     """
-    cargos, abonos = db.query(
-        func.coalesce(func.sum(case(
-            (CustomerLedgerEntry.amount > 0, CustomerLedgerEntry.amount), else_=0)), 0),
-        func.coalesce(func.sum(case(
-            (CustomerLedgerEntry.amount < 0, -CustomerLedgerEntry.amount), else_=0)), 0),
-    ).filter(
-        CustomerLedgerEntry.organization_id == org_id,
-        CustomerLedgerEntry.sales_document_id == documento.id,
-        CustomerLedgerEntry.customer_id == customer_id,
-    ).one()
-    cargos = Decimal(str(cargos or 0))
-    abonos = Decimal(str(abonos or 0))
-    if cargos == 0 and abonos > 0:
-        # Legado: cargo sin `sales_document_id`. Los abonos enlazados prueban
-        # que este documento sí le cargó su total en su momento.
-        cargos = Decimal(str(documento.total_amount or 0))
-    return max(Decimal("0.00"), cargos - abonos)
+    from app.modules.customers.services import deuda_cargada_por_documento
+    return deuda_cargada_por_documento(
+        db, org_id=org_id, documento=documento, customer_id=customer_id)
 
 
 @router.post("", response_model=Dict[str, Any], include_in_schema=False)
@@ -824,8 +801,12 @@ def create_sale(
     if sale_in.payments:
         expected_total = total_a_cobrar
         tolerance = Decimal("0.01")
-        # Pago insuficiente → 422
-        if total_paid < (expected_total - tolerance):
+        # Pago insuficiente → 422, salvo que la venta tenga cliente: entonces
+        # lo que falta queda a su cuenta (enganche + saldo fiado, el bloque de
+        # "Crédito Cliente" de más abajo lo asienta). Hasta la auditoría del
+        # crédito (2026-10-28) la única forma de fiar era `payments: []`:
+        # "se lleva $3,000 y deja $500" devolvía 422.
+        if total_paid < (expected_total - tolerance) and not sale_in.customer_id:
             # Con comision aplicada el total a cobrar es mayor que el del
             # carrito: el mensaje dice de donde sale la diferencia para que el
             # cajero no crea que el sistema le inventa dinero a la venta. Sin
@@ -1007,10 +988,20 @@ def create_sale(
     # documento aún no existía y el cargo nacía con `sales_document_id=None`,
     # así que la deuda por documento no era reconstruible desde el ledger, que
     # es de donde `_deuda_cargada_por_documento` la lee.
+    #
+    # Quién tiene crédito lo decide la cajera en el mostrador (auditoría del
+    # crédito, 2026-10-28): cualquier cliente registrado puede llevarse
+    # mercancía dejando saldo. Antes esto exigía `customer.has_credit`, y un
+    # cliente sin la casilla se llevaba la mercancía con la venta PENDING pero
+    # SIN cargo en su cuenta: la deuda no existía en ningún lado. Hoy el cargo
+    # se asienta siempre y la casilla se enciende sola, para que el CRM
+    # refleje que ese cliente ya fió.
     ajuste_deuda = remaining_debt - deuda_previa
     if sale_in.customer_id and ajuste_deuda != Decimal("0.00"):
         customer = db.query(Customer).filter(Customer.id == sale_in.customer_id, Customer.organization_id == org_id).first()
-        if customer and customer.has_credit:
+        if customer:
+            if ajuste_deuda > 0 and not customer.has_credit:
+                customer.has_credit = True
             customer.current_balance += ajuste_deuda
             db.add(CustomerLedgerEntry(
                 customer_id=customer.id,
@@ -1548,38 +1539,18 @@ def cancel_sale(
                 )
                 db.add(move)
 
-    # 2. Revertir Deuda (Si aplicó)
-    # Si la venta estaba PENDING (crédito), reducimos la deuda del cliente
-    # Si estaba PAID, asumimos que se devolvió el dinero o se queda como saldo a favor (Nota de Crédito)
-    # Para simplificar este endpoint DELETE, asumiremos reversión total.
-    
-    if sale.customer_id:
-        customer = db.query(Customer).filter(
-            Customer.id == sale.customer_id,
-            Customer.organization_id == org_id
-        ).first()
-        if customer:
-            # ¿Cuánto se cargó al cliente?
-            # Si status=PENDING, el cliente debe (total - pagado).
-            # Al cancelar, quitamos esa deuda.
-            
-            # Calculamos cuánto se debía originalmente
-            paid_amount = sum(p.amount for p in sale.payments)
-            debt_amount = sale.total_amount - paid_amount
-            
-            if debt_amount > 0 and sale.status == DocumentStatus.PENDING:
-                customer.current_balance -= debt_amount # Reducir deuda
-                
-                # Ledger entry
-                ledger = CustomerLedgerEntry(
-                    customer_id=customer.id,
-                    sales_document_id=sale.id,
-                    amount=-debt_amount,
-                    description=f"Cancelación Venta #{sale.folio}",
-                    entry_type="CANCELLATION",
-                    organization_id=org_id
-                )
-                db.add(ledger)
+    # 2. Revertir Deuda (si aplicó)
+    # Lo que ESTE documento le carga al cliente lo dice el ledger, no
+    # `total − pagos` (un pedido de cotizaciones nace PENDING sin haber
+    # cargado nada). Hasta la auditoría del crédito (2026-10-28) este bloque
+    # además construía el asiento con un campo que el modelo no tiene
+    # (`entry_type`), así que cancelar una venta fiada tronaba con 500 y la
+    # venta no se podía cancelar.
+    from app.modules.customers.services import revertir_cargo_de_documento
+    revertir_cargo_de_documento(
+        db, org_id=org_id, documento=sale,
+        descripcion=f"Cancelación Venta #{sale.folio}",
+    )
 
     # 3. Marcar Cancelado
     prev_status = sale.status.value if hasattr(sale.status, "value") else str(sale.status)

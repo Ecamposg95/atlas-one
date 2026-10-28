@@ -156,39 +156,15 @@ def get_aging_report(
     report_list = []
     total_receivable = Decimal("0.00")
 
+    from app.modules.customers.services import antiguedad_por_cargo, asientos_del_cliente
+
     for customer in debtor_customers:
-        # Inicializamos los acumuladores para este cliente
-        buckets = {
-            "current": Decimal("0.00"),  # 0-30 días
-            "31_60": Decimal("0.00"),
-            "61_90": Decimal("0.00"),
-            "91_plus": Decimal("0.00")
-        }
-
-        # 2. Analizar cargos pendientes (donde amount > 0)
-        # Nota: En un sistema real, aquí podrías filtrar facturas específicas no pagadas
-        ledger_entries = db.query(CustomerLedgerEntry).filter(
-            CustomerLedgerEntry.organization_id == org_id,
-            CustomerLedgerEntry.customer_id == customer.id,
-            CustomerLedgerEntry.amount > 0 
-        ).all()
-
-        for entry in ledger_entries:
-            creado = entry.created_at
-            if creado is None:
-                continue
-            if creado.tzinfo is None:
-                creado = creado.replace(tzinfo=timezone.utc)
-            days_old = (now - creado).days
-
-            if days_old <= 30:
-                buckets["current"] += entry.amount
-            elif days_old <= 60:
-                buckets["31_60"] += entry.amount
-            elif days_old <= 90:
-                buckets["61_90"] += entry.amount
-            else:
-                buckets["91_plus"] += entry.amount
+        # 2. Lo que debe HOY, por la edad del cargo que lo originó. Los abonos
+        # se aplican al cargo más viejo primero (FIFO). Antes se sumaban TODOS
+        # los cargos históricos sin restar ningún abono, así que los cubos no
+        # cuadraban con el saldo (auditoría del crédito, 2026-10-28).
+        buckets = antiguedad_por_cargo(
+            asientos_del_cliente(db, org_id=org_id, customer_id=customer.id), ahora=now)
 
         # 3. Construir objeto de respuesta para el cliente
         report_list.append({

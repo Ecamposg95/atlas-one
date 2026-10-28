@@ -310,7 +310,9 @@ export function POS() {
       const folio = sale.folio ?? '—'
       const change = sale.change ?? 0
       const changeStr = change > 0 ? ` · Cambio: ${formatCurrency(change)}` : ''
-      showToast(`Venta ${folio} registrada${changeStr}`)
+      const fiado = sale.credit_debt ?? 0
+      const fiadoStr = fiado > 0 ? ` · Queda a crédito: ${formatCurrency(fiado)}` : ''
+      showToast(`Venta ${folio} registrada${changeStr}${fiadoStr}`)
       // Auto-imprimir vía agente local si hay impresora configurada,
       // salvo que el cajero haya apagado "Imprimir Ticket" en el modal.
       if (saleId && shouldPrint) printViaAgent(saleId)
@@ -881,6 +883,8 @@ export function POS() {
         <MixedPaymentModal
           total={total}
           surchargePct={surchargePct}
+          customerId={store.customerId}
+          customerName={store.customerName}
           onClose={() => setPayModal(null)}
           onConfirm={handleMixedPay}
         />

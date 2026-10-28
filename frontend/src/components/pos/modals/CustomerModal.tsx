@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { customersApi, type Customer } from '../../../api/customers'
 import { usePOSStore } from '../../../store/posStore'
 import { errorDetailText } from '../../../utils/errorDetail'
+import { formatCurrency } from '../../../utils/currency'
 
 interface Props {
   onClose: () => void
@@ -164,7 +165,14 @@ export function CustomerModal({ onClose }: Props) {
                 className="w-full text-left px-3 py-2.5 min-h-[44px] transition-colors hover:bg-indigo-500/10 focus:bg-indigo-500/10 focus:outline-none"
                 style={{ borderBottom: '1px solid var(--dax-row-border)' }}
               >
-                <p className="text-sm font-medium" style={{ color: 'var(--dax-text)' }}>{c.name}</p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium truncate" style={{ color: 'var(--dax-text)' }}>{c.name}</p>
+                  {c.current_balance > 0 && (
+                    <span className="text-xs font-semibold tabular-nums whitespace-nowrap text-dax-danger">
+                      Debe {formatCurrency(c.current_balance)}
+                    </span>
+                  )}
+                </div>
                 {c.phone && (
                   <p className="text-xs" style={{ color: 'var(--dax-text-muted)' }}>{c.phone}</p>
                 )}

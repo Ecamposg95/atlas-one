@@ -20,11 +20,18 @@ interface Props {
   total: number
   /** Comisión por pago con tarjeta de la organización. 0 = apagada. */
   surchargePct?: number
+  /**
+   * Cliente del CRM en el carrito. Con uno, lo que no se cobre queda a su
+   * cuenta (fiado): el backend asienta el saldo y la venta nace PENDING. Un
+   * nombre libre sin ficha no puede fiar: no hay cuenta a la cual cargarle.
+   */
+  customerId?: number | null
+  customerName?: string | null
   onClose: () => void
   onConfirm: (payments: { method: string; amount: number; reference?: string }[]) => Promise<void>
 }
 
-export function MixedPaymentModal({ total, surchargePct = 0, onClose, onConfirm }: Props) {
+export function MixedPaymentModal({ total, surchargePct = 0, customerId = null, customerName = null, onClose, onConfirm }: Props) {
   const [lines, setLines] = useState<PaymentLine[]>([
     { method: 'CASH', amount: String(total.toFixed(2)), reference: '' },
   ])
@@ -48,18 +55,28 @@ export function MixedPaymentModal({ total, surchargePct = 0, onClose, onConfirm 
   const updateLine = (i: number, patch: Partial<PaymentLine>) =>
     setLines((l) => l.map((line, idx) => idx === i ? { ...line, ...patch } : line))
 
-  const isValid = remaining <= 0.005 && lines.every((l) => parseFloat(l.amount) > 0)
+  const puedeFiar = customerId != null
+  const fiado = puedeFiar && remaining > 0.005 ? remaining : 0
+  // Sin cliente, cada renglón cobra algo y entre todos cubren el total. Con
+  // cliente, un renglón vacío se ignora (dejar todo a crédito) y lo que falte
+  // es el saldo fiado; nunca se manda un importe negativo.
+  const renglonesValidos = puedeFiar
+    ? lines.every((l) => l.amount === '' || (parseFloat(l.amount) || 0) >= 0)
+    : lines.every((l) => parseFloat(l.amount) > 0)
+  const isValid = renglonesValidos && (puedeFiar || remaining <= 0.005)
 
   const submit = async () => {
     if (!isValid) return
     setLoading(true)
     try {
       await onConfirm(
-        lines.map((l) => ({
-          method: l.method,
-          amount: parseFloat(l.amount),
-          reference: l.reference || undefined,
-        }))
+        lines
+          .filter((l) => (parseFloat(l.amount) || 0) > 0)
+          .map((l) => ({
+            method: l.method,
+            amount: parseFloat(l.amount),
+            reference: l.reference || undefined,
+          }))
       )
     } finally { setLoading(false) }
   }
@@ -73,6 +90,12 @@ export function MixedPaymentModal({ total, surchargePct = 0, onClose, onConfirm 
       <div className="dax-card dax-modal p-6 pb-0 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-black text-white mb-1">Pago Mixto</h3>
         <p className="text-slate-500 text-sm mb-4">Total: <span className="text-white font-bold">{formatCurrency(total)}</span></p>
+        {puedeFiar && (
+          <p className="text-xs mb-3 text-slate-400">
+            <i className="fa-solid fa-user mr-1" />
+            Lo que no se cobre queda a la cuenta de <span className="font-semibold text-white">{customerName ?? 'la clienta'}</span>.
+          </p>
+        )}
 
         <div className="space-y-3 mb-4 max-h-[40dvh] overflow-y-auto pr-1">
           {lines.map((line, i) => (
@@ -134,12 +157,23 @@ export function MixedPaymentModal({ total, surchargePct = 0, onClose, onConfirm 
           </button>
         )}
 
-        <button onClick={addLine} className="dax-btn-secondary text-xs w-full justify-center mb-4">
-          <i className="fa-solid fa-plus" /> Agregar método
-        </button>
+        <div className="flex gap-2 mb-4">
+          <button onClick={addLine} className="dax-btn-secondary text-xs flex-1 justify-center">
+            <i className="fa-solid fa-plus" /> Agregar método
+          </button>
+          {puedeFiar && (
+            <button
+              onClick={() => setLines([{ method: 'CASH', amount: '', reference: '' }])}
+              className="dax-btn-secondary text-xs flex-1 justify-center"
+              title="No cobra nada hoy: el total completo queda a la cuenta del cliente"
+            >
+              <i className="fa-solid fa-hand-holding-dollar" /> Todo a crédito
+            </button>
+          )}
+        </div>
 
         {/* Resumen */}
-        <div className={`rounded-xl p-3 mb-1 text-sm space-y-1 ${remaining > 0.005 ? 'bg-red-600/10 border border-red-600/30' : 'bg-emerald-600/10 border border-emerald-600/30'}`}>
+        <div className={`rounded-xl p-3 mb-1 text-sm space-y-1 ${remaining > 0.005 && !puedeFiar ? 'bg-red-600/10 border border-red-600/30' : fiado > 0 ? 'bg-amber-500/10 border border-amber-500/30' : 'bg-emerald-600/10 border border-emerald-600/30'}`}>
           <div className="flex justify-between text-slate-400">
             <span>{cargo.amount > 0 ? 'Mercancía' : 'Total'}</span><span>{formatCurrency(total)}</span>
           </div>
@@ -157,8 +191,8 @@ export function MixedPaymentModal({ total, surchargePct = 0, onClose, onConfirm 
           <div className="flex justify-between text-slate-400">
             <span>Pagado</span><span>{formatCurrency(paid)}</span>
           </div>
-          <div className={`flex justify-between font-bold pt-1 ${remaining > 0.005 ? 'text-red-400' : 'text-emerald-400'}`} style={{ borderTop: '1px solid var(--dax-border-dim)' }}>
-            <span>{remaining > 0.005 ? 'Pendiente' : change > 0.005 ? 'Cambio' : 'Exacto'}</span>
+          <div className={`flex justify-between font-bold pt-1 ${fiado > 0 ? 'text-amber-400' : remaining > 0.005 ? 'text-red-400' : 'text-emerald-400'}`} style={{ borderTop: '1px solid var(--dax-border-dim)' }}>
+            <span>{fiado > 0 ? 'Queda a crédito' : remaining > 0.005 ? 'Pendiente' : change > 0.005 ? 'Cambio' : 'Exacto'}</span>
             <span>{formatCurrency(remaining > 0.005 ? remaining : change)}</span>
           </div>
         </div>
@@ -175,7 +209,7 @@ export function MixedPaymentModal({ total, surchargePct = 0, onClose, onConfirm 
         <div className="dax-modal-footer flex gap-2 pb-6">
           <button onClick={onClose} className="dax-btn-secondary flex-1 min-h-[44px]">Cancelar</button>
           <button onClick={submit} disabled={loading || !isValid} className="dax-btn-primary flex-1 justify-center disabled:opacity-50 min-h-[44px]">
-            {loading ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Cobrar</>}
+            {loading ? <i className="fa-solid fa-spinner fa-spin" /> : fiado > 0 ? <><i className="fa-solid fa-hand-holding-dollar" /> Cobrar y fiar</> : <><i className="fa-solid fa-check" /> Cobrar</>}
           </button>
         </div>
       </div>
