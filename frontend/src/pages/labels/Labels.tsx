@@ -17,8 +17,8 @@ import type { Brand, Department } from '../../types/products'
 import { errorDetailText } from '../../utils/errorDetail'
 import { sortByName } from '../../utils/sortByName'
 import {
-  MAX_COPIAS, construirLote, copiasIniciales, instanteLocalISO, masRecientesPrimero, mensajeExceso,
-  normalizarCopias, ponerN, textoResumen, usarExistencia,
+  MAX_COPIAS, construirLote, copiasIniciales, filtrarPorTalla, instanteLocalISO, masRecientesPrimero, mensajeExceso,
+  normalizarCopias, ponerN, tallasDisponibles, textoResumen, usarExistencia,
 } from './lote'
 
 /**
@@ -48,7 +48,9 @@ export function Labels() {
   const [departamentos, setDepartamentos] = useState<Department[]>([])
   const [marcas, setMarcas] = useState<Brand[]>([])
 
-  const [items, setItems] = useState<LabelCandidate[]>([])
+  // `cargados` es lo que devolvió el backend; `items` lo que se ve tras el
+  // filtro de talla, que es en pantalla. Todo lo de abajo trabaja con `items`.
+  const [cargados, setCargados] = useState<LabelCandidate[]>([])
   const [cargando, setCargando] = useState(true)
   const [errorLista, setErrorLista] = useState<string | null>(null)
 
@@ -103,7 +105,7 @@ export function Labels() {
         created_after: instanteLocalISO(filtros.created_after),
       })
       // Con el filtro de fecha la tienda quiere ver primero la tanda recién capturada.
-      setItems(filtros.created_after ? masRecientesPrimero(res.items) : res.items)
+      setCargados(filtros.created_after ? masRecientesPrimero(res.items) : res.items)
       setCopias(copiasIniciales(res.items))
       // La selección y la vista previa se quedarían apuntando a variantes que
       // ya no están en pantalla: mandar a imprimir algo que no se ve es la
@@ -114,7 +116,7 @@ export function Labels() {
       setPreviaError(null)
     } catch (e: any) {
       const status = e?.response?.status
-      setItems([])
+      setCargados([])
       setErrorLista(
         status === 403
           ? 'Tu tienda no tiene activo el módulo de Etiquetas. Pídelo a soporte.'
@@ -126,6 +128,18 @@ export function Labels() {
   }, [busqueda, filtros.department_id, filtros.brand_id, filtros.gender, filtros.only_with_stock, filtros.created_after])
 
   useEffect(() => { void cargar() }, [cargar])
+
+  const tallas = useMemo(() => tallasDisponibles(cargados), [cargados])
+  const items = useMemo(() => filtrarPorTalla(cargados, filtros.size), [cargados, filtros.size])
+
+  // Cambiar de talla esconde renglones: la selección y la previa se limpian por
+  // la misma razón que al recargar.
+  useEffect(() => {
+    setSeleccion(new Set())
+    setActiva(null)
+    setPrevia(null)
+    setPreviaError(null)
+  }, [filtros.size])
 
   // ── Vista previa ───────────────────────────────────────────────────────
   const verPrevia = useCallback(async (item: LabelCandidate) => {
@@ -293,6 +307,7 @@ export function Labels() {
           onChange={setFiltros}
           departamentos={departamentos}
           marcas={marcas}
+          tallas={tallas}
           onBuscar={() => setBusqueda(filtros.search)}
           onLimpiar={() => { setFiltros(FILTROS_VACIOS); setBusqueda('') }}
           cargando={cargando}
