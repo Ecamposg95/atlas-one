@@ -214,3 +214,60 @@ export function masRecientesPrimero(items: LabelCandidate[]): LabelCandidate[] {
     return tb - ta
   })
 }
+
+/**
+ * Valor del filtro de talla para lo que no tiene talla (cinturones, bolsas).
+ * No puede chocar con una talla real: nadie captura una talla con guiones bajos.
+ */
+export const SIN_TALLA = '__sin_talla__'
+
+/** Escala de letras como la cuelga la tienda; lo que no está aquí va después de los números. */
+const ESCALA_LETRAS = ['XXS', 'XS', 'CH', 'S', 'M', 'G', 'L', 'XL', 'XG', '2XL', 'XXL', '3XL', '4XL', '5XL']
+
+const clave = (talla: string | null | undefined) => (talla ?? '').trim().toUpperCase()
+
+function rango(talla: string): [number, number, string] {
+  const k = clave(talla)
+  const letra = ESCALA_LETRAS.indexOf(k)
+  if (letra >= 0) return [0, letra, k]
+  const n = Number(k.replace(',', '.'))
+  if (k !== '' && Number.isFinite(n)) return [1, n, k]
+  return [2, 0, k]
+}
+
+/**
+ * Opciones del filtro de talla: cada talla de la lista cargada una sola vez,
+ * letras en orden de escala (Ch, M, G, XL…), luego números de menor a mayor
+ * (pantalones 29-44, calzado) y al final lo demás. Si hay renglones sin talla
+ * se ofrece `SIN_TALLA`.
+ *
+ * Sale de lo que ya devolvió el backend con los demás filtros, así que con
+ * "Pantalones" puesto solo aparecen tallas de pantalón.
+ */
+export function tallasDisponibles(items: LabelCandidate[]): string[] {
+  const vistas = new Map<string, string>()
+  let sinTalla = false
+  for (const it of items) {
+    const k = clave(it.size)
+    if (k === '') { sinTalla = true; continue }
+    if (!vistas.has(k)) vistas.set(k, (it.size ?? '').trim())
+  }
+  const tallas = [...vistas.values()].sort((a, b) => {
+    const [ga, na, ka] = rango(a)
+    const [gb, nb, kb] = rango(b)
+    return ga - gb || na - nb || ka.localeCompare(kb, 'es')
+  })
+  return sinTalla ? [...tallas, SIN_TALLA] : tallas
+}
+
+/**
+ * Deja solo los renglones de la talla elegida. Se filtra en pantalla, sobre
+ * lo ya cargado: así "Usar existencia", la selección y el lote trabajan con
+ * lo visible, igual que con los demás filtros.
+ */
+export function filtrarPorTalla(items: LabelCandidate[], talla: string): LabelCandidate[] {
+  if (!talla) return items
+  if (talla === SIN_TALLA) return items.filter((it) => clave(it.size) === '')
+  const k = clave(talla)
+  return items.filter((it) => clave(it.size) === k)
+}

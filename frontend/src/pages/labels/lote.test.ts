@@ -22,6 +22,9 @@ import {
   ponerN,
   textoResumen,
   usarExistencia,
+  filtrarPorTalla,
+  SIN_TALLA,
+  tallasDisponibles,
 } from './lote'
 
 function fila(over: Partial<LabelCandidate> & { variant_id: string }): LabelCandidate {
@@ -256,5 +259,44 @@ describe('masRecientesPrimero', () => {
       fila({ variant_id: 'a', created_at: '2026-10-03T21:00:00Z' }),
     ]
     expect(masRecientesPrimero(items).map((i) => i.sku)).toEqual(['A', 'B', 'SIN'])
+  })
+})
+
+describe('filtro por talla', () => {
+  const lista = [
+    fila({ variant_id: 'a', size: '34' }),
+    fila({ variant_id: 'b', size: 'M' }),
+    fila({ variant_id: 'c', size: '' }),
+    fila({ variant_id: 'd', size: 'Ch' }),
+    fila({ variant_id: 'e', size: '30' }),
+    fila({ variant_id: 'f', size: 'XL' }),
+    fila({ variant_id: 'g', size: '34' }),
+    fila({ variant_id: 'h', size: 'G' }),
+    fila({ variant_id: 'i', size: '2XL' }),
+    fila({ variant_id: 'j', size: 'Única' }),
+  ]
+
+  it('ofrece cada talla una vez: letras en orden de escala, números de menor a mayor, lo demás al final', () => {
+    expect(tallasDisponibles(lista)).toEqual(['Ch', 'M', 'G', 'XL', '2XL', '30', '34', 'Única', SIN_TALLA])
+  })
+
+  it('"Sin talla" solo aparece si hay renglones sin talla', () => {
+    expect(tallasDisponibles([fila({ variant_id: 'a', size: 'M' })])).toEqual(['M'])
+  })
+
+  it('sin talla elegida deja la lista igual', () => {
+    expect(filtrarPorTalla(lista, '')).toBe(lista)
+  })
+
+  it('deja solo la talla elegida', () => {
+    expect(filtrarPorTalla(lista, '34').map((i) => i.variant_id)).toEqual(['a', 'g'])
+  })
+
+  it('"Sin talla" deja lo que no tiene talla (cinturones, accesorios)', () => {
+    expect(filtrarPorTalla(lista, SIN_TALLA).map((i) => i.variant_id)).toEqual(['c'])
+  })
+
+  it('no distingue mayúsculas ni espacios de captura', () => {
+    expect(filtrarPorTalla([fila({ variant_id: 'a', size: ' ch ' })], 'Ch').map((i) => i.variant_id)).toEqual(['a'])
   })
 })

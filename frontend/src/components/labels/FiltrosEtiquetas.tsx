@@ -1,15 +1,17 @@
 import type { Brand, Department } from '../../types/products'
-import { haceMinutosLocal, inicioDeHoyLocal } from '../../pages/labels/lote'
+import { SIN_TALLA, haceMinutosLocal, inicioDeHoyLocal } from '../../pages/labels/lote'
 import { GENEROS } from '../products/ProductCommercialSection'
 
 /**
  * Filtros de la pantalla de etiquetas. Los mismos ejes con los que la tienda
- * piensa el piso: búsqueda libre, departamento, marca, género, existencia y
- * fecha de alta (para etiquetar el lote recién capturado sin pescar entre el
- * catálogo viejo).
+ * piensa el piso: búsqueda libre, departamento, marca, género, talla,
+ * existencia y fecha de alta (para etiquetar el lote recién capturado sin
+ * pescar entre el catálogo viejo).
  *
  * Se envían tal cual a `GET /api/labels/candidates`, que es quien decide el
- * alcance real (una cajera solo ve lo de su sucursal).
+ * alcance real (una cajera solo ve lo de su sucursal). La talla es la
+ * excepción: se filtra en pantalla sobre lo cargado (`filtrarPorTalla`), y sus
+ * opciones salen de esa misma lista.
  */
 
 export interface EstadoFiltros {
@@ -17,6 +19,8 @@ export interface EstadoFiltros {
   department_id: string
   brand_id: string
   gender: string
+  /** Talla exacta, `SIN_TALLA` o vacío = todas. */
+  size: string
   only_with_stock: boolean
   /** `YYYY-MM-DDTHH:mm` (o solo fecha) local; vacío = sin filtro. */
   created_after: string
@@ -27,6 +31,7 @@ export const FILTROS_VACIOS: EstadoFiltros = {
   department_id: '',
   brand_id: '',
   gender: '',
+  size: '',
   only_with_stock: false,
   created_after: '',
 }
@@ -34,7 +39,7 @@ export const FILTROS_VACIOS: EstadoFiltros = {
 /** `true` si hay algo capturado en cualquier eje: entonces vale la pena ofrecer "Limpiar". */
 export function filtrosActivos(valor: EstadoFiltros): boolean {
   return valor.search.trim() !== '' || valor.department_id !== '' || valor.brand_id !== ''
-    || valor.gender !== '' || valor.only_with_stock || valor.created_after !== ''
+    || valor.gender !== '' || valor.size !== '' || valor.only_with_stock || valor.created_after !== ''
 }
 
 interface Props {
@@ -42,6 +47,8 @@ interface Props {
   onChange: (siguiente: EstadoFiltros) => void
   departamentos: Department[]
   marcas: Brand[]
+  /** Tallas de la lista cargada (`tallasDisponibles`). */
+  tallas: string[]
   /** Se dispara al enviar el formulario (Enter en la búsqueda) o al tocar Buscar. */
   onBuscar: () => void
   /** Vuelve todos los ejes a `FILTROS_VACIOS` y recarga (el padre también limpia la búsqueda aplicada). */
@@ -49,12 +56,12 @@ interface Props {
   cargando: boolean
 }
 
-export function FiltrosEtiquetas({ valor, onChange, departamentos, marcas, onBuscar, onLimpiar, cargando }: Props) {
+export function FiltrosEtiquetas({ valor, onChange, departamentos, marcas, tallas, onBuscar, onLimpiar, cargando }: Props) {
   const set = <K extends keyof EstadoFiltros>(k: K, v: EstadoFiltros[K]) => onChange({ ...valor, [k]: v })
 
   return (
     <form
-      className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end"
+      className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end"
       onSubmit={(e) => { e.preventDefault(); onBuscar() }}
     >
       <div className="sm:col-span-2 lg:col-span-2">
@@ -116,7 +123,25 @@ export function FiltrosEtiquetas({ valor, onChange, departamentos, marcas, onBus
         </select>
       </div>
 
-      <div className="sm:col-span-2 lg:col-span-5 flex flex-wrap items-end gap-x-5 gap-y-3">
+      <div>
+        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+          Talla
+        </label>
+        <select
+          className="dax-input w-full text-sm"
+          value={valor.size}
+          onChange={(e) => set('size', e.target.value)}
+        >
+          <option value="">Todas</option>
+          {/* La elegida se queda en la lista aunque otro filtro la haya dejado sin renglones. */}
+          {valor.size && !tallas.includes(valor.size) && (
+            <option value={valor.size}>{valor.size === SIN_TALLA ? 'Sin talla' : valor.size}</option>
+          )}
+          {tallas.map((t) => <option key={t} value={t}>{t === SIN_TALLA ? 'Sin talla' : t}</option>)}
+        </select>
+      </div>
+
+      <div className="sm:col-span-2 lg:col-span-6 flex flex-wrap items-end gap-x-5 gap-y-3">
         <div>
           <label htmlFor="etiquetas-altas-desde"
                  className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
@@ -175,7 +200,7 @@ export function FiltrosEtiquetas({ valor, onChange, departamentos, marcas, onBus
             className="dax-btn-ghost text-sm ml-auto"
             onClick={onLimpiar}
             disabled={cargando}
-            title="Quitar búsqueda, departamento, marca, género, existencia y fecha"
+            title="Quitar búsqueda, departamento, marca, género, talla, existencia y fecha"
           >
             <i className="fa-solid fa-filter-circle-xmark" /> Limpiar filtros
           </button>
