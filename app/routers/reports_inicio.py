@@ -10,7 +10,7 @@ de mostrador no debe hacer cinco llamadas para pintar el inicio, y una FREE no
 paga las consultas de las secciones que no pinta. `/inicio-basico` es el alias
 del frontend anterior.
 
-Solo lectura. Reusa el criterio de los reportes: `SALES_REPORT_STATUSES` para
+Solo lectura. Reusa el criterio de los reportes: `filtro_venta_reconocida` para
 "esto ya es venta", `metricas_ventas` leído directamente para los cobros
 (descuenta el vuelto del efectivo) y `compute_expected_cash` para la caja. Ámbito como la valuación:
 ADMIN/DUEÑO/SUPERADMIN ven la org o la sucursal que pidan; GERENTE, la suya.
@@ -41,7 +41,7 @@ from app.schemas.reports import (
     PocaExistencia, ProductoPocaExistencia, ProductoSinMovimiento, ProductoTop, SinMovimiento, SucursalInicio,
     Tendencia,
 )
-from app.services.cash_reconciliation import SALES_REPORT_STATUSES, compute_expected_cash
+from app.services.cash_reconciliation import compute_expected_cash, filtro_venta_reconocida
 from app.services import metricas_ventas as mv
 from app.services.existencias import umbral_poca_existencia
 
@@ -196,7 +196,7 @@ def _existencias_del_ambito(db: Session, org_id: int, sucursal: Optional[int]):
 def _sin_movimiento(db: Session, org_id: int, sucursal: Optional[int], dias: int) -> SinMovimiento:
     """Variantes con existencia > 0 y SIN renglón de venta válida en los últimos `dias` días.
 
-    Solo cuentan ventas en `SALES_REPORT_STATUSES` (una cancelada no "mueve" el
+    Solo cuentan ventas reconocidas, cobradas o fiadas (una cancelada no "mueve" el
     producto). Una variante dada de alta dentro de la ventana no ha tenido tiempo
     de moverse (un lote recién cargado taparía lo que sí está parado): fuera.
     Orden por importe a venta: lo que más dinero tiene parado, primero.
@@ -206,7 +206,7 @@ def _sin_movimiento(db: Session, org_id: int, sucursal: Optional[int], dias: int
         SalesLineItem.variant_id == ProductVariant.id,
         SalesLineItem.document_id == SalesDocument.id,
         SalesDocument.organization_id == org_id,
-        SalesDocument.status.in_(SALES_REPORT_STATUSES),
+        filtro_venta_reconocida(),
         SalesDocument.created_at >= desde,
     )
     existencia = func.sum(StockOnHand.qty_on_hand)

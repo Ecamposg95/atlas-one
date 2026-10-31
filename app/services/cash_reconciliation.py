@@ -103,13 +103,13 @@ CASH_INCLUDED_STATUSES = (
 #     `SalesDocument.total_amount` / `tax_amount` / `subtotal`, o cuentan
 #     filas de `SalesDocument`. Para PAID/REFUNDED_* eso es seguro porque
 #     `approve_return` reescribe `total_amount` al neto tras la devolución.
-#     PENDING NO tiene ese ajuste: su `total_amount` es la venta completa,
-#     deuda incluida. PENDING está fuera aquí a propósito y de forma
-#     PERMANENTE: una venta a crédito con abono parcial nunca debe inflar
-#     "ventas totales" con la deuda todavía no cobrada, sin importar qué
-#     tan bien atribuido esté el efectivo. No la agregues aquí aunque
-#     alguna vez vuelvas a agregarla a CASH_INCLUDED_STATUSES por otro
-#     motivo.
+#     PENDING: desde 2026-10-31 (spec crm-cobranza §2.1) la tupla sigue sin
+#     PENDING, pero quien pregunta "¿cuenta como venta?" ya no usa la tupla
+#     directo: usa `filtro_venta_reconocida()`, que suma la venta FIADA
+#     (PENDING con cliente). El motivo histórico para excluir PENDING —su
+#     `total_amount` no se neteaba tras una devolución— ya no existe:
+#     `approve_return` reescribe `total_amount` sea cual sea el estado. Un
+#     PENDING sin cliente (venta que no terminó de cobrarse) sigue fuera.
 #
 # Los usos de `Payment.amount` (desglose por método de pago, en ambas
 # funciones) SÍ deben seguir usando CASH_INCLUDED_STATUSES: ese dinero
@@ -120,6 +120,19 @@ SALES_REPORT_STATUSES = (
     DocumentStatus.REFUNDED_PARTIAL,
     DocumentStatus.REFUNDED_TOTAL,
 )
+
+
+def filtro_venta_reconocida():
+    """Expresión SQL de "este documento cuenta como venta" (spec 2026-10-29 §2.1).
+
+    Cobrada (PAID / REFUNDED_*) o **fiada**: PENDING con cliente del CRM. La
+    venta fiada cuenta el día que sale la mercancía; los abonos que lleguen
+    después son cobranza, no venta. Un PENDING sin cliente sigue fuera.
+    """
+    return or_(
+        SalesDocument.status.in_(SALES_REPORT_STATUSES),
+        and_(SalesDocument.status == DocumentStatus.PENDING, SalesDocument.customer_id.isnot(None)),
+    )
 
 
 @dataclass

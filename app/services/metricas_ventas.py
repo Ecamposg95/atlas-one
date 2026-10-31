@@ -6,8 +6,9 @@ borraba la venta entera), `/sales/stats` sumaba pendientes y borradores, y
 nadie restaba devoluciones. "Ventas hoy" daba tres números. Aquí vive el
 criterio y los routers solo arman la respuesta.
 
-Venta neta = documentos en `SALES_REPORT_STATUSES` a su `total_amount` original
-menos devoluciones APROBADAS en el periodo (por la fecha de la devolución).
+Venta neta = documentos cobrados o fiados (`filtro_venta_reconocida`) a su
+`total_amount` original menos devoluciones APROBADAS en el periodo (por la
+fecha de la devolución).
 Toda fecha se compara en día de México.
 """
 from dataclasses import dataclass
@@ -25,7 +26,7 @@ from app.models.products import ProductVariant
 from app.models.returns import SaleReturnItem
 from app.models.sales import PaymentMethod
 from app.models.users import PlatformRole
-from app.services.cash_reconciliation import SALES_REPORT_STATUSES
+from app.services.cash_reconciliation import filtro_venta_reconocida
 
 ZONA = "America/Mexico_City"
 MX = ZoneInfo(ZONA)
@@ -131,7 +132,7 @@ def ve_costos(user: User) -> bool:
 def filtros_documentos(ambito: Ambito, periodo: Periodo) -> list:
     f = [
         SalesDocument.organization_id == ambito.organization_id,
-        SalesDocument.status.in_(SALES_REPORT_STATUSES),
+        filtro_venta_reconocida(),
         dia_mx(SalesDocument.created_at) >= periodo.inicio,
         dia_mx(SalesDocument.created_at) <= periodo.fin,
     ]

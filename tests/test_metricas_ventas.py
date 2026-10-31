@@ -26,12 +26,12 @@ def _instante(dia: date, hora: int = 12) -> datetime:
 
 
 def _venta(db, org, branch, user, variante, total, *, dia=None, hora=12, status=DocumentStatus.PAID,
-           metodo=PaymentMethod.CASH, entregado=None, costo="40"):
+           metodo=PaymentMethod.CASH, entregado=None, costo="40", customer_id=None, pagado=None):
     dia = dia or mv.hoy_mx()
     doc = SalesDocument(
         organization_id=org.id, branch_id=branch.id, seller_id=user.id, folio=next(_folios),
         series="A", subtotal=Decimal(total), tax_amount=Decimal("0"), total_amount=Decimal(total),
-        status=status, doc_type="ORDER",
+        status=status, doc_type="ORDER", customer_id=customer_id,
         change_given=(Decimal(entregado) - Decimal(total)) if entregado else None,
     )
     doc.created_at = _instante(dia, hora)
@@ -40,10 +40,12 @@ def _venta(db, org, branch, user, variante, total, *, dia=None, hora=12, status=
     db.add(SalesLineItem(organization_id=org.id, document_id=doc.id, variant_id=variante.id,
                          description=f"Producto {doc.folio}", quantity=1, unit_price=Decimal(total),
                          total_line=Decimal(total), unit_cost=Decimal(costo)))
-    pago = Payment(organization_id=org.id, sales_document_id=doc.id, method=metodo,
-                   amount=Decimal(entregado or total))
-    pago.created_at = doc.created_at
-    db.add(pago)
+    # `pagado="0"` = venta fiada sin enganche: ningún Payment.
+    if pagado is None or Decimal(pagado) > 0:
+        pago = Payment(organization_id=org.id, sales_document_id=doc.id, method=metodo,
+                       amount=Decimal(entregado or pagado or total))
+        pago.created_at = doc.created_at
+        db.add(pago)
     db.commit()
     return doc
 
@@ -57,6 +59,13 @@ def _devolucion(db, org, branch, user, venta, importe, *, dia=None, hora=13, sta
     db.add(dev)
     db.commit()
     return dev
+
+
+def _cliente(db, org, nombre="Clienta"):
+    from app.modules.customers.models import Customer
+    c = Customer(name=nombre, organization_id=org.id, current_balance=Decimal("0"))
+    db.add(c); db.commit(); db.refresh(c)
+    return c
 
 
 def _v(products_setup):
@@ -127,6 +136,19 @@ def test_resolver_ambito_sin_sucursal_no_ve_la_org(vendedor_sin_sucursal, org):
 
 
 # --- Resumen -----------------------------------------------------------------
+
+def test_resumen_cuenta_la_venta_fiada_el_dia_que_nace(db, org, branch_a, cajero_a, products_setup):
+    """Spec 2026-10-29 §2.1: PENDING con cliente es venta fiada y cuenta completa
+    el día que sale la mercancía; PENDING sin cliente sigue fuera."""
+    cliente = _cliente(db, org)
+    _venta(db, org, branch_a, cajero_a, _v(products_setup), "100")
+    _venta(db, org, branch_a, cajero_a, _v(products_setup), "300", status=DocumentStatus.PENDING,
+           customer_id=cliente.id, pagado="50")
+    _venta(db, org, branch_a, cajero_a, _v(products_setup), "999", status=DocumentStatus.PENDING)
+    r = mv.resumen(db, mv.Ambito(org.id, None, True), mv.periodo_preset("hoy"))
+    assert (r.bruta, r.tickets) == (400.0, 2)
+    assert mv.por_sucursal(db, org.id, mv.periodo_preset("hoy"))[branch_a.id].bruta == 400.0
+
 
 def test_resumen_neta_resta_devoluciones_aprobadas(db, org, branch_a, cajero_a, products_setup):
     v = _venta(db, org, branch_a, cajero_a, _v(products_setup), "100")
