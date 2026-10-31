@@ -149,6 +149,10 @@ export function Cobranza() {
   // si el cliente ya no debe (o el filtro lo saca), la pantalla lo cierra sola.
   const detalle = detalleId == null ? null : items.find((c) => c.id === detalleId) ?? null
   const r = datos?.resumen
+  // Si el cliente salió de la lista, suelta también su id: que no reabra el detalle si reaparece tras otro filtro.
+  useEffect(() => {
+    if (detalleId != null && datos && !detalle) cerrarDetalle() /* eslint-disable-line react-hooks/exhaustive-deps */
+  }, [detalleId, datos, detalle])
 
   return (
     <div className="space-y-5">

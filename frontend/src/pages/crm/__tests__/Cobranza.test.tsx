@@ -164,6 +164,19 @@ describe('Cuentas por cobrar', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   })
 
+  it('si el cliente sale de la lista y reaparece tras otro filtro, el detalle no se reabre solo', async () => {
+    pintar()
+    fireEvent.click(await screen.findByText('Ana Pérez'))
+    await screen.findByRole('dialog')
+    cobranza.mockResolvedValue(respuesta([item(2, 'Beto', 80)]))
+    fireEvent.change(screen.getByLabelText('Orden'), { target: { value: 'antiguedad' } })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    cobranza.mockResolvedValue(DATOS)
+    fireEvent.change(screen.getByLabelText('Antigüedad'), { target: { value: '31_60' } })
+    await screen.findByText('Ana Pérez')
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
   it('avisa cuando la lista está recortada y no cuando está completa', async () => {
     cobranza.mockResolvedValue({ ...DATOS, total: 350 })
     pintar()
