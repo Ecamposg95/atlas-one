@@ -1,6 +1,6 @@
 # Crédito a clientes: cobranza sobre lo que ya existe — diseño
 
-**Fecha:** 2026-10-29 · **Estado:** diseño aprobado en conversación, pendiente de plan ·
+**Fecha:** 2026-10-29 · **Estado:** implementado en la rama feat/crm-cobranza (plan docs/superpowers/plans/2026-10-31-crm-cobranza.md) ·
 **Caso guía:** Eleven Fashion (org 17, una sucursal, ULTRA+): clientas que se llevan prendas y
 las van pagando poco a poco. **Quién lo usa:** la cajera desde el POS (fiar, abonar, ver lo
 que debe); DUEÑO, ADMINISTRADOR y GERENTE desde el admin (quién debe, cuánto, desde cuándo).

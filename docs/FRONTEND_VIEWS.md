@@ -177,6 +177,7 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Quién la ve:** Cajero, Gerente — módulo `pos`.
 - **Datos/API:** `cashApi.getStatus/close`, `salesApi.create/getMyLast`, `parkedTicketsApi.list/park/resume/remove`, `printerApi.*` (agente local), `utils/offlineQueue` (IndexedDB). Store `usePOSStore`.
 - **Componentes clave:** `ProductSearch`, `CartPanel`, `PendingOrders`; modales `SessionModal`, `Cash/Card/Transfer/MixedPaymentModal`, `ReturnModal`, `CashMovementModal`, `CloseSessionModal`, `ProductDetailModal` (ficha de solo consulta: existencia y precio por talla, escalones, agregar al carrito, entrada rápida de existencia); alta y edición con el formulario único vía `AltaRapidaProducto` y `EditarProductoPos` (chunks `lazy()` precargados, dentro de `LimiteDeError`).
+- **Abonar (2026-10-31):** el botón **Cliente** del carrito (`components/pos/modals/CustomerModal.tsx`) muestra **Abonar** cuando el cliente con ficha tiene saldo; abre `AbonoModal` (carga perezosa) y al registrar imprime el recibo `RECIBO DE ABONO` por `printerApi` (casilla marcada por defecto) (`POST /printer/print-abono/{payment_id}`).
 - **Notas:** Sin turno de caja abierto → carrito bloqueado. Layout 40/60. Polling de pausados 10s + flush offline 30s. Ítems "caja" se expanden a piezas; descuento global se distribuye al unit_price. Auto-imprime ticket/corte. Toast inline propio (debería usar `toastStore`).
 
 ### `/atlas-pos` — Mi día (AtlasPOS)
@@ -238,7 +239,7 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 
 ### `/hq/operations` — Inicio ("¿Cómo voy?") 📱
 - **Archivo:** `pages/hq/Inicio.tsx` (chunk propio, sin chart.js) + `pages/hq/InicioGraficas.tsx` (las cuatro gráficas, cargado con `lazy()` solo en perfil completo). Es la misma pantalla en básico y en completo: espera `enabledModulesStore.loaded` y decide con `perfilUi`.
-- **Propósito:** responder las preguntas del dueño al entrar. Orden en escritorio (rejilla de 12 columnas, apilado en teléfono): 1 cifras Hoy / Ayer / 7 días / Utilidad bruta de hoy con variación (▲/▼ vs ayer, vs antier, vs semana anterior; `components/ui/KpiCard`) · 2 tendencia de 7 días (línea, la semana anterior en gris) y cómo te pagaron (dona con el total al centro + lista) · 3 ventas por hora de hoy (barras, la hora actual en acento) y caja · 4 pendientes · 5 se está acabando y lo más vendido · 6 no se mueve · 7 sucursales (barras horizontales + tarjetas; solo con más de una que vende) · valor de la tienda (`ValorTiendaCard`). En básico: cifras (solo Hoy con variación), lista de métodos, caja, se acaba, lo más vendido y valor de la tienda; **sin gráficas y sin bajar el chunk `charts`**.
+- **Propósito:** responder las preguntas del dueño al entrar. Orden en escritorio (rejilla de 12 columnas, apilado en teléfono): 1 cifras Hoy / Ayer / 7 días / Utilidad bruta de hoy con variación (▲/▼ vs ayer, vs antier, vs semana anterior; `components/ui/KpiCard`) · 2 tendencia de 7 días (línea, la semana anterior en gris) y cómo te pagaron (dona con el total al centro + lista) · 3 ventas por hora de hoy (barras, la hora actual en acento) y caja · 4 pendientes (y, con el módulo `crm` y perfil completo para roles de oficina, la tarjeta **Por cobrar**: total, vencido a más de 30 días y enlace a `/customers/cobranza`; solo si hay deuda) · 5 se está acabando y lo más vendido · 6 no se mueve · 7 sucursales (barras horizontales + tarjetas; solo con más de una que vende) · valor de la tienda (`ValorTiendaCard`). En básico: cifras (solo Hoy con variación), lista de métodos, caja, se acaba, lo más vendido y valor de la tienda; **sin gráficas y sin bajar el chunk `charts`**.
 - **Datos/API:** `reportsApi.inicio({ completo: !modoBasico })` (`GET /reports/inicio`: con `completo`, `tendencia`, `por_hora_hoy`, `utilidad_bruta_ayer`) y `reportsApi.valorInventario`.
 - **Responsivo:** kit `ui/`; tablas en escritorio y `TarjetaFila` bajo 768. Filas de "se acaba"/"no se mueve" enlazan a `/inventory?q=<sku>&variant=<id>`.
 - **Tema:** solo tokens `dax-*` (`coloresPorTokens.test.ts`); las gráficas leen los tokens con `useTemaGrafica` y se repintan al cambiar de tema.
@@ -382,7 +383,7 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Propósito:** Directorio con crédito/cuenta corriente: lista buscable con saldo, estado de cuenta (ledger) y registro de abonos.
 - **Quién la ve:** Admin, Dueño — módulo `crm`.
 - **Datos/API:** `customersApi.getAll/getStats/getStatement/pay`.
-- **Notas:** Búsqueda debounce 400ms. Botón pago solo si `current_balance < 0` (deuda).
+- **Notas:** Búsqueda debounce 400ms. Botón pago solo si `current_balance < 0` (deuda). El abono usa `components/crm/AbonoModal.tsx` (selector de ticket, método, referencia e impresión del recibo), el mismo que `/customers/cobranza` y el POS. Enlace «Cuentas por cobrar» en la cabecera hacia `/customers/cobranza`.
 
 ### `/customers/cobranza` — Cuentas por cobrar 📱
 - **Archivo:** `pages/crm/Cobranza.tsx`
