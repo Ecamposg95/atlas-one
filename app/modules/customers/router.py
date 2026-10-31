@@ -598,7 +598,7 @@ def register_customer_payment(
 
     # Qué tickets cubrió el abono (un asiento por ticket; el asiento sin
     # documento es lo que quedó a favor del cliente).
-    from app.modules.customers.services import CERO, DocumentoAbierto
+    from app.modules.customers.services import CENTAVO, CERO, DocumentoAbierto
     ids = [a.sales_document_id for a in asientos if a.sales_document_id]
     docs = {d.id: d for d in db.query(SalesDocument).filter(SalesDocument.id.in_(ids)).all()} if ids else {}
     applied = [
@@ -606,7 +606,11 @@ def register_customer_payment(
             sales_document_id=a.sales_document_id,
             folio=DocumentoAbierto(documento=docs[a.sales_document_id], saldo=CERO).folio,
             amount=-Decimal(str(a.amount)),
-            paid_in_full=docs[a.sales_document_id].status == DocumentStatus.PAID,
+            # Por la deuda que queda, no por el estatus: un ticket que no está
+            # PENDING (p. ej. REFUNDED_PARTIAL) no se marca PAID aunque ya no deba.
+            paid_in_full=saldo_documento(
+                db, org_id=org_id, documento=docs[a.sales_document_id], customer_id=customer.id,
+            ) <= CENTAVO / 2,
         )
         for a in asientos if a.sales_document_id in docs
     ]
