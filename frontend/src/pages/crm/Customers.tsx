@@ -3,7 +3,7 @@ import { customersApi, type Customer, type CustomerStats, type LedgerEntry } fro
 import { DaxCard } from '../../components/ui/DaxCard'
 import { Spinner } from '../../components/ui/Spinner'
 import { Badge } from '../../components/ui/Badge'
-import { Modal } from '../../components/ui/Modal'
+import { AbonoModal } from '../../components/crm/AbonoModal'
 import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
 import { ListaTarjetas } from '../../components/ui/ListaTarjetas'
 import { TarjetaFila } from '../../components/ui/TarjetaFila'
@@ -43,16 +43,7 @@ export function Customers() {
   const [ledger, setLedger] = useState<LedgerEntry[]>([])
   const [ledgerLoading, setLedgerLoading] = useState(false)
   const [payModal, setPayModal] = useState<PayModal | null>(null)
-  const [payAmount, setPayAmount] = useState('')
-  const [payMethod, setPayMethod] = useState<'CASH' | 'CARD' | 'TRANSFER'>('CASH')
-  const [payReference, setPayReference] = useState('')
   const [soloDeuda, setSoloDeuda] = useState(false)
-  const [payLoading, setPayLoading] = useState(false)
-  const payInputRef = useRef<HTMLInputElement>(null)
-  // El Modal del kit enfoca su primer control (cerrar) al montar y pisa autoFocus;
-  // este efecto corre después y devuelve el foco al monto.
-  const payAbierto = payModal !== null
-  useEffect(() => { if (payAbierto) payInputRef.current?.focus() }, [payAbierto])
   const [formModal, setFormModal] = useState<{ open: boolean; customer: Customer | null }>({ open: false, customer: null })
   const [deleting, setDeleting] = useState(false)
 
@@ -105,25 +96,7 @@ export function Customers() {
     } catch { setLedger([]) } finally { setLedgerLoading(false) }
   }
 
-  const cerrarPago = () => { setPayModal(null); setPayAmount(''); setPayMethod('CASH'); setPayReference('') }
-
-  const handlePay = async () => {
-    if (!payModal || !payAmount) return
-    setPayLoading(true)
-    try {
-      await customersApi.pay(payModal.id, {
-        amount: parseFloat(payAmount),
-        method: payMethod,
-        reference: payReference.trim() || undefined,
-      })
-      cerrarPago()
-      await customersApi.getStats().then(setStats).catch(() => {})
-      load(search, page)
-      if (selected?.id === payModal.id) openDetail({ ...selected })
-    } catch (err) {
-      toast.error(apiErrorMessage(err, 'No se pudo registrar el pago'))
-    } finally { setPayLoading(false) }
-  }
+  const cerrarPago = () => setPayModal(null)
 
   const pages = Math.ceil(total / LIMIT)
   const balanceColor = (b: number) => b > 0 ? 'text-red-400' : b < 0 ? 'text-emerald-400' : 'text-slate-400'
@@ -384,40 +357,16 @@ export function Customers() {
 
       {/* Modal pago */}
       {payModal && (
-        <Modal open onClose={cerrarPago} size="sm" title="Registrar abono"
-          footer={<>
-            <button onClick={cerrarPago} className="dax-btn-secondary flex-1">Cancelar</button>
-            <button onClick={handlePay} disabled={!payAmount || payLoading} className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
-              {payLoading ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Confirmar</>}
-            </button>
-          </>}>
-          <p className="text-slate-400 text-sm mb-4">{payModal.name}</p>
-          <div className="space-y-3">
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Monto</label>
-              <input type="number" step="0.01" value={payAmount} onChange={(e) => setPayAmount(e.target.value)}
-                placeholder="0.00" className="dax-input w-full text-lg font-bold" ref={payInputRef} />
-            </div>
-            <div>
-              <label htmlFor="abono-metodo" className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Método</label>
-              {/* Antes todo abono entraba como efectivo: una transferencia quedaba en el cajón y descuadraba el corte. */}
-              <select id="abono-metodo" value={payMethod} onChange={(e) => setPayMethod(e.target.value as 'CASH' | 'CARD' | 'TRANSFER')}
-                className="dax-input w-full text-sm">
-                <option value="CASH">Efectivo</option>
-                <option value="CARD">Tarjeta</option>
-                <option value="TRANSFER">Transferencia</option>
-              </select>
-            </div>
-            {payMethod !== 'CASH' && (
-              <div>
-                <label htmlFor="abono-referencia" className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Referencia</label>
-                <input id="abono-referencia" type="text" value={payReference} onChange={(e) => setPayReference(e.target.value)}
-                  placeholder={payMethod === 'TRANSFER' ? 'Folio de la transferencia' : 'Últimos dígitos / autorización'} className="dax-input w-full text-sm" />
-              </div>
-            )}
-            <p className="text-xs text-slate-500">Sin ticket elegido, el abono se aplica del ticket más viejo al más nuevo; lo que sobre queda a favor.</p>
-          </div>
-        </Modal>
+        <AbonoModal
+          customerId={payModal.id}
+          customerName={payModal.name}
+          onClose={cerrarPago}
+          onDone={() => {
+            customersApi.getStats().then(setStats).catch(() => {})
+            load(search, page)
+            if (selected?.id === payModal.id) openDetail({ ...selected })
+          }}
+        />
       )}
 
       {formModal.open && (
