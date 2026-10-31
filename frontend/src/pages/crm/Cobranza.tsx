@@ -57,25 +57,42 @@ export function Cobranza() {
   const [branchId, setBranchId] = useState('')
   const [bucket, setBucket] = useState('')
   const [order, setOrder] = useState<'saldo' | 'antiguedad'>('saldo')
-  const [detalle, setDetalle] = useState<CobranzaItem | null>(null)
+  const [detalleId, setDetalleId] = useState<number | null>(null)
   const [tickets, setTickets] = useState<UnpaidDocument[]>([])
   const [asientos, setAsientos] = useState<LedgerEntry[]>([])
   const [abonando, setAbonando] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Boleto por cargador: solo la última petición pinta (las respuestas pueden llegar desordenadas).
+  const seqCarga = useRef(0)
+  const seqDetalle = useRef(0)
 
   const cargar = useCallback(async (q: string) => {
+    const mio = ++seqCarga.current
     setCargando(true); setError(false)
     try {
-      setDatos(await customersApi.cobranza({
+      const r = await customersApi.cobranza({
         search: q.trim() || undefined,
         branch_id: branchId ? Number(branchId) : undefined,
         bucket: bucket || undefined,
         order, limit: 200,
-      }))
-    } catch { setError(true) } finally { setCargando(false) }
+      })
+      if (mio === seqCarga.current) setDatos(r)
+    } catch {
+      if (mio === seqCarga.current) setError(true)
+    } finally {
+      if (mio === seqCarga.current) setCargando(false)
+    }
   }, [branchId, bucket, order])
 
-  useEffect(() => { cargar(search) /* eslint-disable-line react-hooks/exhaustive-deps */ }, [cargar])
+  // El temporizador del buscador llama siempre a la última versión de `cargar` (con los filtros vigentes).
+  const cargarRef = useRef(cargar)
+  cargarRef.current = cargar
+
+  useEffect(() => {
+    // Un cambio de filtro carga ya con el texto actual: el debounce pendiente sobra.
+    if (timer.current) { clearTimeout(timer.current); timer.current = null }
+    cargar(search) /* eslint-disable-line react-hooks/exhaustive-deps */
+  }, [cargar])
 
   // El temporizador del buscador no debe disparar tras desmontar la pantalla.
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current) }, [])
@@ -83,16 +100,22 @@ export function Cobranza() {
   const onSearch = (v: string) => {
     setSearch(v)
     if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(() => cargar(v), 400)
+    timer.current = setTimeout(() => cargarRef.current(v), 400)
   }
 
-  const abrir = async (c: CobranzaItem) => {
-    setDetalle(c)
+  const abrir = async (id: number) => {
+    const mio = ++seqDetalle.current
+    setDetalleId(id); setTickets([]); setAsientos([])
     try {
-      const [t, a] = await Promise.all([customersApi.getUnpaidDocuments(c.id), customersApi.getStatement(c.id, { limit: 30 })])
+      const [t, a] = await Promise.all([customersApi.getUnpaidDocuments(id), customersApi.getStatement(id, { limit: 30 })])
+      if (mio !== seqDetalle.current) return
       setTickets(t); setAsientos(a)
-    } catch { setTickets([]); setAsientos([]) }
+    } catch {
+      if (mio === seqDetalle.current) { setTickets([]); setAsientos([]) }
+    }
   }
+
+  const cerrarDetalle = () => { seqDetalle.current++; setDetalleId(null); setTickets([]); setAsientos([]) }
 
   const whatsapp = (c: CobranzaItem) => {
     const tel = toWaPhone(c.phone)
@@ -122,6 +145,9 @@ export function Cobranza() {
   }
 
   const items = datos?.items ?? []
+  // El detalle se deriva de la lista vigente: tras un abono muestra el saldo nuevo y,
+  // si el cliente ya no debe (o el filtro lo saca), la pantalla lo cierra sola.
+  const detalle = detalleId == null ? null : items.find((c) => c.id === detalleId) ?? null
   const r = datos?.resumen
 
   return (
@@ -167,8 +193,8 @@ export function Cobranza() {
               importe={<span className="text-dax-danger font-bold">{formatCurrency(c.balance)}</span>}
               estado={<Antiguedad a={c.antiguedad} />}
               datos={[{ etiqueta: 'Desde', valor: `${fecha(c.cargo_mas_viejo)} · ${dias(c.dias)}` }, { etiqueta: 'Último abono', valor: fecha(c.ultimo_abono) }]}
-              onClick={() => abrir(c)}
-              acciones={<>{botonWa(c)}<button type="button" onClick={() => abrir(c)} className="dax-btn-primary text-xs">Ver</button></>} />
+              onClick={() => abrir(c.id)}
+              acciones={<>{botonWa(c)}<button type="button" onClick={() => abrir(c.id)} className="dax-btn-primary text-xs">Ver</button></>} />
           ))}
         </ListaTarjetas>
       ) : (
@@ -184,7 +210,7 @@ export function Cobranza() {
               </thead>
               <tbody>
                 {items.map((c) => (
-                  <tr key={c.id} className="border-t border-dax-border-dim cursor-pointer hover:brightness-110" onClick={() => abrir(c)}>
+                  <tr key={c.id} className="border-t border-dax-border-dim cursor-pointer hover:brightness-110" onClick={() => abrir(c.id)}>
                     <td className="py-2 font-medium text-dax-text">{c.name}</td>
                     <td className="text-dax-muted">{c.phone ?? '—'}</td>
                     <td className="text-right tabular-nums font-bold text-dax-danger">{formatCurrency(c.balance)}</td>
@@ -201,8 +227,12 @@ export function Cobranza() {
         </DaxCard>
       )}
 
+      {!error && datos && datos.total > items.length && (
+        <p className="text-xs text-dax-muted text-center">Mostrando {items.length} de {datos.total} clientes. Afina la búsqueda o el filtro para ver el resto.</p>
+      )}
+
       {detalle && (
-        <Modal open onClose={() => { setDetalle(null); setTickets([]); setAsientos([]) }} size="lg" title={detalle.name}
+        <Modal open onClose={cerrarDetalle} size="lg" title={detalle.name}
           footer={<>
             {botonWa(detalle)}
             <button type="button" onClick={() => pdf(detalle)} className="dax-btn-secondary text-xs"><i className="fa-solid fa-file-pdf" aria-hidden="true" /> Estado de cuenta</button>
@@ -231,7 +261,7 @@ export function Cobranza() {
 
       {abonando && detalle && (
         <AbonoModal customerId={detalle.id} customerName={detalle.name} onClose={() => setAbonando(false)}
-          onDone={() => { cargar(search); abrir(detalle) }} />
+          onDone={() => { cargar(search); abrir(detalle.id) }} />
       )}
     </div>
   )
