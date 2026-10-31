@@ -195,3 +195,16 @@ def test_el_gerente_queda_confinado_a_su_sucursal(
         d = client.get(f"/api/customers/cobranza{qs}", headers=h).json()
         assert [i["id"] for i in d["items"]] == [ana.id], qs
         assert float(d["resumen"]["por_cobrar"]) == 70.0 and d["resumen"]["clientes"] == 1, qs
+
+
+def test_un_cliente_sin_nombre_con_deuda_no_rompe_la_lista(client, db, org, branch_a, cajero_a, auth_admin_a):
+    """`customers.name` es nullable: deudores sin nombre y con nombre del mismo
+    saldo (empate en el orden) deben listarse, con `name` nulo en la respuesta."""
+    _habilitar(db, org, "crm")
+    for nombre in (None, "Zoe", None):
+        _cargo(db, org, branch_a, cajero_a, _cliente(db, org, nombre), "40", 1)
+    h = {**auth_admin_a, "X-Organization-ID": str(org.id)}
+    for qs in ("", "?order=antiguedad"):
+        r = client.get(f"/api/customers/cobranza{qs}", headers=h)
+        assert r.status_code == 200, r.text
+        assert [i["name"] for i in r.json()["items"]] == [None, None, "Zoe"]

@@ -83,7 +83,7 @@ class AbonoResponse(BaseModel):
 
 class ClienteCobranzaOut(BaseModel):
     id: int
-    name: str
+    name: Optional[str] = None  # `customers.name` es nullable; la pantalla pinta "—"
     phone: Optional[str] = None
     balance: Decimal
     cargo_mas_viejo: Optional[datetime] = None

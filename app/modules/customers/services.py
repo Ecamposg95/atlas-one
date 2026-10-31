@@ -534,9 +534,9 @@ def cuentas_por_cobrar(
             antiguedad=antig,
         ))
     if order == "antiguedad":
-        filas.sort(key=lambda f: (-f.dias, -f.balance, f.customer.name))
+        filas.sort(key=lambda f: (-f.dias, -f.balance, f.customer.name or ""))
     else:
-        filas.sort(key=lambda f: (-f.balance, f.customer.name))
+        filas.sort(key=lambda f: (-f.balance, f.customer.name or ""))
     vencido = sum((f.antiguedad["31_60"] + f.antiguedad["61_90"] + f.antiguedad["91_plus"] for f in filas), CERO)
     resumen = {
         "por_cobrar": sum((f.balance for f in filas), CERO),

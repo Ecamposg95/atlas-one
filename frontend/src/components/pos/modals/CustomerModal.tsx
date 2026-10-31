@@ -41,8 +41,14 @@ export function CustomerModal({ onClose }: Props) {
   }, [customerId])
 
   const imprimirRecibo = async (paymentId: string) => {
+    // Sin impresora no hay a dónde mandar el recibo: se avisa antes de pedirlo
+    // (el abono ya está registrado y el modal se cierra, no se reintenta).
+    if (!printerName) {
+      toast.error('Sin impresora configurada; el abono quedó registrado')
+      return
+    }
     const b64 = await printerApi.getAbonoBase64(paymentId)
-    if (printerName && b64) await printerApi.printViaAgent(printerName, b64)
+    if (b64) await printerApi.printViaAgent(printerName, b64)
   }
 
   const [texto, setTexto] = useState(customerName ?? '')

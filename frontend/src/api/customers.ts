@@ -57,7 +57,7 @@ export interface UnpaidDocument {
 
 export interface CobranzaItem {
   id: number
-  name: string
+  name: string | null
   phone: string | null
   balance: number
   cargo_mas_viejo: string | null

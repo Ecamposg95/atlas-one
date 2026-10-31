@@ -28,10 +28,12 @@ const BUCKETS: { clave: Bucket; etiqueta: string; tono: string }[] = [
 ]
 const fecha = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('es-MX') : '—')
 const dias = (n: number) => (n === 1 ? '1 día' : `${n} días`)
+// `customers.name` es nullable: un cliente sin nombre se pinta "—".
+const nombreDe = (c: { name: string | null }) => c.name?.trim() || '—'
 
 /** Mensaje del recordatorio (spec 2026-10-29 §5): texto fijo, sin API ni registro. */
-export const mensajeRecordatorio = (nombre: string, negocio: string, saldo: number) =>
-  `Hola ${nombre}, te saludamos de ${negocio}. Tienes un saldo pendiente de ${formatCurrency(saldo)}. Puedes pasar a abonar cuando gustes. ¡Gracias!`
+export const mensajeRecordatorio = (nombre: string | null, negocio: string, saldo: number) =>
+  `Hola${nombre ? ` ${nombre}` : ''}, te saludamos de ${negocio}. Tienes un saldo pendiente de ${formatCurrency(saldo)}. Puedes pasar a abonar cuando gustes. ¡Gracias!`
 
 function Antiguedad({ a }: { a: CobranzaItem['antiguedad'] }) {
   return (
@@ -124,7 +126,7 @@ export function Cobranza() {
   const whatsapp = (c: CobranzaItem) => {
     const tel = toWaPhone(c.phone)
     if (!tel) return
-    window.open(`https://wa.me/${tel}?text=${encodeURIComponent(mensajeRecordatorio(c.name, negocio, c.balance))}`, '_blank')
+    window.open(`https://wa.me/${tel}?text=${encodeURIComponent(mensajeRecordatorio(c.name?.trim() || null, negocio, c.balance))}`, '_blank')
   }
 
   const pdf = async (c: CobranzaItem) => {
@@ -132,7 +134,7 @@ export function Cobranza() {
       const blob = await customersApi.getStatementPdf(c.id)
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
-      a.href = url; a.download = `EdoCuenta_${c.name.replace(/[^\w-]+/g, '_')}.pdf`; a.click()
+      a.href = url; a.download = `EdoCuenta_${nombreDe(c).replace(/[^\w-]+/g, '_')}.pdf`; a.click()
       URL.revokeObjectURL(url)
     } catch { toast.error('No se pudo generar el PDF del estado de cuenta') }
   }
@@ -197,7 +199,7 @@ export function Cobranza() {
       ) : esTelefono ? (
         <ListaTarjetas vacio={!cargando && items.length === 0} textoVacio="Nadie debe" cargando={cargando}>
           {items.map((c) => (
-            <TarjetaFila key={c.id} titulo={c.name} subtitulo={c.branch_name ?? undefined}
+            <TarjetaFila key={c.id} titulo={nombreDe(c)} subtitulo={c.branch_name ?? undefined}
               importe={<span className="text-dax-danger font-bold">{formatCurrency(c.balance)}</span>}
               estado={<Antiguedad a={c.antiguedad} />}
               datos={[{ etiqueta: 'Desde', valor: `${fecha(c.cargo_mas_viejo)} · ${dias(c.dias)}` }, { etiqueta: 'Último abono', valor: fecha(c.ultimo_abono) }]}
@@ -219,7 +221,7 @@ export function Cobranza() {
               <tbody>
                 {items.map((c) => (
                   <tr key={c.id} className="border-t border-dax-border-dim cursor-pointer hover:brightness-110" onClick={() => abrir(c.id)}>
-                    <td className="py-2 font-medium text-dax-text">{c.name}</td>
+                    <td className="py-2 font-medium text-dax-text">{nombreDe(c)}</td>
                     <td className="text-dax-muted">{c.phone ?? '—'}</td>
                     <td className="text-right tabular-nums font-bold text-dax-danger">{formatCurrency(c.balance)}</td>
                     <td className="text-dax-muted">{fecha(c.cargo_mas_viejo)} · {dias(c.dias)}</td>
@@ -240,7 +242,7 @@ export function Cobranza() {
       )}
 
       {detalle && (
-        <Modal open onClose={cerrarDetalle} size="lg" title={detalle.name}
+        <Modal open onClose={cerrarDetalle} size="lg" title={nombreDe(detalle)}
           footer={<>
             {botonWa(detalle)}
             <button type="button" onClick={() => pdf(detalle)} className="dax-btn-secondary text-xs"><i className="fa-solid fa-file-pdf" aria-hidden="true" /> Estado de cuenta</button>
@@ -268,7 +270,7 @@ export function Cobranza() {
       )}
 
       {abonando && detalle && (
-        <AbonoModal customerId={detalle.id} customerName={detalle.name} onClose={() => setAbonando(false)}
+        <AbonoModal customerId={detalle.id} customerName={nombreDe(detalle)} onClose={() => setAbonando(false)}
           onDone={() => { cargar(search); abrir(detalle.id) }} />
       )}
     </div>

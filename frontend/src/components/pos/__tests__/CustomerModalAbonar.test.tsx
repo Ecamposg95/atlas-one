@@ -4,18 +4,27 @@ import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/re
 
 const { getById, search } = vi.hoisted(() => ({ getById: vi.fn(), search: vi.fn() }))
 vi.mock('../../../api/customers', () => ({ customersApi: { getById, search, create: vi.fn() } }))
-vi.mock('../../../api/printer', () => ({ printerApi: { getAbonoBase64: vi.fn(), printViaAgent: vi.fn() } }))
-vi.mock('../../crm/AbonoModal', () => ({ AbonoModal: () => <div data-testid="abono-modal" /> }))
+const { getAbonoBase64, printViaAgent } = vi.hoisted(() => ({ getAbonoBase64: vi.fn(), printViaAgent: vi.fn() }))
+vi.mock('../../../api/printer', () => ({ printerApi: { getAbonoBase64, printViaAgent } }))
+// El mock expone `imprimir` para ejercitar lo que el POS le pasa al modal de abono.
+vi.mock('../../crm/AbonoModal', () => ({
+  AbonoModal: ({ imprimir }: { imprimir?: (id: string) => Promise<void> }) => (
+    <button type="button" data-testid="abono-modal" onClick={() => { void imprimir?.('pago-1') }}>imprimir</button>
+  ),
+}))
 
 import { CustomerModal } from '../modals/CustomerModal'
 import { usePOSStore } from '../../../store/posStore'
+import { toast } from '../../../store/toastStore'
 
 beforeEach(() => {
   search.mockReset().mockResolvedValue([])
   getById.mockReset()
-  usePOSStore.setState({ customerId: 7, customerName: 'Ana Pérez' })
+  getAbonoBase64.mockReset().mockResolvedValue('QUJD')
+  printViaAgent.mockReset().mockResolvedValue(undefined)
+  usePOSStore.setState({ customerId: 7, customerName: 'Ana Pérez', printerName: null })
 })
-afterEach(cleanup)
+afterEach(() => { cleanup(); vi.restoreAllMocks() })
 
 describe('CustomerModal: Abonar', () => {
   it('ofrece Abonar solo cuando el cliente elegido debe', async () => {
@@ -25,6 +34,27 @@ describe('CustomerModal: Abonar', () => {
     expect(screen.getByText(/Debe \$250\.00/)).toBeTruthy()
     fireEvent.click(boton)
     expect(await screen.findByTestId('abono-modal')).toBeTruthy()
+  })
+
+  it('sin impresora configurada avisa y ni siquiera pide el recibo', async () => {
+    getById.mockResolvedValue({ id: 7, name: 'Ana Pérez', current_balance: 250 })
+    const error = vi.spyOn(toast, 'error').mockImplementation(() => {})
+    render(<CustomerModal onClose={() => {}} />)
+    fireEvent.click(await screen.findByRole('button', { name: /Abonar/ }))
+    fireEvent.click(await screen.findByTestId('abono-modal'))
+    await waitFor(() => expect(error).toHaveBeenCalledWith('Sin impresora configurada; el abono quedó registrado'))
+    expect(getAbonoBase64).not.toHaveBeenCalled()
+    expect(printViaAgent).not.toHaveBeenCalled()
+  })
+
+  it('con impresora pide el recibo y lo manda al agente', async () => {
+    usePOSStore.setState({ printerName: 'EPSON' })
+    getById.mockResolvedValue({ id: 7, name: 'Ana Pérez', current_balance: 250 })
+    render(<CustomerModal onClose={() => {}} />)
+    fireEvent.click(await screen.findByRole('button', { name: /Abonar/ }))
+    fireEvent.click(await screen.findByTestId('abono-modal'))
+    await waitFor(() => expect(printViaAgent).toHaveBeenCalledWith('EPSON', 'QUJD'))
+    expect(getAbonoBase64).toHaveBeenCalledWith('pago-1')
   })
 
   it('sin deuda no hay botón', async () => {

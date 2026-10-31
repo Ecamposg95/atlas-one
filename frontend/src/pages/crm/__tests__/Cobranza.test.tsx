@@ -93,6 +93,17 @@ describe('Cuentas por cobrar', () => {
     expect(screen.queryByRole('combobox', { name: 'Sucursal' })).toBeNull()
   })
 
+  it('un cliente sin nombre se pinta con guion y el recordatorio no lo menciona', async () => {
+    cobranza.mockResolvedValue({ ...DATOS, items: [{ ...DATOS.items[0], id: 3, name: null }] })
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null)
+    pintar()
+    const fila = (await screen.findAllByText('—'))[0].closest('tr') as HTMLElement
+    expect(within(fila).getByText('55 1234 5678')).toBeTruthy()
+    fireEvent.click(within(fila).getByRole('button', { name: /WhatsApp/ }))
+    expect(decodeURIComponent((open.mock.calls[0][0] as string).split('text=')[1]).startsWith('Hola, te saludamos de Eleven Fashion.')).toBe(true)
+    open.mockRestore()
+  })
+
   it('en teléfono usa tarjetas, no tabla', async () => {
     modo.telefono = true
     pintar()
