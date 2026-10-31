@@ -3,7 +3,7 @@
 Phase 2 / S2: moved from app/schemas/customers.py.
 """
 from pydantic import BaseModel, EmailStr
-from typing import Optional, List
+from typing import Dict, List, Optional
 from decimal import Decimal
 from datetime import datetime
 
@@ -79,6 +79,33 @@ class AbonoResponse(BaseModel):
     method: str
     reference: Optional[str] = None
     received_at: datetime
+
+
+class ClienteCobranzaOut(BaseModel):
+    id: int
+    name: str
+    phone: Optional[str] = None
+    balance: Decimal
+    cargo_mas_viejo: Optional[datetime] = None
+    dias: int
+    ultimo_abono: Optional[datetime] = None
+    branch_id: Optional[int] = None
+    branch_name: Optional[str] = None
+    tickets_abiertos: int
+    antiguedad: Dict[str, Decimal]   # current, 31_60, 61_90, 91_plus
+
+
+class ResumenCobranza(BaseModel):
+    por_cobrar: Decimal
+    vencido_30: Decimal
+    clientes: int
+    a_favor: Decimal
+
+
+class CobranzaResponse(BaseModel):
+    resumen: ResumenCobranza
+    items: List[ClienteCobranzaOut]
+    total: int
 
 # --- LECTURA (RESPONSE) ---
 class CustomerRead(CustomerBase):

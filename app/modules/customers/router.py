@@ -25,6 +25,9 @@ from app.modules.customers.schemas import (
     CustomerPaymentCreate,
     AbonoResponse,
     AbonoAplicado,
+    CobranzaResponse,
+    ClienteCobranzaOut,
+    ResumenCobranza,
 )
 from app.core.security import get_current_user
 from app.core.security.guards import require_admin_or_owner
@@ -104,6 +107,49 @@ def get_customer_stats(
         "with_debt": base.filter(Customer.current_balance > 0).count(),
         "with_credit": base.filter(Customer.current_balance < 0).count(),
     }
+
+
+@router.get("/cobranza", response_model=CobranzaResponse)
+def cuentas_por_cobrar_endpoint(
+    branch_id: Optional[int] = None,
+    bucket: Optional[str] = None,
+    search: Optional[str] = None,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    order: str = Query("saldo", pattern="^(saldo|antiguedad)$"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    org_id: int = Depends(get_current_active_organization),
+):
+    """Cuentas por cobrar (spec 2026-10-29 §3.1): quién debe, cuánto, desde
+    cuándo. Solo roles de oficina. Va antes de `GET /{customer_id}` para que
+    "cobranza" no se intente leer como id."""
+    from app.models.users import PlatformRole
+    from app.services.metricas_ventas import HQ_ROLES
+    from app.modules.customers.services import BUCKETS, cuentas_por_cobrar
+
+    rol = str(getattr(current_user.role, "value", current_user.role))
+    if rol not in HQ_ROLES and getattr(current_user, "platform_role", None) != PlatformRole.SUPERADMIN:
+        raise HTTPException(status_code=403, detail="Solo administración puede ver las cuentas por cobrar")
+    if bucket and bucket not in BUCKETS:
+        raise HTTPException(status_code=422, detail=f"bucket debe ser uno de: {', '.join(BUCKETS)}")
+
+    resumen, filas = cuentas_por_cobrar(
+        db, org_id=org_id, branch_id=branch_id, bucket=bucket, search=search, order=order)
+    pagina = filas[skip: skip + limit]
+    return CobranzaResponse(
+        resumen=ResumenCobranza(**resumen),
+        total=len(filas),
+        items=[
+            ClienteCobranzaOut(
+                id=f.customer.id, name=f.customer.name, phone=f.customer.phone, balance=f.balance,
+                cargo_mas_viejo=f.cargo_mas_viejo, dias=f.dias, ultimo_abono=f.ultimo_abono,
+                branch_id=f.branch_id, branch_name=f.branch_name,
+                tickets_abiertos=f.tickets_abiertos, antiguedad=f.antiguedad,
+            )
+            for f in pagina
+        ],
+    )
 
 
 # --------------------------------------------------------------------------
