@@ -45,6 +45,36 @@ export interface LedgerEntry {
   created_at: string
 }
 
+export interface UnpaidDocument {
+  id: string
+  folio: string
+  created_at: string
+  total_amount: number
+  paid_amount: number
+  balance: number
+  doc_type: string
+}
+
+export interface AbonoAplicado {
+  sales_document_id: string
+  folio: string
+  amount: number
+  paid_in_full: boolean
+}
+
+/** Respuesta de POST /customers/{id}/pay (spec 2026-10-29 §4.2). */
+export interface AbonoResponse {
+  entries: LedgerEntry[]
+  customer_balance_before: number
+  customer_balance_after: number
+  applied: AbonoAplicado[]
+  unapplied: number
+  payment_id: string
+  method: string
+  reference: string | null
+  received_at: string
+}
+
 export interface CustomerListResponse {
   items: Customer[]
   total: number
@@ -82,9 +112,14 @@ export const customersApi = {
     return Array.isArray(data) ? data : (data as any)?.items ?? []
   },
 
-  pay: async (id: number, payload: { amount: number; method?: string; reference?: string }): Promise<LedgerEntry> => {
-    const { data } = await client.post<LedgerEntry>(`/customers/${id}/pay`, payload)
+  pay: async (id: number, payload: { amount: number; method?: string; reference?: string; sales_document_id?: string }): Promise<AbonoResponse> => {
+    const { data } = await client.post<AbonoResponse>(`/customers/${id}/pay`, payload)
     return data
+  },
+
+  getUnpaidDocuments: async (id: number): Promise<UnpaidDocument[]> => {
+    const { data } = await client.get<UnpaidDocument[]>(`/customers/${id}/unpaid-documents`)
+    return Array.isArray(data) ? data : []
   },
 
   create: async (payload: CustomerPayload): Promise<Customer> => {

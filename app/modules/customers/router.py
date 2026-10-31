@@ -22,6 +22,8 @@ from app.modules.customers.schemas import (
     CustomerUpdate,
     LedgerEntryResponse,
     CustomerPaymentCreate,
+    AbonoResponse,
+    AbonoAplicado,
 )
 from app.core.security import get_current_user
 from app.core.security.guards import require_admin_or_owner
@@ -456,7 +458,7 @@ def get_customer_unpaid_documents(
 # ni turno de caja, asi que un abono en efectivo le respondia 409 y nadie
 # podia recibirlo. Lo que SI es de administracion —borrar un cliente— sigue
 # con `require_admin_or_owner`.
-@router.post("/{customer_id}/pay", response_model=LedgerEntryResponse)
+@router.post("/{customer_id}/pay", response_model=AbonoResponse)
 def register_customer_payment(
     customer_id: int,
     payment_in: CustomerPaymentCreate,
@@ -468,11 +470,9 @@ def register_customer_payment(
     Registra un abono/pago de un cliente y actualiza su saldo.
     Si se proporciona sales_document_id, vincula el pago a ese documento específico.
 
-    Solo administrador/dueño: un abono mueve el saldo de crédito del cliente y
-    —cuando es en efectivo— entra al cajón de quien lo cobra. Ojo: el guard de
-    efectivo de más abajo sigue vigente para TODOS los roles, así que quien
-    registre un abono en efectivo desde una sucursal necesita su propia caja
-    abierta.
+    Cualquier rol con el módulo `crm` puede abonar; el efectivo exige caja
+    abierta de quien cobra (y sucursal). Devuelve qué tickets cubrió y el saldo
+    antes/después (spec 2026-10-29 §4.2).
     """
     from app.models import SalesDocument
     
@@ -537,13 +537,20 @@ def register_customer_payment(
     # venta original —cerrada y cuadrada dias antes—, que pasaba a mostrar un
     # faltante por el monto del abono.
     #
-    # Dos diferencias deliberadas con el checkout, ambas conservan lo que ya
-    # se permitia aqui: (a) solo el efectivo exige turno; tarjeta y
-    # transferencia se siguen registrando sin caja (no tocan el cajon) y se
-    # atribuyen cuando hay una abierta; (b) la exencion de oficina central es
-    # la misma que alla — sin `branch_id` no hay cajon del que responder.
+    # Una diferencia deliberada con el checkout: solo el efectivo exige turno;
+    # tarjeta y transferencia se siguen registrando sin caja (no tocan el
+    # cajon) y se atribuyen cuando hay una abierta.
     cobra_efectivo = method_enum == SalesPaymentMethod.CASH
-    requiere_caja = cobra_efectivo and bool(current_user.branch_id)
+    # Spec 2026-10-29 §6.1: sin sucursal no hay cajón que responda por los
+    # billetes. Antes el rol de oficina quedaba exento y el efectivo nacía
+    # sin caja (caía al respaldo por documento del corte original); ahora
+    # solo tarjeta y transferencia pasan sin sucursal.
+    if cobra_efectivo and not current_user.branch_id:
+        raise HTTPException(
+            status_code=422,
+            detail="Para recibir efectivo elige una sucursal con caja abierta; tarjeta y transferencia sí se pueden registrar",
+        )
+    requiere_caja = cobra_efectivo
     if requiere_caja and cash_session_id_value is None:
         logger.warning(
             "BLOCKED_CUSTOMER_PAYMENT: user_id=%s branch_id=%s customer_id=%s "
@@ -563,6 +570,7 @@ def register_customer_payment(
     # tickets PENDING para siempre, y el ticket solo se marcaba PAID cuando
     # el saldo TOTAL del cliente llegaba a cero (con dos tickets fiados,
     # liquidar el primero no lo cerraba).
+    saldo_antes = Decimal(str(customer.current_balance or 0))
     asientos = aplicar_abono(
         db,
         org_id=org_id,
@@ -571,7 +579,6 @@ def register_customer_payment(
         documento=doc,
         referencia=payment_in.reference or payment_in.method,
     )
-    new_entry = asientos[0]
 
     # ATS-37: Create a Payment record linked to the SalesDocument
     # (`method_enum` y `cash_session_id_value` se resolvieron arriba, antes de
@@ -587,10 +594,39 @@ def register_customer_payment(
         cash_session_id=cash_session_id_value,
     )
     db.add(payment_record)
+    db.flush()
+
+    # Qué tickets cubrió el abono (un asiento por ticket; el asiento sin
+    # documento es lo que quedó a favor del cliente).
+    from app.modules.customers.services import CERO, DocumentoAbierto
+    ids = [a.sales_document_id for a in asientos if a.sales_document_id]
+    docs = {d.id: d for d in db.query(SalesDocument).filter(SalesDocument.id.in_(ids)).all()} if ids else {}
+    applied = [
+        AbonoAplicado(
+            sales_document_id=a.sales_document_id,
+            folio=DocumentoAbierto(documento=docs[a.sales_document_id], saldo=CERO).folio,
+            amount=-Decimal(str(a.amount)),
+            paid_in_full=docs[a.sales_document_id].status == DocumentStatus.PAID,
+        )
+        for a in asientos if a.sales_document_id in docs
+    ]
+    unapplied = sum((-Decimal(str(a.amount)) for a in asientos if not a.sales_document_id), Decimal("0"))
 
     db.commit()
-    db.refresh(new_entry)
-    return new_entry
+    for a in asientos:
+        db.refresh(a)
+    db.refresh(payment_record)
+    return AbonoResponse(
+        entries=[LedgerEntryResponse.model_validate(a) for a in asientos],
+        customer_balance_before=saldo_antes,
+        customer_balance_after=Decimal(str(customer.current_balance)),
+        applied=applied,
+        unapplied=unapplied,
+        payment_id=payment_record.id,
+        method=method_enum.value,
+        reference=payment_in.reference,
+        received_at=payment_record.created_at,
+    )
 
 from fastapi import Response
 from app.modules.customers.statement_pdf import (

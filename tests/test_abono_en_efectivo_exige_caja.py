@@ -132,23 +132,27 @@ def test_el_abono_en_efectivo_con_caja_abierta_se_atribuye_a_esa_caja(
     assert Decimal(str(compute_expected_cash(db, sesion_2).expected)) == Decimal("400.00")
 
 
-def test_el_rol_de_oficina_sin_sucursal_sigue_exento(
+def test_el_rol_de_oficina_sin_sucursal_no_puede_recibir_efectivo(
     client, db, org, branch_a, cajero_a, admin_user, auth_admin
 ):
-    """Misma exencion que el checkout: sin `branch_id` no hay cajon fisico del
-    que responder (cobro de back-office, migracion de saldos). El pago se
-    registra sin atribucion y cae al respaldo por documento."""
+    """Spec 2026-10-29 §6.1: sin `branch_id` no hay cajón que responda por los
+    billetes, así que el efectivo se rechaza con 422; transferencia y tarjeta
+    se siguen registrando sin caja (no tocan el cajón)."""
     sesion_1 = _abrir_caja(db, org, branch_a, cajero_a)
     cliente, venta = _cliente_con_venta_a_credito(
         db, org, branch_a, cajero_a, sesion_1, folio=3004)
     admin_user.branch_id = None
     db.commit()
+    h = {**auth_admin, "X-Organization-ID": str(org.id)}
 
-    resp = client.post(
-        f"/api/customers/{cliente.id}/pay",
-        json={"amount": "400", "method": "CASH", "sales_document_id": venta.id},
-        headers={**auth_admin, "X-Organization-ID": str(org.id)},
-    )
+    resp = client.post(f"/api/customers/{cliente.id}/pay",
+                       json={"amount": "400", "method": "CASH", "sales_document_id": venta.id}, headers=h)
+    assert resp.status_code == 422, resp.text
+    assert "sucursal" in resp.json()["detail"]
+    assert db.query(Payment).filter(Payment.organization_id == org.id).count() == 0
+
+    resp = client.post(f"/api/customers/{cliente.id}/pay",
+                       json={"amount": "400", "method": "TRANSFER", "sales_document_id": venta.id}, headers=h)
     assert resp.status_code == 200, resp.text
     pago = db.query(Payment).filter(Payment.organization_id == org.id).one()
     assert pago.cash_session_id is None

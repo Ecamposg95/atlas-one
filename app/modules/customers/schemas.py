@@ -58,6 +58,28 @@ class LedgerEntryResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
+class AbonoAplicado(BaseModel):
+    sales_document_id: str
+    folio: str
+    amount: Decimal
+    paid_in_full: bool
+
+
+class AbonoResponse(BaseModel):
+    """Respuesta de POST /customers/{id}/pay (spec 2026-10-29 §4.2): qué
+    tickets cubrió el abono y cómo quedó el saldo, para que el POS lo diga y
+    el recibo lo imprima."""
+    entries: List[LedgerEntryResponse]
+    customer_balance_before: Decimal
+    customer_balance_after: Decimal
+    applied: List[AbonoAplicado]
+    unapplied: Decimal          # saldo a favor que quedó sin ticket
+    payment_id: str             # UUID del Payment
+    method: str
+    reference: Optional[str] = None
+    received_at: datetime
+
 # --- LECTURA (RESPONSE) ---
 class CustomerRead(CustomerBase):
     id: int
