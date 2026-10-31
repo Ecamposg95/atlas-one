@@ -972,6 +972,13 @@ class PosPrinter:
                 # desglose tiene que dar EXACTAMENTE el total, ni un peso mas.
                 if m_key == 'card' and _comision_tarjeta > 0:
                     raw += self._rline("  incl. comision", _comision_tarjeta)
+        # Abonos a cuenta cobrados en el turno. Informativo: YA están dentro
+        # de los renglones por método (son Payment como cualquier otro); se
+        # nombran para que la cajera sepa que parte de lo cobrado no es venta
+        # de hoy sino cobranza de ventas fiadas (spec 2026-10-29 §2.3).
+        _abonos = (kpis.get('customer_payments') or 0)
+        if _abonos > 0:
+            raw += self._rline("  Abonos a cuenta", _abonos)
         raw += self._rline("Total cobrado", _total_cobrado)
 
         raw += self.CMD["LF"] + sep
@@ -1055,6 +1062,10 @@ class PosPrinter:
         raw += self.CMD["BOLD_OFF"] + self.CMD["LEFT"]
 
         raw += self._rline("Ventas Totales", kpis['total_sales'])
+        # Lo que de esas ventas quedó fiado a clientes: ventas = cobrado + fiado.
+        _fiado = (kpis.get('credit_sales') or 0)
+        if _fiado > 0:
+            raw += self._rline("Fiado", _fiado)
         raw += f"Tickets: {kpis['total_tickets']}".rjust(self.cols).encode("latin-1", "replace") + b"\n"
         raw += self._rline("Ticket Promedio", kpis['avg_ticket'])
         raw += self._rline("Impuestos (IVA)", kpis['total_taxes'])

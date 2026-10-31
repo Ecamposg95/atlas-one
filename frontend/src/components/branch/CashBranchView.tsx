@@ -698,6 +698,26 @@ export function CashBranchView() {
             iconColor="#10b981"
             valueClass="text-emerald-600 dark:text-emerald-400"
           />
+          {summary && summary.credit_sales > 0 && (
+            <KpiCard
+              icon="fa-hand-holding-dollar"
+              label="Fiado"
+              value={fmtMoney(String(summary.credit_sales))}
+              iconBg="rgba(245,158,11,0.12)"
+              iconColor="#f59e0b"
+              valueClass="text-amber-600 dark:text-amber-400"
+            />
+          )}
+          {summary && summary.customer_payments > 0 && (
+            <KpiCard
+              icon="fa-piggy-bank"
+              label="Abonos a cuenta"
+              value={fmtMoney(String(summary.customer_payments))}
+              iconBg="rgba(16,185,129,0.12)"
+              iconColor="#10b981"
+              valueClass="text-emerald-600 dark:text-emerald-400"
+            />
+          )}
           <KpiCard
             icon="fa-scale-balanced"
             label={current ? COPY.cashKpis.expected : 'Cierre reportado'}

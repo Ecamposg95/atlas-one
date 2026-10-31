@@ -6,6 +6,10 @@ export interface CashSummary {
   opening_amount: number
   expected_cash: number
   total_sales: number
+  /** Lo que quedó fiado a clientes en las ventas del turno (spec 2026-10-29 §2.3). */
+  credit_sales: number
+  /** Abonos a cuenta cobrados en el turno; ya están dentro de los totales por método. */
+  customer_payments: number
   total_cash: number
   total_card: number
   total_transfer: number
@@ -104,6 +108,8 @@ export const cashApi = {
       opening_amount: data?.session?.opening_balance ?? 0,
       expected_cash: data?.expected?.cash_physical ?? 0,
       total_sales: data?.kpis?.total_sales ?? 0,
+      credit_sales: data?.kpis?.credit_sales ?? 0,
+      customer_payments: data?.kpis?.customer_payments ?? 0,
       total_cash: data?.payments?.cash?.total ?? 0,
       total_card: data?.payments?.card?.total ?? 0,
       total_transfer: data?.payments?.transfer?.total ?? 0,
