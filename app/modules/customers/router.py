@@ -133,6 +133,13 @@ def cuentas_por_cobrar_endpoint(
         raise HTTPException(status_code=403, detail="Solo administración puede ver las cuentas por cobrar")
     if bucket and bucket not in BUCKETS:
         raise HTTPException(status_code=422, detail=f"bucket debe ser uno de: {', '.join(BUCKETS)}")
+    # Mismo criterio que el Inicio (`reports_inicio._sucursal_del_inicio`): el
+    # GERENTE solo ve su sucursal y el `branch_id` que mande se ignora, para
+    # que la tarjeta "Por cobrar" y esta pantalla den las mismas cifras.
+    if rol == "GERENTE" and getattr(current_user, "platform_role", None) != PlatformRole.SUPERADMIN:
+        if not current_user.branch_id:
+            raise HTTPException(status_code=403, detail="Tu usuario no tiene una sucursal asignada")
+        branch_id = current_user.branch_id
 
     resumen, filas = cuentas_por_cobrar(
         db, org_id=org_id, branch_id=branch_id, bucket=bucket, search=search, order=order)

@@ -182,3 +182,16 @@ def test_el_abono_a_un_ticket_baja_ese_ticket_en_la_antiguedad(
     _abono(db, org, beto, "50", 0)
     d = client.get("/api/customers/cobranza?search=beto", headers=h).json()
     assert {k: float(v) for k, v in d["items"][0]["antiguedad"].items()} == {"current": 50.0, "31_60": 50.0, "61_90": 0.0, "91_plus": 0.0}
+
+
+def test_el_gerente_queda_confinado_a_su_sucursal(
+    client, db, org, branch_a, branch_b, cajero_a, gerente_a, auth_gerente_a
+):
+    """Igual que el Inicio: el GERENTE ve solo su sucursal y el `branch_id` que
+    mande se ignora; el resumen es el de su sucursal, no el de la organización."""
+    ana, beto, _, _ = _escenario(db, org, branch_a, branch_b, cajero_a)
+    h = {**auth_gerente_a, "X-Organization-ID": str(org.id)}
+    for qs in ("", f"?branch_id={branch_b.id}", f"?branch_id={branch_a.id}"):
+        d = client.get(f"/api/customers/cobranza{qs}", headers=h).json()
+        assert [i["id"] for i in d["items"]] == [ana.id], qs
+        assert float(d["resumen"]["por_cobrar"]) == 70.0 and d["resumen"]["clientes"] == 1, qs

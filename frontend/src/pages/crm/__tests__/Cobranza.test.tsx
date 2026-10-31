@@ -13,7 +13,10 @@ vi.mock('../../../api/customers', () => ({
   },
 }))
 vi.mock('../../../hooks/useIsMobile', () => ({ useEsTelefono: () => modo.telefono }))
-vi.mock('../../../hooks/useSucursalesVendibles', () => ({ useSucursalesVendibles: () => [] }))
+// Con `activo` falso el hook real no pide nada: el mock lo imita para probar el gating por rol.
+vi.mock('../../../hooks/useSucursalesVendibles', () => ({
+  useSucursalesVendibles: (activo: boolean) => (activo ? [{ id: 1, name: 'Roma' }, { id: 2, name: 'Condesa' }] : []),
+}))
 vi.mock('../../../components/crm/AbonoModal', () => ({
   AbonoModal: ({ onDone }: { onDone?: () => void }) => <button type="button" data-testid="abono-modal" onClick={() => onDone?.()}>abonar</button>,
 }))
@@ -77,6 +80,17 @@ describe('Cuentas por cobrar', () => {
     const dialogo = await screen.findByRole('dialog')
     fireEvent.click(within(dialogo).getByRole('button', { name: /Registrar abono/ }))
     expect(await screen.findByTestId('abono-modal')).toBeTruthy()
+  })
+
+  it('el selector de sucursal es del administrador; al gerente no se le enseña (el backend lo confina)', async () => {
+    pintar()
+    await screen.findByText('Ana Pérez')
+    expect(screen.getByRole('combobox', { name: 'Sucursal' })).toBeTruthy()
+    cleanup()
+    useAuthStore.setState({ user: { id: 2, role: 'GERENTE' } as never })
+    pintar()
+    await screen.findByText('Ana Pérez')
+    expect(screen.queryByRole('combobox', { name: 'Sucursal' })).toBeNull()
   })
 
   it('en teléfono usa tarjetas, no tabla', async () => {

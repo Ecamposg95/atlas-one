@@ -387,7 +387,7 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 
 ### `/customers/cobranza` — Cuentas por cobrar 📱
 - **Archivo:** `pages/crm/Cobranza.tsx`
-- **Propósito:** Quién debe, cuánto y desde cuándo: KPIs (por cobrar, vencido a más de 30 días, clientes con deuda), filtros (búsqueda, sucursal, antigüedad, orden), detalle con tickets abiertos y movimientos, estado de cuenta en PDF, `Registrar abono` (`AbonoModal`) y recordatorio por WhatsApp (`wa.me`, texto fijo, deshabilitado sin teléfono marcable).
+- **Propósito:** Quién debe, cuánto y desde cuándo: KPIs (por cobrar, vencido a más de 30 días, clientes con deuda), filtros (búsqueda, sucursal —solo Admin y Dueño; al Gerente el backend lo confina a la suya—, antigüedad, orden), detalle con tickets abiertos y movimientos, estado de cuenta en PDF, `Registrar abono` (`AbonoModal`) y recordatorio por WhatsApp (`wa.me`, texto fijo, deshabilitado sin teléfono marcable).
 - **Quién la ve:** Admin, Dueño, Gerente (no en modo básico).
 - **Datos/API:** `customersApi.cobranza/getUnpaidDocuments/getStatement/getStatementPdf`.
 

@@ -17,6 +17,7 @@ import { useAuthStore } from '../../store/authStore'
 import { toast } from '../../store/toastStore'
 import { formatCurrency } from '../../utils/currency'
 import { toWaPhone } from '../../utils/phone'
+import { esRolHq } from '../../utils/rolesHq'
 
 type Bucket = 'current' | '31_60' | '61_90' | '91_plus'
 const BUCKETS: { clave: Bucket; etiqueta: string; tono: string }[] = [
@@ -49,7 +50,10 @@ function Antiguedad({ a }: { a: CobranzaItem['antiguedad'] }) {
 export function Cobranza() {
   const esTelefono = useEsTelefono()
   const negocio = useAuthStore((s) => s.org?.name) ?? 'la tienda'
-  const sucursales = useSucursalesVendibles(true)
+  // Solo administrador y dueño eligen sucursal; al gerente el backend lo confina
+  // a la suya (igual que el Inicio), así que no se le enseña el selector.
+  const esHq = esRolHq(useAuthStore((s) => s.user?.role))
+  const sucursales = useSucursalesVendibles(esHq)
   const [datos, setDatos] = useState<CobranzaResponse | null>(null)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState(false)
@@ -172,7 +176,7 @@ export function Cobranza() {
 
       <BarraFiltros>
         <input type="search" value={search} onChange={(e) => onSearch(e.target.value)} placeholder="Nombre o teléfono" aria-label="Buscar" className="dax-input flex-1 min-w-[160px] text-sm" />
-        {sucursales.length > 1 && (
+        {esHq && sucursales.length > 1 && (
           <select aria-label="Sucursal" value={branchId} onChange={(e) => setBranchId(e.target.value)} className="dax-input text-sm">
             <option value="">Todas las sucursales</option>
             {sucursales.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
