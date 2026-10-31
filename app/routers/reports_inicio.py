@@ -83,7 +83,8 @@ def _ambito(org_id: int, sucursal: Optional[int]) -> mv.Ambito:
 
 def _periodo(db: Session, org_id: int, sucursal: Optional[int], desde: date, hasta: date) -> PeriodoVentas:
     r = mv.resumen(db, _ambito(org_id, sucursal), mv.Periodo(desde, hasta))
-    return PeriodoVentas(desde=desde, hasta=hasta, total=r.neta, devuelto=r.devuelto, tickets=r.tickets)
+    return PeriodoVentas(desde=desde, hasta=hasta, total=r.neta, devuelto=r.devuelto, tickets=r.tickets,
+                         fiado=r.fiado, cobranza=r.cobranza)
 
 
 def _top(db: Session, org_id: int, sucursal: Optional[int], desde: date, hasta: date) -> List[ProductoTop]:
@@ -323,7 +324,7 @@ def _sucursales(db: Session, org_id: int, hoy: date, umbral: int) -> Optional[Li
         )
         salida.append(SucursalInicio(
             branch_id=b.id, nombre=b.name, ventas_hoy=r.neta, devuelto_hoy=r.devuelto, tickets_hoy=r.tickets,
-            corte=_corte(db, org_id, b.id), poca_existencia=int(poca or 0),
+            fiado_hoy=r.fiado, corte=_corte(db, org_id, b.id), poca_existencia=int(poca or 0),
         ))
     return salida
 

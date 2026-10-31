@@ -1,13 +1,13 @@
 # tests/test_reports_dashboard.py
 """`/reports/dashboard`, `/reports/sales-by-hour` y `/reports/command-center/stats`
 sobre `metricas_ventas`: neto, día de México, 24 horas y ámbito explícito."""
-from datetime import datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from itertools import count
 from zoneinfo import ZoneInfo
 
 from app.models.returns import SaleReturn
-from app.models.sales import DocumentStatus, Payment, PaymentMethod, SalesDocument, SalesLineItem
+from app.models.sales import DocumentStatus, DocumentType, Payment, PaymentMethod, SalesDocument, SalesLineItem
 from app.services import metricas_ventas as mv
 
 _MX = ZoneInfo("America/Mexico_City")
@@ -70,6 +70,25 @@ def test_dashboard_kpis_netos_y_comparativo(client, db, org, branch_a, cajero_a,
     assert (k["prev_sales"], k["prev_orders"], k["prev_returns"]) == (60.0, 1, 0.0)
     assert d["charts"]["trend_previous"]["data"] == [60.0]
     assert d["charts"]["payments"]["CASH"] == {"total": 75.0, "count": 1}
+
+
+def test_dashboard_trae_fiado_y_cobranza(client, db, org, branch_a, cajero_a, auth_admin_a, products_setup):
+    from app.modules.customers.models import Customer, CustomerLedgerEntry
+    hoy = date.today()
+    cliente = Customer(name="Fiada", organization_id=org.id, current_balance=Decimal("0"))
+    db.add(cliente); db.commit()
+    v = _venta(db, org, branch_a, cajero_a, _v(products_setup), "300", status=DocumentStatus.PENDING)
+    v.customer_id = cliente.id
+    v.doc_type = DocumentType.INVOICE   # el `_venta` de este archivo hace ORDER; la fiada es un ticket
+    db.add(CustomerLedgerEntry(customer_id=cliente.id, sales_document_id=v.id, organization_id=org.id,
+                               amount=Decimal("300"), description="Venta a crédito"))
+    db.add(Payment(organization_id=org.id, customer_id=cliente.id, method=PaymentMethod.CASH, amount=Decimal("45")))
+    db.commit()
+    d = client.get(f"/api/reports/dashboard?start_date={hoy}&end_date={hoy}&branch_id=0", headers=auth_admin_a).json()
+    assert d["kpis"]["sales"] == 300.0
+    assert d["kpis"]["credit_sales"] == 300.0
+    assert d["kpis"]["collections"] == 45.0
+    assert d["kpis"]["prev_credit_sales"] == 0.0
 
 
 def test_dashboard_admin_sin_sucursal_en_query_ve_toda_la_org(client, db, org, branch_a, branch_b, cajero_a, auth_admin_a, products_setup):

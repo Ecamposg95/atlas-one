@@ -69,6 +69,51 @@ def _cliente(db, org, nombre="Clienta"):
     return c
 
 
+def _fiada(db, org, branch, user, variante, cliente, total, enganche="0", dia=None):
+    """Venta fiada como la deja el checkout: PENDING con cliente, Payment solo
+    por el enganche y un cargo en el ledger por lo que quedó a cuenta."""
+    from app.modules.customers.models import CustomerLedgerEntry
+    doc = _venta(db, org, branch, user, variante, total, dia=dia, status=DocumentStatus.PENDING,
+                 customer_id=cliente.id, pagado=enganche)
+    cargo = CustomerLedgerEntry(customer_id=cliente.id, sales_document_id=doc.id, organization_id=org.id,
+                                amount=Decimal(total) - Decimal(enganche), description=f"Venta a crédito #{doc.folio}")
+    cargo.created_at = doc.created_at
+    cliente.current_balance = Decimal(str(cliente.current_balance)) + cargo.amount
+    db.add(cargo); db.commit()
+    return doc
+
+
+def _abono(db, org, cliente, monto, dia=None, sesion=None, doc=None):
+    """Abono como lo deja POST /customers/{id}/pay: Payment con cliente (y la
+    caja que lo cobró) más el asiento negativo."""
+    from app.modules.customers.models import CustomerLedgerEntry
+    cuando = _instante(dia or mv.hoy_mx())
+    pago = Payment(organization_id=org.id, customer_id=cliente.id, method=PaymentMethod.CASH,
+                   amount=Decimal(monto), cash_session_id=sesion.id if sesion else None)
+    pago.created_at = cuando
+    asiento = CustomerLedgerEntry(customer_id=cliente.id, organization_id=org.id, amount=-Decimal(monto),
+                                  sales_document_id=doc.id if doc else None, description="PAGO RECIBIDO: CASH")
+    asiento.created_at = cuando
+    cliente.current_balance = Decimal(str(cliente.current_balance)) - Decimal(monto)
+    db.add_all([pago, asiento]); db.commit()
+
+
+def _reversion(db, org, cliente, doc, monto, descripcion):
+    from app.modules.customers.models import CustomerLedgerEntry
+    a = CustomerLedgerEntry(customer_id=cliente.id, organization_id=org.id, amount=-Decimal(monto),
+                            sales_document_id=doc.id, description=descripcion)
+    a.created_at = doc.created_at
+    db.add(a); db.commit()
+
+
+def _caja(db, org, branch, user):
+    from app.models.cash import CashSession
+    s = CashSession(user_id=user.id, branch_id=branch.id, organization_id=org.id,
+                    opening_balance=Decimal("0"), status="OPEN")
+    db.add(s); db.commit(); db.refresh(s)
+    return s
+
+
 def _v(products_setup):
     return products_setup["product_a"][1]
 
@@ -359,3 +404,66 @@ def test_utilidad_bruta_devolucion_sin_reingreso_de_pieza_sin_costo_tambien_baja
     db.commit()
     utilidad, sin_costo = mv.utilidad_bruta(db, mv.Ambito(org.id, None, True), mv.periodo_preset("hoy"))
     assert (utilidad, sin_costo) == (0.0, 40.0)
+
+
+# --- Fiado y cobranza (spec 2026-10-29 §2.2) ---------------------------------
+
+def test_fiado_y_cobranza_del_periodo(db, org, branch_a, branch_b, cajero_a, products_setup):
+    hoy, ayer = mv.hoy_mx(), mv.hoy_mx() - timedelta(days=1)
+    cliente = _cliente(db, org)
+    sesion = _caja(db, org, branch_a, cajero_a)
+    _venta(db, org, branch_a, cajero_a, _v(products_setup), "100")                    # cobrada hoy
+    _fiada(db, org, branch_a, cajero_a, _v(products_setup), cliente, "300", "50")      # fiada hoy, enganche 50
+    _fiada(db, org, branch_a, cajero_a, _v(products_setup), cliente, "200", dia=ayer)  # fiada ayer
+    _abono(db, org, cliente, "80", sesion=sesion)                                      # abono hoy
+
+    todo = mv.Ambito(org.id, None, True)
+    r_hoy = mv.resumen(db, todo, mv.Periodo(hoy, hoy))
+    assert (r_hoy.bruta, r_hoy.neta, r_hoy.tickets) == (400.0, 400.0, 2)
+    assert (r_hoy.fiado, r_hoy.cobranza) == (250.0, 80.0)
+    # Invariante: neta = cobrado en las ventas + fiado − devuelto (100 + 50 + 250 − 0).
+    assert r_hoy.neta == 150.0 + r_hoy.fiado - r_hoy.devuelto
+    r_ayer = mv.resumen(db, todo, mv.Periodo(ayer, ayer))
+    assert (r_ayer.bruta, r_ayer.fiado, r_ayer.cobranza) == (200.0, 200.0, 0.0)
+
+    # Por sucursal: el abono se atribuye a la caja que lo cobró (sucursal A).
+    por_suc = mv.por_sucursal(db, org.id, mv.Periodo(hoy, hoy))
+    assert (por_suc[branch_a.id].fiado, por_suc[branch_a.id].cobranza) == (250.0, 80.0)
+    assert branch_b.id not in por_suc
+    solo_b = mv.resumen(db, mv.Ambito(org.id, branch_b.id, False), mv.Periodo(hoy, hoy))
+    assert (solo_b.fiado, solo_b.cobranza) == (0.0, 0.0)
+
+
+def test_un_abono_sin_caja_cuenta_en_la_org_y_en_ninguna_sucursal(db, org, branch_a, cajero_a, products_setup):
+    hoy = mv.hoy_mx()
+    cliente = _cliente(db, org)
+    _fiada(db, org, branch_a, cajero_a, _v(products_setup), cliente, "100")
+    _abono(db, org, cliente, "40")   # transferencia registrada desde oficina, sin caja
+    assert mv.resumen(db, mv.Ambito(org.id, None, True), mv.Periodo(hoy, hoy)).cobranza == 40.0
+    assert mv.resumen(db, mv.Ambito(org.id, branch_a.id, False), mv.Periodo(hoy, hoy)).cobranza == 0.0
+
+
+def test_fiado_del_dia_ignora_la_venta_cancelada(db, org, branch_a, cajero_a, products_setup):
+    """Review Focus 2."""
+    hoy = mv.hoy_mx()
+    cliente = _cliente(db, org)
+    doc = _fiada(db, org, branch_a, cajero_a, _v(products_setup), cliente, "100")
+    _reversion(db, org, cliente, doc, "100", f"Cancelación Venta #{doc.folio}")
+    doc.status = DocumentStatus.CANCELLED
+    db.commit()
+    r = mv.resumen(db, mv.Ambito(org.id, None, True), mv.Periodo(hoy, hoy))
+    assert (r.bruta, r.tickets, r.fiado) == (0.0, 0, 0.0)
+
+
+def test_la_devolucion_de_una_fiada_baja_neta_y_fiado(db, org, branch_a, cajero_a, products_setup):
+    """Review Focus 3: la devolución aprobada resta en `devuelto` y su asiento
+    "Devolución …" resta del fiado; el abono, en cambio, no toca el fiado."""
+    hoy = mv.hoy_mx()
+    cliente = _cliente(db, org)
+    doc = _fiada(db, org, branch_a, cajero_a, _v(products_setup), cliente, "100")
+    _devolucion(db, org, branch_a, cajero_a, doc, "30")
+    _reversion(db, org, cliente, doc, "30", "Devolución #ABCD1234 aplicada al saldo")
+    _abono(db, org, cliente, "20", doc=doc)
+    r = mv.resumen(db, mv.Ambito(org.id, None, True), mv.Periodo(hoy, hoy))
+    assert (r.bruta, r.devuelto, r.neta) == (100.0, 30.0, 70.0)
+    assert (r.fiado, r.cobranza) == (70.0, 20.0)

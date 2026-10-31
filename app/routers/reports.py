@@ -317,6 +317,10 @@ def get_dashboard_stats(
             "prev_orders": anterior.tickets,
             "prev_avg_ticket": anterior.ticket_promedio,
             "prev_returns": anterior.devuelto,
+            # Spec 2026-10-29 §2.2: lo que quedó fiado en las ventas del periodo y los abonos recibidos.
+            "credit_sales": actual.fiado,
+            "collections": actual.cobranza,
+            "prev_credit_sales": anterior.fiado,
             # OJO: aquí `gross_profit` es SOLO sobre renglones con costo (los sin costo van
             # en `sales_without_cost`); en `/daily-summary` es el contrato A-8, que suma
             # la línea sin costo con costo 0. Mismo nombre, dos significados.
