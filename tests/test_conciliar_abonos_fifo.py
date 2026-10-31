@@ -59,3 +59,20 @@ def test_marca_pagado_lo_que_los_abonos_sueltos_cubren_y_no_toca_el_saldo(db, or
 def test_un_abono_posterior_a_la_auditoria_no_cuenta(db, org, branch_a, cajero_a):
     c, viejo, nuevo = _escenario(db, org, branch_a, cajero_a)
     assert conciliar(db, org_id=org.id, antes=date(2026, 9, 30), dry_run=True) == []
+
+
+def test_el_ticket_conciliado_ya_no_debe_y_un_abono_libre_posterior_va_al_siguiente(db, org, branch_a, cajero_a):
+    """PAID significa sin deuda: tras conciliar, A-7001 sale de `documentos_abiertos`
+    y el siguiente abono libre cae sobre A-7002, no sobre el ticket ya pagado."""
+    from app.modules.customers.services import aplicar_abono, documentos_abiertos, saldo_documento
+
+    c, viejo, nuevo = _escenario(db, org, branch_a, cajero_a)
+    conciliar(db, org_id=org.id, antes=date(2026, 10, 28), dry_run=False)
+    db.expire_all()
+    assert viejo.status == DocumentStatus.PAID
+    assert saldo_documento(db, org_id=org.id, documento=viejo, customer_id=c.id) == Decimal("0")
+    assert [x.documento.id for x in documentos_abiertos(db, org_id=org.id, customer=c)] == [nuevo.id]
+
+    asientos = aplicar_abono(db, org_id=org.id, customer=c, amount=Decimal("30"))
+    db.commit()
+    assert [(a.sales_document_id, Decimal(str(a.amount))) for a in asientos] == [(nuevo.id, Decimal("-30"))]

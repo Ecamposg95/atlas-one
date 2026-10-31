@@ -86,6 +86,10 @@ abono o una devolución. `sales.py::_deuda_cargada_por_documento` quedó como al
    (`--org N [--antes AAAA-MM-DD] [--dry-run]`): suma los abonos sueltos anteriores a `--antes`
    (default 2026-10-28) y marca PAID los tickets más viejos que esa bolsa cubre por completo;
    no crea asientos ni toca `current_balance`, es idempotente. Correrlo a mano por organización.
+   Un ticket PAID no debe nada (`saldo_documento` devuelve 0 aunque el ledger conserve el cargo sin
+   abono enlazado): tras conciliar, el ticket sale de `documentos_abiertos`, de `/unpaid-documents`
+   y del selector del abono, y el siguiente abono libre ya no cae sobre él. Vale también para
+   tickets PAID legados.
 7. Portal del cliente (`pages/portal/Portal.tsx`) pinta el saldo deudor en verde y el saldo a
    favor en rojo: colores invertidos respecto al CRM. → **resuelto en el spec 2026-10-29 /
    plan 2026-10-31:** hecho (deudor `text-dax-danger`, a favor `text-dax-success`).

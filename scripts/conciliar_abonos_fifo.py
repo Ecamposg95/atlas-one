@@ -6,6 +6,9 @@ pagados. Este script suma, por cliente, los abonos sueltos anteriores a
 `--antes` y recorre sus tickets abiertos del más viejo al más nuevo marcando
 PAID los que esa bolsa cubre por completo. No crea asientos ni toca
 `current_balance` (el saldo ya es correcto); solo corrige el estado del ticket.
+Un ticket PAID no debe nada para el CRM (`saldo_documento` devuelve 0): sale de
+`unpaid-documents`, del selector de abono y del conteo de tickets abiertos, y un
+abono libre posterior ya no cae sobre él.
 
 Uso (dentro del contenedor de producción, donde vive la base):
     python scripts/conciliar_abonos_fifo.py --org 17 --dry-run

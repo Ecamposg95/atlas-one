@@ -93,3 +93,29 @@ def test_paid_in_full_sale_de_la_deuda_restante_y_no_del_estatus(
         (venta["sale_id"], 100.0, True)]
     assert float(d["unapplied"]) == 0.0
     assert float(d["customer_balance_after"]) == 0.0
+
+
+def test_un_ticket_paid_con_cargo_enlazado_no_debe_nada(
+    client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup
+):
+    """PAID significa sin deuda aunque el ledger siga con el cargo sin abono
+    enlazado (caso legado: abonos libres anteriores a la auditoría, o ticket
+    marcado PAID por la conciliación). No debe salir en `unpaid-documents`."""
+    from app.modules.customers.models import CustomerLedgerEntry
+    from app.modules.customers.services import documentos_abiertos, saldo_documento
+
+    h, variant, _ = _escenario(client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup)
+    cliente = _cliente(db, org)
+    venta = _fiar(client, h, cliente, variant.sku)
+    doc = db.query(SalesDocument).filter(SalesDocument.id == venta["sale_id"]).one()
+    assert db.query(CustomerLedgerEntry).filter(CustomerLedgerEntry.sales_document_id == doc.id).count() == 1
+    assert saldo_documento(db, org_id=org.id, documento=doc, customer_id=cliente.id) == Decimal("100")
+
+    doc.status = DocumentStatus.PAID
+    db.commit()
+
+    assert saldo_documento(db, org_id=org.id, documento=doc, customer_id=cliente.id) == Decimal("0")
+    assert documentos_abiertos(db, org_id=org.id, customer=cliente) == []
+    r = client.get(f"/api/customers/{cliente.id}/unpaid-documents", headers=h)
+    assert r.status_code == 200, r.text
+    assert r.json() == []

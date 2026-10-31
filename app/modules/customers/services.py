@@ -86,7 +86,12 @@ def saldo_documento(db: Session, *, org_id: int, documento, customer_id: int) ->
     from app.models.sales import DocumentStatus, Payment
 
     estado = getattr(documento.status, "value", documento.status)
-    if estado in (DocumentStatus.CANCELLED.value, DocumentStatus.REFUNDED_TOTAL.value):
+    # PAID significa sin deuda, aunque el ledger conserve el cargo sin abono
+    # enlazado (abonos libres anteriores a la auditoría, tickets cerrados por
+    # `conciliar_abonos_fifo`): lo garantizan `_marcar_pagado_si_liquidado`,
+    # `/pay` y el script de conciliación.
+    if estado in (DocumentStatus.CANCELLED.value, DocumentStatus.REFUNDED_TOTAL.value,
+                  DocumentStatus.PAID.value):
         return CERO
     hay_asientos = db.query(CustomerLedgerEntry.id).filter(
         CustomerLedgerEntry.organization_id == org_id,
