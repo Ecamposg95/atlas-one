@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Iterable, Optional
 
-from sqlalchemy import case, func
+from sqlalchemy import and_, case, func, or_
 from sqlalchemy.orm import Session
 
 from app.modules.customers.models import Customer, CustomerLedgerEntry
@@ -204,6 +204,38 @@ def aplicar_abono(
 
 
 # --------------------------------------------------------------------------
+# Qué es cada asiento
+# --------------------------------------------------------------------------
+# Un asiento negativo es abono salvo que lo haya escrito una cancelación o una
+# devolución (`revertir_cargo_de_documento` desde sales.py::cancel_sale y
+# `aplicar_devolucion_a_saldo` desde crud/returns.py::approve_return). Este es
+# el ÚNICO lugar que conoce los prefijos; `tests/test_cobranza_corte.py` los
+# fija contra los textos reales.
+PREFIJOS_REVERSION = ("Cancelación", "Devolución")
+
+
+def es_reversion(asiento) -> bool:
+    return _dec(asiento.amount) < 0 and (asiento.description or "").startswith(PREFIJOS_REVERSION)
+
+
+def es_abono(asiento) -> bool:
+    return _dec(asiento.amount) < 0 and not es_reversion(asiento)
+
+
+def filtro_sql_reversion():
+    return or_(*[CustomerLedgerEntry.description.like(f"{p}%") for p in PREFIJOS_REVERSION])
+
+
+def filtro_sql_cargo_o_reversion():
+    """Cargos (+) y sus reversiones (−): lo que suma al "fiado". Deja fuera los abonos."""
+    return or_(CustomerLedgerEntry.amount > 0, filtro_sql_reversion())
+
+
+def filtro_sql_abono():
+    return and_(CustomerLedgerEntry.amount < 0, ~filtro_sql_reversion())
+
+
+# --------------------------------------------------------------------------
 # Cancelación y devolución
 # --------------------------------------------------------------------------
 def revertir_cargo_de_documento(
@@ -344,4 +376,10 @@ __all__ = [
     "aplicar_devolucion_a_saldo",
     "antiguedad_por_cargo",
     "asientos_del_cliente",
+    "PREFIJOS_REVERSION",
+    "es_reversion",
+    "es_abono",
+    "filtro_sql_reversion",
+    "filtro_sql_cargo_o_reversion",
+    "filtro_sql_abono",
 ]

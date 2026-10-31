@@ -135,6 +135,15 @@ def filtro_venta_reconocida():
     )
 
 
+def filtro_pago_cobrado():
+    """Para queries sobre `Payment` con `.outerjoin(SalesDocument)`: el pago
+    cuenta si su documento está en CASH_INCLUDED_STATUSES o si no tiene
+    documento —abono libre a la cuenta del cliente (spec 2026-10-29 §2.3)—.
+    Antes el `join` interno dejaba ese efectivo fuera del esperado aunque
+    estuviera en el cajón."""
+    return or_(SalesDocument.status.in_(CASH_INCLUDED_STATUSES), SalesDocument.id.is_(None))
+
+
 @dataclass
 class ExpectedCashBreakdown:
     """Desglose del efectivo esperado en caja al final del turno."""
@@ -288,13 +297,14 @@ def compute_expected_cash(db: Session, session: CashSession) -> ExpectedCashBrea
         Payment.cash_session_id == session.id,
         and_(Payment.cash_session_id.is_(None), session_sales_filter(session)),
     )
+    # Outerjoin: el abono libre (Payment sin documento) también es efectivo que entró.
     cash_payments = (
         db.query(func.sum(Payment.amount))
-        .join(SalesDocument)
+        .outerjoin(SalesDocument)
         .filter(
             Payment.method == PaymentMethod.CASH,
             pago_de_esta_sesion,
-            SalesDocument.status.in_(CASH_INCLUDED_STATUSES),
+            filtro_pago_cobrado(),
         )
         .scalar()
         or Decimal(0)
@@ -493,3 +503,30 @@ def compute_closure_warnings(
             })
 
     return warnings
+
+
+def fiado_de_sesion(db: Session, session: CashSession) -> Decimal:
+    """Lo que quedó a cuenta en las ventas fiadas de este turno: cargos del
+    ledger ligados a documentos del turno, netos de cancelación/devolución
+    (spec 2026-10-29 §2.3). Los abonos no restan: son cobranza."""
+    from app.modules.customers.models import CustomerLedgerEntry
+    from app.modules.customers.services import filtro_sql_cargo_o_reversion
+    total = (
+        db.query(func.coalesce(func.sum(CustomerLedgerEntry.amount), 0))
+        .join(SalesDocument, SalesDocument.id == CustomerLedgerEntry.sales_document_id)
+        .filter(session_sales_filter(session), filtro_venta_reconocida(), filtro_sql_cargo_o_reversion())
+        .scalar()
+    )
+    return Decimal(str(total or 0))
+
+
+def abonos_de_sesion(db: Session, session: CashSession) -> Decimal:
+    """Abonos a cuenta cobrados en este turno. Son los `Payment` con
+    `customer_id`: solo los crea `POST /customers/{id}/pay`; el checkout no
+    pone cliente en el pago."""
+    total = (
+        db.query(func.coalesce(func.sum(Payment.amount), 0))
+        .filter(Payment.cash_session_id == session.id, Payment.customer_id.isnot(None))
+        .scalar()
+    )
+    return Decimal(str(total or 0))

@@ -675,7 +675,10 @@ def get_session_audit_data(db: Session, session_id: int):
         session_sales_filter,
         session_payments_filter,
         CASH_INCLUDED_STATUSES,
-        SALES_REPORT_STATUSES,
+        filtro_venta_reconocida,
+        filtro_pago_cobrado,
+        fiado_de_sesion,
+        abonos_de_sesion,
     )
 
     _session_filter = session_sales_filter(session)
@@ -702,13 +705,14 @@ def get_session_audit_data(db: Session, session_id: int):
     # CashMovement OUT separados. Excluirlas aquí "borra" la entrada
     # original mientras se sigue restando el OUT → expected_cash negativo en
     # días con devoluciones.
+    # Outerjoin + filtro_pago_cobrado: el abono libre (sin documento) también entró por caja.
     payment_stats = db.query(
         Payment.method,
         func.count(Payment.id).label("count"),
         func.sum(Payment.amount).label("total")
-    ).join(SalesDocument).filter(
+    ).outerjoin(SalesDocument).filter(
         session_payments_filter(session),
-        SalesDocument.status.in_(CASH_INCLUDED_STATUSES),
+        filtro_pago_cobrado(),
     ).group_by(Payment.method).all()
 
     methods_map = {p.method: {"total": float(p.total), "count": p.count} for p in payment_stats}
@@ -725,21 +729,16 @@ def get_session_audit_data(db: Session, session_id: int):
         SalesDocument.status.in_(CASH_INCLUDED_STATUSES),
     ).scalar() or 0
 
-    # 2. Impuestos y Subtotal (NETOS post-refund).
-    # SALES_REPORT_STATUSES aquí (NO PENDING): esto suma `tax_amount`/
-    # `subtotal` del SalesDocument completo, no lo realmente cobrado. Para
-    # PAID/REFUNDED_* es seguro porque `approve_return` reescribe esos campos
-    # al valor neto tras la devolución — incluir REFUNDED_* da el revenue neto
-    # real del día (PAID-only perdería la contribución parcial de ventas
-    # devueltas). PENDING no tiene ese ajuste: su tax_amount/subtotal es el de
-    # la venta completa, deuda incluida — incluirlo aquí infla estos totales
-    # con impuestos de dinero que todavía no se cobra.
+    # 2. Impuestos y Subtotal (NETOS post-refund) de las ventas reconocidas:
+    # cobradas o fiadas (spec 2026-10-29 §2.1). `approve_return` reescribe
+    # estos campos al neto sea cual sea el estado, así que la fiada entra
+    # completa el día que nace, igual que en "Ventas totales".
     invoice_stats = db.query(
         func.sum(SalesDocument.tax_amount).label("taxes"),
         func.sum(SalesDocument.subtotal).label("subtotal")
     ).filter(
         _session_filter,
-        SalesDocument.status.in_(SALES_REPORT_STATUSES),
+        filtro_venta_reconocida(),
     ).first()
 
     total_taxes = float(invoice_stats.taxes or 0)
@@ -881,26 +880,22 @@ def get_session_audit_data(db: Session, session_id: int):
     # Ventas Totales NETAS post-refund — sale.total_amount está actualizado
     # por approve_return. Incluir REFUNDED_* para que el ticket muestre el
     # revenue real del día (PAID-only saltearía las ventas con devoluciones).
-    # SALES_REPORT_STATUSES (NO PENDING, y así se queda): una venta a
-    # crédito con abono parcial todavía no es ingreso reconocido por el
-    # total completo. Nota: desde Task 5, `payment_stats` arriba SÍ incluye
-    # PENDING (vía CASH_INCLUDED_STATUSES) — las dos tuplas ya NO coinciden
-    # a propósito, ver el comentario de SALES_REPORT_STATUSES en
-    # app/services/cash_reconciliation.py.
+    # Ventas reconocidas (cobradas o fiadas): la fiada cuenta el día que sale
+    # la mercancía; lo que quedó a cuenta va aparte en kpis.credit_sales.
     total_sales_query = db.query(func.sum(SalesDocument.total_amount)).filter(
         _session_filter,
-        SalesDocument.status.in_(SALES_REPORT_STATUSES),
+        filtro_venta_reconocida(),
     ).scalar()
     grand_total_sales = float(total_sales_query or 0)
 
     # Tickets: sí cuentan ventas con devolución parcial (sigue siendo un ticket
     # vendido). REFUNDED_TOTAL técnicamente es venta cancelada pero el cliente
     # SÍ recorrió el flujo de checkout — para fines de "tickets atendidos" en
-    # el corte cuenta como ticket. Coherente con grand_total_sales. PENDING NO
-    # cuenta: el cliente todavía no terminó de pagar, no es un ticket cerrado.
+    # el corte cuenta como ticket. Coherente con grand_total_sales.
+    # La fiada es un ticket cerrado en mostrador aunque se liquide después.
     total_tickets = db.query(func.count(SalesDocument.id)).filter(
         _session_filter,
-        SalesDocument.status.in_(SALES_REPORT_STATUSES),
+        filtro_venta_reconocida(),
     ).scalar() or 0
     avg_ticket = grand_total_sales / total_tickets if total_tickets > 0 else 0
 
@@ -928,6 +923,9 @@ def get_session_audit_data(db: Session, session_id: int):
 
     # Format Activity (Local)
     last_act_mx = last_activity.astimezone(MX_TZ) if last_activity.tzinfo else last_activity.replace(tzinfo=timezone.utc).astimezone(MX_TZ)
+
+    fiado_turno = fiado_de_sesion(db, session)
+    abonos_turno = abonos_de_sesion(db, session)
 
     return {
         "session": {
@@ -977,12 +975,15 @@ def get_session_audit_data(db: Session, session_id: int):
             "total_tickets": total_tickets,
             "avg_ticket": float(avg_ticket),
             "total_taxes": total_taxes,
-            "subtotal": total_subtotal
+            "subtotal": total_subtotal,
+            "credit_sales": float(fiado_turno),
+            "customer_payments": float(abonos_turno),
         },
         "expected": {
             "cash_physical": float(expected_cash),
+            # total_system es dinero: las ventas menos lo que quedó fiado.
             "total_system": float(
-                Decimal(str(grand_total_sales))
+                Decimal(str(grand_total_sales)) - fiado_turno
                 + Decimal(str(session.opening_balance or 0))
                 + total_inflows
                 - total_outflows
@@ -1302,6 +1303,7 @@ def get_branch_cash_summary(
             "cashiers": [],
             "totals": {
                 "sales": 0, "tickets": 0, "cash": 0, "card": 0, "transfer": 0,
+                "credit_sales": 0, "customer_payments": 0,
                 "inflows": 0, "outflows": 0, "cash_refunds": 0,
                 "opening_total": 0, "closing_total": 0, "difference_total": 0,
             }
@@ -1312,6 +1314,7 @@ def get_branch_cash_summary(
     totals = {
         "sales": Decimal(0), "tickets": 0, "cash": Decimal(0),
         "card": Decimal(0), "transfer": Decimal(0),
+        "credit_sales": Decimal(0), "customer_payments": Decimal(0),
         "inflows": Decimal(0), "outflows": Decimal(0),
         "cash_refunds": Decimal(0),
         "opening_total": Decimal(0), "closing_total": Decimal(0),
@@ -1327,12 +1330,13 @@ def get_branch_cash_summary(
     #     viejo en sesiones cerradas antes del fix de devoluciones).
     # Ahora todo deriva de compute_expected_cash + session_sales_filter.
     #
-    # sales_total/ticket_count (SALES_REPORT_STATUSES, a nivel DOCUMENTO vía
-    # session_sales_filter) y payment_stats (CASH_INCLUDED_STATUSES) son dos
-    # tuplas separadas a propósito: responden preguntas distintas ("venta ya
-    # reconocida como ingreso" vs. "dinero en el cajón") y desde Task 5 ya
-    # no coinciden — CASH_INCLUDED_STATUSES sí incluye PENDING. Ver el
-    # comentario de ambas tuplas en app/services/cash_reconciliation.py.
+    # sales_total/ticket_count (filtro_venta_reconocida: cobradas o fiadas, a
+    # nivel DOCUMENTO vía session_sales_filter) y payment_stats
+    # (filtro_pago_cobrado sobre CASH_INCLUDED_STATUSES) son criterios
+    # separados a propósito: responden preguntas distintas ("venta reconocida
+    # como ingreso" vs. "dinero en el cajón") y no coinciden — la fiada cuenta
+    # como venta pero solo su enganche es dinero. Ver el comentario de ambas
+    # reglas en app/services/cash_reconciliation.py.
     #
     # Ronda de correcciones 1 (revisión de Task 5): `payment_stats` abajo
     # filtraba por `sales_filter` (documento) igual que `sales_total`, en
@@ -1342,11 +1346,13 @@ def get_branch_cash_summary(
     # solo cobró el abono. `cash` no se veía porque ese total sale de
     # `breakdown.net_cash` (ya corregido), pero `card`/`transfer` sí venían
     # de este query. `sales_total`/`ticket_count` SÍ se dejan con
-    # `sales_filter` — están fuera de esta corrección (SALES_REPORT_STATUSES
-    # no cambia, y `session_sales_filter` está protegido).
+    # `sales_filter` — están fuera de esta corrección (`session_sales_filter`
+    # está protegido).
     from app.services.cash_reconciliation import (
-        CASH_INCLUDED_STATUSES,
-        SALES_REPORT_STATUSES,
+        filtro_venta_reconocida,
+        filtro_pago_cobrado,
+        fiado_de_sesion,
+        abonos_de_sesion,
         compute_expected_cash,
         session_sales_filter,
         session_payments_filter,
@@ -1365,20 +1371,21 @@ def get_branch_cash_summary(
 
         sales_total = db.query(func.sum(SalesDocument.total_amount)).filter(
             sales_filter,
-            SalesDocument.status.in_(SALES_REPORT_STATUSES),
+            filtro_venta_reconocida(),
         ).scalar() or Decimal(0)
 
         ticket_count = db.query(func.count(SalesDocument.id)).filter(
             sales_filter,
-            SalesDocument.status.in_(SALES_REPORT_STATUSES),
+            filtro_venta_reconocida(),
         ).scalar() or 0
 
+        # Outerjoin + filtro_pago_cobrado: el abono libre (sin documento) también entró por caja.
         payment_stats = db.query(
             Payment.method,
             func.sum(Payment.amount).label("total")
-        ).join(SalesDocument).filter(
+        ).outerjoin(SalesDocument).filter(
             session_payments_filter(s),
-            SalesDocument.status.in_(CASH_INCLUDED_STATUSES),
+            filtro_pago_cobrado(),
         ).group_by(Payment.method).all()
 
         methods = {p.method: Decimal(str(p.total)) for p in payment_stats}
@@ -1395,6 +1402,8 @@ def get_branch_cash_summary(
         # Difference live (no leer s.difference persistido) — coherente con
         # el endpoint single-session y con la UI/ticket actuales.
         live_difference = Decimal(str(s.closing_balance or 0)) - breakdown.expected
+        fiado_s = fiado_de_sesion(db, s)
+        abonos_s = abonos_de_sesion(db, s)
 
         user = _users_by_id.get(s.user_id)
 
@@ -1415,6 +1424,8 @@ def get_branch_cash_summary(
             "cash": float(breakdown.net_cash),
             "card": float(card_amt),
             "transfer": float(transfer_amt),
+            "credit_sales": float(fiado_s),
+            "customer_payments": float(abonos_s),
             "change_given": float(breakdown.change_given),
             "inflows": float(breakdown.manual_inflows),
             "outflows": float(breakdown.manual_outflows),
@@ -1428,6 +1439,8 @@ def get_branch_cash_summary(
         totals["cash"] += breakdown.net_cash
         totals["card"] += card_amt
         totals["transfer"] += transfer_amt
+        totals["credit_sales"] += fiado_s
+        totals["customer_payments"] += abonos_s
         totals["inflows"] += breakdown.manual_inflows
         totals["outflows"] += breakdown.manual_outflows
         totals["cash_refunds"] += breakdown.refund_cash_outflows
