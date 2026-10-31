@@ -329,11 +329,27 @@ def _bucket(dias: int) -> str:
 
 def cargos_pendientes(asientos: Iterable[CustomerLedgerEntry]) -> list[list]:
     """Los cargos que todavía deben algo, del más viejo al más nuevo, como
-    `[created_at, restante]`. Los abonos se aplican al cargo más viejo primero
-    (FIFO); un abono anterior a cualquier cargo queda como crédito que consume
-    el siguiente cargo. Las reversiones (cancelación/devolución) también restan
-    del cargo más viejo: es la mejor aproximación sin enlace asiento↔asiento."""
-    pendientes: list[list] = []
+    `[created_at, restante]`. Un asiento negativo (abono, cancelación,
+    devolución) con `sales_document_id` baja primero el cargo de ESE ticket;
+    solo lo que exceda lo pendiente de su ticket, y todo asiento sin ticket
+    (abono libre, `PAGO RECIBIDO`), se aplica al cargo más viejo (FIFO). Un
+    abono anterior a cualquier cargo queda como crédito que consume el
+    siguiente cargo."""
+    pendientes: list[list] = []  # [created_at, restante, sales_document_id]
+
+    def _aplicar(abono: Decimal, solo_doc) -> Decimal:
+        for cargo in list(pendientes):
+            if abono <= 0:
+                break
+            if solo_doc is not None and cargo[2] != solo_doc:
+                continue
+            usado = min(abono, cargo[1])
+            cargo[1] -= usado
+            abono -= usado
+            if cargo[1] <= CERO:
+                pendientes.remove(cargo)
+        return abono
+
     credito = CERO
     for e in sorted(asientos, key=lambda x: (x.created_at or datetime.min.replace(tzinfo=timezone.utc), x.id or 0)):
         monto = _dec(e.amount)
@@ -343,19 +359,15 @@ def cargos_pendientes(asientos: Iterable[CustomerLedgerEntry]) -> list[list]:
                 credito -= usado
                 monto -= usado
             if monto > 0:
-                pendientes.append([e.created_at, monto])
+                pendientes.append([e.created_at, monto, e.sales_document_id])
         elif monto < 0:
             abono = -monto
-            while abono > 0 and pendientes:
-                cargo = pendientes[0]
-                usado = min(abono, cargo[1])
-                cargo[1] -= usado
-                abono -= usado
-                if cargo[1] <= CERO:
-                    pendientes.pop(0)
+            if e.sales_document_id:
+                abono = _aplicar(abono, e.sales_document_id)
+            abono = _aplicar(abono, None)
             if abono > 0:
                 credito += abono
-    return pendientes
+    return [[creado, restante] for creado, restante, _ in pendientes]
 
 
 def antiguedad_por_cargo(

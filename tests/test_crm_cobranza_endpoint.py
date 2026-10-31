@@ -120,3 +120,65 @@ def test_filtros_y_orden(client, db, org, branch_a, branch_b, cajero_a, auth_adm
     pagina = g("limit=1&skip=1")
     assert pagina["total"] == 2 and [i["id"] for i in pagina["items"]] == [ana.id]
     assert client.get("/api/customers/cobranza?bucket=viejo", headers=h).status_code == 422
+
+
+def _asiento_de_ticket(db, org, cliente, doc, monto, descripcion):
+    """Asiento negativo ligado a un ticket (abono a ticket o reversión)."""
+    a = CustomerLedgerEntry(customer_id=cliente.id, sales_document_id=doc.id, organization_id=org.id,
+                            amount=-Decimal(monto), description=descripcion)
+    a.created_at = _hace(0)  # explícito: el default de SQLite trunca al segundo y podría quedar antes del cargo
+    cliente.current_balance = Decimal(str(cliente.current_balance)) - Decimal(monto)
+    db.add(a); db.commit()
+
+
+def test_la_cancelacion_de_una_venta_reciente_no_rejuvenece_la_deuda_vieja(
+    client, db, org, branch_a, cajero_a, auth_cajero_a, auth_admin_a, products_setup
+):
+    """Fiada vieja de 100 (45 días) y fiada de hoy de 100 cancelada por la API:
+    la reversión descuenta el cargo de SU ticket, no el más viejo."""
+    from app.models.cash import CashSession
+    _habilitar(db, org, "pos", "crm")
+    db.add(CashSession(user_id=cajero_a.id, branch_id=branch_a.id, organization_id=org.id,
+                       opening_balance=Decimal("0"), status="OPEN")); db.commit()
+    ana = _cliente(db, org, "Ana Pérez")
+    _cargo(db, org, branch_a, cajero_a, ana, "100", 45)
+    hc = {**auth_cajero_a, "X-Organization-ID": str(org.id)}
+    _, variant = products_setup["product_a"]
+    venta = client.post("/api/sales/", json={
+        "doc_type": "ORDER", "customer_id": ana.id,
+        "items": [{"sku": variant.sku, "quantity": 1}], "payments": [],
+    }, headers=hc)
+    assert venta.status_code in (200, 201), venta.text
+    r = client.delete(f"/api/sales/{venta.json()['sale_id']}", params={"reason": "Se arrepintió"}, headers=hc)
+    assert r.status_code == 200, r.text
+
+    h = {**auth_admin_a, "X-Organization-ID": str(org.id)}
+    d = client.get("/api/customers/cobranza", headers=h).json()
+    assert [i["id"] for i in d["items"]] == [ana.id]
+    fila = d["items"][0]
+    assert float(fila["balance"]) == 100.0
+    assert {k: float(v) for k, v in fila["antiguedad"].items()} == {"current": 0.0, "31_60": 100.0, "61_90": 0.0, "91_plus": 0.0}
+    assert float(d["resumen"]["vencido_30"]) == 100.0
+    assert client.get("/api/customers/cobranza?bucket=current", headers=h).json()["items"] == []
+
+
+def test_el_abono_a_un_ticket_baja_ese_ticket_en_la_antiguedad(
+    client, db, org, branch_a, branch_b, cajero_a, auth_admin_a
+):
+    """El abono a un ticket concreto no consume el cargo más viejo; el abono
+    libre sí (FIFO)."""
+    _habilitar(db, org, "crm")
+    h = {**auth_admin_a, "X-Organization-ID": str(org.id)}
+    ana = _cliente(db, org, "Ana")
+    _cargo(db, org, branch_a, cajero_a, ana, "100", 45)
+    nuevo = _cargo(db, org, branch_a, cajero_a, ana, "50", 0)
+    _asiento_de_ticket(db, org, ana, nuevo, "50", f"ABONO A TICKET #{nuevo.folio}")
+    fila = client.get("/api/customers/cobranza", headers=h).json()["items"][0]
+    assert {k: float(v) for k, v in fila["antiguedad"].items()} == {"current": 0.0, "31_60": 100.0, "61_90": 0.0, "91_plus": 0.0}
+
+    beto = _cliente(db, org, "Beto")
+    _cargo(db, org, branch_a, cajero_a, beto, "100", 45)
+    _cargo(db, org, branch_a, cajero_a, beto, "50", 0)
+    _abono(db, org, beto, "50", 0)
+    d = client.get("/api/customers/cobranza?search=beto", headers=h).json()
+    assert {k: float(v) for k, v in d["items"][0]["antiguedad"].items()} == {"current": 50.0, "31_60": 50.0, "61_90": 0.0, "91_plus": 0.0}
