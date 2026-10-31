@@ -24,6 +24,8 @@ interface POSStore {
   // Cliente
   customerName: string | null
   customerId: number | null
+  /** Sube cuando el cliente abona desde el POS: el carrito vuelve a pedir el saldo. */
+  saldoVersion: number
 
   // Tickets pausados (parked_tickets — snapshot de carrito sin afectar stock)
   parkedTickets: ParkedTicket[]
@@ -51,6 +53,7 @@ interface POSStore {
 
   // Cliente
   setCustomer: (id: number | null, name: string | null) => void
+  tocarSaldo: () => void
 
   // Bulk caja
   applyCajaToAll: (sources: Map<string, ProductWithCajaInfo>) => { applied: number; total: number }
@@ -100,6 +103,7 @@ export const usePOSStore = create<POSStore>((set, get) => ({
   activeSession: null,
   customerName: null,
   customerId: null,
+  saldoVersion: 0,
   parkedTickets: [],
   currentParkedId: null,
   printerName: localStorage.getItem(LS_PRINTER_KEY) ?? null,
@@ -262,6 +266,7 @@ export const usePOSStore = create<POSStore>((set, get) => ({
   setTip: (amount: number) => set({ tip: Math.max(0, Number.isFinite(amount) ? amount : 0) }),
   setSession: (session: CashSession | null) => set({ activeSession: session }),
   setCustomer: (id: number | null, name: string | null) => set({ customerId: id, customerName: name }),
+  tocarSaldo: () => set((s) => ({ saldoVersion: s.saldoVersion + 1 })),
   setParkedTickets: (tickets: ParkedTicket[]) => set({ parkedTickets: tickets }),
   setCurrentParkedId: (id: string | null) => set({ currentParkedId: id }),
   setPrinterName: (name: string | null) => {

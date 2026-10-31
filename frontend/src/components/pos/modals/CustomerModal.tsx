@@ -1,8 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { customersApi, type Customer } from '../../../api/customers'
+import { printerApi } from '../../../api/printer'
 import { usePOSStore } from '../../../store/posStore'
+import { toast } from '../../../store/toastStore'
 import { errorDetailText } from '../../../utils/errorDetail'
 import { formatCurrency } from '../../../utils/currency'
+
+// Perezoso: el POS no paga el modal de abono hasta que alguien abona.
+const AbonoModal = lazy(() => import('../../crm/AbonoModal').then((m) => ({ default: m.AbonoModal })))
 
 interface Props {
   onClose: () => void
@@ -20,6 +25,25 @@ export function CustomerModal({ onClose }: Props) {
   const customerId = usePOSStore((s) => s.customerId)
   const customerName = usePOSStore((s) => s.customerName)
   const setCustomer = usePOSStore((s) => s.setCustomer)
+  const printerName = usePOSStore((s) => s.printerName)
+  const tocarSaldo = usePOSStore((s) => s.tocarSaldo)
+  // Saldo del cliente con ficha: habilita "Abonar" (spec 2026-10-29 §4.1).
+  // Un nombre libre no tiene ficha ni saldo; si el CRM falla, no hay botón.
+  const [saldo, setSaldo] = useState<number | null>(null)
+  const [abonando, setAbonando] = useState(false)
+  useEffect(() => {
+    if (customerId == null) { setSaldo(null); return }
+    let vivo = true
+    customersApi.getById(customerId)
+      .then((c) => { if (vivo) setSaldo(c.current_balance ?? 0) })
+      .catch(() => { if (vivo) setSaldo(null) })
+    return () => { vivo = false }
+  }, [customerId])
+
+  const imprimirRecibo = async (paymentId: string) => {
+    const b64 = await printerApi.getAbonoBase64(paymentId)
+    if (printerName && b64) await printerApi.printViaAgent(printerName, b64)
+  }
 
   const [texto, setTexto] = useState(customerName ?? '')
   const [resultados, setResultados] = useState<Customer[]>([])
@@ -35,10 +59,11 @@ export function CustomerModal({ onClose }: Props) {
   const hayCliente = customerId != null || !!(customerName ?? '').trim()
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    // Con el modal de abono abierto, Escape es suyo (el Modal del kit ya lo atiende).
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !abonando) onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [onClose, abonando])
 
   // Búsqueda con debounce de 300 ms. `vivo` descarta la respuesta de una
   // consulta que quedó atrás (una lenta no puede repintar sobre una nueva) y
@@ -122,6 +147,9 @@ export function CustomerModal({ onClose }: Props) {
         <p className="text-xs mb-4" style={{ color: 'var(--dax-text-muted)' }}>
           Búscalo en clientes, guárdalo o usa solo el nombre.
         </p>
+        {customerId != null && saldo != null && saldo > 0 && (
+          <p className="text-xs mb-3 font-semibold text-dax-danger">Debe {formatCurrency(saldo)}</p>
+        )}
 
         <div className="relative">
           <input
@@ -205,6 +233,11 @@ export function CustomerModal({ onClose }: Props) {
         {error && <p className="text-dax-danger text-xs mt-2">{error}</p>}
 
         <div className="dax-modal-footer flex flex-wrap gap-2 mt-1 pb-6">
+          {customerId != null && saldo != null && saldo > 0 && (
+            <button onClick={() => setAbonando(true)} className="dax-btn-primary text-sm min-h-[44px]">
+              <i className="fa-solid fa-hand-holding-dollar" /> Abonar
+            </button>
+          )}
           {hayCliente && (
             <button onClick={quitarCliente} className="dax-btn-secondary text-sm min-h-[44px]">
               Quitar cliente
@@ -236,6 +269,21 @@ export function CustomerModal({ onClose }: Props) {
           )}
         </div>
       </div>
+      {abonando && customerId != null && (
+        <Suspense fallback={null}>
+          <AbonoModal
+            customerId={customerId}
+            customerName={customerName ?? ''}
+            onClose={() => setAbonando(false)}
+            onDone={(r) => {
+              toast.success(`Abono de ${formatCurrency(r.customer_balance_before - r.customer_balance_after)} · Saldo: ${formatCurrency(r.customer_balance_after)}`)
+              setSaldo(r.customer_balance_after)
+              tocarSaldo()
+            }}
+            imprimir={imprimirRecibo}
+          />
+        </Suspense>
+      )}
     </div>
   )
 }
