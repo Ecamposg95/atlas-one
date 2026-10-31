@@ -366,6 +366,51 @@ def asientos_del_cliente(db: Session, *, org_id: int, customer_id: int) -> list[
     ).order_by(CustomerLedgerEntry.created_at.asc(), CustomerLedgerEntry.id.asc()).all()
 
 
+def detalle_del_abono(db: Session, *, org_id: int, pago) -> dict:
+    """Reconstruye qué cubrió un abono a partir del ledger (spec 2026-10-29 §4.3).
+
+    Sin columna nueva: los asientos de abono del mismo cliente nacidos en la
+    misma transacción que el `Payment` (misma marca de tiempo, ±2 s) son los
+    suyos. "Saldo anterior" = saldo actual + lo abonado: exacto al imprimir en
+    el momento; en una reimpresión posterior parte del saldo de hoy.
+    """
+    from datetime import timedelta
+    from app.models.sales import SalesDocument
+
+    customer = db.query(Customer).filter(
+        Customer.id == pago.customer_id, Customer.organization_id == org_id).one()
+
+    def _utc(t):
+        return t.replace(tzinfo=timezone.utc) if t.tzinfo is None else t
+
+    cuando = _utc(pago.created_at)
+    asientos = [
+        a for a in asientos_del_cliente(db, org_id=org_id, customer_id=customer.id)
+        if es_abono(a) and a.created_at is not None
+        and abs(_utc(a.created_at) - cuando) <= timedelta(seconds=2)
+    ]
+    ids = [a.sales_document_id for a in asientos if a.sales_document_id]
+    docs = {d.id: d for d in db.query(SalesDocument).filter(SalesDocument.id.in_(ids)).all()} if ids else {}
+    applied = [
+        {
+            "sales_document_id": a.sales_document_id,
+            "folio": DocumentoAbierto(documento=docs[a.sales_document_id], saldo=CERO).folio,
+            "amount": -_dec(a.amount),
+            # Liquidado según la deuda que queda, no por el estado: un ticket con
+            # devolución parcial puede quedar en cero sin ser PAID.
+            "paid_in_full": saldo_documento(
+                db, org_id=org_id, documento=docs[a.sales_document_id], customer_id=customer.id,
+            ) <= CENTAVO / 2,
+        }
+        for a in asientos if a.sales_document_id in docs
+    ]
+    unapplied = sum((-_dec(a.amount) for a in asientos if not a.sales_document_id), CERO)
+    abonado = sum((-_dec(a.amount) for a in asientos), CERO)
+    despues = _dec(customer.current_balance)
+    return {"customer": customer, "applied": applied, "unapplied": unapplied,
+            "balance_after": despues, "balance_before": despues + abonado}
+
+
 __all__ = [
     "deuda_cargada_por_documento",
     "saldo_documento",
@@ -376,6 +421,7 @@ __all__ = [
     "aplicar_devolucion_a_saldo",
     "antiguedad_por_cargo",
     "asientos_del_cliente",
+    "detalle_del_abono",
     "PREFIJOS_REVERSION",
     "es_reversion",
     "es_abono",

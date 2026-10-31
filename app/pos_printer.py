@@ -1143,6 +1143,43 @@ class PosPrinter:
 
         return raw
 
+    def build_abono_bytes(self, *, organization, branch, cashier: str, customer_name: str,
+                          amount: float, method: str, reference, applied: list, unapplied: float,
+                          balance_before: float, balance_after: float, received_at: datetime,
+                          folio: str) -> bytes:
+        """Recibo de abono a cuenta (spec 2026-10-29 §4.3). Sin apertura de cajón:
+        el efectivo ya entró con el abono, el recibo solo lo documenta."""
+        sep = ("-" * self.cols + "\n").encode("latin-1", "replace")
+
+        def linea(texto: str) -> bytes:
+            return (self._truncate(texto, self.cols) + "\n").encode("latin-1", "replace")
+
+        raw = self.CMD["RESET"] + self._default_font + self.CMD["SIZE_NORMAL"] + self.CMD["CENTER"]
+        raw += self.CMD["BOLD_ON"] + linea((organization.name if organization else None) or "ATLAS POS") + self.CMD["BOLD_OFF"]
+        if branch is not None and getattr(branch, "name", None):
+            raw += linea(branch.name)
+        raw += self.CMD["SIZE_LARGE"] + self.CMD["BOLD_ON"] + b"RECIBO DE ABONO\n" + self.CMD["BOLD_OFF"] + self.CMD["SIZE_NORMAL"]
+        dt = received_at if received_at.tzinfo else received_at.replace(tzinfo=timezone.utc)
+        raw += linea(f"{dt.astimezone(MX_TZ).strftime('%d/%m/%y %H:%M')} | {folio}")
+        raw += self.CMD["LEFT"] + sep
+        raw += linea(f"CLIENTE: {customer_name}")
+        raw += self._rline("Abono", amount)
+        metodo = {"CASH": "Efectivo", "CARD": "Tarjeta", "TRANSFER": "Transferencia"}.get(str(method).upper(), str(method))
+        raw += linea(f"Metodo: {metodo}" + (f" ({reference})" if reference else ""))
+        if applied:
+            raw += sep + linea("APLICADO A:")
+            for a in applied:
+                etiqueta = f"Ticket {a['folio']}" + (" (liquidado)" if a.get("paid_in_full") else "")
+                raw += self._rline(etiqueta, float(a["amount"]))
+        if unapplied and unapplied > 0:
+            raw += self._rline("Queda a favor", float(unapplied))
+        raw += sep
+        raw += self._rline("Saldo anterior", balance_before)
+        raw += self.CMD["BOLD_ON"] + self._rline("Saldo actual", balance_after) + self.CMD["BOLD_OFF"]
+        raw += sep + linea(f"Le atendio: {cashier}")
+        raw += self.CMD["LF"] * 3 + self.CMD["CUT"]
+        return raw
+
     def _format_currency(self, val: float) -> str:
         return f"${val:.2f}"
 
