@@ -288,6 +288,20 @@ function Pendientes({ datos, esTelefono }: { datos: NonNullable<DatosInicio['pen
   )
 }
 
+function PorCobrar({ datos }: { datos: NonNullable<DatosInicio['por_cobrar']> }) {
+  const clientes = datos.clientes === 1 ? '1 cliente' : `${datos.clientes} clientes`
+  return (
+    <DaxCard>
+      <Titulo enlace={{ a: '/customers/cobranza', texto: 'Ver cuentas por cobrar →' }}>Por cobrar</Titulo>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" data-testid="por-cobrar">
+        <KpiCard etiqueta="Total por cobrar" valor={formatCurrency(datos.total)} detalle={clientes} />
+        <KpiCard etiqueta="Vencido a más de 30 días" valor={formatCurrency(datos.vencido_30)}
+          tono={datos.vencido_30 > 0 ? 'danger' : undefined} />
+      </div>
+    </DaxCard>
+  )
+}
+
 function Sucursales({ lista, grafica }: { lista: NonNullable<DatosInicio['sucursales']>; grafica: ReactNode }) {
   const estadoCorte = (c: DatosInicio['corte']) =>
     c.estado === 'abierto' ? <span className="text-dax-success">Turno abierto</span>
@@ -447,6 +461,8 @@ export function Inicio() {
 
           {/* 4 · Pendientes */}
           {datos.pendientes && <Pendientes datos={datos.pendientes} esTelefono={esTelefono} />}
+          {/* 4b · Por cobrar: solo si hay deuda (render condicional, no hidden) */}
+          {datos.por_cobrar && datos.por_cobrar.total > 0 && <PorCobrar datos={datos.por_cobrar} />}
 
           {/* 5 · Se está acabando · Lo que más se vendió */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">

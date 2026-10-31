@@ -34,11 +34,12 @@ from app.models import (
     StockOnHand, User,
 )
 from app.models.cash import CashSession, CashSessionStatus
+from app.models.modules import OrganizationModule
 from app.models.users import PlatformRole, Role
 from app.routers.reports import _describe_name, _today_mx
 from app.schemas.reports import (
     CorteInicio, DiaTendencia, DiferenciaCaja, HoraInicio, InicioResponse, Pendientes, PeriodoVentas,
-    PocaExistencia, ProductoPocaExistencia, ProductoSinMovimiento, ProductoTop, SinMovimiento, SucursalInicio,
+    PocaExistencia, PorCobrar, ProductoPocaExistencia, ProductoSinMovimiento, ProductoTop, SinMovimiento, SucursalInicio,
     Tendencia,
 )
 from app.services.cash_reconciliation import compute_expected_cash, filtro_venta_reconocida
@@ -329,6 +330,24 @@ def _sucursales(db: Session, org_id: int, hoy: date, umbral: int) -> Optional[Li
     return salida
 
 
+def _por_cobrar(db: Session, org_id: int, sucursal: Optional[int], current_user: User) -> Optional[PorCobrar]:
+    """Cuentas por cobrar para la tarjeta del Inicio: solo roles de oficina y
+    solo con el módulo `crm` encendido; si no, None y la tarjeta no se pinta."""
+    rol = str(getattr(current_user.role, "value", current_user.role))
+    if rol not in mv.HQ_ROLES and getattr(current_user, "platform_role", None) != PlatformRole.SUPERADMIN:
+        return None
+    activo = db.query(OrganizationModule.module_key).filter(
+        OrganizationModule.organization_id == org_id, OrganizationModule.module_key == "crm",
+        OrganizationModule.is_enabled == True,  # noqa: E712
+    ).first()
+    if activo is None:
+        return None
+    from app.modules.customers.services import cuentas_por_cobrar
+    resumen, _ = cuentas_por_cobrar(db, org_id=org_id, branch_id=sucursal)
+    return PorCobrar(total=float(resumen["por_cobrar"]), vencido_30=float(resumen["vencido_30"]),
+                     clientes=int(resumen["clientes"]))
+
+
 @router.get("/inicio", response_model=InicioResponse)
 @router.get("/inicio-basico", response_model=InicioResponse, include_in_schema=False)
 def inicio(
@@ -365,6 +384,7 @@ def inicio(
         return respuesta
     respuesta.sin_movimiento = _sin_movimiento(db, org_id, sucursal, dias_sin_movimiento)
     respuesta.pendientes = _pendientes(db, org_id, sucursal)
+    respuesta.por_cobrar = _por_cobrar(db, org_id, sucursal, current_user)
     respuesta.tendencia = _tendencia(db, org_id, sucursal, hoy)
     respuesta.por_hora_hoy = _por_hora_hoy(db, org_id, sucursal, hoy)
     # El gerente ya viene fijado a su sucursal: la sección de sucursales no aplica.
