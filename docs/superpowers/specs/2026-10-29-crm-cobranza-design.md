@@ -67,8 +67,9 @@ Distinguir abono de reversión sin columna nueva: la reversión lleva descripci�
 `ABONO A TICKET` o `PAGO RECIBIDO`. El helper que clasifica un asiento vive en
 `app/modules/customers/services.py` y es el único que conoce los prefijos.
 
-Invariante que se prueba: en un periodo, `neta = cobrado_en_ventas + fiado − devuelto`, donde
-`cobrado_en_ventas` es lo pagado al momento de la venta (sin abonos posteriores).
+Invariante que se prueba: en un periodo, `neta = cobrado_en_ventas + fiado − devuelto_de_ventas_no_fiadas`,
+donde `cobrado_en_ventas` es lo pagado al momento de la venta (sin abonos posteriores). La devolución de
+una venta fiada no se resta otra vez porque su asiento "Devolución" ya la neteó dentro de `fiado`.
 
 ### 2.3 Corte de caja
 

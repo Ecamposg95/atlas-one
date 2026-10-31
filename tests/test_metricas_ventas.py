@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import update
+from sqlalchemy import func, update
 
 from app.models.returns import SaleReturn, SaleReturnItem
 from app.models.sales import DocumentStatus, DocumentType, Payment, PaymentMethod, SalesDocument, SalesLineItem
@@ -421,8 +421,9 @@ def test_fiado_y_cobranza_del_periodo(db, org, branch_a, branch_b, cajero_a, pro
     r_hoy = mv.resumen(db, todo, mv.Periodo(hoy, hoy))
     assert (r_hoy.bruta, r_hoy.neta, r_hoy.tickets) == (400.0, 400.0, 2)
     assert (r_hoy.fiado, r_hoy.cobranza) == (250.0, 80.0)
-    # Invariante: neta = cobrado en las ventas + fiado − devuelto (100 + 50 + 250 − 0).
-    assert r_hoy.neta == 150.0 + r_hoy.fiado - r_hoy.devuelto
+    # Sin devoluciones: neta = cobrado en las ventas + fiado (100 + 50 + 250). Con devoluciones, ver
+    # test_la_invariante_separa_devoluciones_de_cobradas_y_fiadas.
+    assert r_hoy.neta == 150.0 + r_hoy.fiado
     r_ayer = mv.resumen(db, todo, mv.Periodo(ayer, ayer))
     assert (r_ayer.bruta, r_ayer.fiado, r_ayer.cobranza) == (200.0, 200.0, 0.0)
 
@@ -467,3 +468,32 @@ def test_la_devolucion_de_una_fiada_baja_neta_y_fiado(db, org, branch_a, cajero_
     r = mv.resumen(db, mv.Ambito(org.id, None, True), mv.Periodo(hoy, hoy))
     assert (r.bruta, r.devuelto, r.neta) == (100.0, 30.0, 70.0)
     assert (r.fiado, r.cobranza) == (70.0, 20.0)
+
+
+def test_la_invariante_separa_devoluciones_de_cobradas_y_fiadas(db, org, branch_a, cajero_a, products_setup):
+    """neta = cobrado_en_ventas + fiado − devuelto_de_ventas_no_fiadas.
+
+    La devolución de una fiada NO se resta otra vez: su asiento "Devolución" ya la
+    netea dentro de `fiado`. Por eso `devuelto` (que suma ambas) no sirve en la fórmula."""
+    hoy = mv.hoy_mx()
+    cliente = _cliente(db, org)
+    v = _v(products_setup)
+    cobrada = _venta(db, org, branch_a, cajero_a, v, "100")                      # cobrada y devuelta en parte
+    liquidada = _venta(db, org, branch_a, cajero_a, v, "80")                     # cobrada, sin devolución
+    con_enganche = _fiada(db, org, branch_a, cajero_a, v, cliente, "300", "50")  # fiado 250
+    devuelta = _fiada(db, org, branch_a, cajero_a, v, cliente, "100")            # fiado 100, devuelta en parte
+    _devolucion(db, org, branch_a, cajero_a, cobrada, "30")
+    _devolucion(db, org, branch_a, cajero_a, devuelta, "20")
+    _reversion(db, org, cliente, devuelta, "20", "Devolución #ABCD1234 aplicada al saldo")
+
+    docs = [cobrada, liquidada, con_enganche, devuelta]
+    cobrado = float(db.query(func.coalesce(func.sum(Payment.amount), 0))
+                    .filter(Payment.sales_document_id.in_([d.id for d in docs])).scalar())
+    devuelto_no_fiadas = 30.0
+
+    r = mv.resumen(db, mv.Ambito(org.id, None, True), mv.Periodo(hoy, hoy))
+    assert (cobrado, r.fiado, devuelto_no_fiadas) == (230.0, 330.0, 30.0)   # ningún término en cero
+    assert r.neta == cobrado + r.fiado - devuelto_no_fiadas == 530.0
+    # El enunciado viejo restaba también la devolución de la fiada y daba 20 de menos.
+    assert r.devuelto == 50.0
+    assert r.neta != cobrado + r.fiado - r.devuelto

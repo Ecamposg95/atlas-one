@@ -818,8 +818,9 @@ def test_fiado_y_cobranza_del_periodo(db, org, branch_a, branch_b, cajero_a, pro
     r_hoy = mv.resumen(db, todo, mv.Periodo(hoy, hoy))
     assert (r_hoy.bruta, r_hoy.neta, r_hoy.tickets) == (400.0, 400.0, 2)
     assert (r_hoy.fiado, r_hoy.cobranza) == (250.0, 80.0)
-    # Invariante: neta = cobrado en las ventas + fiado − devuelto (100 + 50 + 250 − 0).
-    assert r_hoy.neta == 150.0 + r_hoy.fiado - r_hoy.devuelto
+    # Invariante: neta = cobrado en las ventas + fiado − devuelto de ventas NO fiadas (100 + 50 + 250 − 0);
+    # la devolución de una fiada ya va neteada dentro de `fiado`. Ver test_la_invariante_separa_….
+    assert r_hoy.neta == 150.0 + r_hoy.fiado - 0.0
     r_ayer = mv.resumen(db, todo, mv.Periodo(ayer, ayer))
     assert (r_ayer.bruta, r_ayer.fiado, r_ayer.cobranza) == (200.0, 200.0, 0.0)
 
@@ -871,7 +872,7 @@ Y en `tests/test_reports_dashboard.py`, después de `test_dashboard_kpis_netos_y
 ```python
 def test_dashboard_trae_fiado_y_cobranza(client, db, org, branch_a, cajero_a, auth_admin_a, products_setup):
     from app.modules.customers.models import Customer, CustomerLedgerEntry
-    hoy = date.today()
+    hoy = mv.hoy_mx()
     cliente = Customer(name="Fiada", organization_id=org.id, current_balance=Decimal("0"))
     db.add(cliente); db.commit()
     v = _venta(db, org, branch_a, cajero_a, _v(products_setup), "300", status=DocumentStatus.PENDING)

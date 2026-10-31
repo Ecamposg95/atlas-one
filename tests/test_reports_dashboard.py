@@ -1,7 +1,7 @@
 # tests/test_reports_dashboard.py
 """`/reports/dashboard`, `/reports/sales-by-hour` y `/reports/command-center/stats`
 sobre `metricas_ventas`: neto, día de México, 24 horas y ámbito explícito."""
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 from itertools import count
 from zoneinfo import ZoneInfo
@@ -74,7 +74,7 @@ def test_dashboard_kpis_netos_y_comparativo(client, db, org, branch_a, cajero_a,
 
 def test_dashboard_trae_fiado_y_cobranza(client, db, org, branch_a, cajero_a, auth_admin_a, products_setup):
     from app.modules.customers.models import Customer, CustomerLedgerEntry
-    hoy = date.today()
+    hoy = mv.hoy_mx()
     cliente = Customer(name="Fiada", organization_id=org.id, current_balance=Decimal("0"))
     db.add(cliente); db.commit()
     v = _venta(db, org, branch_a, cajero_a, _v(products_setup), "300", status=DocumentStatus.PENDING)
