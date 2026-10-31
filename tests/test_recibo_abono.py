@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from app.pos_printer import PosPrinter
-from tests.cobranza_helpers import _cliente, _escenario, _fiar
+from tests.cobranza_helpers import _abonar, _cliente, _escenario, _fiar
 
 
 def _texto(raw: bytes, p: PosPrinter) -> str:
@@ -83,3 +83,57 @@ def test_el_gerente_puede_imprimir_el_recibo_de_otra_cajera(
     abono = client.post(f"/api/customers/{cliente.id}/pay", json={"amount": "10", "method": "CARD", "reference": "77"}, headers=h).json()
     hg = {**auth_gerente_a, "X-Organization-ID": str(org.id)}
     assert client.post(f"/api/printer/print-abono/{abono['payment_id']}", headers=hg).status_code == 200
+
+
+def _recibo(client, h, payment_id) -> str:
+    r = client.post(f"/api/printer/print-abono/{payment_id}", headers=h)
+    assert r.status_code == 200, r.text
+    return base64.b64decode(r.json()["content_base64"]).decode("latin-1", "replace")
+
+
+def test_dos_abonos_seguidos_no_se_mezclan_en_el_recibo(client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup):
+    """Dos abonos del mismo cliente en el mismo segundo: cada recibo enlaza solo
+    sus asientos (por el folio AB-… del asiento), no por ventana de tiempo."""
+    h, variant, _ = _escenario(client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup)
+    cliente = _cliente(db, org)
+    v1 = _fiar(client, h, cliente, variant.sku)                       # 100
+    r2 = client.post("/api/sales/", json={
+        "doc_type": "ORDER", "customer_id": cliente.id,
+        "items": [{"sku": variant.sku, "quantity": 1}], "payments": [{"method": "CASH", "amount": "50.00"}],
+    }, headers=h)
+    assert r2.status_code in (200, 201), r2.text                        # deja 50 más de saldo
+    def _linea(t, clave):
+        return next(l for l in t.split("\n") if clave in l).rstrip()
+
+    # El recibo se imprime al cobrar: ahí "Saldo anterior" es exacto.
+    a1 = _abonar(client, h, cliente, 100)
+    t1 = _recibo(client, h, a1["payment_id"])
+    a2 = _abonar(client, h, cliente, 50)        # mismo segundo que el anterior
+    t2 = _recibo(client, h, a2["payment_id"])
+    folio1, folio2 = a1["applied"][0]["folio"], a2["applied"][0]["folio"]
+    assert folio1 != folio2 and len(a1["applied"]) == 1 and len(a2["applied"]) == 1
+
+    assert f"Ticket {folio1}" in t1 and f"Ticket {folio2}" not in t1, t1
+    assert f"Ticket {folio2}" in t2 and f"Ticket {folio1}" not in t2, t2
+    assert _linea(t1, "Saldo anterior").endswith("$150.00"), t1
+    assert _linea(t1, "Saldo actual").endswith("$50.00"), t1
+    assert _linea(t2, "Saldo anterior").endswith("$50.00"), t2
+    assert _linea(t2, "Saldo actual").endswith("$0.00"), t2
+
+    # Reimprimir después, con el otro abono ya hecho, sigue sin mezclarlos.
+    r1 = _recibo(client, h, a1["payment_id"])
+    assert f"Ticket {folio1}" in r1 and f"Ticket {folio2}" not in r1, r1
+    assert _linea(r1, "Abono").endswith("$100.00"), r1
+
+
+def test_la_cajera_ajena_sin_rol_de_oficina_recibe_403(client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup):
+    from conftest import _auth_header, _make_user
+    from app.models.users import Role
+    h, variant, _ = _escenario(client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup)
+    cliente = _cliente(db, org)
+    _fiar(client, h, cliente, variant.sku)
+    abono = _abonar(client, h, cliente, 10)
+    otra = _make_user(db, org, branch_a, "cajera_ajena", Role.CAJERO); db.commit()
+    ho = {**_auth_header(otra), "X-Organization-ID": str(org.id)}
+    assert client.post(f"/api/printer/print-abono/{abono['payment_id']}", headers=ho).status_code == 403
+    assert client.post(f"/api/printer/print-abono/{abono['payment_id']}", headers=h).status_code == 200

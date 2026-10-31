@@ -151,6 +151,7 @@ def aplicar_abono(
     amount: Decimal,
     documento=None,
     referencia: Optional[str] = None,
+    recibo: Optional[str] = None,
 ) -> list[CustomerLedgerEntry]:
     """Baja la deuda del cliente y deja el rastro por documento.
 
@@ -162,18 +163,26 @@ def aplicar_abono(
     cubre, y la antigüedad de saldos cuadra con el saldo. Antes un abono libre
     bajaba el saldo pero dejaba todos los tickets PENDING para siempre.
 
+    `recibo` (folio `AB-XXXXXXXX` del Payment) se añade como sufijo
+    ` [AB-XXXXXXXX]` a la descripción de cada asiento: es el enlace
+    determinista entre un Payment y sus asientos (lo usa `detalle_del_abono`)
+    y deja el folio del recibo en el estado de cuenta. Los prefijos
+    `ABONO A TICKET` / `PAGO RECIBIDO` no cambian: la clasificación de
+    asientos depende de ellos.
+
     No hace commit; el que llama decide la transacción.
     """
     amount = _dec(amount)
     asientos: list[CustomerLedgerEntry] = []
     etiqueta = referencia or "Abono"
+    sufijo = f" [{recibo}]" if recibo else ""
 
     def _asiento(monto: Decimal, doc, descripcion: str) -> None:
         e = CustomerLedgerEntry(
             customer_id=customer.id,
             sales_document_id=doc.id if doc is not None else None,
             amount=-monto,
-            description=descripcion,
+            description=descripcion + sufijo,
             organization_id=org_id,
         )
         db.add(e)
@@ -383,14 +392,29 @@ def detalle_del_abono(db: Session, *, org_id: int, pago) -> dict:
     def _utc(t):
         return t.replace(tzinfo=timezone.utc) if t.tzinfo is None else t
 
-    cuando = _utc(pago.created_at)
-    asientos = [
-        a for a in asientos_del_cliente(db, org_id=org_id, customer_id=customer.id)
-        if es_abono(a) and a.created_at is not None
-        and abs(_utc(a.created_at) - cuando) <= timedelta(seconds=2)
-    ]
+    # Enlace determinista: `aplicar_abono(recibo=...)` marca cada asiento con
+    # el sufijo " [AB-XXXXXXXX]" del Payment.
+    folio = f"AB-{pago.id[:8].upper()}"
+    propios = db.query(CustomerLedgerEntry).filter(
+        CustomerLedgerEntry.organization_id == org_id,
+        CustomerLedgerEntry.customer_id == customer.id,
+        CustomerLedgerEntry.description.like(f"% [{folio}]"),
+    ).order_by(CustomerLedgerEntry.created_at.asc(), CustomerLedgerEntry.id.asc()).all()
+    asientos = [a for a in propios if es_abono(a)]
+    if not asientos:
+        # Abonos registrados antes del sufijo no lo traen: se cae a la ventana
+        # de tiempo (asientos de abono del cliente nacidos con el Payment, ±2 s).
+        cuando = _utc(pago.created_at)
+        asientos = [
+            a for a in asientos_del_cliente(db, org_id=org_id, customer_id=customer.id)
+            if es_abono(a) and a.created_at is not None
+            and abs(_utc(a.created_at) - cuando) <= timedelta(seconds=2)
+        ]
     ids = [a.sales_document_id for a in asientos if a.sales_document_id]
-    docs = {d.id: d for d in db.query(SalesDocument).filter(SalesDocument.id.in_(ids)).all()} if ids else {}
+    docs = {
+        d.id: d for d in db.query(SalesDocument).filter(
+            SalesDocument.id.in_(ids), SalesDocument.organization_id == org_id).all()
+    } if ids else {}
     applied = [
         {
             "sales_document_id": a.sales_document_id,

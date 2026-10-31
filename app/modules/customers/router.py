@@ -7,6 +7,7 @@ Phase 2 / S2: moved from app/routers/customers.py. Imports point to the
 local module (models, schemas) instead of the legacy global namespace.
 """
 import logging
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
@@ -571,6 +572,9 @@ def register_customer_payment(
     # el saldo TOTAL del cliente llegaba a cero (con dos tickets fiados,
     # liquidar el primero no lo cerraba).
     saldo_antes = Decimal(str(customer.current_balance or 0))
+    # El id del Payment se fija ya (el default del modelo corre al flush): su
+    # folio AB-… marca los asientos y así el recibo los reconoce sin ambigüedad.
+    payment_id = str(uuid.uuid4())
     asientos = aplicar_abono(
         db,
         org_id=org_id,
@@ -578,12 +582,14 @@ def register_customer_payment(
         amount=payment_in.amount,
         documento=doc,
         referencia=payment_in.reference or payment_in.method,
+        recibo=f"AB-{payment_id[:8].upper()}",
     )
 
     # ATS-37: Create a Payment record linked to the SalesDocument
     # (`method_enum` y `cash_session_id_value` se resolvieron arriba, antes de
     # tocar el saldo, porque el guard de efectivo depende de ambos.)
     payment_record = SalesPayment(
+        id=payment_id,
         sales_document_id=payment_in.sales_document_id,
         customer_id=customer.id,
         created_by_id=current_user.id,
