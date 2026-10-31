@@ -403,8 +403,14 @@ def detalle_del_abono(db: Session, *, org_id: int, pago) -> dict:
 
     Sin columna nueva: los asientos de abono del mismo cliente nacidos en la
     misma transacción que el `Payment` (misma marca de tiempo, ±2 s) son los
-    suyos. "Saldo anterior" = saldo actual + lo abonado: exacto al imprimir en
-    el momento; en una reimpresión posterior parte del saldo de hoy.
+    suyos. Los saldos se reconstruyen hacia atrás desde el saldo de hoy: se
+    deshace todo asiento del cliente posterior al último asiento del abono
+    (ventas fiadas, otros abonos, cancelaciones) para obtener "Saldo actual" y,
+    sumando lo abonado, "Saldo anterior". Así una reimpresión repite el recibo
+    original aunque el cliente haya movido su cuenta desde entonces.
+
+    `paid_in_full` de cada renglón sí es "al momento de imprimir" (lee la deuda
+    que le queda hoy al ticket), no al momento del abono.
     """
     from datetime import timedelta
     from app.models.sales import SalesDocument
@@ -451,6 +457,14 @@ def detalle_del_abono(db: Session, *, org_id: int, pago) -> dict:
     unapplied = sum((-_dec(a.amount) for a in asientos if not a.sales_document_id), CERO)
     abonado = sum((-_dec(a.amount) for a in asientos), CERO)
     despues = _dec(customer.current_balance)
+    if asientos:
+        ultimo = max(a.id for a in asientos)
+        posteriores = db.query(func.coalesce(func.sum(CustomerLedgerEntry.amount), 0)).filter(
+            CustomerLedgerEntry.organization_id == org_id,
+            CustomerLedgerEntry.customer_id == customer.id,
+            CustomerLedgerEntry.id > ultimo,
+        ).scalar()
+        despues -= _dec(posteriores)
     return {"customer": customer, "applied": applied, "unapplied": unapplied,
             "balance_after": despues, "balance_before": despues + abonado}
 

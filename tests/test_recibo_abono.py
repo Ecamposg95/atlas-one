@@ -137,3 +137,31 @@ def test_la_cajera_ajena_sin_rol_de_oficina_recibe_403(client, db, org, branch_a
     ho = {**_auth_header(otra), "X-Organization-ID": str(org.id)}
     assert client.post(f"/api/printer/print-abono/{abono['payment_id']}", headers=ho).status_code == 403
     assert client.post(f"/api/printer/print-abono/{abono['payment_id']}", headers=h).status_code == 200
+
+
+def test_reimprimir_reproduce_saldos_cajera_y_sucursal_del_recibo_original(
+    client, db, org, branch_a, cajero_a, auth_cajero_a, admin_sin_sucursal, auth_admin_sin_sucursal, products_setup
+):
+    """El recibo reimpreso es el de entonces: los saldos no parten del saldo de
+    hoy y "Le atendió"/sucursal son los de quien cobró, no los de quien reimprime."""
+    h, variant, _ = _escenario(client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup)
+    cliente = _cliente(db, org)
+    _fiar(client, h, cliente, variant.sku)                         # debe 100
+    primero = _abonar(client, h, cliente, 40)
+
+    def _linea(t, clave):
+        return next(l for l in t.split("\n") if clave in l).rstrip()
+
+    al_cobrar = _recibo(client, h, primero["payment_id"])
+    assert _linea(al_cobrar, "Saldo anterior").endswith("$100.00"), al_cobrar
+    assert _linea(al_cobrar, "Saldo actual").endswith("$60.00"), al_cobrar
+
+    _fiar(client, h, cliente, variant.sku, pagos=[{"method": "CASH", "amount": "50.00"}])   # +50 de deuda
+    _abonar(client, h, cliente, 10)
+
+    ho = {**auth_admin_sin_sucursal, "X-Organization-ID": str(org.id)}
+    reimpreso = _recibo(client, ho, primero["payment_id"])
+    assert _linea(reimpreso, "Saldo anterior").endswith("$100.00"), reimpreso
+    assert _linea(reimpreso, "Saldo actual").endswith("$60.00"), reimpreso
+    assert "Le atendio: cajero_a" in reimpreso, reimpreso
+    assert branch_a.name in reimpreso, reimpreso

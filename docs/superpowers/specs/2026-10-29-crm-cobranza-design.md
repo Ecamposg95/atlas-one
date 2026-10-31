@@ -214,6 +214,11 @@ misma transacción que el `Payment` (mismo `customer_id`, `created_at` igual al 
 tolerancia de 2 segundos) con `sales_document_id`. "Saldo anterior" = saldo actual − suma de
 esos asientos. Sin columna nueva.
 
+*Ajuste 2026-10-31 (revisión final):* para que una reimpresión repita el recibo original, "Saldo actual" =
+saldo de hoy − Σ(asientos del cliente con id posterior al último asiento del abono) y "Saldo anterior" =
+"Saldo actual" + lo abonado; cajera y sucursal salen de `pago.created_by_id` y de la caja
+(`pago.cash_session_id`), con el usuario actual como respaldo.
+
 ## 5. Recordatorio por WhatsApp
 
 Botón "Recordar por WhatsApp" en el panel de cobranza (§3.2) y en el renglón de la tabla.

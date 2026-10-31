@@ -523,7 +523,10 @@ def print_abono_endpoint(
     """Recibo de un abono a cuenta (spec 2026-10-29 §4.3). Mismo contrato que
     el ticket: bytes ESC/POS en base64 que el agente local manda a la
     impresora. Reimprimir es volver a llamar; no pide PIN. Lo imprime quien
-    cobró el abono o un rol de oficina."""
+    cobró el abono o un rol de oficina. El recibo reproduce el original: saldos
+    reconstruidos (`detalle_del_abono`), cajera = quien registró el abono y
+    sucursal = la de la caja que lo recibió; solo si faltan esos datos cae al
+    usuario/sucursal de quien imprime."""
     from app.models.sales import Payment
     from app.modules.customers.services import detalle_del_abono
     from app.services.metricas_ventas import HQ_ROLES
@@ -539,9 +542,14 @@ def print_abono_endpoint(
     from app.models.organization import Organization
     organization = db.query(Organization).filter(Organization.id == org_id).first()
     printer, target_printer_name = _resolve_printer(current_user, organization)
+    from app.models.cash import CashSession
+    cobro_por = db.query(User).filter(User.id == pago.created_by_id).first() if pago.created_by_id else None
+    caja = db.query(CashSession).filter(CashSession.id == pago.cash_session_id).first() if pago.cash_session_id else None
+    sucursal = (caja.branch if caja is not None else None) or current_user.branch
+    cajera = cobro_por.username if cobro_por is not None else current_user.username
     try:
         raw_bytes = printer.build_abono_bytes(
-            organization=organization, branch=current_user.branch, cashier=current_user.username,
+            organization=organization, branch=sucursal, cashier=cajera,
             customer_name=detalle["customer"].name, amount=float(pago.amount),
             method=str(getattr(pago.method, "value", pago.method)), reference=pago.reference,
             applied=detalle["applied"], unapplied=float(detalle["unapplied"]),
