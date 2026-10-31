@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { customersApi, type Customer, type CustomerStats, type LedgerEntry } from '../../api/customers'
 import { DaxCard } from '../../components/ui/DaxCard'
 import { Spinner } from '../../components/ui/Spinner'
@@ -15,6 +16,7 @@ import { toast } from '../../store/toastStore'
 import { confirm as confirmDialog } from '../../components/ui/ConfirmDialog'
 import { ErrorState } from '../../components/ui/ErrorState'
 import { useAuthStore } from '../../store/authStore'
+import { esRolHq } from '../../utils/rolesHq'
 
 interface PayModal { id: number; name: string }
 
@@ -141,6 +143,9 @@ export function Customers() {
     <div className="space-y-5">
       <CabeceraPagina
         titulo={<div className="flex items-center gap-3"><i className="fa-solid fa-address-book text-indigo-400 text-xl" /><h1 className="text-2xl font-black text-white">Clientes</h1></div>}
+        acciones={(esRolHq(user?.role) || user?.role === 'GERENTE') ? (
+          <Link to="/customers/cobranza" className="dax-btn-secondary text-xs"><i className="fa-solid fa-hand-holding-dollar" aria-hidden="true" /> Cuentas por cobrar</Link>
+        ) : undefined}
       />
 
       {/* KPI Cards */}

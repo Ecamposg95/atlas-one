@@ -70,6 +70,7 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 | `/expenses`, `/purchases` | `finance/Expenses`, `Purchases` | Admin, Dueño | payments |
 | `/reports` | `reports/Reportes` (fijado a la sucursal del usuario; el CAJERO no tiene la ruta en `ROLE_ROUTES` y, si entrara por API, el backend fija su sucursal) | Gerente | — |
 | `/customers` | `crm/Customers` | Admin, Dueño | crm |
+| `/customers/cobranza` | `crm/Cobranza` | Admin, Dueño, Gerente | crm |
 | `/hr`, `/hr/me` | `hr/HR`, `HRMe` | Admin / todos | — |
 | `/portal` | `portal/Portal` | Cliente | — |
 | `/users`, `/organization`, `/startup` | `core/Users`, `Organization`, `Startup` | Admin | — |
@@ -382,6 +383,12 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Quién la ve:** Admin, Dueño — módulo `crm`.
 - **Datos/API:** `customersApi.getAll/getStats/getStatement/pay`.
 - **Notas:** Búsqueda debounce 400ms. Botón pago solo si `current_balance < 0` (deuda).
+
+### `/customers/cobranza` — Cuentas por cobrar 📱
+- **Archivo:** `pages/crm/Cobranza.tsx`
+- **Propósito:** Quién debe, cuánto y desde cuándo: KPIs (por cobrar, vencido a más de 30 días, clientes con deuda), filtros (búsqueda, sucursal, antigüedad, orden), detalle con tickets abiertos y movimientos, estado de cuenta en PDF, `Registrar abono` (`AbonoModal`) y recordatorio por WhatsApp (`wa.me`, texto fijo, deshabilitado sin teléfono marcable).
+- **Quién la ve:** Admin, Dueño, Gerente (no en modo básico).
+- **Datos/API:** `customersApi.cobranza/getUnpaidDocuments/getStatement/getStatementPdf`.
 
 ### `/hr` — Recursos Humanos 📱
 - **Archivo:** `pages/hr/HR.tsx` (214 líneas)
