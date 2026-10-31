@@ -55,28 +55,36 @@ export function AbonoModal({ customerId, customerName, onClose, onDone, imprimir
     if (!valido) return
     setGuardando(true)
     setError(null)
+    let r: AbonoResponse
     try {
-      const r = await customersApi.pay(customerId, {
+      r = await customersApi.pay(customerId, {
         amount: importe,
         method: metodo,
-        reference: referencia.trim() || undefined,
+        // En efectivo no hay referencia: ignora lo que se escribió antes de cambiar de método.
+        reference: metodo === 'CASH' ? undefined : referencia.trim() || undefined,
         sales_document_id: ticket || undefined,
       })
-      onDone?.(r)
-      if (imprimir && imprimirRecibo) {
-        try {
-          await imprimir(r.payment_id)
-        } catch {
-          setRegistrado(r.payment_id)
-          setGuardando(false)
-          return
-        }
-      }
-      onClose()
     } catch (err) {
       setError(apiErrorMessage(err, 'No se pudo registrar el abono'))
       setGuardando(false)
+      return
     }
+    // Desde aquí el abono ya existe: nada de lo que falle abajo puede reabrir el formulario.
+    try {
+      onDone?.(r)
+    } catch {
+      // El padre falló al refrescar; el abono sigue registrado y el modal se cierra igual.
+    }
+    if (imprimir && imprimirRecibo) {
+      try {
+        await imprimir(r.payment_id)
+      } catch {
+        setRegistrado(r.payment_id)
+        setGuardando(false)
+        return
+      }
+    }
+    onClose()
   }
 
   const reintentarImpresion = async () => {
@@ -90,13 +98,17 @@ export function AbonoModal({ customerId, customerName, onClose, onDone, imprimir
     }
   }
 
+  // En vuelo no se cierra: la respuesta del abono se perdería y se podría reenviar.
+  const cerrar = () => { if (!guardando) onClose() }
+
   const fecha = (iso: string) => new Date(iso).toLocaleDateString('es-MX')
 
   if (registrado) {
     return (
-      <Modal open onClose={onClose} size="sm" title="Registrar abono"
+      <Modal open onClose={cerrar} size="sm" title="Registrar abono"
+        closeOnBackdrop={!guardando} closeOnEscape={!guardando}
         footer={<>
-          <button onClick={onClose} className="dax-btn-secondary flex-1">Cerrar</button>
+          <button onClick={cerrar} disabled={guardando} className="dax-btn-secondary flex-1 disabled:opacity-40">Cerrar</button>
           <button onClick={reintentarImpresion} disabled={guardando} className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
             {guardando ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-print" /> Reintentar impresión</>}
           </button>
@@ -108,9 +120,10 @@ export function AbonoModal({ customerId, customerName, onClose, onDone, imprimir
   }
 
   return (
-    <Modal open onClose={onClose} size="sm" title="Registrar abono"
+    <Modal open onClose={cerrar} size="sm" title="Registrar abono"
+      closeOnBackdrop={!guardando} closeOnEscape={!guardando}
       footer={<>
-        <button onClick={onClose} className="dax-btn-secondary flex-1">Cancelar</button>
+        <button onClick={cerrar} disabled={guardando} className="dax-btn-secondary flex-1 disabled:opacity-40">Cancelar</button>
         <button onClick={confirmar} disabled={!valido} className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
           {guardando ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Confirmar</>}
         </button>

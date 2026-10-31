@@ -96,4 +96,45 @@ describe('AbonoModal', () => {
     expect(pay).toHaveBeenCalledTimes(1)
     expect(onDone).toHaveBeenCalledTimes(1)
   })
+
+  it('un onDone que lanza no reabre el formulario ni reenvía el abono', async () => {
+    const onDone = vi.fn(() => { throw new Error('el padre falló') })
+    const onClose = vi.fn()
+    render(<AbonoModal customerId={1} customerName="Ana" onClose={onClose} onDone={onDone} />)
+    fireEvent.change(monto(), { target: { value: '10' } })
+    fireEvent.click(confirmar())
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+    expect(pay).toHaveBeenCalledTimes(1)
+    expect(onDone).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('alert')).toBeNull()
+    // El formulario no se rehabilita: el botón principal sigue en espera (spinner) y deshabilitado.
+    expect((screen.getAllByRole('button').at(-1) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('con el abono en vuelo no se puede cancelar ni cerrar con Escape o el fondo', async () => {
+    let resolver: (r: typeof RESPUESTA) => void = () => {}
+    pay.mockReturnValueOnce(new Promise((res) => { resolver = res }))
+    const onClose = vi.fn()
+    render(<AbonoModal customerId={1} customerName="Ana" onClose={onClose} />)
+    fireEvent.change(monto(), { target: { value: '10' } })
+    fireEvent.click(confirmar())
+    const cancelar = await screen.findByRole('button', { name: 'Cancelar' }) as HTMLButtonElement
+    await waitFor(() => expect(cancelar.disabled).toBe(true))
+    fireEvent.keyDown(document, { key: 'Escape' })
+    fireEvent.click(screen.getByRole('dialog'))
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar' }))
+    expect(onClose).not.toHaveBeenCalled()
+    resolver(RESPUESTA)
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+  })
+
+  it('en efectivo no manda la referencia aunque se haya escrito antes de cambiar de método', async () => {
+    render(<AbonoModal customerId={1} customerName="Ana" onClose={() => {}} />)
+    fireEvent.change(monto(), { target: { value: '10' } })
+    fireEvent.change(screen.getByLabelText('Método'), { target: { value: 'CARD' } })
+    fireEvent.change(screen.getByLabelText(/Referencia/), { target: { value: '4421' } })
+    fireEvent.change(screen.getByLabelText('Método'), { target: { value: 'CASH' } })
+    fireEvent.click(confirmar())
+    await waitFor(() => expect(pay).toHaveBeenCalledWith(1, { amount: 10, method: 'CASH', reference: undefined, sales_document_id: undefined }))
+  })
 })
