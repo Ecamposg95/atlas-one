@@ -34,6 +34,8 @@ export function AbonoModal({ customerId, customerName, onClose, onDone, imprimir
   const [imprimirRecibo, setImprimirRecibo] = useState(true)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Id del pago ya registrado cuando falló la impresión: el formulario se retira para que no se pueda abonar dos veces.
+  const [registrado, setRegistrado] = useState<string | null>(null)
   const montoRef = useRef<HTMLInputElement>(null)
 
   // El Modal del kit enfoca su primer control (cerrar) al montar; este efecto corre después y devuelve el foco al monto.
@@ -65,7 +67,7 @@ export function AbonoModal({ customerId, customerName, onClose, onDone, imprimir
         try {
           await imprimir(r.payment_id)
         } catch {
-          setError('El abono quedó registrado, pero el recibo no se imprimió')
+          setRegistrado(r.payment_id)
           setGuardando(false)
           return
         }
@@ -77,7 +79,33 @@ export function AbonoModal({ customerId, customerName, onClose, onDone, imprimir
     }
   }
 
+  const reintentarImpresion = async () => {
+    if (!imprimir || !registrado || guardando) return
+    setGuardando(true)
+    try {
+      await imprimir(registrado)
+      onClose()
+    } catch {
+      setGuardando(false)
+    }
+  }
+
   const fecha = (iso: string) => new Date(iso).toLocaleDateString('es-MX')
+
+  if (registrado) {
+    return (
+      <Modal open onClose={onClose} size="sm" title="Registrar abono"
+        footer={<>
+          <button onClick={onClose} className="dax-btn-secondary flex-1">Cerrar</button>
+          <button onClick={reintentarImpresion} disabled={guardando} className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
+            {guardando ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-print" /> Reintentar impresión</>}
+          </button>
+        </>}>
+        <p className="text-dax-muted text-sm mb-4">{customerName}</p>
+        <p className="text-dax-danger text-xs" role="alert">El abono quedó registrado, pero el recibo no se imprimió</p>
+      </Modal>
+    )
+  }
 
   return (
     <Modal open onClose={onClose} size="sm" title="Registrar abono"
