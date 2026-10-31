@@ -13,7 +13,7 @@ from fastapi import HTTPException
 from sqlalchemy import update
 
 from app.models.returns import SaleReturn, SaleReturnItem
-from app.models.sales import DocumentStatus, Payment, PaymentMethod, SalesDocument, SalesLineItem
+from app.models.sales import DocumentStatus, DocumentType, Payment, PaymentMethod, SalesDocument, SalesLineItem
 from app.services import metricas_ventas as mv
 
 _MX = ZoneInfo("America/Mexico_City")
@@ -26,12 +26,13 @@ def _instante(dia: date, hora: int = 12) -> datetime:
 
 
 def _venta(db, org, branch, user, variante, total, *, dia=None, hora=12, status=DocumentStatus.PAID,
-           metodo=PaymentMethod.CASH, entregado=None, costo="40", customer_id=None, pagado=None):
+           metodo=PaymentMethod.CASH, entregado=None, costo="40", customer_id=None, pagado=None,
+           doc_type=DocumentType.INVOICE):
     dia = dia or mv.hoy_mx()
     doc = SalesDocument(
         organization_id=org.id, branch_id=branch.id, seller_id=user.id, folio=next(_folios),
         series="A", subtotal=Decimal(total), tax_amount=Decimal("0"), total_amount=Decimal(total),
-        status=status, doc_type="ORDER", customer_id=customer_id,
+        status=status, doc_type=doc_type, customer_id=customer_id,
         change_given=(Decimal(entregado) - Decimal(total)) if entregado else None,
     )
     doc.created_at = _instante(dia, hora)
@@ -148,6 +149,19 @@ def test_resumen_cuenta_la_venta_fiada_el_dia_que_nace(db, org, branch_a, cajero
     r = mv.resumen(db, mv.Ambito(org.id, None, True), mv.periodo_preset("hoy"))
     assert (r.bruta, r.tickets) == (400.0, 2)
     assert mv.por_sucursal(db, org.id, mv.periodo_preset("hoy"))[branch_a.id].bruta == 400.0
+
+
+def test_resumen_ignora_cotizaciones_y_pedidos_con_cliente(db, org, branch_a, cajero_a, products_setup):
+    """La fiada es un ticket (INVOICE) PENDING con cliente: una cotización o un
+    pedido PENDING con cliente todavía no es venta."""
+    cliente = _cliente(db, org)
+    for tipo in (DocumentType.QUOTE, DocumentType.ORDER):
+        _venta(db, org, branch_a, cajero_a, _v(products_setup), "500", status=DocumentStatus.PENDING,
+               customer_id=cliente.id, pagado="0", doc_type=tipo)
+    _venta(db, org, branch_a, cajero_a, _v(products_setup), "300", status=DocumentStatus.PENDING,
+           customer_id=cliente.id, pagado="50")
+    r = mv.resumen(db, mv.Ambito(org.id, None, True), mv.periodo_preset("hoy"))
+    assert (r.bruta, r.tickets) == (300.0, 1)
 
 
 def test_resumen_neta_resta_devoluciones_aprobadas(db, org, branch_a, cajero_a, products_setup):

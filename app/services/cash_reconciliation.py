@@ -44,6 +44,7 @@ _MX_TZ = ZoneInfo("America/Mexico_City")
 from app.models.cash import CashMovement, CashSession
 from app.models.sales import (
     DocumentStatus,
+    DocumentType,
     Payment,
     PaymentMethod,
     SalesDocument,
@@ -125,13 +126,19 @@ SALES_REPORT_STATUSES = (
 def filtro_venta_reconocida():
     """Expresión SQL de "este documento cuenta como venta" (spec 2026-10-29 §2.1).
 
-    Cobrada (PAID / REFUNDED_*) o **fiada**: PENDING con cliente del CRM. La
-    venta fiada cuenta el día que sale la mercancía; los abonos que lleguen
-    después son cobranza, no venta. Un PENDING sin cliente sigue fuera.
+    Cobrada (PAID / REFUNDED_*) o **fiada**: un ticket (INVOICE) PENDING con
+    cliente del CRM. La venta fiada cuenta el día que sale la mercancía; los
+    abonos que lleguen después son cobranza, no venta. Un PENDING sin cliente
+    sigue fuera, y también las cotizaciones y pedidos (QUOTE/ORDER) PENDING con
+    cliente: todavía no son una venta.
     """
     return or_(
         SalesDocument.status.in_(SALES_REPORT_STATUSES),
-        and_(SalesDocument.status == DocumentStatus.PENDING, SalesDocument.customer_id.isnot(None)),
+        and_(
+            SalesDocument.doc_type == DocumentType.INVOICE,
+            SalesDocument.status == DocumentStatus.PENDING,
+            SalesDocument.customer_id.isnot(None),
+        ),
     )
 
 

@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - **Sin ALTER.** Ninguna tabla ni columna nueva; `scripts/railway_init.py` no se toca.
-- **Venta fiada = `status = PENDING AND customer_id IS NOT NULL`.** Un PENDING sin cliente sigue fuera de todo reporte.
+- **Venta fiada = `doc_type = INVOICE AND status = PENDING AND customer_id IS NOT NULL`.** Un PENDING sin cliente sigue fuera de todo reporte, y las cotizaciones y pedidos (QUOTE/ORDER) PENDING tampoco cuentan.
 - **`CASH_INCLUDED_STATUSES` y el efectivo esperado no cambian de criterio**: suman `Payment.amount`, lo que entró físicamente. La única corrección es que el abono libre (pago sin documento) ya entre.
 - **Prefijos de reversión del ledger:** `Cancelación` y `Devolución`; solo `app/modules/customers/services.py` los conoce.
 - **Copy exacto:** renglones del corte `Fiado` y `Abonos a cuenta`; título del recibo `RECIBO DE ABONO`; folio del recibo `AB-{payment_id[:8].upper()}`; botón del POS `Abonar`; pantalla `Cuentas por cobrar` en `/customers/cobranza`; 422 del efectivo sin sucursal: `Para recibir efectivo elige una sucursal con caja abierta; tarjeta y transferencia sí se pueden registrar`.

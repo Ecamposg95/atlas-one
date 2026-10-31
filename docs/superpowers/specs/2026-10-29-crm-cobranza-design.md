@@ -26,12 +26,13 @@ automático de mensajes, tablas o columnas nuevas.
 
 ### 2.1 Qué es una venta fiada
 
-Un `SalesDocument` con `status = PENDING` y `customer_id IS NOT NULL`. Un PENDING sin cliente
-sigue siendo lo que era (una venta que no terminó de cobrarse) y sigue fuera de todo reporte.
+Un `SalesDocument` con `doc_type = INVOICE AND status = PENDING AND customer_id IS NOT NULL`.
+Un PENDING sin cliente sigue siendo lo que era (una venta que no terminó de cobrarse) y sigue
+fuera de todo reporte; las cotizaciones y pedidos (QUOTE/ORDER) PENDING no cuentan.
 
 La condición se define **una sola vez** en `app/services/cash_reconciliation.py`, junto a
 `SALES_REPORT_STATUSES`, como un helper que devuelve la expresión SQL
-`status IN SALES_REPORT_STATUSES OR (status = PENDING AND customer_id IS NOT NULL)`. La tupla
+`status IN SALES_REPORT_STATUSES OR (doc_type = INVOICE AND status = PENDING AND customer_id IS NOT NULL)`. La tupla
 `SALES_REPORT_STATUSES` no cambia; cambia quién la usa directo:
 
 | Consumidor | Hoy | Después |

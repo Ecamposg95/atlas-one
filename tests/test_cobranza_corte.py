@@ -99,3 +99,27 @@ def test_las_reversiones_se_distinguen_de_los_abonos(
     assert [float(x.amount) for x in asientos] == [100.0, -20.0, 100.0, -100.0]
     assert [es_abono(x) for x in asientos] == [False, True, False, False]
     assert [es_reversion(x) for x in asientos] == [False, False, False, True]
+
+
+def test_la_cotizacion_y_el_pedido_con_cliente_no_cuentan_en_el_corte(
+    client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup
+):
+    """Una cotización/pedido PENDING con cliente cae en el turno por el respaldo
+    legacy (vendedor + sucursal + horario) pero no es un ticket: la fiada solo
+    es INVOICE."""
+    from tests.cobranza_helpers import _habilitar
+    h, variant, sesion = _escenario(client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup)
+    _habilitar(db, org, "quotes")
+    cliente = _cliente(db, org)
+    for tipo in ("QUOTE", "ORDER"):
+        r = client.post("/api/quotes/", json={
+            "doc_type": tipo, "customer_id": cliente.id,
+            "items": [{"sku": variant.sku, "quantity": 1}], "payments": [],
+        }, headers=h)
+        assert r.status_code == 200, r.text
+
+    audit = get_session_audit_data(db, sesion.id)
+    assert audit["kpis"]["total_sales"] == 0.0
+    assert audit["kpis"]["total_tickets"] == 0
+    assert audit["kpis"]["credit_sales"] == 0.0
+    assert audit["expected"]["total_system"] == float(sesion.opening_balance)
