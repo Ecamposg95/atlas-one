@@ -65,6 +65,8 @@ class PeriodoVentas(BaseModel):
     total: float        # venta NETA: cobradas menos devoluciones aprobadas del periodo
     devuelto: float = 0.0
     tickets: int
+    fiado: float = 0.0     # lo que quedó a cuenta en esas ventas
+    cobranza: float = 0.0  # abonos recibidos en el periodo
 
 
 class ProductoTop(BaseModel):
@@ -143,6 +145,7 @@ class SucursalInicio(BaseModel):
     ventas_hoy: float        # neta
     devuelto_hoy: float = 0.0
     tickets_hoy: int
+    fiado_hoy: float = 0.0
     corte: CorteInicio
     poca_existencia: int     # variantes ≤ umbral en esa sucursal
 
@@ -164,9 +167,17 @@ class HoraInicio(BaseModel):
     tickets: int
 
 
+class PorCobrar(BaseModel):
+    """Spec 2026-10-29 §3.3: solo con `completo`, rol de oficina y módulo crm."""
+    total: float
+    vencido_30: float   # suma de los cubos 31_60 + 61_90 + 91_plus
+    clientes: int
+
+
 class InicioResponse(InicioBasicoResponse):
     sin_movimiento: Optional[SinMovimiento] = None
     pendientes: Optional[Pendientes] = None
+    por_cobrar: Optional[PorCobrar] = None             # None = sin `completo`, rol sin acceso o módulo crm apagado
     sucursales: Optional[List[SucursalInicio]] = None   # None = una sola sucursal o ámbito de una
     utilidad_bruta_hoy: Optional[float] = None          # None = sin `completo` o rol sin costos; SOLO renglones con costo
     venta_sin_costo_hoy: Optional[float] = None         # lo vendido hoy en renglones sin costo (fuera de la utilidad)

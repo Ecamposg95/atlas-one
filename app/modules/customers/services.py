@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Iterable, Optional
 
-from sqlalchemy import case, func
+from sqlalchemy import and_, case, func, or_
 from sqlalchemy.orm import Session
 
 from app.modules.customers.models import Customer, CustomerLedgerEntry
@@ -31,6 +31,10 @@ CENTAVO = Decimal("0.01")
 
 def _dec(x) -> Decimal:
     return Decimal(str(x or 0))
+
+
+def _utc(t: datetime) -> datetime:
+    return t.replace(tzinfo=timezone.utc) if t.tzinfo is None else t
 
 
 # --------------------------------------------------------------------------
@@ -82,7 +86,12 @@ def saldo_documento(db: Session, *, org_id: int, documento, customer_id: int) ->
     from app.models.sales import DocumentStatus, Payment
 
     estado = getattr(documento.status, "value", documento.status)
-    if estado in (DocumentStatus.CANCELLED.value, DocumentStatus.REFUNDED_TOTAL.value):
+    # PAID significa sin deuda, aunque el ledger conserve el cargo sin abono
+    # enlazado (abonos libres anteriores a la auditoría, tickets cerrados por
+    # `conciliar_abonos_fifo`): lo garantizan `_marcar_pagado_si_liquidado`,
+    # `/pay` y el script de conciliación.
+    if estado in (DocumentStatus.CANCELLED.value, DocumentStatus.REFUNDED_TOTAL.value,
+                  DocumentStatus.PAID.value):
         return CERO
     hay_asientos = db.query(CustomerLedgerEntry.id).filter(
         CustomerLedgerEntry.organization_id == org_id,
@@ -151,6 +160,7 @@ def aplicar_abono(
     amount: Decimal,
     documento=None,
     referencia: Optional[str] = None,
+    recibo: Optional[str] = None,
 ) -> list[CustomerLedgerEntry]:
     """Baja la deuda del cliente y deja el rastro por documento.
 
@@ -162,18 +172,26 @@ def aplicar_abono(
     cubre, y la antigüedad de saldos cuadra con el saldo. Antes un abono libre
     bajaba el saldo pero dejaba todos los tickets PENDING para siempre.
 
+    `recibo` (folio `AB-XXXXXXXX` del Payment) se añade como sufijo
+    ` [AB-XXXXXXXX]` a la descripción de cada asiento: es el enlace
+    determinista entre un Payment y sus asientos (lo usa `detalle_del_abono`)
+    y deja el folio del recibo en el estado de cuenta. Los prefijos
+    `ABONO A TICKET` / `PAGO RECIBIDO` no cambian: la clasificación de
+    asientos depende de ellos.
+
     No hace commit; el que llama decide la transacción.
     """
     amount = _dec(amount)
     asientos: list[CustomerLedgerEntry] = []
     etiqueta = referencia or "Abono"
+    sufijo = f" [{recibo}]" if recibo else ""
 
     def _asiento(monto: Decimal, doc, descripcion: str) -> None:
         e = CustomerLedgerEntry(
             customer_id=customer.id,
             sales_document_id=doc.id if doc is not None else None,
             amount=-monto,
-            description=descripcion,
+            description=descripcion + sufijo,
             organization_id=org_id,
         )
         db.add(e)
@@ -201,6 +219,38 @@ def aplicar_abono(
         _asiento(resto, None, f"PAGO RECIBIDO: {etiqueta}")
         customer.current_balance = _dec(customer.current_balance) - resto
     return asientos
+
+
+# --------------------------------------------------------------------------
+# Qué es cada asiento
+# --------------------------------------------------------------------------
+# Un asiento negativo es abono salvo que lo haya escrito una cancelación o una
+# devolución (`revertir_cargo_de_documento` desde sales.py::cancel_sale y
+# `aplicar_devolucion_a_saldo` desde crud/returns.py::approve_return). Este es
+# el ÚNICO lugar que conoce los prefijos; `tests/test_cobranza_corte.py` los
+# fija contra los textos reales.
+PREFIJOS_REVERSION = ("Cancelación", "Devolución")
+
+
+def es_reversion(asiento) -> bool:
+    return _dec(asiento.amount) < 0 and (asiento.description or "").startswith(PREFIJOS_REVERSION)
+
+
+def es_abono(asiento) -> bool:
+    return _dec(asiento.amount) < 0 and not es_reversion(asiento)
+
+
+def filtro_sql_reversion():
+    return or_(*[CustomerLedgerEntry.description.like(f"{p}%") for p in PREFIJOS_REVERSION])
+
+
+def filtro_sql_cargo_o_reversion():
+    """Cargos (+) y sus reversiones (−): lo que suma al "fiado". Deja fuera los abonos."""
+    return or_(CustomerLedgerEntry.amount > 0, filtro_sql_reversion())
+
+
+def filtro_sql_abono():
+    return and_(CustomerLedgerEntry.amount < 0, ~filtro_sql_reversion())
 
 
 # --------------------------------------------------------------------------
@@ -282,19 +332,29 @@ def _bucket(dias: int) -> str:
     return "91_plus"
 
 
-def antiguedad_por_cargo(
-    asientos: Iterable[CustomerLedgerEntry], *, ahora: Optional[datetime] = None
-) -> dict[str, Decimal]:
-    """Reparte lo que el cliente debe HOY por la edad del cargo que lo originó.
+def cargos_pendientes(asientos: Iterable[CustomerLedgerEntry]) -> list[list]:
+    """Los cargos que todavía deben algo, del más viejo al más nuevo, como
+    `[created_at, restante]`. Un asiento negativo (abono, cancelación,
+    devolución) con `sales_document_id` baja primero el cargo de ESE ticket;
+    solo lo que exceda lo pendiente de su ticket, y todo asiento sin ticket
+    (abono libre, `PAGO RECIBIDO`), se aplica al cargo más viejo (FIFO). Un
+    abono anterior a cualquier cargo queda como crédito que consume el
+    siguiente cargo."""
+    pendientes: list[list] = []  # [created_at, restante, sales_document_id]
 
-    Los abonos se aplican al cargo más viejo primero (FIFO), así que un cliente
-    que compró $10,000 a lo largo del año y debe $100 reporta $100, no $10,000
-    (que es lo que hacía el reporte al sumar todos los cargos históricos sin
-    restar nada). Un abono anterior a cualquier cargo queda como crédito que
-    consume el siguiente cargo.
-    """
-    ahora = ahora or datetime.now(timezone.utc)
-    pendientes: list[list] = []  # [created_at, restante]
+    def _aplicar(abono: Decimal, solo_doc) -> Decimal:
+        for cargo in list(pendientes):
+            if abono <= 0:
+                break
+            if solo_doc is not None and cargo[2] != solo_doc:
+                continue
+            usado = min(abono, cargo[1])
+            cargo[1] -= usado
+            abono -= usado
+            if cargo[1] <= CERO:
+                pendientes.remove(cargo)
+        return abono
+
     credito = CERO
     for e in sorted(asientos, key=lambda x: (x.created_at or datetime.min.replace(tzinfo=timezone.utc), x.id or 0)):
         monto = _dec(e.amount)
@@ -304,26 +364,30 @@ def antiguedad_por_cargo(
                 credito -= usado
                 monto -= usado
             if monto > 0:
-                pendientes.append([e.created_at, monto])
+                pendientes.append([e.created_at, monto, e.sales_document_id])
         elif monto < 0:
             abono = -monto
-            while abono > 0 and pendientes:
-                cargo = pendientes[0]
-                usado = min(abono, cargo[1])
-                cargo[1] -= usado
-                abono -= usado
-                if cargo[1] <= CERO:
-                    pendientes.pop(0)
+            if e.sales_document_id:
+                abono = _aplicar(abono, e.sales_document_id)
+            abono = _aplicar(abono, None)
             if abono > 0:
                 credito += abono
+    return [[creado, restante] for creado, restante, _ in pendientes]
+
+
+def antiguedad_por_cargo(
+    asientos: Iterable[CustomerLedgerEntry], *, ahora: Optional[datetime] = None
+) -> dict[str, Decimal]:
+    """Reparte lo que el cliente debe HOY por la edad del cargo que lo originó
+    (ver `cargos_pendientes`). Un cliente que compró $10,000 en el año y debe
+    $100 reporta $100, no $10,000."""
+    ahora = ahora or datetime.now(timezone.utc)
     buckets = {k: CERO for k in BUCKETS}
-    for creado, restante in pendientes:
+    for creado, restante in cargos_pendientes(asientos):
         if creado is None:
             buckets["current"] += restante
             continue
-        if creado.tzinfo is None:
-            creado = creado.replace(tzinfo=timezone.utc)
-        buckets[_bucket((ahora - creado).days)] += restante
+        buckets[_bucket((ahora - _utc(creado)).days)] += restante
     return buckets
 
 
@@ -334,6 +398,155 @@ def asientos_del_cliente(db: Session, *, org_id: int, customer_id: int) -> list[
     ).order_by(CustomerLedgerEntry.created_at.asc(), CustomerLedgerEntry.id.asc()).all()
 
 
+def detalle_del_abono(db: Session, *, org_id: int, pago) -> dict:
+    """Reconstruye qué cubrió un abono a partir del ledger (spec 2026-10-29 §4.3).
+
+    Sin columna nueva: los asientos de abono del mismo cliente nacidos en la
+    misma transacción que el `Payment` (misma marca de tiempo, ±2 s) son los
+    suyos. Los saldos se reconstruyen hacia atrás desde el saldo de hoy: se
+    deshace todo asiento del cliente posterior al último asiento del abono
+    (ventas fiadas, otros abonos, cancelaciones) para obtener "Saldo actual" y,
+    sumando lo abonado, "Saldo anterior". Así una reimpresión repite el recibo
+    original aunque el cliente haya movido su cuenta desde entonces.
+
+    `paid_in_full` de cada renglón sí es "al momento de imprimir" (lee la deuda
+    que le queda hoy al ticket), no al momento del abono.
+    """
+    from datetime import timedelta
+    from app.models.sales import SalesDocument
+
+    customer = db.query(Customer).filter(
+        Customer.id == pago.customer_id, Customer.organization_id == org_id).one()
+
+    # Enlace determinista: `aplicar_abono(recibo=...)` marca cada asiento con
+    # el sufijo " [AB-XXXXXXXX]" del Payment.
+    folio = f"AB-{pago.id[:8].upper()}"
+    propios = db.query(CustomerLedgerEntry).filter(
+        CustomerLedgerEntry.organization_id == org_id,
+        CustomerLedgerEntry.customer_id == customer.id,
+        CustomerLedgerEntry.description.like(f"% [{folio}]"),
+    ).order_by(CustomerLedgerEntry.created_at.asc(), CustomerLedgerEntry.id.asc()).all()
+    asientos = [a for a in propios if es_abono(a)]
+    if not asientos:
+        # Abonos registrados antes del sufijo no lo traen: se cae a la ventana
+        # de tiempo (asientos de abono del cliente nacidos con el Payment, ±2 s).
+        cuando = _utc(pago.created_at)
+        asientos = [
+            a for a in asientos_del_cliente(db, org_id=org_id, customer_id=customer.id)
+            if es_abono(a) and a.created_at is not None
+            and abs(_utc(a.created_at) - cuando) <= timedelta(seconds=2)
+        ]
+    ids = [a.sales_document_id for a in asientos if a.sales_document_id]
+    docs = {
+        d.id: d for d in db.query(SalesDocument).filter(
+            SalesDocument.id.in_(ids), SalesDocument.organization_id == org_id).all()
+    } if ids else {}
+    applied = [
+        {
+            "sales_document_id": a.sales_document_id,
+            "folio": DocumentoAbierto(documento=docs[a.sales_document_id], saldo=CERO).folio,
+            "amount": -_dec(a.amount),
+            # Liquidado según la deuda que queda, no por el estado: un ticket con
+            # devolución parcial puede quedar en cero sin ser PAID.
+            "paid_in_full": saldo_documento(
+                db, org_id=org_id, documento=docs[a.sales_document_id], customer_id=customer.id,
+            ) <= CENTAVO / 2,
+        }
+        for a in asientos if a.sales_document_id in docs
+    ]
+    unapplied = sum((-_dec(a.amount) for a in asientos if not a.sales_document_id), CERO)
+    abonado = sum((-_dec(a.amount) for a in asientos), CERO)
+    despues = _dec(customer.current_balance)
+    if asientos:
+        ultimo = max(a.id for a in asientos)
+        posteriores = db.query(func.coalesce(func.sum(CustomerLedgerEntry.amount), 0)).filter(
+            CustomerLedgerEntry.organization_id == org_id,
+            CustomerLedgerEntry.customer_id == customer.id,
+            CustomerLedgerEntry.id > ultimo,
+        ).scalar()
+        despues -= _dec(posteriores)
+    return {"customer": customer, "applied": applied, "unapplied": unapplied,
+            "balance_after": despues, "balance_before": despues + abonado}
+
+
+# --------------------------------------------------------------------------
+# Cuentas por cobrar (spec 2026-10-29 §3.1)
+# --------------------------------------------------------------------------
+@dataclass
+class ClienteCobranza:
+    customer: Customer
+    balance: Decimal
+    cargo_mas_viejo: Optional[datetime]
+    dias: int
+    ultimo_abono: Optional[datetime]
+    branch_id: Optional[int]
+    branch_name: Optional[str]
+    tickets_abiertos: int
+    antiguedad: dict[str, Decimal]
+
+
+def cuentas_por_cobrar(
+    db: Session, *, org_id: int, branch_id: Optional[int] = None, bucket: Optional[str] = None,
+    search: Optional[str] = None, order: str = "saldo", ahora: Optional[datetime] = None,
+) -> tuple[dict, list[ClienteCobranza]]:
+    """Quién debe, cuánto y desde cuándo. Recorre asientos en Python por
+    cliente (decenas en una boutique); `limit` lo acota el router. La sucursal
+    de un cliente es la de su última venta. `a_favor` suma los saldos negativos
+    del mismo filtro de búsqueda y va aparte: no se resta de `por_cobrar`."""
+    from app.models.organization import Branch
+    from app.models.sales import SalesDocument
+
+    ahora = ahora or datetime.now(timezone.utc)
+    q = db.query(Customer).filter(Customer.organization_id == org_id, Customer.current_balance != 0)
+    if search and search.strip():
+        like = f"%{search.strip()}%"
+        q = q.filter(or_(Customer.name.ilike(like), Customer.phone.ilike(like)))
+    clientes = q.all()
+    a_favor = sum((-_dec(c.current_balance) for c in clientes if _dec(c.current_balance) < 0), CERO)
+
+    filas: list[ClienteCobranza] = []
+    for c in clientes:
+        saldo = _dec(c.current_balance)
+        if saldo <= 0:
+            continue
+        ultima = (
+            db.query(SalesDocument.branch_id, Branch.name)
+            .join(Branch, Branch.id == SalesDocument.branch_id)
+            .filter(SalesDocument.customer_id == c.id, SalesDocument.organization_id == org_id)
+            .order_by(SalesDocument.created_at.desc()).first()
+        )
+        b_id, b_name = (ultima[0], ultima[1]) if ultima else (None, None)
+        if branch_id is not None and b_id != branch_id:
+            continue
+        asientos = asientos_del_cliente(db, org_id=org_id, customer_id=c.id)
+        antig = antiguedad_por_cargo(asientos, ahora=ahora)
+        if bucket and antig.get(bucket, CERO) <= 0:
+            continue
+        pendientes = cargos_pendientes(asientos)
+        mas_viejo = next((creado for creado, _ in pendientes if creado is not None), None)
+        abonos = [_utc(a.created_at) for a in asientos if es_abono(a) and a.created_at is not None]
+        filas.append(ClienteCobranza(
+            customer=c, balance=saldo, cargo_mas_viejo=mas_viejo,
+            dias=(ahora - _utc(mas_viejo)).days if mas_viejo else 0,
+            ultimo_abono=max(abonos) if abonos else None,
+            branch_id=b_id, branch_name=b_name,
+            tickets_abiertos=len(documentos_abiertos(db, org_id=org_id, customer=c)),
+            antiguedad=antig,
+        ))
+    if order == "antiguedad":
+        filas.sort(key=lambda f: (-f.dias, -f.balance, f.customer.name or ""))
+    else:
+        filas.sort(key=lambda f: (-f.balance, f.customer.name or ""))
+    vencido = sum((f.antiguedad["31_60"] + f.antiguedad["61_90"] + f.antiguedad["91_plus"] for f in filas), CERO)
+    resumen = {
+        "por_cobrar": sum((f.balance for f in filas), CERO),
+        "vencido_30": vencido,
+        "clientes": len(filas),
+        "a_favor": a_favor,
+    }
+    return resumen, filas
+
+
 __all__ = [
     "deuda_cargada_por_documento",
     "saldo_documento",
@@ -342,6 +555,16 @@ __all__ = [
     "aplicar_abono",
     "revertir_cargo_de_documento",
     "aplicar_devolucion_a_saldo",
+    "cargos_pendientes",
     "antiguedad_por_cargo",
+    "ClienteCobranza",
+    "cuentas_por_cobrar",
     "asientos_del_cliente",
+    "detalle_del_abono",
+    "PREFIJOS_REVERSION",
+    "es_reversion",
+    "es_abono",
+    "filtro_sql_reversion",
+    "filtro_sql_cargo_o_reversion",
+    "filtro_sql_abono",
 ]

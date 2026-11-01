@@ -74,6 +74,7 @@ const Products        = lazy(() => import('./pages/inventory/Products').then(m =
 
 // CRM / HR
 const Customers       = lazy(() => import('./pages/crm/Customers').then(m => ({ default: m.Customers })))
+const Cobranza        = lazy(() => import('./pages/crm/Cobranza').then(m => ({ default: m.Cobranza })))
 const HR              = lazy(() => import('./pages/hr/HR').then(m => ({ default: m.HR })))
 const HRMe            = lazy(() => import('./pages/hr/HRMe').then(m => ({ default: m.HRMe })))
 
@@ -353,6 +354,7 @@ export default function App() {
 
           {/* CRM / HR */}
           <Route path="customers"  element={<RutaPorRol url="/customers"><Suspense fallback={<PageLoader />}><Customers /></Suspense></RutaPorRol>} />
+          <Route path="customers/cobranza" element={<RutaPorRol url="/customers/cobranza"><Suspense fallback={<PageLoader />}><Cobranza /></Suspense></RutaPorRol>} />
           <Route path="hr"         element={<RutaPorRol url="/hr"><Suspense fallback={<PageLoader />}><HR /></Suspense></RutaPorRol>} />
           <Route path="hr/me"      element={<RutaPorRol url="/hr/me"><Suspense fallback={<PageLoader />}><HRMe /></Suspense></RutaPorRol>} />
 

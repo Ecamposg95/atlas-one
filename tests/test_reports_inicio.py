@@ -246,7 +246,7 @@ def test_alias_inicio_basico_sigue_respondiendo(client, db, org, branch_a, admin
     assert a == b
     assert a["hoy"]["total"] == 100.0
     assert set(a) == {"branch_id", "hoy", "ayer", "semana", "por_metodo_hoy", "top_semana", "poca_existencia", "corte",
-                      "sin_movimiento", "pendientes", "sucursales", "utilidad_bruta_hoy", "venta_sin_costo_hoy", "venta_con_costo_hoy",
+                      "sin_movimiento", "pendientes", "por_cobrar", "sucursales", "utilidad_bruta_hoy", "venta_sin_costo_hoy", "venta_con_costo_hoy",
                       "tendencia", "por_hora_hoy", "utilidad_bruta_ayer"}
 
 
@@ -256,8 +256,34 @@ def test_sin_completo_las_secciones_nuevas_son_null(client, db, org, branch_a, a
     d = client.get(INICIO, headers=auth_admin).json()
     assert d["sin_movimiento"] is None
     assert d["pendientes"] is None
+    assert d["por_cobrar"] is None
     assert d["sucursales"] is None
     assert d["utilidad_bruta_hoy"] is None
+
+
+def test_por_cobrar_solo_con_completo_rol_de_oficina_y_crm(client, db, org, branch_a, admin_user, auth_admin, cajero_a, auth_cajero_a):
+    from app.models.modules import Module, OrganizationModule
+    from app.modules.customers.models import Customer, CustomerLedgerEntry
+    cliente = Customer(name="Fiada", organization_id=org.id, current_balance=Decimal("0"))
+    db.add(cliente); db.commit()
+    doc = _venta(db, org, branch_a, cajero_a, _variante(db, org, branch_a, "Blusa", "BL-1", 5), "300",
+                 status=DocumentStatus.PENDING, dias_atras=40)
+    doc.customer_id = cliente.id
+    cargo = CustomerLedgerEntry(customer_id=cliente.id, sales_document_id=doc.id, organization_id=org.id,
+                                amount=Decimal("300"), description="Venta a crédito")
+    cargo.created_at = doc.created_at
+    cliente.current_balance = Decimal("300")
+    db.add(cargo); db.commit()
+
+    assert client.get(f"{INICIO}?completo=true", headers=auth_admin).json()["por_cobrar"] is None, "sin módulo crm"
+
+    if db.query(Module).filter(Module.key == "crm").first() is None:
+        db.add(Module(key="crm", name="crm")); db.flush()
+    db.add(OrganizationModule(organization_id=org.id, module_key="crm", is_enabled=True)); db.commit()
+
+    assert client.get(INICIO, headers=auth_admin).json()["por_cobrar"] is None, "sin completo"
+    pc = client.get(f"{INICIO}?completo=true", headers=auth_admin).json()["por_cobrar"]
+    assert pc == {"total": 300.0, "vencido_30": 300.0, "clientes": 1}
 
 
 def test_sin_movimiento_vendido_hace_diez_dias_sale_con_treinta_no_con_cinco(client, db, org, branch_a, admin_user, auth_admin):

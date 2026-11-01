@@ -55,17 +55,41 @@ abono o una devolución. `sales.py::_deuda_cargada_por_documento` quedó como al
 1. **Qué cuenta como "Ventas hoy"** con una venta fiada: hoy no cuenta hasta liquidarse y ese
    día cuenta completa (`SALES_REPORT_STATUSES` excluye PENDING). Opciones: contar la venta el
    día que sale la mercancía (recomendada: es lo que descuenta inventario; los abonos son
-   cobranza) o contar solo el dinero que entra. Decisión del dueño pendiente.
+   cobranza) o contar solo el dinero que entra. → **resuelto en el spec 2026-10-29 / plan
+   2026-10-31:** la venta fiada (ticket `INVOICE` PENDING con cliente) cuenta el día que sale la
+   mercancía (`filtro_venta_reconocida`); los abonos son cobranza y se reportan aparte
+   (`fiado` / `cobranza`). Cotizaciones y pedidos PENDING no cuentan.
 2. **Vista detallada del dueño**: quién debe, cuánto, desde cuándo (la antigüedad ya cuadra),
    historial por cliente y por sucursal, cuentas por cobrar en Inicio/Reportes. Hoy
-   `/reports/aging-report` no tiene pantalla.
-3. **Abonos desde el POS** (hoy solo desde Clientes) y recibo/ticket del abono.
-4. **Recordatorios por WhatsApp** (hoy solo el estado de cuenta manual).
+   `/reports/aging-report` no tiene pantalla. → **resuelto en el spec 2026-10-29 / plan
+   2026-10-31:** `/customers/cobranza` (`GET /api/customers/cobranza`) y la tarjeta Por cobrar
+   del Inicio. La antigüedad ahora aplica los asientos ligados a un ticket (reversiones,
+   `ABONO A TICKET`) al cargo de su propio documento y solo los abonos libres corren FIFO;
+   esto también cambió los cubos de `/reports/aging-report`.
+3. **Abonos desde el POS** (hoy solo desde Clientes) y recibo/ticket del abono. → **resuelto en
+   el spec 2026-10-29 / plan 2026-10-31:** botón `Abonar` en Cliente del POS (`AbonoModal`
+   compartido) y recibo por `POST /api/printer/print-abono/{payment_id}`, folio
+   `AB-{payment_id[:8].upper()}`. Cada asiento que escribe `aplicar_abono` termina en
+   ` [AB-XXXXXXXX]` y `detalle_del_abono` encuentra por ese sufijo los asientos de un pago;
+   solo para abonos registrados antes de esta rama cae a una ventana de ±2 s.
+4. **Recordatorios por WhatsApp** (hoy solo el estado de cuenta manual). → **resuelto en el spec
+   2026-10-29 / plan 2026-10-31:** botón WhatsApp (`wa.me`, texto fijo) en cuentas por cobrar.
 5. **Abono en efectivo de un rol de oficina sin sucursal**: queda sin caja (`cash_session_id`
    NULL) y, si trae ticket, cae al respaldo por documento del corte original. Decidir si se
-   bloquea o se pide sucursal.
+   bloquea o se pide sucursal. → **resuelto en el spec 2026-10-29 / plan 2026-10-31:** se
+   bloquea con 422 («Para recibir efectivo elige una sucursal con caja abierta; tarjeta y
+   transferencia sí se pueden registrar»); tarjeta y transferencia pasan sin sucursal.
 6. **Abonos libres anteriores a esta auditoría** no tienen enlace a ticket: esos tickets siguen
    PENDING aunque el saldo esté en cero. Un script de conciliación FIFO es trivial con
    `aplicar_abono`; correrlo cuando se migre a producción si hay datos (Eleven hoy no fía).
+   → **resuelto en el spec 2026-10-29 / plan 2026-10-31:** `scripts/conciliar_abonos_fifo.py`
+   (`--org N [--antes AAAA-MM-DD] [--dry-run]`): suma los abonos sueltos anteriores a `--antes`
+   (default 2026-10-28) y marca PAID los tickets más viejos que esa bolsa cubre por completo;
+   no crea asientos ni toca `current_balance`, es idempotente. Correrlo a mano por organización.
+   Un ticket PAID no debe nada (`saldo_documento` devuelve 0 aunque el ledger conserve el cargo sin
+   abono enlazado): tras conciliar, el ticket sale de `documentos_abiertos`, de `/unpaid-documents`
+   y del selector del abono, y el siguiente abono libre ya no cae sobre él. Vale también para
+   tickets PAID legados.
 7. Portal del cliente (`pages/portal/Portal.tsx`) pinta el saldo deudor en verde y el saldo a
-   favor en rojo: colores invertidos respecto al CRM.
+   favor en rojo: colores invertidos respecto al CRM. → **resuelto en el spec 2026-10-29 /
+   plan 2026-10-31:** hecho (deudor `text-dax-danger`, a favor `text-dax-success`).

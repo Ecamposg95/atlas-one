@@ -7,6 +7,7 @@ Phase 2 / S2: moved from app/routers/customers.py. Imports point to the
 local module (models, schemas) instead of the legacy global namespace.
 """
 import logging
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
@@ -22,6 +23,11 @@ from app.modules.customers.schemas import (
     CustomerUpdate,
     LedgerEntryResponse,
     CustomerPaymentCreate,
+    AbonoResponse,
+    AbonoAplicado,
+    CobranzaResponse,
+    ClienteCobranzaOut,
+    ResumenCobranza,
 )
 from app.core.security import get_current_user
 from app.core.security.guards import require_admin_or_owner
@@ -101,6 +107,56 @@ def get_customer_stats(
         "with_debt": base.filter(Customer.current_balance > 0).count(),
         "with_credit": base.filter(Customer.current_balance < 0).count(),
     }
+
+
+@router.get("/cobranza", response_model=CobranzaResponse)
+def cuentas_por_cobrar_endpoint(
+    branch_id: Optional[int] = None,
+    bucket: Optional[str] = None,
+    search: Optional[str] = None,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    order: str = Query("saldo", pattern="^(saldo|antiguedad)$"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    org_id: int = Depends(get_current_active_organization),
+):
+    """Cuentas por cobrar (spec 2026-10-29 §3.1): quién debe, cuánto, desde
+    cuándo. Solo roles de oficina. Va antes de `GET /{customer_id}` para que
+    "cobranza" no se intente leer como id."""
+    from app.models.users import PlatformRole
+    from app.services.metricas_ventas import HQ_ROLES
+    from app.modules.customers.services import BUCKETS, cuentas_por_cobrar
+
+    rol = str(getattr(current_user.role, "value", current_user.role))
+    if rol not in HQ_ROLES and getattr(current_user, "platform_role", None) != PlatformRole.SUPERADMIN:
+        raise HTTPException(status_code=403, detail="Solo administración puede ver las cuentas por cobrar")
+    if bucket and bucket not in BUCKETS:
+        raise HTTPException(status_code=422, detail=f"bucket debe ser uno de: {', '.join(BUCKETS)}")
+    # Mismo criterio que el Inicio (`reports_inicio._sucursal_del_inicio`): el
+    # GERENTE solo ve su sucursal y el `branch_id` que mande se ignora, para
+    # que la tarjeta "Por cobrar" y esta pantalla den las mismas cifras.
+    if rol == "GERENTE" and getattr(current_user, "platform_role", None) != PlatformRole.SUPERADMIN:
+        if not current_user.branch_id:
+            raise HTTPException(status_code=403, detail="Tu usuario no tiene una sucursal asignada")
+        branch_id = current_user.branch_id
+
+    resumen, filas = cuentas_por_cobrar(
+        db, org_id=org_id, branch_id=branch_id, bucket=bucket, search=search, order=order)
+    pagina = filas[skip: skip + limit]
+    return CobranzaResponse(
+        resumen=ResumenCobranza(**resumen),
+        total=len(filas),
+        items=[
+            ClienteCobranzaOut(
+                id=f.customer.id, name=f.customer.name, phone=f.customer.phone, balance=f.balance,
+                cargo_mas_viejo=f.cargo_mas_viejo, dias=f.dias, ultimo_abono=f.ultimo_abono,
+                branch_id=f.branch_id, branch_name=f.branch_name,
+                tickets_abiertos=f.tickets_abiertos, antiguedad=f.antiguedad,
+            )
+            for f in pagina
+        ],
+    )
 
 
 # --------------------------------------------------------------------------
@@ -456,7 +512,7 @@ def get_customer_unpaid_documents(
 # ni turno de caja, asi que un abono en efectivo le respondia 409 y nadie
 # podia recibirlo. Lo que SI es de administracion —borrar un cliente— sigue
 # con `require_admin_or_owner`.
-@router.post("/{customer_id}/pay", response_model=LedgerEntryResponse)
+@router.post("/{customer_id}/pay", response_model=AbonoResponse)
 def register_customer_payment(
     customer_id: int,
     payment_in: CustomerPaymentCreate,
@@ -468,11 +524,9 @@ def register_customer_payment(
     Registra un abono/pago de un cliente y actualiza su saldo.
     Si se proporciona sales_document_id, vincula el pago a ese documento específico.
 
-    Solo administrador/dueño: un abono mueve el saldo de crédito del cliente y
-    —cuando es en efectivo— entra al cajón de quien lo cobra. Ojo: el guard de
-    efectivo de más abajo sigue vigente para TODOS los roles, así que quien
-    registre un abono en efectivo desde una sucursal necesita su propia caja
-    abierta.
+    Cualquier rol con el módulo `crm` puede abonar; el efectivo exige caja
+    abierta de quien cobra (y sucursal). Devuelve qué tickets cubrió y el saldo
+    antes/después (spec 2026-10-29 §4.2).
     """
     from app.models import SalesDocument
     
@@ -537,13 +591,20 @@ def register_customer_payment(
     # venta original —cerrada y cuadrada dias antes—, que pasaba a mostrar un
     # faltante por el monto del abono.
     #
-    # Dos diferencias deliberadas con el checkout, ambas conservan lo que ya
-    # se permitia aqui: (a) solo el efectivo exige turno; tarjeta y
-    # transferencia se siguen registrando sin caja (no tocan el cajon) y se
-    # atribuyen cuando hay una abierta; (b) la exencion de oficina central es
-    # la misma que alla — sin `branch_id` no hay cajon del que responder.
+    # Una diferencia deliberada con el checkout: solo el efectivo exige turno;
+    # tarjeta y transferencia se siguen registrando sin caja (no tocan el
+    # cajon) y se atribuyen cuando hay una abierta.
     cobra_efectivo = method_enum == SalesPaymentMethod.CASH
-    requiere_caja = cobra_efectivo and bool(current_user.branch_id)
+    # Spec 2026-10-29 §6.1: sin sucursal no hay cajón que responda por los
+    # billetes. Antes el rol de oficina quedaba exento y el efectivo nacía
+    # sin caja (caía al respaldo por documento del corte original); ahora
+    # solo tarjeta y transferencia pasan sin sucursal.
+    if cobra_efectivo and not current_user.branch_id:
+        raise HTTPException(
+            status_code=422,
+            detail="Para recibir efectivo elige una sucursal con caja abierta; tarjeta y transferencia sí se pueden registrar",
+        )
+    requiere_caja = cobra_efectivo
     if requiere_caja and cash_session_id_value is None:
         logger.warning(
             "BLOCKED_CUSTOMER_PAYMENT: user_id=%s branch_id=%s customer_id=%s "
@@ -563,6 +624,10 @@ def register_customer_payment(
     # tickets PENDING para siempre, y el ticket solo se marcaba PAID cuando
     # el saldo TOTAL del cliente llegaba a cero (con dos tickets fiados,
     # liquidar el primero no lo cerraba).
+    saldo_antes = Decimal(str(customer.current_balance or 0))
+    # El id del Payment se fija ya (el default del modelo corre al flush): su
+    # folio AB-… marca los asientos y así el recibo los reconoce sin ambigüedad.
+    payment_id = str(uuid.uuid4())
     asientos = aplicar_abono(
         db,
         org_id=org_id,
@@ -570,13 +635,14 @@ def register_customer_payment(
         amount=payment_in.amount,
         documento=doc,
         referencia=payment_in.reference or payment_in.method,
+        recibo=f"AB-{payment_id[:8].upper()}",
     )
-    new_entry = asientos[0]
 
     # ATS-37: Create a Payment record linked to the SalesDocument
     # (`method_enum` y `cash_session_id_value` se resolvieron arriba, antes de
     # tocar el saldo, porque el guard de efectivo depende de ambos.)
     payment_record = SalesPayment(
+        id=payment_id,
         sales_document_id=payment_in.sales_document_id,
         customer_id=customer.id,
         created_by_id=current_user.id,
@@ -587,10 +653,43 @@ def register_customer_payment(
         cash_session_id=cash_session_id_value,
     )
     db.add(payment_record)
+    db.flush()
+
+    # Qué tickets cubrió el abono (un asiento por ticket; el asiento sin
+    # documento es lo que quedó a favor del cliente).
+    from app.modules.customers.services import CENTAVO, CERO, DocumentoAbierto
+    ids = [a.sales_document_id for a in asientos if a.sales_document_id]
+    docs = {d.id: d for d in db.query(SalesDocument).filter(SalesDocument.id.in_(ids)).all()} if ids else {}
+    applied = [
+        AbonoAplicado(
+            sales_document_id=a.sales_document_id,
+            folio=DocumentoAbierto(documento=docs[a.sales_document_id], saldo=CERO).folio,
+            amount=-Decimal(str(a.amount)),
+            # Por la deuda que queda, no por el estatus: un ticket que no está
+            # PENDING (p. ej. REFUNDED_PARTIAL) no se marca PAID aunque ya no deba.
+            paid_in_full=saldo_documento(
+                db, org_id=org_id, documento=docs[a.sales_document_id], customer_id=customer.id,
+            ) <= CENTAVO / 2,
+        )
+        for a in asientos if a.sales_document_id in docs
+    ]
+    unapplied = sum((-Decimal(str(a.amount)) for a in asientos if not a.sales_document_id), Decimal("0"))
 
     db.commit()
-    db.refresh(new_entry)
-    return new_entry
+    for a in asientos:
+        db.refresh(a)
+    db.refresh(payment_record)
+    return AbonoResponse(
+        entries=[LedgerEntryResponse.model_validate(a) for a in asientos],
+        customer_balance_before=saldo_antes,
+        customer_balance_after=Decimal(str(customer.current_balance)),
+        applied=applied,
+        unapplied=unapplied,
+        payment_id=payment_record.id,
+        method=method_enum.value,
+        reference=payment_in.reference,
+        received_at=payment_record.created_at,
+    )
 
 from fastapi import Response
 from app.modules.customers.statement_pdf import (

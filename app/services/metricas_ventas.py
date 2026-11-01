@@ -6,8 +6,9 @@ borraba la venta entera), `/sales/stats` sumaba pendientes y borradores, y
 nadie restaba devoluciones. "Ventas hoy" daba tres números. Aquí vive el
 criterio y los routers solo arman la respuesta.
 
-Venta neta = documentos en `SALES_REPORT_STATUSES` a su `total_amount` original
-menos devoluciones APROBADAS en el periodo (por la fecha de la devolución).
+Venta neta = documentos cobrados o fiados (`filtro_venta_reconocida`) a su
+`total_amount` original menos devoluciones APROBADAS en el periodo (por la
+fecha de la devolución).
 Toda fecha se compara en día de México.
 """
 from dataclasses import dataclass
@@ -21,11 +22,14 @@ from sqlalchemy import case, desc, func, or_
 from sqlalchemy.orm import Session
 
 from app.models import Payment, SaleReturn, SalesDocument, SalesLineItem, User
+from app.models.cash import CashSession
 from app.models.products import ProductVariant
 from app.models.returns import SaleReturnItem
 from app.models.sales import PaymentMethod
 from app.models.users import PlatformRole
-from app.services.cash_reconciliation import SALES_REPORT_STATUSES
+from app.modules.customers.models import CustomerLedgerEntry
+from app.modules.customers.services import filtro_sql_cargo_o_reversion
+from app.services.cash_reconciliation import filtro_venta_reconocida
 
 ZONA = "America/Mexico_City"
 MX = ZoneInfo(ZONA)
@@ -131,7 +135,7 @@ def ve_costos(user: User) -> bool:
 def filtros_documentos(ambito: Ambito, periodo: Periodo) -> list:
     f = [
         SalesDocument.organization_id == ambito.organization_id,
-        SalesDocument.status.in_(SALES_REPORT_STATUSES),
+        filtro_venta_reconocida(),
         dia_mx(SalesDocument.created_at) >= periodo.inicio,
         dia_mx(SalesDocument.created_at) <= periodo.fin,
     ]
@@ -164,13 +168,56 @@ class Resumen:
     tickets: int
     devoluciones: int
     ticket_promedio: float
+    fiado: float = 0.0      # lo que quedó a cuenta en las ventas del periodo (spec 2026-10-29 §2.2)
+    cobranza: float = 0.0   # abonos recibidos en el periodo; no son venta
 
 
-def _armar_resumen(bruta, devuelto, tickets, devoluciones) -> Resumen:
+def _armar_resumen(bruta, devuelto, tickets, devoluciones, fiado=0, cobranza=0) -> Resumen:
     bruta, devuelto, tickets, devoluciones = _f(bruta), _f(devuelto), int(tickets or 0), int(devoluciones or 0)
     neta = round(bruta - devuelto, 2)
     return Resumen(bruta=bruta, devuelto=devuelto, neta=neta, tickets=tickets, devoluciones=devoluciones,
-                   ticket_promedio=round(neta / tickets, 2) if tickets else 0.0)
+                   ticket_promedio=round(neta / tickets, 2) if tickets else 0.0,
+                   fiado=_f(fiado), cobranza=_f(cobranza))
+
+
+def _filtros_abonos(ambito: Ambito, periodo: Periodo) -> list:
+    """Abonos a cuenta del periodo: `Payment` con cliente (solo los crea
+    POST /customers/{id}/pay). La sucursal es la de la caja que los recibió
+    (`Payment.cash_session_id`); sin caja, el abono cuenta en toda la
+    organización y en ninguna sucursal."""
+    f = [
+        Payment.organization_id == ambito.organization_id,
+        Payment.customer_id.isnot(None),
+        dia_mx(Payment.created_at) >= periodo.inicio,
+        dia_mx(Payment.created_at) <= periodo.fin,
+    ]
+    if not ambito.toda_la_org:
+        f.append(CashSession.branch_id == ambito.branch_id)
+    return f
+
+
+def fiado(db: Session, ambito: Ambito, periodo: Periodo) -> float:
+    """Lo que quedó a cuenta en las ventas del periodo: cargos del ledger ligados
+    a documentos del ámbito creados en el periodo, menos lo que una cancelación
+    o devolución ya revirtió. Los abonos no restan: son cobranza."""
+    total = (
+        db.query(func.coalesce(func.sum(CustomerLedgerEntry.amount), 0))
+        .join(SalesDocument, SalesDocument.id == CustomerLedgerEntry.sales_document_id)
+        .filter(*filtros_documentos(ambito, periodo), filtro_sql_cargo_o_reversion())
+        .scalar()
+    )
+    return _f(total)
+
+
+def cobranza(db: Session, ambito: Ambito, periodo: Periodo) -> float:
+    """Abonos recibidos en el periodo (fecha del pago). No son venta."""
+    total = (
+        db.query(func.coalesce(func.sum(Payment.amount), 0))
+        .outerjoin(CashSession, CashSession.id == Payment.cash_session_id)
+        .filter(*_filtros_abonos(ambito, periodo))
+        .scalar()
+    )
+    return _f(total)
 
 
 def resumen(db: Session, ambito: Ambito, periodo: Periodo) -> Resumen:
@@ -180,7 +227,8 @@ def resumen(db: Session, ambito: Ambito, periodo: Periodo) -> Resumen:
     devs = db.query(
         func.coalesce(func.sum(SaleReturn.total_refunded), 0), func.count(SaleReturn.id),
     ).filter(*filtros_devoluciones(ambito, periodo)).one()
-    return _armar_resumen(docs[0], devs[0], docs[1], devs[1])
+    return _armar_resumen(docs[0], devs[0], docs[1], devs[1],
+                          fiado=fiado(db, ambito, periodo), cobranza=cobranza(db, ambito, periodo))
 
 
 RESUMEN_VACIO = Resumen(bruta=0.0, devuelto=0.0, neta=0.0, tickets=0, devoluciones=0, ticket_promedio=0.0)
@@ -307,11 +355,27 @@ def por_sucursal(db: Session, org_id: int, periodo: Periodo) -> Dict[int, Resume
                           func.count(SaleReturn.id).label("n"))
         .filter(*filtros_devoluciones(ambito, periodo)).group_by(SaleReturn.branch_id).all()
     }
+    fiados = {
+        r.branch_id: r.total
+        for r in db.query(SalesDocument.branch_id, func.coalesce(func.sum(CustomerLedgerEntry.amount), 0).label("total"))
+        .select_from(CustomerLedgerEntry)
+        .join(SalesDocument, SalesDocument.id == CustomerLedgerEntry.sales_document_id)
+        .filter(*filtros_documentos(ambito, periodo), filtro_sql_cargo_o_reversion())
+        .group_by(SalesDocument.branch_id).all()
+    }
+    cobranzas = {
+        r.branch_id: r.total
+        for r in db.query(CashSession.branch_id, func.coalesce(func.sum(Payment.amount), 0).label("total"))
+        .select_from(Payment)
+        .join(CashSession, CashSession.id == Payment.cash_session_id)
+        .filter(*_filtros_abonos(ambito, periodo))
+        .group_by(CashSession.branch_id).all()
+    }
     salida = {}
-    for b in set(docs) | set(devs):
+    for b in set(docs) | set(devs) | set(fiados) | set(cobranzas):
         bruta, n = docs.get(b, (0, 0))
         devuelto, nd = devs.get(b, (0, 0))
-        salida[b] = _armar_resumen(bruta, devuelto, n, nd)
+        salida[b] = _armar_resumen(bruta, devuelto, n, nd, fiado=fiados.get(b, 0), cobranza=cobranzas.get(b, 0))
     return salida
 
 

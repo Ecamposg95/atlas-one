@@ -10,7 +10,7 @@ de mostrador no debe hacer cinco llamadas para pintar el inicio, y una FREE no
 paga las consultas de las secciones que no pinta. `/inicio-basico` es el alias
 del frontend anterior.
 
-Solo lectura. Reusa el criterio de los reportes: `SALES_REPORT_STATUSES` para
+Solo lectura. Reusa el criterio de los reportes: `filtro_venta_reconocida` para
 "esto ya es venta", `metricas_ventas` leído directamente para los cobros
 (descuenta el vuelto del efectivo) y `compute_expected_cash` para la caja. Ámbito como la valuación:
 ADMIN/DUEÑO/SUPERADMIN ven la org o la sucursal que pidan; GERENTE, la suya.
@@ -34,14 +34,15 @@ from app.models import (
     StockOnHand, User,
 )
 from app.models.cash import CashSession, CashSessionStatus
+from app.models.modules import OrganizationModule
 from app.models.users import PlatformRole, Role
 from app.routers.reports import _describe_name, _today_mx
 from app.schemas.reports import (
     CorteInicio, DiaTendencia, DiferenciaCaja, HoraInicio, InicioResponse, Pendientes, PeriodoVentas,
-    PocaExistencia, ProductoPocaExistencia, ProductoSinMovimiento, ProductoTop, SinMovimiento, SucursalInicio,
+    PocaExistencia, PorCobrar, ProductoPocaExistencia, ProductoSinMovimiento, ProductoTop, SinMovimiento, SucursalInicio,
     Tendencia,
 )
-from app.services.cash_reconciliation import SALES_REPORT_STATUSES, compute_expected_cash
+from app.services.cash_reconciliation import compute_expected_cash, filtro_venta_reconocida
 from app.services import metricas_ventas as mv
 from app.services.existencias import umbral_poca_existencia
 
@@ -83,7 +84,8 @@ def _ambito(org_id: int, sucursal: Optional[int]) -> mv.Ambito:
 
 def _periodo(db: Session, org_id: int, sucursal: Optional[int], desde: date, hasta: date) -> PeriodoVentas:
     r = mv.resumen(db, _ambito(org_id, sucursal), mv.Periodo(desde, hasta))
-    return PeriodoVentas(desde=desde, hasta=hasta, total=r.neta, devuelto=r.devuelto, tickets=r.tickets)
+    return PeriodoVentas(desde=desde, hasta=hasta, total=r.neta, devuelto=r.devuelto, tickets=r.tickets,
+                         fiado=r.fiado, cobranza=r.cobranza)
 
 
 def _top(db: Session, org_id: int, sucursal: Optional[int], desde: date, hasta: date) -> List[ProductoTop]:
@@ -196,7 +198,7 @@ def _existencias_del_ambito(db: Session, org_id: int, sucursal: Optional[int]):
 def _sin_movimiento(db: Session, org_id: int, sucursal: Optional[int], dias: int) -> SinMovimiento:
     """Variantes con existencia > 0 y SIN renglón de venta válida en los últimos `dias` días.
 
-    Solo cuentan ventas en `SALES_REPORT_STATUSES` (una cancelada no "mueve" el
+    Solo cuentan ventas reconocidas, cobradas o fiadas (una cancelada no "mueve" el
     producto). Una variante dada de alta dentro de la ventana no ha tenido tiempo
     de moverse (un lote recién cargado taparía lo que sí está parado): fuera.
     Orden por importe a venta: lo que más dinero tiene parado, primero.
@@ -206,7 +208,7 @@ def _sin_movimiento(db: Session, org_id: int, sucursal: Optional[int], dias: int
         SalesLineItem.variant_id == ProductVariant.id,
         SalesLineItem.document_id == SalesDocument.id,
         SalesDocument.organization_id == org_id,
-        SalesDocument.status.in_(SALES_REPORT_STATUSES),
+        filtro_venta_reconocida(),
         SalesDocument.created_at >= desde,
     )
     existencia = func.sum(StockOnHand.qty_on_hand)
@@ -323,9 +325,27 @@ def _sucursales(db: Session, org_id: int, hoy: date, umbral: int) -> Optional[Li
         )
         salida.append(SucursalInicio(
             branch_id=b.id, nombre=b.name, ventas_hoy=r.neta, devuelto_hoy=r.devuelto, tickets_hoy=r.tickets,
-            corte=_corte(db, org_id, b.id), poca_existencia=int(poca or 0),
+            fiado_hoy=r.fiado, corte=_corte(db, org_id, b.id), poca_existencia=int(poca or 0),
         ))
     return salida
+
+
+def _por_cobrar(db: Session, org_id: int, sucursal: Optional[int], current_user: User) -> Optional[PorCobrar]:
+    """Cuentas por cobrar para la tarjeta del Inicio: solo roles de oficina y
+    solo con el módulo `crm` encendido; si no, None y la tarjeta no se pinta."""
+    rol = str(getattr(current_user.role, "value", current_user.role))
+    if rol not in mv.HQ_ROLES and getattr(current_user, "platform_role", None) != PlatformRole.SUPERADMIN:
+        return None
+    activo = db.query(OrganizationModule.module_key).filter(
+        OrganizationModule.organization_id == org_id, OrganizationModule.module_key == "crm",
+        OrganizationModule.is_enabled == True,  # noqa: E712
+    ).first()
+    if activo is None:
+        return None
+    from app.modules.customers.services import cuentas_por_cobrar
+    resumen, _ = cuentas_por_cobrar(db, org_id=org_id, branch_id=sucursal)
+    return PorCobrar(total=float(resumen["por_cobrar"]), vencido_30=float(resumen["vencido_30"]),
+                     clientes=int(resumen["clientes"]))
 
 
 @router.get("/inicio", response_model=InicioResponse)
@@ -364,6 +384,7 @@ def inicio(
         return respuesta
     respuesta.sin_movimiento = _sin_movimiento(db, org_id, sucursal, dias_sin_movimiento)
     respuesta.pendientes = _pendientes(db, org_id, sucursal)
+    respuesta.por_cobrar = _por_cobrar(db, org_id, sucursal, current_user)
     respuesta.tendencia = _tendencia(db, org_id, sucursal, hoy)
     respuesta.por_hora_hoy = _por_hora_hoy(db, org_id, sucursal, hoy)
     # El gerente ya viene fijado a su sucursal: la sección de sucursales no aplica.

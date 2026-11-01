@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 
 /** Pantallas de la ola 2 del responsivo (catálogo y personas) y, desde SP6, todo el grupo HQ; desde la Fase 2 del admin, Reportes. */
 export const PAGINAS = [
-  'core/Brands.tsx', 'core/Departments.tsx', 'core/Users.tsx', 'crm/Customers.tsx', 'inventory/Inventory.tsx',
+  'core/Brands.tsx', 'core/Departments.tsx', 'core/Users.tsx', 'crm/Customers.tsx', 'crm/Cobranza.tsx', 'inventory/Inventory.tsx',
   'inventory/Products.tsx', 'hq/Inicio.tsx',
   'reports/Reportes.tsx', 'sales/SalesHistory.tsx', 'sales/Returns.tsx', 'hq/HQBranches.tsx', 'hq/HQValorInventario.tsx',
 ]
@@ -37,7 +37,9 @@ describe('ola 2 responsiva: catálogo y personas', () => {
   it('Customers conserva la paginación fuera del condicional y usa Modal del kit para pago y formulario', () => {
     const s = fuente('crm/Customers.tsx')
     expect(s.indexOf('pages > 1')).toBeGreaterThan(s.indexOf('esTelefono ?'))
-    expect(s).toMatch(/import \{ Modal \} from '\.\.\/\.\.\/components\/ui\/Modal'/)
+    // el pago vive en AbonoModal (compartido), que a su vez usa el Modal del kit
+    expect(s).toMatch(/import \{ AbonoModal \} from '\.\.\/\.\.\/components\/crm\/AbonoModal'/)
+    expect(fuente('../components/crm/AbonoModal.tsx')).toMatch(/import \{ Modal \} from '\.\.\/ui\/Modal'/)
     expect((s.match(/fixed inset-0/g) ?? []).length).toBe(1) // solo el estado de cuenta (cabecera propia)
     expect(fuente('crm/CustomerFormModal.tsx')).not.toMatch(/fixed inset-0/)
   })

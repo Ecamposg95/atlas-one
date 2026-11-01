@@ -29,7 +29,7 @@ const DATOS = {
   top_semana: [{ nombre: 'Blusa roja', cantidad: 14, total: 1400 }],
   poca_existencia: { umbral: 3, productos: [{ variant_id: 'v1', nombre: 'Falda negra', sku: 'FAL-1', existencia: 1 }] },
   corte: { estado: 'abierto', cajera: 'Mirna', abierto_en: '2026-10-19T15:00:00+00:00', cerrado_en: null, efectivo_esperado: 1500, efectivo_contado: null },
-  sin_movimiento: null, pendientes: null, sucursales: null, utilidad_bruta_hoy: null, venta_sin_costo_hoy: null, venta_con_costo_hoy: null,
+  sin_movimiento: null, pendientes: null, por_cobrar: null, sucursales: null, utilidad_bruta_hoy: null, venta_sin_costo_hoy: null, venta_con_costo_hoy: null,
   tendencia: null, por_hora_hoy: null, utilidad_bruta_ayer: null,
 }
 // Lo que trae `completo=true` para una org de paga con dos sucursales.
@@ -40,6 +40,7 @@ const COMPLETO = {
     devoluciones: 2, turnos_abiertos: 1,
     diferencias_caja: [{ session_id: 7, sucursal: 'Roma', cajera: 'Lupita', cerrado_en: '2026-10-18T23:00:00+00:00', esperado: 500, contado: 480, diferencia: -20 }],
   },
+  por_cobrar: { total: 4500, vencido_30: 1200, clientes: 3 },
   sucursales: [
     { branch_id: 1, nombre: 'Roma', ventas_hoy: 1000, devuelto_hoy: 0, tickets_hoy: 9, corte: DATOS.corte, poca_existencia: 2 },
     { branch_id: 2, nombre: 'Condesa', ventas_hoy: 234.5, devuelto_hoy: 0, tickets_hoy: 3, corte: { ...DATOS.corte, estado: 'sin_turno' }, poca_existencia: 0 },
@@ -299,5 +300,21 @@ describe('Inicio', () => {
     expect(screen.getByText('Falda negra').closest('a')?.getAttribute('href')).toBe('/inventory?q=FAL-1&variant=v1')
     expect(screen.getByText('Ver ventas →').getAttribute('href')).toBe('/sales')
     expect(screen.getAllByText('Ver inventario →').length).toBeGreaterThan(0)
+  })
+
+  it('pinta "Por cobrar" solo cuando viene y es mayor que cero', async () => {
+    perfil('completo')
+    inicio.mockResolvedValueOnce(COMPLETO); valorInventario.mockResolvedValue(VALUACION)
+    pintar()
+    const tarjeta = await screen.findByTestId('por-cobrar')
+    expect(within(tarjeta).getByText('$4,500.00')).toBeTruthy()
+    expect(within(tarjeta).getByText('$1,200.00')).toBeTruthy()
+    expect(within(tarjeta).getByText('3 clientes')).toBeTruthy()
+    expect(screen.getByRole('link', { name: /Ver cuentas por cobrar/ }).getAttribute('href')).toBe('/customers/cobranza')
+    cleanup()
+    inicio.mockResolvedValueOnce({ ...COMPLETO, por_cobrar: { total: 0, vencido_30: 0, clientes: 0 } })
+    pintar()
+    await screen.findByTestId('pendientes')
+    expect(screen.queryByTestId('por-cobrar')).toBeNull()
   })
 })

@@ -7,6 +7,7 @@ vi.mock('../../../api/customers', () => ({
   customersApi: {
     getAll: vi.fn().mockResolvedValue({ items: [{ id: 1, name: 'Ana', phone: null, tax_id: null, current_balance: 100, credit_limit: null }], total: 1 }),
     getStats: vi.fn().mockResolvedValue(null),
+    getUnpaidDocuments: vi.fn().mockResolvedValue([]),
   },
 }))
 

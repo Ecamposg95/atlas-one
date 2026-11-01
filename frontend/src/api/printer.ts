@@ -397,6 +397,14 @@ export const printerApi = {
     return data.content_base64 ?? data.base64 ?? ''
   },
 
+  /** Recibo de abono a cuenta en base64 (spec 2026-10-29 §4.3); reimprimir es volver a llamar. */
+  getAbonoBase64: async (paymentId: string): Promise<string> => {
+    const { data } = await client.post<{ content_base64?: string; base64?: string }>(
+      `/printer/print-abono/${paymentId}`, {}
+    )
+    return data.content_base64 ?? data.base64 ?? ''
+  },
+
   /** Obtener corte de caja en base64 para imprimir vía agente local */
   getCashCutBase64: async (sessionId: number): Promise<string> => {
     const { data } = await client.post<{ content_base64?: string; base64?: string }>(

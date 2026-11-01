@@ -154,6 +154,10 @@ export interface PeriodoVentas {
   total: number
   devuelto: number
   tickets: number
+  /** Venta fiada del periodo (spec 2026-10-29): ya viene dentro de `total`. Ausente en respuestas viejas. */
+  fiado?: number
+  /** Abonos a cuenta cobrados en el periodo; no son venta. */
+  cobranza?: number
 }
 
 export interface ProductoTop {
@@ -242,6 +246,8 @@ export interface Inicio {
   corte: CorteInicio
   sin_movimiento: { dias: number; productos: ProductoSinMovimiento[] } | null
   pendientes: { devoluciones: number; turnos_abiertos: number; diferencias_caja: DiferenciaCaja[] } | null
+  /** Cuentas por cobrar (spec 2026-10-29 §3.3): solo con `completo`, rol de oficina y módulo crm; null si no aplica. */
+  por_cobrar: { total: number; vencido_30: number; clientes: number } | null
   /** null = una sola sucursal que vende, o se pidió una sucursal. */
   sucursales: SucursalInicio[] | null
   /** null = sin `completo` o rol que no ve costos. Solo renglones con costo. */

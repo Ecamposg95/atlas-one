@@ -238,6 +238,8 @@ function CashHistoryHQView() {
                 { label: 'Efectivo', value: formatCurrency(summary.total_cash), icon: 'fa-money-bill', color: 'text-white' },
                 { label: 'Tarjeta', value: formatCurrency(summary.total_card), icon: 'fa-credit-card', color: 'text-indigo-400' },
                 { label: 'Transferencia', value: formatCurrency(summary.total_transfer), icon: 'fa-mobile-screen', color: 'text-blue-400' },
+                ...(summary.credit_sales > 0 ? [{ label: 'Fiado', value: formatCurrency(summary.credit_sales), icon: 'fa-hand-holding-dollar', color: 'text-dax-warning' }] : []),
+                ...(summary.customer_payments > 0 ? [{ label: 'Abonos a cuenta', value: formatCurrency(summary.customer_payments), icon: 'fa-piggy-bank', color: 'text-dax-success' }] : []),
               ].map((k) => (
                 <DaxCard key={k.label}>
                   <div className="flex items-center gap-2 mb-1">

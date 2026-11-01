@@ -93,7 +93,7 @@ export function Portal() {
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
               <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Saldo actual</p>
-              <p className={`text-3xl font-black ${balance.current_balance < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+              <p className={`text-3xl font-black ${balance.current_balance > 0 ? 'text-dax-danger' : 'text-dax-success'}`}>
                 {formatCurrency(balance.current_balance)}
               </p>
               <p className="text-slate-500 text-xs mt-1">Actualizado {fmtDate(balance.last_updated)}</p>
@@ -118,7 +118,7 @@ export function Portal() {
                   <p className="text-white text-sm font-medium">{a.organization_name}</p>
                   <p className="text-slate-500 text-xs">ID cliente #{a.customer_id}</p>
                 </div>
-                <p className={`text-sm font-bold ${a.current_balance < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                <p className={`text-sm font-bold ${a.current_balance > 0 ? 'text-dax-danger' : 'text-dax-success'}`}>
                   {formatCurrency(a.current_balance, { currency: a.currency })}
                 </p>
               </div>

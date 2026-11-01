@@ -44,6 +44,7 @@ _MX_TZ = ZoneInfo("America/Mexico_City")
 from app.models.cash import CashMovement, CashSession
 from app.models.sales import (
     DocumentStatus,
+    DocumentType,
     Payment,
     PaymentMethod,
     SalesDocument,
@@ -103,13 +104,13 @@ CASH_INCLUDED_STATUSES = (
 #     `SalesDocument.total_amount` / `tax_amount` / `subtotal`, o cuentan
 #     filas de `SalesDocument`. Para PAID/REFUNDED_* eso es seguro porque
 #     `approve_return` reescribe `total_amount` al neto tras la devolución.
-#     PENDING NO tiene ese ajuste: su `total_amount` es la venta completa,
-#     deuda incluida. PENDING está fuera aquí a propósito y de forma
-#     PERMANENTE: una venta a crédito con abono parcial nunca debe inflar
-#     "ventas totales" con la deuda todavía no cobrada, sin importar qué
-#     tan bien atribuido esté el efectivo. No la agregues aquí aunque
-#     alguna vez vuelvas a agregarla a CASH_INCLUDED_STATUSES por otro
-#     motivo.
+#     PENDING: desde 2026-10-31 (spec crm-cobranza §2.1) la tupla sigue sin
+#     PENDING, pero quien pregunta "¿cuenta como venta?" ya no usa la tupla
+#     directo: usa `filtro_venta_reconocida()`, que suma la venta FIADA
+#     (PENDING con cliente). El motivo histórico para excluir PENDING —su
+#     `total_amount` no se neteaba tras una devolución— ya no existe:
+#     `approve_return` reescribe `total_amount` sea cual sea el estado. Un
+#     PENDING sin cliente (venta que no terminó de cobrarse) sigue fuera.
 #
 # Los usos de `Payment.amount` (desglose por método de pago, en ambas
 # funciones) SÍ deben seguir usando CASH_INCLUDED_STATUSES: ese dinero
@@ -120,6 +121,34 @@ SALES_REPORT_STATUSES = (
     DocumentStatus.REFUNDED_PARTIAL,
     DocumentStatus.REFUNDED_TOTAL,
 )
+
+
+def filtro_venta_reconocida():
+    """Expresión SQL de "este documento cuenta como venta" (spec 2026-10-29 §2.1).
+
+    Cobrada (PAID / REFUNDED_*) o **fiada**: un ticket (INVOICE) PENDING con
+    cliente del CRM. La venta fiada cuenta el día que sale la mercancía; los
+    abonos que lleguen después son cobranza, no venta. Un PENDING sin cliente
+    sigue fuera, y también las cotizaciones y pedidos (QUOTE/ORDER) PENDING con
+    cliente: todavía no son una venta.
+    """
+    return or_(
+        SalesDocument.status.in_(SALES_REPORT_STATUSES),
+        and_(
+            SalesDocument.doc_type == DocumentType.INVOICE,
+            SalesDocument.status == DocumentStatus.PENDING,
+            SalesDocument.customer_id.isnot(None),
+        ),
+    )
+
+
+def filtro_pago_cobrado():
+    """Para queries sobre `Payment` con `.outerjoin(SalesDocument)`: el pago
+    cuenta si su documento está en CASH_INCLUDED_STATUSES o si no tiene
+    documento —abono libre a la cuenta del cliente (spec 2026-10-29 §2.3)—.
+    Antes el `join` interno dejaba ese efectivo fuera del esperado aunque
+    estuviera en el cajón."""
+    return or_(SalesDocument.status.in_(CASH_INCLUDED_STATUSES), SalesDocument.id.is_(None))
 
 
 @dataclass
@@ -275,13 +304,14 @@ def compute_expected_cash(db: Session, session: CashSession) -> ExpectedCashBrea
         Payment.cash_session_id == session.id,
         and_(Payment.cash_session_id.is_(None), session_sales_filter(session)),
     )
+    # Outerjoin: el abono libre (Payment sin documento) también es efectivo que entró.
     cash_payments = (
         db.query(func.sum(Payment.amount))
-        .join(SalesDocument)
+        .outerjoin(SalesDocument)
         .filter(
             Payment.method == PaymentMethod.CASH,
             pago_de_esta_sesion,
-            SalesDocument.status.in_(CASH_INCLUDED_STATUSES),
+            filtro_pago_cobrado(),
         )
         .scalar()
         or Decimal(0)
@@ -480,3 +510,30 @@ def compute_closure_warnings(
             })
 
     return warnings
+
+
+def fiado_de_sesion(db: Session, session: CashSession) -> Decimal:
+    """Lo que quedó a cuenta en las ventas fiadas de este turno: cargos del
+    ledger ligados a documentos del turno, netos de cancelación/devolución
+    (spec 2026-10-29 §2.3). Los abonos no restan: son cobranza."""
+    from app.modules.customers.models import CustomerLedgerEntry
+    from app.modules.customers.services import filtro_sql_cargo_o_reversion
+    total = (
+        db.query(func.coalesce(func.sum(CustomerLedgerEntry.amount), 0))
+        .join(SalesDocument, SalesDocument.id == CustomerLedgerEntry.sales_document_id)
+        .filter(session_sales_filter(session), filtro_venta_reconocida(), filtro_sql_cargo_o_reversion())
+        .scalar()
+    )
+    return Decimal(str(total or 0))
+
+
+def abonos_de_sesion(db: Session, session: CashSession) -> Decimal:
+    """Abonos a cuenta cobrados en este turno. Son los `Payment` con
+    `customer_id`: solo los crea `POST /customers/{id}/pay`; el checkout no
+    pone cliente en el pago."""
+    total = (
+        db.query(func.coalesce(func.sum(Payment.amount), 0))
+        .filter(Payment.cash_session_id == session.id, Payment.customer_id.isnot(None))
+        .scalar()
+    )
+    return Decimal(str(total or 0))

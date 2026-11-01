@@ -3,7 +3,7 @@
 Phase 2 / S2: moved from app/schemas/customers.py.
 """
 from pydantic import BaseModel, EmailStr
-from typing import Optional, List
+from typing import Dict, List, Optional
 from decimal import Decimal
 from datetime import datetime
 
@@ -57,6 +57,55 @@ class LedgerEntryResponse(BaseModel):
     
     class Config:
         from_attributes = True
+
+
+class AbonoAplicado(BaseModel):
+    sales_document_id: str
+    folio: str
+    amount: Decimal
+    paid_in_full: bool
+
+
+class AbonoResponse(BaseModel):
+    """Respuesta de POST /customers/{id}/pay (spec 2026-10-29 §4.2): qué
+    tickets cubrió el abono y cómo quedó el saldo, para que el POS lo diga y
+    el recibo lo imprima."""
+    entries: List[LedgerEntryResponse]
+    customer_balance_before: Decimal
+    customer_balance_after: Decimal
+    applied: List[AbonoAplicado]
+    unapplied: Decimal          # saldo a favor que quedó sin ticket
+    payment_id: str             # UUID del Payment
+    method: str
+    reference: Optional[str] = None
+    received_at: datetime
+
+
+class ClienteCobranzaOut(BaseModel):
+    id: int
+    name: Optional[str] = None  # `customers.name` es nullable; la pantalla pinta "—"
+    phone: Optional[str] = None
+    balance: Decimal
+    cargo_mas_viejo: Optional[datetime] = None
+    dias: int
+    ultimo_abono: Optional[datetime] = None
+    branch_id: Optional[int] = None
+    branch_name: Optional[str] = None
+    tickets_abiertos: int
+    antiguedad: Dict[str, Decimal]   # current, 31_60, 61_90, 91_plus
+
+
+class ResumenCobranza(BaseModel):
+    por_cobrar: Decimal
+    vencido_30: Decimal
+    clientes: int
+    a_favor: Decimal
+
+
+class CobranzaResponse(BaseModel):
+    resumen: ResumenCobranza
+    items: List[ClienteCobranzaOut]
+    total: int
 
 # --- LECTURA (RESPONSE) ---
 class CustomerRead(CustomerBase):

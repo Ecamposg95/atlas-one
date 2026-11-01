@@ -512,6 +512,63 @@ def reprint_refunded_endpoint(
     }
 
 
+@router.post("/print-abono/{payment_id}")
+def print_abono_endpoint(
+    payment_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    org_id: int = Depends(get_current_active_organization),
+):
+    """Recibo de un abono a cuenta (spec 2026-10-29 §4.3). Mismo contrato que
+    el ticket: bytes ESC/POS en base64 que el agente local manda a la
+    impresora. Reimprimir es volver a llamar; no pide PIN. Lo imprime quien
+    cobró el abono o un rol de oficina. El recibo reproduce el original: saldos
+    reconstruidos (`detalle_del_abono`), cajera = quien registró el abono y
+    sucursal = la de la caja que lo recibió; solo si faltan esos datos cae al
+    usuario/sucursal de quien imprime."""
+    from app.models.sales import Payment
+    from app.modules.customers.services import detalle_del_abono
+    from app.services.metricas_ventas import HQ_ROLES
+
+    pago = db.query(Payment).filter(Payment.id == payment_id, Payment.organization_id == org_id).first()
+    if not pago or pago.customer_id is None:
+        raise HTTPException(status_code=404, detail="Abono no encontrado")
+    rol = str(getattr(current_user.role, "value", current_user.role))
+    if rol not in HQ_ROLES and pago.created_by_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Solo quien cobró el abono o un rol de oficina puede imprimir este recibo")
+
+    detalle = detalle_del_abono(db, org_id=org_id, pago=pago)
+    from app.models.organization import Organization
+    organization = db.query(Organization).filter(Organization.id == org_id).first()
+    printer, target_printer_name = _resolve_printer(current_user, organization)
+    from app.models.cash import CashSession
+    cobro_por = db.query(User).filter(User.id == pago.created_by_id).first() if pago.created_by_id else None
+    caja = db.query(CashSession).filter(CashSession.id == pago.cash_session_id).first() if pago.cash_session_id else None
+    sucursal = (caja.branch if caja is not None else None) or current_user.branch
+    cajera = cobro_por.username if cobro_por is not None else current_user.username
+    try:
+        raw_bytes = printer.build_abono_bytes(
+            organization=organization, branch=sucursal, cashier=cajera,
+            customer_name=detalle["customer"].name, amount=float(pago.amount),
+            method=str(getattr(pago.method, "value", pago.method)), reference=pago.reference,
+            applied=detalle["applied"], unapplied=float(detalle["unapplied"]),
+            balance_before=float(detalle["balance_before"]), balance_after=float(detalle["balance_after"]),
+            received_at=pago.created_at, folio=f"AB-{pago.id[:8].upper()}",
+        )
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+    job = _record_print_job(db, raw_bytes=raw_bytes, printer_name=printer.printer_name,
+                            org_id=org_id, request=request)
+    return {
+        "status": "ready_to_print",
+        "job_id": job.id,
+        "content_base64": base64.b64encode(raw_bytes).decode("utf-8"),
+        "printer_target": target_printer_name,
+    }
+
+
 class PrintCashCutRequest(BaseModel):
     session_id: int
     # Track 4: `mode` ignorado (deprecated). Siempre return_base64.

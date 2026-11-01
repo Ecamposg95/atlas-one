@@ -43,6 +43,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
   // fiarle más. Un nombre libre no tiene ficha ni saldo. Si el CRM no
   // responde, el chip se queda sin saldo y el cobro sigue igual.
   const customerId = usePOSStore((s) => s.customerId)
+  const saldoVersion = usePOSStore((s) => s.saldoVersion)
   const [saldoCliente, setSaldoCliente] = useState<number | null>(null)
   useEffect(() => {
     if (customerId == null) { setSaldoCliente(null); return }
@@ -51,7 +52,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
       .then((c) => { if (vivo) setSaldoCliente(c.current_balance ?? 0) })
       .catch(() => { if (vivo) setSaldoCliente(null) })
     return () => { vivo = false }
-  }, [customerId])
+  }, [customerId, saldoVersion])
   const setGlobalDiscount = usePOSStore((s) => s.setGlobalDiscount)
   const tip = usePOSStore((s) => s.tip)
   const setTip = usePOSStore((s) => s.setTip)

@@ -972,6 +972,13 @@ class PosPrinter:
                 # desglose tiene que dar EXACTAMENTE el total, ni un peso mas.
                 if m_key == 'card' and _comision_tarjeta > 0:
                     raw += self._rline("  incl. comision", _comision_tarjeta)
+        # Abonos a cuenta cobrados en el turno. Informativo: YA están dentro
+        # de los renglones por método (son Payment como cualquier otro); se
+        # nombran para que la cajera sepa que parte de lo cobrado no es venta
+        # de hoy sino cobranza de ventas fiadas (spec 2026-10-29 §2.3).
+        _abonos = (kpis.get('customer_payments') or 0)
+        if _abonos > 0:
+            raw += self._rline("  Abonos a cuenta", _abonos)
         raw += self._rline("Total cobrado", _total_cobrado)
 
         raw += self.CMD["LF"] + sep
@@ -1055,6 +1062,10 @@ class PosPrinter:
         raw += self.CMD["BOLD_OFF"] + self.CMD["LEFT"]
 
         raw += self._rline("Ventas Totales", kpis['total_sales'])
+        # Lo que de esas ventas quedó fiado a clientes: ventas = cobrado + fiado.
+        _fiado = (kpis.get('credit_sales') or 0)
+        if _fiado > 0:
+            raw += self._rline("Fiado", _fiado)
         raw += f"Tickets: {kpis['total_tickets']}".rjust(self.cols).encode("latin-1", "replace") + b"\n"
         raw += self._rline("Ticket Promedio", kpis['avg_ticket'])
         raw += self._rline("Impuestos (IVA)", kpis['total_taxes'])
@@ -1130,6 +1141,43 @@ class PosPrinter:
             raw += self.CMD["DRAWER"]
         raw += self.CMD["CUT"]
 
+        return raw
+
+    def build_abono_bytes(self, *, organization, branch, cashier: str, customer_name: str,
+                          amount: float, method: str, reference, applied: list, unapplied: float,
+                          balance_before: float, balance_after: float, received_at: datetime,
+                          folio: str) -> bytes:
+        """Recibo de abono a cuenta (spec 2026-10-29 §4.3). Sin apertura de cajón:
+        el efectivo ya entró con el abono, el recibo solo lo documenta."""
+        sep = ("-" * self.cols + "\n").encode("latin-1", "replace")
+
+        def linea(texto: str) -> bytes:
+            return (self._truncate(texto, self.cols) + "\n").encode("latin-1", "replace")
+
+        raw = self.CMD["RESET"] + self._default_font + self.CMD["SIZE_NORMAL"] + self.CMD["CENTER"]
+        raw += self.CMD["BOLD_ON"] + linea((organization.name if organization else None) or "ATLAS POS") + self.CMD["BOLD_OFF"]
+        if branch is not None and getattr(branch, "name", None):
+            raw += linea(branch.name)
+        raw += self.CMD["SIZE_LARGE"] + self.CMD["BOLD_ON"] + b"RECIBO DE ABONO\n" + self.CMD["BOLD_OFF"] + self.CMD["SIZE_NORMAL"]
+        dt = received_at if received_at.tzinfo else received_at.replace(tzinfo=timezone.utc)
+        raw += linea(f"{dt.astimezone(MX_TZ).strftime('%d/%m/%y %H:%M')} | {folio}")
+        raw += self.CMD["LEFT"] + sep
+        raw += linea(f"CLIENTE: {customer_name}")
+        raw += self._rline("Abono", amount)
+        metodo = {"CASH": "Efectivo", "CARD": "Tarjeta", "TRANSFER": "Transferencia"}.get(str(method).upper(), str(method))
+        raw += linea(f"Metodo: {metodo}" + (f" ({reference})" if reference else ""))
+        if applied:
+            raw += sep + linea("APLICADO A:")
+            for a in applied:
+                etiqueta = f"Ticket {a['folio']}" + (" (liquidado)" if a.get("paid_in_full") else "")
+                raw += self._rline(etiqueta, float(a["amount"]))
+        if unapplied and unapplied > 0:
+            raw += self._rline("Queda a favor", float(unapplied))
+        raw += sep
+        raw += self._rline("Saldo anterior", balance_before)
+        raw += self.CMD["BOLD_ON"] + self._rline("Saldo actual", balance_after) + self.CMD["BOLD_OFF"]
+        raw += sep + linea(f"Le atendio: {cashier}")
+        raw += self.CMD["LF"] * 3 + self.CMD["CUT"]
         return raw
 
     def _format_currency(self, val: float) -> str:
