@@ -1,19 +1,35 @@
 """La descarga del agente redirige al repositorio externo.
 
 El agente dejo de vivir en este repo (2026-09-22): se mantiene en
-https://github.com/Ecamposg95/Atlas-Print-Agent para todos los productos.
+https://github.com/Ecamposg95/Atlas-Print-Agent para todos los productos. Por
+omision se baja el instalador de la version publicada; `formato=zip`, el codigo
+para el modo manual.
 """
-import os
+import pytest
+
+REL = "https://github.com/Ecamposg95/Atlas-Print-Agent/releases/download/v3.1.0/"
 
 
-def test_redirige_al_repositorio_del_agente(client):
-    r = client.get("/api/printer/download-agent?platform=mac", follow_redirects=False)
+@pytest.mark.parametrize("plataforma,archivo", [
+    ("windows", "atlas-print-agent-setup-3.1.0.exe"),
+    ("linux", "atlas-print-agent_3.1.0_amd64.deb"),
+    ("mac", "atlas-print-agent-3.1.0-arm64.pkg"),
+    ("mac-intel", "atlas-print-agent-3.1.0-x86_64.pkg"),
+])
+def test_baja_el_instalador_de_cada_sistema(client, plataforma, archivo):
+    r = client.get(f"/api/printer/download-agent?platform={plataforma}", follow_redirects=False)
     assert r.status_code == 302
+    assert r.headers["location"] == REL + archivo
+
+
+def test_zip_del_modo_manual(client):
+    r = client.get("/api/printer/download-agent?platform=windows&formato=zip", follow_redirects=False)
     assert r.headers["location"] == "https://github.com/Ecamposg95/Atlas-Print-Agent/archive/refs/heads/main.zip"
 
 
-def test_plataforma_invalida(client):
+def test_plataforma_o_formato_invalidos(client):
     assert client.get("/api/printer/download-agent?platform=amiga", follow_redirects=False).status_code == 400
+    assert client.get("/api/printer/download-agent?formato=rar", follow_redirects=False).status_code == 400
 
 
 def test_url_configurable_por_plataforma(client, monkeypatch):

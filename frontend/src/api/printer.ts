@@ -312,9 +312,15 @@ export const printerApi = {
     return res.json()
   },
 
-  /** URL de descarga del agente por plataforma */
-  downloadAgentUrl: (platform: 'windows' | 'linux' | 'mac'): string =>
-    `/api/printer/download-agent?platform=${platform}`,
+  /**
+   * URL de descarga del agente por plataforma. Por omision el instalador de la
+   * version publicada (arranca solo con la PC); `zip` es el modo manual (.bat/.sh).
+   */
+  downloadAgentUrl: (
+    platform: 'windows' | 'linux' | 'mac' | 'mac-intel',
+    formato: 'instalador' | 'zip' = 'instalador',
+  ): string =>
+    `/api/printer/download-agent?platform=${platform}${formato === 'zip' ? '&formato=zip' : ''}`,
 
   /**
    * Ticket de prueba en base64 desde backend. Acepta override opcional para

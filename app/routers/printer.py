@@ -14,6 +14,14 @@ from app.core.tenant_context import get_current_active_organization
 # Repositorio del agente de impresión (fuente única desde 2026-09-22).
 PRINT_AGENT_REPO_URL = "https://github.com/Ecamposg95/Atlas-Print-Agent"
 PRINT_AGENT_DOWNLOAD_URL = PRINT_AGENT_REPO_URL + "/archive/refs/heads/main.zip"
+# Instaladores publicados (dejan el agente arrancando solo con la PC).
+PRINT_AGENT_VERSION = "3.1.0"
+PRINT_AGENT_INSTALADORES = {
+    "windows": "atlas-print-agent-setup-{v}.exe",
+    "linux": "atlas-print-agent_{v}_amd64.deb",
+    "mac": "atlas-print-agent-{v}-arm64.pkg",        # Apple M1 o posterior
+    "mac-intel": "atlas-print-agent-{v}-x86_64.pkg",
+}
 from app.pos_printer import PosPrinter
 from app.routers.sales import _assert_sale_branch_access
 import base64
@@ -318,21 +326,29 @@ class PrintRequest(BaseModel):
 
 
 @router.get("/download-agent")
-def download_print_agent(platform: str = "windows"):
+def download_print_agent(platform: str = "windows", formato: str = "instalador"):
     """Descarga del Agente Local de Impresión.
 
-    El agente ya no vive en este repositorio: se mantiene en
-    https://github.com/Ecamposg95/Atlas-Print-Agent (unificado para todos los
-    productos de Atlas). Aquí solo redirigimos. `ATLAS_PRINT_AGENT_URL` permite
-    apuntar a otra ubicación; si contiene `{platform}`, se rellena con
-    windows|linux|mac (para cuando el repo publique un ZIP por plataforma).
+    El agente vive en https://github.com/Ecamposg95/Atlas-Print-Agent (unificado
+    para todos los productos de Atlas); aquí solo redirigimos. Por omisión baja el
+    instalador de la versión publicada (`PRINT_AGENT_VERSION`), que deja el agente
+    arrancando solo; `formato=zip` baja el código para el modo manual (.bat/.sh).
+    `ATLAS_PRINT_AGENT_URL` manda sobre todo; si contiene `{platform}`, se rellena.
     """
     import os
     plat = platform.lower()
-    if plat not in ("windows", "linux", "mac"):
-        raise HTTPException(status_code=400, detail="platform debe ser 'windows', 'linux' o 'mac'")
-    url = os.environ.get("ATLAS_PRINT_AGENT_URL") or PRINT_AGENT_DOWNLOAD_URL
-    return RedirectResponse(url.replace("{platform}", plat), status_code=302)
+    if plat not in PRINT_AGENT_INSTALADORES:
+        raise HTTPException(status_code=400, detail="platform debe ser 'windows', 'linux', 'mac' o 'mac-intel'")
+    if formato not in ("instalador", "zip"):
+        raise HTTPException(status_code=400, detail="formato debe ser 'instalador' o 'zip'")
+    propia = os.environ.get("ATLAS_PRINT_AGENT_URL")
+    if propia:
+        return RedirectResponse(propia.replace("{platform}", plat), status_code=302)
+    if formato == "zip":
+        return RedirectResponse(PRINT_AGENT_DOWNLOAD_URL, status_code=302)
+    archivo = PRINT_AGENT_INSTALADORES[plat].format(v=PRINT_AGENT_VERSION)
+    url = f"{PRINT_AGENT_REPO_URL}/releases/download/v{PRINT_AGENT_VERSION}/{archivo}"
+    return RedirectResponse(url, status_code=302)
 
 @router.get("/printers")
 def get_printers(

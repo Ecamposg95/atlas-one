@@ -401,7 +401,14 @@ export function PrinterSettings() {
             </select>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <a
+            href={printerApi.downloadAgentUrl(detectedOS === 'linux' ? 'linux' : detectedOS === 'mac' ? 'mac' : 'windows')}
+            className="dax-btn-secondary text-xs"
+            title="Instalador del agente de impresión para esta computadora; queda arrancando solo"
+          >
+            <i className="fa-solid fa-download" /> Descargar agente
+          </a>
           <button
             onClick={() => setWizardOpen(true)}
             className="dax-btn-secondary text-xs"
@@ -488,14 +495,24 @@ export function PrinterSettings() {
                       Requerido para imprimir desde el navegador en Windows
                     </p>
                   </div>
-                  <a
-                    href={printerApi.downloadAgentUrl('windows')}
-                    className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg transition-colors flex-shrink-0"
-                    style={{ background: 'rgba(99,102,241,0.2)', color: '#a5b4fc' }}
-                  >
-                    <i className="fa-solid fa-download" /> Descargar
-                  </a>
+                  <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                    <a
+                      href={printerApi.downloadAgentUrl('windows')}
+                      className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg transition-colors"
+                      style={{ background: 'rgba(99,102,241,0.2)', color: '#a5b4fc' }}
+                    >
+                      <i className="fa-solid fa-download" /> Instalador (.exe)
+                    </a>
+                    <a href={printerApi.downloadAgentUrl('windows', 'zip')} className="text-[10px] underline"
+                       style={{ color: 'var(--dax-text-muted)' }}>
+                      o ZIP modo manual
+                    </a>
+                  </div>
                 </div>
+                <p className="mt-3 text-xs" style={{ color: 'var(--dax-text-muted)' }}>
+                  Con el instalador: doble clic, siguiente hasta terminar, y el agente queda arrancando solo.
+                  Las instrucciones de abajo son del modo manual (ZIP).
+                </p>
                 <div className="mt-4 space-y-2">
                   <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--dax-text-faint)' }}>
                     Instrucciones
@@ -587,13 +604,19 @@ export function PrinterSettings() {
                       <p className="text-sm font-bold" style={{ color: 'var(--dax-text)' }}>Agente Linux</p>
                       <p className="text-xs mt-0.5" style={{ color: 'var(--dax-text-muted)' }}>Requiere Python 3.10+ y CUPS instalado</p>
                     </div>
-                    <a
-                      href={printerApi.downloadAgentUrl('linux')}
-                      className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg transition-colors flex-shrink-0"
-                      style={{ background: 'rgba(34,197,94,0.15)', color: '#4ade80' }}
-                    >
-                      <i className="fa-solid fa-download" /> Descargar
-                    </a>
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      <a
+                        href={printerApi.downloadAgentUrl('linux')}
+                        className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg transition-colors"
+                        style={{ background: 'rgba(34,197,94,0.15)', color: '#4ade80' }}
+                      >
+                        <i className="fa-solid fa-download" /> Instalador (.deb)
+                      </a>
+                      <a href={printerApi.downloadAgentUrl('linux', 'zip')} className="text-[10px] underline"
+                         style={{ color: 'var(--dax-text-muted)' }}>
+                        o ZIP modo manual
+                      </a>
+                    </div>
                   </div>
                   <div className="space-y-2 mb-4">
                     <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--dax-text-faint)' }}>
@@ -684,13 +707,23 @@ export function PrinterSettings() {
                       Requiere Python 3.10+ · CUPS incluido en macOS
                     </p>
                   </div>
-                  <a
-                    href={printerApi.downloadAgentUrl('mac')}
-                    className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg transition-colors flex-shrink-0"
-                    style={{ background: 'rgba(148,163,184,0.15)', color: '#cbd5e1' }}
-                  >
-                    <i className="fa-solid fa-download" /> Descargar
-                  </a>
+                  <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                    <a
+                      href={printerApi.downloadAgentUrl('mac')}
+                      className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg transition-colors"
+                      style={{ background: 'rgba(148,163,184,0.15)', color: '#cbd5e1' }}
+                    >
+                      <i className="fa-solid fa-download" /> Instalador M1+ (.pkg)
+                    </a>
+                    <a href={printerApi.downloadAgentUrl('mac-intel')} className="text-[10px] underline"
+                       style={{ color: 'var(--dax-text-muted)' }}>
+                      Mac con Intel
+                    </a>
+                    <a href={printerApi.downloadAgentUrl('mac', 'zip')} className="text-[10px] underline"
+                       style={{ color: 'var(--dax-text-muted)' }}>
+                      o ZIP modo manual
+                    </a>
+                  </div>
                 </div>
                 <div className="mt-4 space-y-2">
                   <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--dax-text-faint)' }}>
