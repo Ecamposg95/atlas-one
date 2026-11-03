@@ -7,7 +7,8 @@ nadie restaba devoluciones. "Ventas hoy" daba tres números. Aquí vive el
 criterio y los routers solo arman la respuesta.
 
 Venta neta = documentos cobrados o fiados (`filtro_venta_reconocida`) a su
-`total_amount` original menos devoluciones APROBADAS en el periodo (por la
+importe original (`total_original`: `total_amount` ya viene rebajado por cada
+devolución aprobada) menos devoluciones APROBADAS en el periodo (por la
 fecha de la devolución).
 Toda fecha se compara en día de México.
 """
@@ -18,7 +19,7 @@ from typing import Dict, List, Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
-from sqlalchemy import case, desc, func, or_
+from sqlalchemy import case, desc, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models import Payment, SaleReturn, SalesDocument, SalesLineItem, User
@@ -144,6 +145,24 @@ def filtros_documentos(ambito: Ambito, periodo: Periodo) -> list:
     return f
 
 
+def total_original():
+    """Importe con el que nació el ticket: `total_amount` más lo devuelto.
+
+    `app/crud/returns.py::approve_return` rebaja `total_amount` en cada
+    devolución aprobada (los reportes fiscales lo necesitan neto), y aquí la
+    devolución se resta además por su fecha (`filtros_devoluciones`). Sumar
+    `total_amount` tal cual la restaba dos veces: 200 con devolución de 100
+    daba neta 0, y una devolución total dejaba la venta en negativo.
+    """
+    devuelto = (
+        select(func.coalesce(func.sum(SaleReturn.total_refunded), 0))
+        .where(SaleReturn.sale_id == SalesDocument.id, SaleReturn.status == "APPROVED")
+        .correlate(SalesDocument)
+        .scalar_subquery()
+    )
+    return SalesDocument.total_amount + devuelto
+
+
 def filtros_devoluciones(ambito: Ambito, periodo: Periodo) -> list:
     f = [
         SaleReturn.organization_id == ambito.organization_id,
@@ -222,7 +241,7 @@ def cobranza(db: Session, ambito: Ambito, periodo: Periodo) -> float:
 
 def resumen(db: Session, ambito: Ambito, periodo: Periodo) -> Resumen:
     docs = db.query(
-        func.coalesce(func.sum(SalesDocument.total_amount), 0), func.count(SalesDocument.id),
+        func.coalesce(func.sum(total_original()), 0), func.count(SalesDocument.id),
     ).filter(*filtros_documentos(ambito, periodo)).one()
     devs = db.query(
         func.coalesce(func.sum(SaleReturn.total_refunded), 0), func.count(SaleReturn.id),
@@ -250,7 +269,7 @@ def por_dia(db: Session, ambito: Ambito, periodo: Periodo) -> List[DiaVentas]:
     dia_doc = dia_mx(SalesDocument.created_at).label("dia")
     docs = {
         str(r.dia): (r.total, r.n)
-        for r in db.query(dia_doc, func.coalesce(func.sum(SalesDocument.total_amount), 0).label("total"),
+        for r in db.query(dia_doc, func.coalesce(func.sum(total_original()), 0).label("total"),
                           func.count(SalesDocument.id).label("n"))
         .filter(*filtros_documentos(ambito, periodo)).group_by("dia").all()
     }
@@ -282,7 +301,7 @@ def por_hora(db: Session, ambito: Ambito, periodo: Periodo) -> List[HoraVentas]:
     hora_doc = func.to_char(mx(SalesDocument.created_at), "HH24").label("hora")
     docs = {
         int(r.hora): (r.total, r.n)
-        for r in db.query(hora_doc, func.coalesce(func.sum(SalesDocument.total_amount), 0).label("total"),
+        for r in db.query(hora_doc, func.coalesce(func.sum(total_original()), 0).label("total"),
                           func.count(SalesDocument.id).label("n"))
         .filter(*filtros_documentos(ambito, periodo)).group_by("hora").all()
     }
@@ -345,7 +364,7 @@ def por_sucursal(db: Session, org_id: int, periodo: Periodo) -> Dict[int, Resume
     ambito = Ambito(org_id, None, True)
     docs = {
         r.branch_id: (r.total, r.n)
-        for r in db.query(SalesDocument.branch_id, func.coalesce(func.sum(SalesDocument.total_amount), 0).label("total"),
+        for r in db.query(SalesDocument.branch_id, func.coalesce(func.sum(total_original()), 0).label("total"),
                           func.count(SalesDocument.id).label("n"))
         .filter(*filtros_documentos(ambito, periodo)).group_by(SalesDocument.branch_id).all()
     }

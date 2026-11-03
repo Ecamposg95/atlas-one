@@ -41,6 +41,9 @@ def _devolucion(db, org, branch, user, venta, importe):
                      total_refunded=Decimal(importe), refund_method=PaymentMethod.CASH, reason="Prueba",
                      status="APPROVED")
     db.add(dev)
+    # Como approve_return: aprobar rebaja el total del ticket.
+    venta.subtotal = Decimal(str(venta.subtotal)) - Decimal(importe)
+    venta.total_amount = Decimal(str(venta.total_amount)) - Decimal(importe)
     db.commit()
     return dev
 
