@@ -131,6 +131,8 @@ Edita `scripts/init_presets_v2.py` (seed de `industry_presets`) y/o el fallback 
 4. `scripts/import_rmazh_export.py catalogo.xlsx --org N --branch M --dry-run` → revisar incidencias y "EXISTENCIAS MAYORES A 500" → real. Idempotente; `--tope N` recorta relleno.
 5. Verificar el POS **con el cajero**, no con el admin (`GET /api/products/pos/search`).
 
+**Con historial completo** (ventas, cortes, movimientos; Novedades America 2026-11-03): `scripts/export_rmazh_org.py` por stdin en el contenedor de rmazh (`railway ssh -s Atlas-API -- 'cd /app && /opt/venv/bin/python - <org>' < script > salida.txt`, trae hashes → fuera del repo) y `scripts/import_rmazh_org.py salida.txt --nombre … --plan … --giro … [--sucursales 12,13]` dentro de `atlas-one-prod` (`docker cp` + `PYTHONPATH=/app`; ensayo por omisión, `--ejecutar` confirma). Renumera ids enteros, conserva UUIDs y verifica antes de confirmar. Apaga a los usuarios en rmazh **antes** de exportar (y reactívalos en Atlas ONE: llegan inactivos). Si alguien vuelve a vender en rmazh, `scripts/fusionar_rmazh_ventas.py nueva.txt --org N --desde <hora de la exportación del corte>` agrega solo lo que falta (idempotente).
+
 ### Hacer responsiva una pantalla de admin
 1. `const esTelefono = useEsTelefono()` (`hooks/useIsMobile.ts`, < 768).
 2. Cabecera → `CabeceraPagina`, filtros → `BarraFiltros` (`components/ui/`).
