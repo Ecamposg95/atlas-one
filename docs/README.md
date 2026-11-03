@@ -17,6 +17,7 @@
 | [`modules/GASTRO_MESAS_COMANDAS.md`](modules/GASTRO_MESAS_COMANDAS.md) | Feature doc del flujo mesas → comanda → KDS → cuenta → cobro. |
 | [`presets/README.md`](presets/README.md) | Cómo crear un preset de industria nuevo (composición de módulos, datos vs. código, checklist). |
 | [`presets/BOUTIQUE.md`](presets/BOUTIQUE.md) | Preset `ATLAS_POS_BOUTIQUE`: estándar de datos de producto, ticket, etiquetas, funciones de cajera, checklist de alta. |
+| [`playbooks/altas-de-clientes.md`](playbooks/altas-de-clientes.md) | Alta de una tienda: organización, usuarios, catálogo según el POS de origen (Eleventa, Data X POS, rmazh, libreta), existencias, mayoreo, verificación, y cómo se convierte en funciones de IA. |
 | [`platform/superadmin-creation.md`](platform/superadmin-creation.md) | Crear SUPERADMINs de plataforma. |
 | [`branching-strategy.md`](branching-strategy.md) | Modelo de ramas (una sola: `main`) y entornos. |
 | [`DEPLOY.md`](DEPLOY.md) | Despliegue a producción — VPS IONOS vía CI/CD (GitHub Actions), en cada push a `main`. |

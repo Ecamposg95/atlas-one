@@ -124,6 +124,9 @@ Edita `scripts/init_presets_v2.py` (seed de `industry_presets`) y/o el fallback 
 - Cambiar de plan NO toca `organization_modules`: los módulos encendidos se heredan y la pantalla los marca "Fuera de plan". Los topes (usuarios activos, sucursales que venden) solo frenan altas nuevas con un 403 cuyo `detail` nombra el plan mínimo.
 - Módulos permitidos = base ∪ preset del giro ∪ crecimiento del plan. Para añadir un módulo a un plan, edita `_START/_PRO/_BUSINESS/_SCALE` en `plans.py` y corre `tests/test_planes.py`.
 
+### Dar de alta una tienda (cualquier origen)
+Playbook completo con reglas, trampas y qué preguntar: [`docs/playbooks/altas-de-clientes.md`](docs/playbooks/altas-de-clientes.md).
+
 ### Dar de alta una tienda que llega de rmazh (Data X POS)
 1. Exportar desde rmazh en **solo lectura** con `scripts/adhoc/2026-09-01/coqueta/export_coq2.py` (repo Atlas-Rmazh, por `railway ssh`; pasar la sucursal con existencias, no el HQ). Guarda el xlsx y el JSON de usuarios **fuera del repo** (trae hashes).
 2. `scripts/onboard_org.py` crea org + matriz (`can_sell=True`) + admin. Luego fija `branches.printer_name` y, si la tienda ya emitía folios, `branches.folio_inicial` (siguiente al último de rmazh).
