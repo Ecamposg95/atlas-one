@@ -29,6 +29,8 @@ import { MixedPaymentModal } from '../../components/pos/modals/MixedPaymentModal
 import { ReturnModal } from '../../components/pos/modals/ReturnModal'
 import { CashMovementModal } from '../../components/pos/modals/CashMovementModal'
 import { CloseSessionModal } from '../../components/pos/modals/CloseSessionModal'
+import { TicketWhatsappModal } from '../../components/pos/modals/TicketWhatsappModal'
+import type { SalesDocument } from '../../types/sales'
 import { formatCurrency } from '../../utils/currency'
 import { errorDetailText } from '../../utils/errorDetail'
 import {
@@ -82,6 +84,11 @@ export function POS() {
   // (ficha de producto, cliente) y dos suscripciones al store.
   const esTelefono = useEsTelefono()
   const [carritoAbierto, setCarritoAbierto] = useState(false)
+  // Ticket por WhatsApp: en teléfono no hay agente de impresión. Tras cobrar
+  // queda un aviso con el botón; se va solo al empezar la siguiente venta.
+  const [ticketWa, setTicketWa] = useState<{ id: string; venta?: SalesDocument } | null>(null)
+  const [avisoVenta, setAvisoVenta] = useState<{ id: string; folio: string } | null>(null)
+  useEffect(() => { if (itemCount > 0) setAvisoVenta(null) }, [itemCount])
 
   const [checkingSession, setCheckingSession] = useState(true)
   const [showSessionModal, setShowSessionModal] = useState(false)
@@ -313,6 +320,7 @@ export function POS() {
       const fiado = sale.credit_debt ?? 0
       const fiadoStr = fiado > 0 ? ` · Queda a crédito: ${formatCurrency(fiado)}` : ''
       showToast(`Venta ${folio} registrada${changeStr}${fiadoStr}`)
+      if (esTelefono && saleId) setAvisoVenta({ id: saleId, folio })
       // Auto-imprimir vía agente local si hay impresora configurada,
       // salvo que el cajero haya apagado "Imprimir Ticket" en el modal.
       if (saleId && shouldPrint) printViaAgent(saleId)
@@ -694,7 +702,15 @@ export function POS() {
           <button
             onClick={async () => {
               if (!savedPrinterName) {
-                showToast('Configura una impresora', 'error')
+                // Sin impresora (el teléfono nunca tiene agente): el último
+                // ticket se manda por WhatsApp en vez de fallar.
+                try {
+                  const ultima = await salesApi.getMyLast()
+                  if (ultima) setTicketWa({ id: ultima.id, venta: ultima })
+                  else showToast('No hay venta reciente', 'error')
+                } catch {
+                  showToast('No se pudo leer la última venta', 'error')
+                }
                 return
               }
               let last
@@ -721,10 +737,12 @@ export function POS() {
             }}
             className={actionBtn}
             style={{ background: 'var(--dax-elevated)', borderColor: 'var(--dax-border-dim)', color: 'var(--dax-text-muted)' }}
-            title="Reimprimir último ticket"
-            aria-label="Reimprimir último ticket"
+            title={savedPrinterName ? 'Reimprimir último ticket' : 'Enviar último ticket por WhatsApp'}
+            aria-label={savedPrinterName ? 'Reimprimir último ticket' : 'Enviar último ticket por WhatsApp'}
           >
-            <i className="fa-solid fa-print text-xs" aria-hidden="true" /> <span className={actionLabel}>Reimprimir último</span>
+            {savedPrinterName
+              ? <><i className="fa-solid fa-print text-xs" aria-hidden="true" /> <span className={actionLabel}>Reimprimir último</span></>
+              : <><i className="fa-brands fa-whatsapp text-sm" aria-hidden="true" /> <span className={actionLabel}>Enviar último</span></>}
           </button>
           <div className="w-px h-4 flex-shrink-0" style={{ background: 'var(--dax-border-dim)' }} />
           <button
@@ -772,6 +790,21 @@ export function POS() {
           </div>
         )}
       </div>
+
+      {/* ── Teléfono: aviso de la venta recién cobrada, con su ticket por WhatsApp ── */}
+      {esTelefono && avisoVenta && (
+        <div className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-dax-success-soft border-t border-dax-border-dim">
+          <i className="fa-solid fa-circle-check text-dax-success" aria-hidden="true" />
+          <span className="flex-1 min-w-0 truncate text-sm font-semibold text-dax-text">Venta {avisoVenta.folio}</span>
+          <button type="button" onClick={() => setTicketWa({ id: avisoVenta.id })} className="dax-btn-primary text-xs flex-shrink-0"
+                  aria-label={`Enviar ticket ${avisoVenta.folio} por WhatsApp`}>
+            <i className="fa-brands fa-whatsapp" aria-hidden="true" /> WhatsApp
+          </button>
+          <button type="button" onClick={() => setAvisoVenta(null)} className="dax-btn-icon dax-btn-ghost" aria-label="Cerrar aviso de venta">
+            <i className="fa-solid fa-xmark" aria-hidden="true" />
+          </button>
+        </div>
+      )}
 
       {/* ── Teléfono: barra fija de ticket + hoja inferior del carrito ── */}
       {esTelefono && (
@@ -896,6 +929,7 @@ export function POS() {
           activeSessionId={store.activeSession?.id}
         />
       )}
+      <TicketWhatsappModal saleId={ticketWa?.id ?? null} venta={ticketWa?.venta} onClose={() => setTicketWa(null)} />
       {cashMovement && (
         <CashMovementModal
           type={cashMovement}

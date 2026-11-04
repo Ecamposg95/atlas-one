@@ -21,6 +21,7 @@ import type { SalesDocument } from '../../types/sales'
 import { saleLabel } from '../../types/sales'
 import { ReturnModal } from '../../components/pos/modals/ReturnModal'
 import { ReprintPinModal } from '../../components/pos/modals/ReprintPinModal'
+import { TicketWhatsappModal } from '../../components/pos/modals/TicketWhatsappModal'
 import { formatCurrency } from '../../utils/currency'
 import { toast } from '../../store/toastStore'
 import { errorDetailText } from '../../utils/errorDetail'
@@ -103,6 +104,7 @@ export function SalesHistory() {
   const [includeOpenStates, setIncludeOpenStates] = useState(esHq)
   const [selected, setSel] = useState<SalesDocument | null>(null)
   const [returnSale, setReturnSale] = useState<SalesDocument | null>(null)
+  const [ticketWa, setTicketWa] = useState<SalesDocument | null>(null)
   const [reprinting, setReprinting] = useState(false)
   // Venta cuya reimpresión espera el PIN de un supervisor (428 del backend).
   const [ventaPorAutorizar, setVentaPorAutorizar] = useState<SalesDocument | null>(null)
@@ -218,6 +220,9 @@ export function SalesHistory() {
         title={printerName ? 'Reimprimir ticket' : 'Configura una impresora'}
       >
         <i className="fa-solid fa-print" aria-hidden="true" /> Reimprimir
+      </button>
+      <button type="button" onClick={(e) => { e.stopPropagation(); setTicketWa(s) }} className="dax-btn-secondary text-xs" title="Enviar ticket por WhatsApp">
+        <i className="fa-brands fa-whatsapp" aria-hidden="true" /> WhatsApp
       </button>
       {sePuedeDevolver(s) && (
         <button type="button" onClick={(e) => { e.stopPropagation(); setReturnSale(s) }} className="dax-btn-danger text-xs" title="Iniciar devolución">
@@ -410,6 +415,9 @@ export function SalesHistory() {
                   ? <i className="fa-solid fa-spinner fa-spin" aria-hidden="true" />
                   : <><i className="fa-solid fa-print" aria-hidden="true" /> {printerName ? 'Reimprimir ticket' : 'Sin impresora configurada'}</>}
               </button>
+              <button type="button" onClick={() => { setSel(null); setTicketWa(selected) }} className="dax-btn-secondary flex-1 justify-center">
+                <i className="fa-brands fa-whatsapp" aria-hidden="true" /> WhatsApp
+              </button>
               {sePuedeDevolver(selected) && (
                 <button type="button" onClick={() => { setSel(null); setReturnSale(selected) }} className="dax-btn-danger flex-1 justify-center">
                   <i className="fa-solid fa-undo" aria-hidden="true" /> Registrar devolución
@@ -464,6 +472,7 @@ export function SalesHistory() {
           </div>
         </Modal>
       )}
+      <TicketWhatsappModal saleId={ticketWa?.id ?? null} venta={ticketWa} onClose={() => setTicketWa(null)} />
       {returnSale && (
         <ReturnModal
           initialSale={returnSale}
