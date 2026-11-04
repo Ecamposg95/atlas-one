@@ -213,20 +213,29 @@ class BranchDashboardService:
         )
 
     def _payment_methods_session(self, session_filter) -> Dict[str, Decimal]:
-        """Sum of payments grouped by method for the active session's PAID sales."""
+        """Sum of payments grouped by method for the active session's PAID sales.
+
+        `Payment.amount` del efectivo es lo que entregó la clienta: el cambio
+        (`SalesDocument.change_given`) se resta de CASH, como en el corte y en
+        `metricas_ventas.por_metodo`."""
+        filtros = (
+            SalesDocument.organization_id == self.organization_id,
+            session_filter,
+            SalesDocument.status == DocumentStatus.PAID,
+            SalesDocument.doc_type == DocumentType.INVOICE,
+        )
         rows = (
             self.db.query(Payment.method, func.coalesce(func.sum(Payment.amount), 0))
             .join(SalesDocument, SalesDocument.id == Payment.sales_document_id)
-            .filter(
-                SalesDocument.organization_id == self.organization_id,
-                session_filter,
-                SalesDocument.status == DocumentStatus.PAID,
-                SalesDocument.doc_type == DocumentType.INVOICE,
-            )
+            .filter(*filtros)
             .group_by(Payment.method)
             .all()
         )
-        return {(method.value if hasattr(method, 'value') else str(method)): Decimal(total or 0) for method, total in rows}
+        totales = {(method.value if hasattr(method, 'value') else str(method)): Decimal(total or 0) for method, total in rows}
+        if "CASH" in totales:
+            cambio = self.db.query(func.coalesce(func.sum(SalesDocument.change_given), 0)).filter(*filtros).scalar()
+            totales["CASH"] -= Decimal(str(cambio or 0))
+        return totales
 
     def _top_products_session(self, session_filter) -> List[TopProduct]:
         """Top 3 products by units sold during the active session."""
