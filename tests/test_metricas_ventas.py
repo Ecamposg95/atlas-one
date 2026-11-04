@@ -58,6 +58,12 @@ def _devolucion(db, org, branch, user, venta, importe, *, dia=None, hora=13, sta
                      total_refunded=Decimal(importe), refund_method=metodo, reason="Prueba", status=status)
     dev.created_at = _instante(dia, hora)
     db.add(dev)
+    if status == "APPROVED":
+        # Como `app/crud/returns.py::approve_return`: aprobar rebaja el total
+        # del ticket. Sin esto las pruebas no veían que el reporte restaba la
+        # devolución dos veces (una en `total_amount`, otra en `total_refunded`).
+        venta.subtotal = Decimal(str(venta.subtotal)) - Decimal(importe)
+        venta.total_amount = Decimal(str(venta.total_amount)) - Decimal(importe)
     db.commit()
     return dev
 

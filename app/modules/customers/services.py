@@ -27,6 +27,9 @@ from app.modules.customers.models import Customer, CustomerLedgerEntry
 
 CERO = Decimal("0.00")
 CENTAVO = Decimal("0.01")
+# Estados de ticket que no deben nada (valores de `DocumentStatus`; el import
+# es perezoso en este módulo para no ciclar con app.models.sales).
+_SIN_DEUDA = frozenset({"PAID", "CANCELLED", "REFUNDED_TOTAL", "REFUNDED_PARTIAL"})
 
 
 def _dec(x) -> Decimal:
@@ -74,6 +77,25 @@ def deuda_cargada_por_documento(
     return max(CERO, cargos - abonos)
 
 
+def deuda_viva_del_documento(
+    db: Session, *, org_id: int, documento, customer_id: int
+) -> Decimal:
+    """Lo que ESTE documento todavía le debe al negocio, para devolver o cancelar.
+
+    Igual que `deuda_cargada_por_documento`, pero un ticket PAID o devuelto no
+    debe nada aunque el ledger conserve su cargo sin abono enlazado: así quedan
+    los tickets que `conciliar_abonos_fifo` cerró con abonos sueltos. Leer solo
+    el ledger le aplicaba al saldo del cliente (que ya había pagado) la
+    devolución que debía entregársele, reabría el ticket como PENDING, y la
+    cancelación le dejaba el importe entero a favor.
+    """
+    estado = getattr(documento.status, "value", documento.status)
+    if estado in _SIN_DEUDA:
+        return CERO
+    return deuda_cargada_por_documento(
+        db, org_id=org_id, documento=documento, customer_id=customer_id)
+
+
 def saldo_documento(db: Session, *, org_id: int, documento, customer_id: int) -> Decimal:
     """Lo que el cliente todavía debe de ESTE documento, para el CRM.
 
@@ -89,9 +111,10 @@ def saldo_documento(db: Session, *, org_id: int, documento, customer_id: int) ->
     # PAID significa sin deuda, aunque el ledger conserve el cargo sin abono
     # enlazado (abonos libres anteriores a la auditoría, tickets cerrados por
     # `conciliar_abonos_fifo`): lo garantizan `_marcar_pagado_si_liquidado`,
-    # `/pay` y el script de conciliación.
-    if estado in (DocumentStatus.CANCELLED.value, DocumentStatus.REFUNDED_TOTAL.value,
-                  DocumentStatus.PAID.value):
+    # `/pay` y el script de conciliación. REFUNDED_PARTIAL tampoco: una
+    # devolución parcial que deja deuda mantiene el ticket PENDING
+    # (`app/crud/returns.py`), así que el parcial solo nace sin deuda.
+    if estado in _SIN_DEUDA:
         return CERO
     hay_asientos = db.query(CustomerLedgerEntry.id).filter(
         CustomerLedgerEntry.organization_id == org_id,
@@ -271,7 +294,7 @@ def revertir_cargo_de_documento(
     ).first()
     if customer is None:
         return CERO
-    vivo = deuda_cargada_por_documento(
+    vivo = deuda_viva_del_documento(
         db, org_id=org_id, documento=documento, customer_id=customer.id)
     if vivo <= CERO:
         return CERO
@@ -300,7 +323,7 @@ def aplicar_devolucion_a_saldo(
     ).first()
     if customer is None:
         return CERO
-    vivo = deuda_cargada_por_documento(
+    vivo = deuda_viva_del_documento(
         db, org_id=org_id, documento=documento, customer_id=customer.id)
     aplicado = min(_dec(monto), vivo)
     if aplicado <= CERO:
@@ -549,6 +572,7 @@ def cuentas_por_cobrar(
 
 __all__ = [
     "deuda_cargada_por_documento",
+    "deuda_viva_del_documento",
     "saldo_documento",
     "documentos_abiertos",
     "DocumentoAbierto",

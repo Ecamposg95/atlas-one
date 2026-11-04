@@ -256,14 +256,16 @@ def approve_return(db: Session, return_id: str, supervisor_id: int,
     # dinero a un cliente que no había pagado la mercancía, y su deuda seguía
     # intacta. Solo lo que exceda la deuda viva se entrega por el método
     # elegido (auditoría del crédito, 2026-10-28).
-    from app.modules.customers.services import aplicar_devolucion_a_saldo, deuda_cargada_por_documento
+    from app.modules.customers.services import aplicar_devolucion_a_saldo, deuda_viva_del_documento
     aplicado_a_saldo = aplicar_devolucion_a_saldo(
         db, org_id=db_return.organization_id, documento=sale, monto=refund_amount,
         descripcion=f"Devolución #{db_return.id[:8].upper()} aplicada al saldo",
     )
     a_entregar = refund_amount - aplicado_a_saldo
     db.flush()
-    sigue_debiendo = bool(sale.customer_id) and deuda_cargada_por_documento(
+    # Con el estado de ANTES de esta devolución: un ticket que ya estaba PAID
+    # no vuelve a quedar por cobrar aunque su cargo no tenga abono enlazado.
+    sigue_debiendo = bool(sale.customer_id) and deuda_viva_del_documento(
         db, org_id=db_return.organization_id, documento=sale, customer_id=sale.customer_id,
     ) > Decimal("0")
 

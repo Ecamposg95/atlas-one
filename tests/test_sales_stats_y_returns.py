@@ -41,6 +41,10 @@ def _devolucion(db, org, branch, user, venta, importe, *, dia=None, status="APPR
                      status=status)
     dev.created_at = _instante(dia or mv.hoy_mx())
     db.add(dev)
+    if status == "APPROVED":
+    # Como approve_return: aprobar rebaja el total del ticket.
+        venta.subtotal = Decimal(str(venta.subtotal)) - Decimal(importe)
+        venta.total_amount = Decimal(str(venta.total_amount)) - Decimal(importe)
     db.commit()
     return dev
 

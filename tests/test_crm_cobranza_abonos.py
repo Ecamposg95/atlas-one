@@ -57,9 +57,10 @@ def test_efectivo_sin_sucursal_se_rechaza_y_tarjeta_pasa(
 def test_paid_in_full_sale_de_la_deuda_restante_y_no_del_estatus(
     client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup
 ):
-    """Una fiada con devolución parcial aprobada sigue debiendo lo que falta;
-    si no está PENDING (aquí REFUNDED_PARTIAL) el servicio no la marca PAID,
-    pero al abonar justo lo que debe el ticket queda saldado y así se dice."""
+    """Una fiada con devolución parcial aprobada sigue debiendo lo que falta
+    (y sigue PENDING: un REFUNDED_PARTIAL ya no debe nada, ver
+    `test_devolucion_ticket_conciliado.py`); al abonar justo lo que debe, el
+    ticket queda saldado aunque su total original fuera mayor, y así se dice."""
     h, variant, _ = _escenario(client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup)
     cliente = _cliente(db, org)
     r = client.post("/api/sales/", json={          # 200 sin pagar (el helper fía una pieza)
@@ -79,9 +80,9 @@ def test_paid_in_full_sale_de_la_deuda_restante_y_no_del_estatus(
         user_id=cajero_a.id, branch_id=branch_a.id, organization_id=org.id,
     )
     crud_returns.approve_return(db, d.id, supervisor_id=cajero_a.id, organization_id=org.id)
-    doc = db.query(SalesDocument).filter(SalesDocument.id == venta["sale_id"]).one()
-    doc.status = DocumentStatus.REFUNDED_PARTIAL  # estado con el que el CRM aún lo cobra
     db.commit()
+    doc = db.query(SalesDocument).filter(SalesDocument.id == venta["sale_id"]).one()
+    assert doc.status == DocumentStatus.PENDING
     db.expire_all()
     db.refresh(cliente)
     assert Decimal(str(cliente.current_balance)) == Decimal("100.00")
@@ -93,6 +94,9 @@ def test_paid_in_full_sale_de_la_deuda_restante_y_no_del_estatus(
         (venta["sale_id"], 100.0, True)]
     assert float(d["unapplied"]) == 0.0
     assert float(d["customer_balance_after"]) == 0.0
+    db.expire_all()
+    assert db.query(SalesDocument).filter(
+        SalesDocument.id == venta["sale_id"]).one().status == DocumentStatus.PAID
 
 
 def test_un_ticket_paid_con_cargo_enlazado_no_debe_nada(

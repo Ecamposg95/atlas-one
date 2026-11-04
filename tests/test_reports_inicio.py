@@ -463,6 +463,8 @@ def test_inicio_hoy_es_neto_y_trae_devuelto(client, db, org, branch_a, cajero_a,
     db.add(SaleReturn(organization_id=org.id, sale_id=v.id, user_id=cajero_a.id, branch_id=branch_a.id,
                       total_refunded=Decimal("40"), refund_method=PaymentMethod.CASH, reason="Prueba",
                       status="APPROVED"))
+    # Como approve_return: aprobar rebaja el total del ticket.
+    v.subtotal = v.total_amount = Decimal("60")
     db.commit()
     d = client.get("/api/reports/inicio?completo=true", headers=auth_admin_a).json()
     assert d["hoy"]["total"] == 60.0 and d["hoy"]["devuelto"] == 40.0 and d["hoy"]["tickets"] == 1
@@ -508,6 +510,8 @@ def test_inicio_por_hora_hoy_trae_24_horas_en_hora_de_mexico(client, db, org, br
                      total_refunded=Decimal("40"), refund_method=PaymentMethod.CASH, reason="Prueba", status="APPROVED")
     dev.created_at = _instante(0, hora=20)
     db.add(dev)
+    # Como approve_return: aprobar rebaja el total del ticket.
+    tarde.subtotal = tarde.total_amount = Decimal("60")
     db.commit()
 
     h = client.get(f"{INICIO}?completo=true", headers=auth_admin).json()["por_hora_hoy"]

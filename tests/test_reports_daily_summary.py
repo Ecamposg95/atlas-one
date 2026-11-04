@@ -247,6 +247,8 @@ def test_daily_summary_resta_devoluciones_aprobadas(client, db, org, branch_a, c
     db.add(SaleReturn(organization_id=org.id, sale_id=v.id, user_id=cajero_a.id, branch_id=branch_a.id,
                       total_refunded=Decimal("30"), refund_method=PaymentMethod.CASH, reason="Prueba",
                       status="APPROVED"))
+    # Como approve_return: aprobar rebaja el total del ticket.
+    v.subtotal = v.total_amount = Decimal("70")
     db.commit()
     d = client.get("/api/reports/daily-summary", headers=auth_cajero_a).json()
     assert d["gross_revenue"] == 100.0
