@@ -732,6 +732,9 @@
     border-radius: 16px 16px 0 0;
     padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
   }
+  /* La tarjeta de vidrio (`dax-card`, 5 % de opacidad) sobre la hoja del
+     carrito dejaba ver los renglones detrás del monto de cobro. */
+  .dax-card.dax-modal { background: var(--dax-card-solid); }
 }
 
 /* Pie de acciones pegado al fondo de la tarjeta. Vive DENTRO de

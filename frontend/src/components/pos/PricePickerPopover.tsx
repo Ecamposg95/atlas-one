@@ -188,7 +188,7 @@ export function PricePickerPopover({
             if (e.key === 'Enter') submitFree()
           }}
           placeholder="0.00"
-          className="flex-1 text-center text-base rounded px-2 outline-none tabular-nums"
+          className="flex-1 min-w-0 text-center text-base rounded px-2 outline-none tabular-nums"
           style={{
             background: 'var(--dax-card)',
             border: '1px solid rgba(139,92,246,0.5)',
@@ -199,7 +199,7 @@ export function PricePickerPopover({
         />
         <button
           onClick={submitFree}
-          className="text-sm font-bold rounded px-3 transition-colors"
+          className="text-sm font-bold rounded px-3 transition-colors flex-shrink-0"
           style={{
             height: 44,
             background: 'var(--dax-accent-soft)',

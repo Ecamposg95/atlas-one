@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuthStore } from '../../store/authStore'
 import { useModoBasico } from '../../store/enabledModulesStore'
+import { useEsTelefono } from '../../hooks/useIsMobile'
 import { productsApi } from '../../api/products'
 import { inventoryApi } from '../../api/inventory'
 import { toast } from '../../store/toastStore'
@@ -367,14 +368,17 @@ function ProductRow({ product: p, onView, onEdit, onStock }: RowProps) {
   const stock = Number(p.stock_total ?? p.stock ?? 0)
   const min = p.min_stock ?? 0
   const lowStock = min > 0 && stock <= min
+  // En teléfono el nombre se cortaba a 3 letras ("JL75…") y el precio no se
+  // veía: el nombre va en dos líneas y el precio junto al SKU.
+  const esTelefono = useEsTelefono()
 
   return (
     <li
       onClick={onView}
-      className="p-4 flex items-center gap-4 hover:bg-stone-50 dark:hover:bg-slate-800/40 transition-colors cursor-pointer"
+      className={`${esTelefono ? 'p-3 gap-3' : 'p-4 gap-4'} flex items-center hover:bg-stone-50 dark:hover:bg-slate-800/40 transition-colors cursor-pointer`}
     >
       {/* Image / placeholder */}
-      <div className="w-12 h-12 rounded-xl bg-stone-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0 overflow-hidden">
+      <div className={`${esTelefono ? 'w-10 h-10' : 'w-12 h-12'} rounded-xl bg-stone-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0 overflow-hidden`}>
         {p.image_url ? (
           <img src={p.image_url} alt="" loading="lazy" className="w-full h-full object-cover" />
         ) : (
@@ -384,27 +388,36 @@ function ProductRow({ product: p, onView, onEdit, onStock }: RowProps) {
 
       {/* Name + meta */}
       <div className="flex-1 min-w-0">
-        <p className="font-semibold text-slate-900 dark:text-slate-100 truncate">{p.label}</p>
+        <p className={`font-semibold text-slate-900 dark:text-slate-100 ${esTelefono ? 'line-clamp-2 break-words leading-snug' : 'truncate'}`}>{p.label}</p>
         <p className="text-xs text-slate-500 dark:text-slate-400 truncate font-mono">
           {p.sku}{p.brand_name ? ` · ${p.brand_name}` : ''}
         </p>
+        {esTelefono && (
+          <p className="text-sm tabular-nums">
+            <span className={`font-bold ${brand.purpleText}`}>{fmtMoney(String(p.price))}</span>
+            <span className={`text-xs ${ui.muted}`}> · Stock </span>
+            <span className={`font-bold ${lowStock ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-slate-100'}`}>{stock}</span>
+          </p>
+        )}
       </div>
 
       {/* Price */}
-      <div className="text-right hidden sm:flex flex-col items-end min-w-[80px]">
-        <span className={`text-xs ${ui.muted}`}>Precio</span>
-        <span className={`font-bold tabular-nums ${brand.purpleText}`}>
-          {fmtMoney(String(p.price))}
-        </span>
-      </div>
+      {!esTelefono && (
+        <div className="text-right hidden sm:flex flex-col items-end min-w-[80px]">
+          <span className={`text-xs ${ui.muted}`}>Precio</span>
+          <span className={`font-bold tabular-nums ${brand.purpleText}`}>
+            {fmtMoney(String(p.price))}
+          </span>
+        </div>
+      )}
 
-      {/* Stock */}
-      <div className="text-right flex flex-col items-end min-w-[70px]">
+      {/* Stock (en teléfono va junto al precio) */}
+      {!esTelefono && <div className="text-right flex flex-col items-end min-w-[70px]">
         <span className={`text-xs ${ui.muted}`}>Stock</span>
         <span className={`font-bold tabular-nums ${lowStock ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-slate-100'}`}>
           {stock}
         </span>
-      </div>
+      </div>}
 
       {/* Actions */}
       <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>

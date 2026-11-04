@@ -94,6 +94,18 @@ const pickCheapestTier = (prices?: CartItemPrice[] | null): CartItemPrice | null
   )
 }
 
+/**
+ * ¿"Aplicar caja" cambiaría algún renglón? Mismas reglas que `applyCajaToAll`:
+ * hay un escalón más barato que el precio base y el renglón no es ya de caja.
+ */
+export function puedeAplicarCaja(cart: CartItem[]): boolean {
+  return cart.some((item) => {
+    if (typeof item.cart_key === 'string' && item.cart_key.includes('::caja::')) return false
+    const cheapest = pickCheapestTier(item.prices)
+    return !!cheapest && Number(cheapest.unit_price) < (item.base_price ?? Number(item.price))
+  })
+}
+
 export const usePOSStore = create<POSStore>((set, get) => ({
   cart: [],
   requiresInvoice: false,
