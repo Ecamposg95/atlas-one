@@ -111,7 +111,8 @@ function PaymentMethods({ today }: TodayProps) {
   return (
     <div className={`${ui.card} p-5`}>
       <p className={`${ui.kpiLabel} mb-4`}>{BRANCH_COPY.cockpit.paymentMethods}</p>
-      <div className="grid grid-cols-3 gap-3">
+      {/* Tres columnas no caben en teléfono: "Transferencia" se salía de su tarjeta. */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {FIXED_METHODS.map(({ key, icon, iconBg, iconColor }) => {
           const amount = Number(payMethods[key] ?? 0)
           return (

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { usePOSStore } from '../../store/posStore'
+import { usePOSStore, puedeAplicarCaja } from '../../store/posStore'
+import { useEsTelefono } from '../../hooks/useIsMobile'
 import { toast } from '../../store/toastStore'
 import { productsApi } from '../../api/products'
 import type { CartItem } from '../../types/sales'
@@ -67,6 +68,7 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
   const opciones = opcionesPorPerfil(useEnabledModulesStore((s) => s.perfilUi))
   // Un descuento que ya viene (ticket pausado) se sigue viendo aunque básico esconda el control.
   const muestraDescuentoGlobal = opciones.descuentos || globalDiscount > 0
+  const esTelefono = useEsTelefono()
   const [editingGlobalDisc, setEditingGlobalDisc] = useState(false)
   // El cliente se asigna desde aquí: el cajero no tenía dónde hacerlo.
   const [clienteAbierto, setClienteAbierto] = useState(false)
@@ -916,6 +918,8 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
             const totalCount = cart.length
             const appliedCount = cart.filter((i) => i.cajaForcedByBulk === true).length
             const cajaModeApplied = appliedCount > 0
+            // En teléfono cada renglón cuenta: sin escalón aplicable el botón solo estorba.
+            if (esTelefono && !cajaModeApplied && !puedeAplicarCaja(cart)) return null
             return !cajaModeApplied ? (
               <button
                 onClick={() => {

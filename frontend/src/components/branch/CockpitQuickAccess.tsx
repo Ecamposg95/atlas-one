@@ -1,6 +1,9 @@
 import { Link } from 'react-router-dom'
 import { BRANCH_COPY } from '../../copy/branchCopy'
 import { ui, brand } from './branchUI'
+import { useAuthStore } from '../../store/authStore'
+import { rolesConAcceso } from '../layout/navConfig'
+import type { Role } from '../../types/auth'
 
 const TILES = [
   { to: '/sales',            label: BRANCH_COPY.pages.sales,    icon: 'fa-solid fa-receipt' },
@@ -11,11 +14,15 @@ const TILES = [
 ] as const
 
 export function CockpitQuickAccess() {
+  // Solo los accesos que el rol puede abrir: a la cajera "Reportes" la
+  // regresaba a Mi día sin decir nada.
+  const role = useAuthStore((s) => s.user?.role) as Role | undefined
+  const tiles = TILES.filter((t) => !role || rolesConAcceso(t.to).includes(role))
   return (
     <div className={`${ui.card} p-6`}>
       <p className={`${ui.kpiLabel} mb-4`}>{BRANCH_COPY.cockpit.quickAccess}</p>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        {TILES.map((t) => (
+        {tiles.map((t) => (
           <Link
             key={t.to}
             to={t.to}

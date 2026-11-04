@@ -11,6 +11,7 @@ import { needsPicker, pickVariantForCart, variantShortLabel } from './variantPic
 import { formatCurrency } from '../../utils/currency'
 import { useExchangeRateStore } from '../../store/exchangeRateStore'
 import { formatUsd, usdEquivalent } from '../../utils/usd'
+import { useEsTelefono } from '../../hooks/useIsMobile'
 
 const EDIT_ROLES = ['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO']
 
@@ -77,6 +78,10 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
   const { user } = useAuthStore()
   const canEdit = !!user?.role && EDIT_ROLES.includes(user.role)
   const opciones = opcionesPorPerfil(useEnabledModulesStore((s) => s.perfilUi))
+  // En teléfono cada producto es una fila con miniatura: la foto cuadrada a
+  // todo lo ancho dejaba ver un solo producto por pantalla (y sin fotos era
+  // un hueco gris de 340 px).
+  const esTelefono = useEsTelefono()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<Product[]>([])
   const [loading, setLoading] = useState(false)
@@ -328,7 +333,9 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
             return (
               <div
                 key={p.id}
-                className="flex flex-col gap-1.5 rounded-2xl p-3 transition-shadow hover:shadow-md"
+                className={esTelefono
+                  ? 'flex flex-row items-center gap-2 rounded-2xl p-2.5 transition-shadow'
+                  : 'flex flex-col gap-1.5 rounded-2xl p-3 transition-shadow hover:shadow-md'}
                 style={{
                   background: 'var(--dax-surface)',
                   border: `1.5px solid ${isInCart ? 'rgba(139,92,246,0.55)' : 'var(--dax-border-dim)'}`,
@@ -339,19 +346,21 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => addOrPick(p)}
                   disabled={stock <= 0 || atLimit}
-                  className={`text-left flex flex-col gap-1.5 group w-full disabled:opacity-40 disabled:cursor-not-allowed transition-colors ${isLimit ? 'opacity-80' : ''}`}
+                  className={`text-left flex ${esTelefono ? 'flex-row items-start gap-3 flex-1 min-w-0' : 'flex-col gap-1.5 w-full'} group disabled:opacity-40 disabled:cursor-not-allowed transition-colors ${isLimit ? 'opacity-80' : ''}`}
                 >
                   {/* Image / icon */}
                   <div
-                    className="w-full aspect-square rounded-xl overflow-hidden flex items-center justify-center"
+                    className={`${esTelefono ? 'w-12 h-12 flex-shrink-0' : 'w-full aspect-square'} rounded-xl overflow-hidden flex items-center justify-center`}
                     style={{ background: p.image_url ? undefined : 'var(--dax-elevated)' }}
                   >
                     {p.image_url ? (
                       <img src={p.image_url} alt="" className="w-full h-full object-cover" />
                     ) : (
-                      <i className="fa-solid fa-box text-2xl" style={{ color: 'var(--dax-text-faint)' }} />
+                      <i className={`fa-solid fa-box ${esTelefono ? 'text-base' : 'text-2xl'}`} style={{ color: 'var(--dax-text-faint)' }} />
                     )}
                   </div>
+                  {/* En escritorio el envoltorio no existe para el layout (`contents`). */}
+                  <div className={esTelefono ? 'flex-1 min-w-0 flex flex-col gap-1' : 'contents'}>
                   <p className="text-sm font-bold leading-snug line-clamp-2"
                      style={{ color: 'var(--dax-text)', lineHeight: '1.25' }}>
                     {p.sale_name ?? p.name}
@@ -443,17 +452,23 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
                       </span>
                     )}
                   </div>
+                  </div>
                 </button>
                 <button
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={(e) => { e.stopPropagation(); setDetailProduct(p) }}
-                  className="w-full mt-1 py-1.5 text-xs font-semibold rounded-xl border transition-colors"
+                  aria-label="Ver detalles"
+                  className={esTelefono
+                    ? 'w-11 h-11 flex-shrink-0 self-center flex items-center justify-center text-sm rounded-xl border transition-colors'
+                    : 'w-full mt-1 py-1.5 text-xs font-semibold rounded-xl border transition-colors'}
                   style={{ borderColor: 'var(--dax-border)', color: 'var(--dax-text-muted)' }}
                   onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(139,92,246,0.08)' }}
                   onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
                   title="Ver detalles"
                 >
-                  <i className="fa-solid fa-circle-info mr-1.5" /> Ver detalles
+                  {esTelefono
+                    ? <i className="fa-solid fa-circle-info" aria-hidden="true" />
+                    : <><i className="fa-solid fa-circle-info mr-1.5" /> Ver detalles</>}
                 </button>
               </div>
             )
