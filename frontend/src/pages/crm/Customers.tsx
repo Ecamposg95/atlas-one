@@ -5,6 +5,7 @@ import { DaxCard } from '../../components/ui/DaxCard'
 import { Spinner } from '../../components/ui/Spinner'
 import { Badge } from '../../components/ui/Badge'
 import { AbonoModal } from '../../components/crm/AbonoModal'
+import { DeudaAnteriorModal } from '../../components/crm/DeudaAnteriorModal'
 import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
 import { ListaTarjetas } from '../../components/ui/ListaTarjetas'
 import { TarjetaFila } from '../../components/ui/TarjetaFila'
@@ -45,6 +46,9 @@ export function Customers() {
   const [ledger, setLedger] = useState<LedgerEntry[]>([])
   const [ledgerLoading, setLedgerLoading] = useState(false)
   const [payModal, setPayModal] = useState<PayModal | null>(null)
+  // Deuda de antes del sistema (la libreta): la cargan dueño y administrador.
+  const [deudaModal, setDeudaModal] = useState<PayModal | null>(null)
+  const [quitando, setQuitando] = useState<number | null>(null)
   const [soloDeuda, setSoloDeuda] = useState(false)
   const [formModal, setFormModal] = useState<{ open: boolean; customer: Customer | null }>({ open: false, customer: null })
   const [deleting, setDeleting] = useState(false)
@@ -99,6 +103,33 @@ export function Customers() {
   }
 
   const cerrarPago = () => setPayModal(null)
+
+  // Tras abonar o mover la deuda anterior: saldo del detalle, su estado de cuenta, lista y KPIs.
+  const refrescarCliente = async (id: number) => {
+    customersApi.getStats().then(setStats).catch(() => {})
+    load(search, page)
+    if (selected?.id !== id) return
+    try { await openDetail(await customersApi.getById(id)) } catch { /* el detalle queda como estaba */ }
+  }
+
+  const esDeudaAnterior = (e: LedgerEntry) => !e.sales_document_id && e.amount > 0 && (e.description ?? '').startsWith('Deuda anterior')
+
+  const quitarDeuda = async (c: Customer, e: LedgerEntry) => {
+    const ok = await confirmDialog({
+      title: 'Quitar deuda anterior',
+      message: `Se quitarán ${formatCurrency(e.amount)} de la cuenta de ${c.name}.`,
+      variant: 'danger',
+      confirmText: 'Quitar',
+    })
+    if (!ok) return
+    setQuitando(e.id)
+    try {
+      await customersApi.quitarDeudaAnterior(c.id, e.id)
+      await refrescarCliente(c.id)
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'No se pudo quitar la deuda'))
+    } finally { setQuitando(null) }
+  }
 
   const pages = Math.ceil(total / LIMIT)
   const balanceColor = (b: number) => b > 0 ? 'text-red-400' : b < 0 ? 'text-emerald-400' : 'text-slate-400'
@@ -326,6 +357,13 @@ export function Customers() {
               </button>
             )}
 
+            {puedeBorrar && (
+              <button onClick={() => setDeudaModal({ id: selected.id, name: selected.name })}
+                className="dax-btn-secondary w-full justify-center mb-4 text-sm max-md:min-h-[44px]">
+                <i className="fa-solid fa-book" aria-hidden="true" /> Deuda anterior
+              </button>
+            )}
+
             <div className="grid grid-cols-2 gap-2 mb-4">
               <button onClick={() => handlePdf(selected)} disabled={sharing}
                 className="dax-btn-secondary justify-center text-sm max-md:min-h-[44px] disabled:opacity-40">
@@ -349,9 +387,17 @@ export function Customers() {
                       <p className="text-slate-300">{e.description ?? '—'}</p>
                       <p className="text-slate-600">{new Date(e.created_at).toLocaleDateString('es-MX')}{e.sales_document_id && ` · ${e.sales_document_id}`}</p>
                     </div>
-                    <p className={`font-semibold tabular-nums ${e.amount >= 0 ? 'text-red-400' : 'text-emerald-400'}`}>
-                      {e.amount >= 0 ? '+' : ''}{formatCurrency(e.amount)}
-                    </p>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <p className={`font-semibold tabular-nums ${e.amount >= 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                        {e.amount >= 0 ? '+' : ''}{formatCurrency(e.amount)}
+                      </p>
+                      {puedeBorrar && esDeudaAnterior(e) && (
+                        <button onClick={() => quitarDeuda(selected, e)} disabled={quitando === e.id}
+                          className="dax-btn-ghost text-xs max-md:min-h-[44px] disabled:opacity-40" aria-label={`Quitar deuda anterior de ${formatCurrency(e.amount)}`}>
+                          Quitar
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -366,11 +412,16 @@ export function Customers() {
           customerId={payModal.id}
           customerName={payModal.name}
           onClose={cerrarPago}
-          onDone={() => {
-            customersApi.getStats().then(setStats).catch(() => {})
-            load(search, page)
-            if (selected?.id === payModal.id) openDetail({ ...selected })
-          }}
+          onDone={() => { refrescarCliente(payModal.id) }}
+        />
+      )}
+
+      {deudaModal && (
+        <DeudaAnteriorModal
+          customerId={deudaModal.id}
+          customerName={deudaModal.name}
+          onClose={() => setDeudaModal(null)}
+          onDone={() => { refrescarCliente(deudaModal.id) }}
         />
       )}
 

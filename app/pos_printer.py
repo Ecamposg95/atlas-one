@@ -1146,7 +1146,7 @@ class PosPrinter:
     def build_abono_bytes(self, *, organization, branch, cashier: str, customer_name: str,
                           amount: float, method: str, reference, applied: list, unapplied: float,
                           balance_before: float, balance_after: float, received_at: datetime,
-                          folio: str) -> bytes:
+                          folio: str, deuda_anterior: float = 0.0) -> bytes:
         """Recibo de abono a cuenta (spec 2026-10-29 §4.3). Sin apertura de cajón:
         el efectivo ya entró con el abono, el recibo solo lo documenta."""
         sep = ("-" * self.cols + "\n").encode("latin-1", "replace")
@@ -1166,8 +1166,10 @@ class PosPrinter:
         raw += self._rline("Abono", amount)
         metodo = {"CASH": "Efectivo", "CARD": "Tarjeta", "TRANSFER": "Transferencia"}.get(str(method).upper(), str(method))
         raw += linea(f"Metodo: {metodo}" + (f" ({reference})" if reference else ""))
-        if applied:
+        if applied or (deuda_anterior and deuda_anterior > 0):
             raw += sep + linea("APLICADO A:")
+            if deuda_anterior and deuda_anterior > 0:
+                raw += self._rline("Deuda anterior", float(deuda_anterior))
             for a in applied:
                 etiqueta = f"Ticket {a['folio']}" + (" (liquidado)" if a.get("paid_in_full") else "")
                 raw += self._rline(etiqueta, float(a["amount"]))
