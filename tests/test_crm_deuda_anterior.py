@@ -3,6 +3,7 @@ antes del sistema (la libreta de Eleven). Sube su saldo con la fecha real de
 la deuda, no es venta ni toca caja ni inventario, los abonos la cubren
 primero y se puede quitar mientras no tenga abonos."""
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from decimal import Decimal
 
 from app.models.platform import PlatformAuditLog
@@ -12,6 +13,12 @@ from app.modules.customers.services import antiguedad_por_cargo, asientos_del_cl
 from app.pos_printer import PosPrinter
 from app.services import metricas_ventas as mv
 from tests.cobranza_helpers import _cliente, _escenario, _fiar
+
+
+def _hoy_mx() -> date:
+    # El servicio valida "no en el futuro" con el día de México; el runner del CI
+    # vive en UTC y de 18:00 a 24:00 de México ya va en el día siguiente.
+    return datetime.now(ZoneInfo("America/Mexico_City")).date()
 
 
 def _ho(auth_admin, org):
@@ -27,7 +34,7 @@ def _cargar(client, h, cliente, monto, fecha, nota=None):
 
 def test_el_dueno_carga_la_deuda_con_su_fecha(client, db, org, auth_admin):
     cliente = _cliente(db, org, "Ana")
-    fecha = date.today() - timedelta(days=100)
+    fecha = _hoy_mx() - timedelta(days=100)
     r = _cargar(client, _ho(auth_admin, org), cliente, "1500", fecha, "libreta: vestido Zara")
     assert r.status_code == 200, r.text
     d = r.json()
@@ -46,22 +53,22 @@ def test_el_dueno_carga_la_deuda_con_su_fecha(client, db, org, auth_admin):
 
 def test_sin_nota_la_descripcion_es_solo_deuda_anterior(client, db, org, auth_admin):
     cliente = _cliente(db, org)
-    d = _cargar(client, _ho(auth_admin, org), cliente, "80", date.today()).json()
+    d = _cargar(client, _ho(auth_admin, org), cliente, "80", _hoy_mx()).json()
     assert d["entry"]["description"] == "Deuda anterior"
 
 
 def test_la_cajera_no_puede_cargar_deuda_anterior(client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup):
     h, _, _ = _escenario(client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup)
     cliente = _cliente(db, org)
-    assert _cargar(client, h, cliente, "100", date.today()).status_code == 403
+    assert _cargar(client, h, cliente, "100", _hoy_mx()).status_code == 403
 
 
 def test_monto_y_fecha_invalidos_se_rechazan(client, db, org, auth_admin):
     cliente = _cliente(db, org)
     h = _ho(auth_admin, org)
-    assert _cargar(client, h, cliente, "0", date.today()).status_code == 422
-    assert _cargar(client, h, cliente, "-5", date.today()).status_code == 422
-    r = _cargar(client, h, cliente, "100", date.today() + timedelta(days=2))
+    assert _cargar(client, h, cliente, "0", _hoy_mx()).status_code == 422
+    assert _cargar(client, h, cliente, "-5", _hoy_mx()).status_code == 422
+    r = _cargar(client, h, cliente, "100", _hoy_mx() + timedelta(days=2))
     assert r.status_code == 422
     assert "futuro" in r.json()["detail"]
     db.refresh(cliente)
@@ -70,10 +77,10 @@ def test_monto_y_fecha_invalidos_se_rechazan(client, db, org, auth_admin):
 
 def test_no_es_venta_ni_fiado_y_entra_a_cobranza_por_su_antiguedad(client, db, org, auth_admin):
     cliente = _cliente(db, org, "Beth")
-    _cargar(client, _ho(auth_admin, org), cliente, "900", date.today() - timedelta(days=75))
+    _cargar(client, _ho(auth_admin, org), cliente, "900", _hoy_mx() - timedelta(days=75))
 
     ambito = mv.Ambito(organization_id=org.id, branch_id=None, toda_la_org=True)
-    periodo = mv.Periodo(date.today() - timedelta(days=120), date.today())
+    periodo = mv.Periodo(_hoy_mx() - timedelta(days=120), _hoy_mx())
     res = mv.resumen(db, ambito, periodo)
     assert (res.bruta, res.neta, res.tickets) == (0.0, 0.0, 0)
     assert mv.fiado(db, ambito, periodo) == 0.0
@@ -92,7 +99,7 @@ def test_el_abono_libre_cubre_primero_la_deuda_anterior(
     h, variant, _ = _escenario(client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup)
     cliente = _cliente(db, org)
     venta = _fiar(client, h, cliente, variant.sku)          # ticket de hoy por 100
-    _cargar(client, _ho(auth_admin, org), cliente, "300", date.today() - timedelta(days=60))
+    _cargar(client, _ho(auth_admin, org), cliente, "300", _hoy_mx() - timedelta(days=60))
 
     r = client.post(f"/api/customers/{cliente.id}/pay", json={"amount": "350", "method": "CASH"}, headers=h)
     assert r.status_code == 200, r.text
@@ -112,7 +119,7 @@ def test_el_abono_libre_cubre_primero_la_deuda_anterior(
 def test_un_abono_menor_baja_solo_la_deuda_anterior(client, db, org, branch_a, cajero_a, auth_cajero_a, auth_admin, products_setup):
     h, _, _ = _escenario(client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup)
     cliente = _cliente(db, org)
-    _cargar(client, _ho(auth_admin, org), cliente, "300", date.today() - timedelta(days=10))
+    _cargar(client, _ho(auth_admin, org), cliente, "300", _hoy_mx() - timedelta(days=10))
     d = client.post(f"/api/customers/{cliente.id}/pay", json={"amount": "120", "method": "CASH"}, headers=h).json()
     assert (float(d["deuda_anterior"]), float(d["unapplied"]), d["applied"]) == (120.0, 0.0, [])
     assert float(d["customer_balance_after"]) == 180.0
@@ -127,7 +134,7 @@ def test_un_abono_menor_baja_solo_la_deuda_anterior(client, db, org, branch_a, c
 def test_quitar_la_deuda_sin_abonos_la_borra(client, db, org, auth_admin):
     cliente = _cliente(db, org)
     h = _ho(auth_admin, org)
-    entry = _cargar(client, h, cliente, "500", date.today() - timedelta(days=5)).json()["entry"]
+    entry = _cargar(client, h, cliente, "500", _hoy_mx() - timedelta(days=5)).json()["entry"]
     r = client.delete(f"/api/customers/{cliente.id}/deuda-anterior/{entry['id']}", headers=h)
     assert r.status_code == 200, r.text
     assert float(r.json()["customer_balance"]) == 0.0
@@ -139,7 +146,7 @@ def test_no_se_quita_si_ya_recibio_abonos(client, db, org, branch_a, cajero_a, a
     h, _, _ = _escenario(client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup)
     cliente = _cliente(db, org)
     ho = _ho(auth_admin, org)
-    entry = _cargar(client, ho, cliente, "500", date.today() - timedelta(days=5)).json()["entry"]
+    entry = _cargar(client, ho, cliente, "500", _hoy_mx() - timedelta(days=5)).json()["entry"]
     client.post(f"/api/customers/{cliente.id}/pay", json={"amount": "100", "method": "CASH"}, headers=h)
     r = client.delete(f"/api/customers/{cliente.id}/deuda-anterior/{entry['id']}", headers=ho)
     assert r.status_code == 409, r.text
