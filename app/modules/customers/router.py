@@ -28,6 +28,8 @@ from app.modules.customers.schemas import (
     CobranzaResponse,
     ClienteCobranzaOut,
     ResumenCobranza,
+    DeudaAnteriorCreate,
+    DeudaAnteriorResponse,
 )
 from app.core.security import get_current_user
 from app.core.security.guards import require_admin_or_owner
@@ -673,7 +675,10 @@ def register_customer_payment(
         )
         for a in asientos if a.sales_document_id in docs
     ]
-    unapplied = sum((-Decimal(str(a.amount)) for a in asientos if not a.sales_document_id), Decimal("0"))
+    from app.modules.customers.services import es_abono_a_deuda_anterior
+    deuda_anterior = sum((-Decimal(str(a.amount)) for a in asientos if es_abono_a_deuda_anterior(a)), Decimal("0"))
+    unapplied = sum((-Decimal(str(a.amount)) for a in asientos
+                     if not a.sales_document_id and not es_abono_a_deuda_anterior(a)), Decimal("0"))
 
     db.commit()
     for a in asientos:
@@ -685,11 +690,76 @@ def register_customer_payment(
         customer_balance_after=Decimal(str(customer.current_balance)),
         applied=applied,
         unapplied=unapplied,
+        deuda_anterior=deuda_anterior,
         payment_id=payment_record.id,
         method=method_enum.value,
         reference=payment_in.reference,
         received_at=payment_record.created_at,
     )
+
+# --------------------------------------------------------------------------
+# DEUDA ANTERIOR (lo que ya se debía antes del sistema: la libreta)
+# --------------------------------------------------------------------------
+# Cargarla o quitarla es de dueño/administrador: sube una deuda sin ticket que
+# nadie cobró en el mostrador. Abonarla sigue siendo de quien tiene la caja
+# (POST /pay), y el abono libre la cubre antes que los tickets.
+@router.post("/{customer_id}/deuda-anterior", response_model=DeudaAnteriorResponse)
+def cargar_deuda_anterior_endpoint(
+    customer_id: int,
+    datos: DeudaAnteriorCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_owner),
+    org_id: int = Depends(get_current_active_organization),
+):
+    from app.modules.customers.services import DeudaAnteriorInvalida, cargar_deuda_anterior
+    from app.services.audit_service import write_audit
+
+    customer = db.query(Customer).filter(Customer.id == customer_id, Customer.organization_id == org_id).first()
+    if not customer:
+        raise HTTPException(404, "Cliente no encontrado")
+    try:
+        entry = cargar_deuda_anterior(db, org_id=org_id, customer=customer, amount=datos.amount,
+                                      fecha=datos.fecha, nota=datos.nota)
+    except DeudaAnteriorInvalida as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    write_audit(db, actor_user_id=current_user.id, action="CUSTOMER_DEUDA_ANTERIOR_CREATE",
+                entity_type="CustomerLedgerEntry", entity_id=entry.id, organization_id=org_id,
+                meta={"customer_id": customer.id, "amount": str(datos.amount),
+                      "fecha": datos.fecha.isoformat(), "nota": datos.nota})
+    db.commit()
+    db.refresh(entry)
+    db.refresh(customer)
+    return DeudaAnteriorResponse(entry=LedgerEntryResponse.model_validate(entry),
+                                 customer_balance=Decimal(str(customer.current_balance)))
+
+
+@router.delete("/{customer_id}/deuda-anterior/{entry_id}", response_model=DeudaAnteriorResponse)
+def quitar_deuda_anterior_endpoint(
+    customer_id: int,
+    entry_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_owner),
+    org_id: int = Depends(get_current_active_organization),
+):
+    from app.modules.customers.services import DeudaAnteriorConAbonos, quitar_deuda_anterior
+    from app.services.audit_service import write_audit
+
+    customer = db.query(Customer).filter(Customer.id == customer_id, Customer.organization_id == org_id).first()
+    if not customer:
+        raise HTTPException(404, "Cliente no encontrado")
+    try:
+        monto = quitar_deuda_anterior(db, org_id=org_id, customer=customer, entry_id=entry_id)
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except DeudaAnteriorConAbonos as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    write_audit(db, actor_user_id=current_user.id, action="CUSTOMER_DEUDA_ANTERIOR_DELETE",
+                entity_type="CustomerLedgerEntry", entity_id=entry_id, organization_id=org_id,
+                meta={"customer_id": customer.id, "amount": str(monto)})
+    db.commit()
+    db.refresh(customer)
+    return DeudaAnteriorResponse(entry=None, customer_balance=Decimal(str(customer.current_balance)))
+
 
 from fastapi import Response
 from app.modules.customers.statement_pdf import (

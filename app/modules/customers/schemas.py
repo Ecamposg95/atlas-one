@@ -2,10 +2,10 @@
 
 Phase 2 / S2: moved from app/schemas/customers.py.
 """
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Dict, List, Optional
 from decimal import Decimal
-from datetime import datetime
+from datetime import date, datetime
 
 # --- CLASES BASE ---
 
@@ -75,10 +75,24 @@ class AbonoResponse(BaseModel):
     customer_balance_after: Decimal
     applied: List[AbonoAplicado]
     unapplied: Decimal          # saldo a favor que quedó sin ticket
+    deuda_anterior: Decimal = Decimal("0")  # lo que cubrió de la deuda anterior (sin ticket)
     payment_id: str             # UUID del Payment
     method: str
     reference: Optional[str] = None
     received_at: datetime
+
+
+class DeudaAnteriorCreate(BaseModel):
+    """POST /customers/{id}/deuda-anterior: lo que la clienta ya debía antes
+    del sistema (la libreta). `fecha` es el día de la deuda, no el de la carga."""
+    amount: Decimal = Field(gt=0, le=Decimal("99999999.99"))
+    fecha: date
+    nota: Optional[str] = Field(default=None, max_length=200)
+
+
+class DeudaAnteriorResponse(BaseModel):
+    entry: Optional[LedgerEntryResponse] = None   # None al quitarla
+    customer_balance: Decimal
 
 
 class ClienteCobranzaOut(BaseModel):

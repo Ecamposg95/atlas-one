@@ -569,6 +569,7 @@ def print_abono_endpoint(
             customer_name=detalle["customer"].name, amount=float(pago.amount),
             method=str(getattr(pago.method, "value", pago.method)), reference=pago.reference,
             applied=detalle["applied"], unapplied=float(detalle["unapplied"]),
+            deuda_anterior=float(detalle["deuda_anterior"]),
             balance_before=float(detalle["balance_before"]), balance_after=float(detalle["balance_after"]),
             received_at=pago.created_at, folio=f"AB-{pago.id[:8].upper()}",
         )

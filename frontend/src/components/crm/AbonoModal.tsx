@@ -23,7 +23,8 @@ const apiErrorMessage = (err: unknown, fallback: string) => {
 /**
  * Registrar un abono a la cuenta de un cliente (spec 2026-10-29 §4.1). Lo
  * usan Clientes, Cuentas por cobrar y el POS. Sin ticket elegido el backend
- * reparte del más viejo al más nuevo; lo que sobre queda a favor.
+ * cubre primero la deuda anterior y reparte del ticket más viejo al más
+ * nuevo; lo que sobre queda a favor.
  */
 export function AbonoModal({ customerId, customerName, onClose, onDone, imprimir }: Props) {
   const [monto, setMonto] = useState('')
@@ -167,7 +168,7 @@ export function AbonoModal({ customerId, customerName, onClose, onDone, imprimir
             Imprimir recibo
           </label>
         )}
-        <p className="text-xs text-dax-muted">Sin ticket elegido, el abono se aplica del ticket más viejo al más nuevo; lo que sobre queda a favor.</p>
+        <p className="text-xs text-dax-muted">Sin ticket elegido, el abono cubre primero la deuda anterior y luego del ticket más viejo al más nuevo; lo que sobre queda a favor.</p>
         {error && <p className="text-dax-danger text-xs" role="alert">{error}</p>}
       </div>
     </Modal>

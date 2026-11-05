@@ -87,10 +87,18 @@ export interface AbonoResponse {
   customer_balance_after: number
   applied: AbonoAplicado[]
   unapplied: number
+  /** Lo que el abono cubrió de la deuda anterior (sin ticket). */
+  deuda_anterior?: number
   payment_id: string
   method: string
   reference: string | null
   received_at: string
+}
+
+/** Respuesta de POST/DELETE /customers/{id}/deuda-anterior. */
+export interface DeudaAnteriorResponse {
+  entry: LedgerEntry | null
+  customer_balance: number
 }
 
 export interface CustomerListResponse {
@@ -133,6 +141,17 @@ export const customersApi = {
   pay: async (id: number, payload: { amount: number; method?: string; reference?: string; sales_document_id?: string }): Promise<AbonoResponse> => {
     const { data } = await client.post<AbonoResponse>(`/customers/${id}/pay`, payload)
     return data
+  },
+
+  /** Deuda de antes del sistema (la libreta); solo dueño y administrador. */
+  cargarDeudaAnterior: async (id: number, payload: { amount: number; fecha: string; nota?: string }): Promise<DeudaAnteriorResponse> => {
+    const { data } = await client.post<DeudaAnteriorResponse>(`/customers/${id}/deuda-anterior`, payload)
+    return { ...data, customer_balance: Number(data.customer_balance) }
+  },
+
+  quitarDeudaAnterior: async (id: number, entryId: number): Promise<DeudaAnteriorResponse> => {
+    const { data } = await client.delete<DeudaAnteriorResponse>(`/customers/${id}/deuda-anterior/${entryId}`)
+    return { ...data, customer_balance: Number(data.customer_balance) }
   },
 
   getUnpaidDocuments: async (id: number): Promise<UnpaidDocument[]> => {

@@ -164,7 +164,7 @@ export function Cobranza() {
     <div className="space-y-5">
       <CabeceraPagina
         titulo={<h1 className="text-2xl font-black text-dax-text">Cuentas por cobrar</h1>}
-        descripcion="Quién debe, cuánto y desde cuándo. El abono se aplica del ticket más viejo al más nuevo."
+        descripcion="Quién debe, cuánto y desde cuándo. El abono cubre primero la deuda anterior y luego del ticket más viejo al más nuevo."
         acciones={<Link to="/customers" className="dax-btn-secondary text-xs"><i className="fa-solid fa-address-book" aria-hidden="true" /> Clientes</Link>}
       />
 
