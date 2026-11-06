@@ -13,14 +13,14 @@ import { coincideUrl } from './navPerfilPlan'
  * Para esconder algo más en básico, agrégalo aquí (CLAUDE.md §5).
  */
 
-/** Cajera y gerente: Cobrar · Ventas · Corte · Productos · Impresora · Mi día. */
+/** Cajera y gerente: Cobrar · Ventas · Corte · Productos · Configuración · Mi día. */
 export const OCULTAS_BASICO_SUCURSAL: readonly string[] = [
   '/returns',             // se llega desde el ticket en Ventas y desde el POS
   '/labels', '/scanner', '/customers', '/hr/me',
   '/reports', '/hq/valor-inventario',   // gerente
 ]
 
-/** Dueña: Inicio · Ventas · Corte · Productos · Reportes · Empresa · Usuarios · Impresora. */
+/** Dueña: Inicio · Ventas · Corte · Productos · Reportes · Empresa · Usuarios · Configuración. */
 export const OCULTAS_BASICO_HQ: readonly string[] = [
   '/departments', '/brands', '/labels', '/scanner',
   '/customers', '/customers/cobranza', '/hq/branches', '/inventory', '/inventory/conteos',

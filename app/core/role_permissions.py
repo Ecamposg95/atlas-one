@@ -219,7 +219,7 @@ TEMPLATE_METADATA = {
     "cash_history.html":             {"label": "Cortes de Caja",         "icon": "fa-vault",               "url": "/cash-history"},
     "sales.html":                    {"label": "Historial Ventas",       "icon": "fa-history",             "url": "/sales"},
     "products.html":                 {"label": "Consulta Productos",     "icon": "fa-barcode",             "url": "/products"},
-    "printer_config.html":           {"label": "Config. Impresora",      "icon": "fa-print",               "url": "/printer-settings"},
+    "printer_config.html":           {"label": "Configuración",          "icon": "fa-gear",                "url": "/configuracion"},
     "reports.html":                  {"label": "Reportes",               "icon": "fa-chart-pie",           "url": "/api/reports/sales-summary"},
     # --- Mobile ---
     "mobile_query.html":             {"label": "Consulta Móvil",         "icon": "fa-mobile-alt",          "url": "/mobile/query"},
@@ -244,7 +244,7 @@ TEMPLATE_LABEL_OVERRIDES_BY_ROLE: dict[Role, dict[str, str]] = {
         "sales.html":           "Mis ventas",
         "returns.html":         "Devolución",
         "products.html":        "Inventario",
-        "printer_config.html":  "Impresora",
+        "printer_config.html":  "Configuración",
     },
 }
 # GERENTE shares the same semantic labels as CAJERO, plus reports access.

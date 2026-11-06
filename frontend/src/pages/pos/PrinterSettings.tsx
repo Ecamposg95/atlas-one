@@ -28,10 +28,12 @@ declare global {
 import { useAuthStore } from '../../store/authStore'
 import type { Branch } from '../../types/auth'
 import { elegirSucursalParaImpresora } from '../../utils/sucursalParaImpresora'
+import { guardarCajonAlCobrar } from '../../utils/cajon'
 import { usePOSStore } from '../../store/posStore'
 import { DaxCard } from '../../components/ui/DaxCard'
 import { Spinner } from '../../components/ui/Spinner'
 import { AgentDiagnosticsPanel } from '../../components/pos/AgentDiagnosticsPanel'
+import { CajonCard } from '../../components/pos/CajonCard'
 import { PrinterInstallWizard } from '../../components/pos/PrinterInstallWizard'
 import client from '../../api/client'
 import { formatCurrency } from '../../utils/currency'
@@ -54,6 +56,13 @@ interface OrgDetails {
 
 type AgentMode = 'local' | 'server'
 type Tab = 'windows' | 'linux' | 'mac' | 'bluetooth'
+type Seccion = 'impresoras' | 'cajon' | 'ticket'
+
+const SECCIONES: { id: Seccion; icon: string; label: string }[] = [
+  { id: 'impresoras', icon: 'fa-print', label: 'Impresoras' },
+  { id: 'cajon', icon: 'fa-cash-register', label: 'Cajón' },
+  { id: 'ticket', icon: 'fa-receipt', label: 'Ticket' },
+]
 
 /** Comandos de conversión al autoarranque. Los nombres de archivo que aparecen
  *  en esta pantalla viven en https://github.com/Ecamposg95/Atlas-Print-Agent: en
@@ -84,6 +93,7 @@ export function PrinterSettings() {
   const detectedOS = detectOS()
   const initialTab: Tab = detectedOS === 'linux' ? 'linux' : detectedOS === 'mac' ? 'mac' : 'windows'
   const [tab, setTab] = useState<Tab>(initialTab)
+  const [seccion, setSeccion] = useState<Seccion>('impresoras')
 
   const [config, setConfig] = useState<BranchConfig>({
     printer_name: null,
@@ -152,6 +162,7 @@ export function PrinterSettings() {
         ticket_footer: data.ticket_footer ?? '',
         open_drawer_on_print: data.open_drawer_on_print ?? true,
       })
+      guardarCajonAlCobrar(branch.id, data.open_drawer_on_print ?? true)
       if (data.printer_name) setPrinterName(data.printer_name)
     } catch { /* usa defaults */ }
   }, [branch?.id])
@@ -212,6 +223,21 @@ export function PrinterSettings() {
       showToast('Configuración guardada')
     } catch { showToast('Error al guardar', 'error') }
     finally { setSaving(false) }
+  }
+
+  // En su propia pestaña no hay un Guardar a la vista: depender de él lo perdía en silencio.
+  const cambiarAbreAlCobrar = async (valor: boolean) => {
+    if (!branch?.id) { showToast('Sin sucursal activa', 'error'); return }
+    const antes = config.open_drawer_on_print
+    setConfig(c => ({ ...c, open_drawer_on_print: valor }))
+    try {
+      await client.put(`/branches/${branch.id}`, { open_drawer_on_print: valor })
+      guardarCajonAlCobrar(branch.id, valor)
+      showToast('Cajón actualizado')
+    } catch {
+      setConfig(c => ({ ...c, open_drawer_on_print: antes }))
+      showToast('No se pudo guardar el ajuste del cajón', 'error')
+    }
   }
 
   const uploadBranchLogo = async (file: File) => {
@@ -373,7 +399,7 @@ export function PrinterSettings() {
       )}
 
       {/* Agente local — estado + diagnóstico */}
-      <AgentDiagnosticsPanel />
+      {seccion !== 'ticket' && <AgentDiagnosticsPanel />}
 
       <PrinterInstallWizard
         open={wizardOpen}
@@ -388,8 +414,8 @@ export function PrinterSettings() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <i className="fa-solid fa-print text-indigo-400 text-xl" />
-          <h1 className="text-2xl font-black" style={{ color: 'var(--dax-text)' }}>Impresora</h1>
+          <i className="fa-solid fa-gear text-indigo-400 text-xl" aria-hidden="true" />
+          <h1 className="text-2xl font-black" style={{ color: 'var(--dax-text)' }}>Configuración</h1>
           {branch && (
             <span className="text-xs text-slate-400">Configurando: <b>{branch.name}</b></span>
           )}
@@ -402,6 +428,7 @@ export function PrinterSettings() {
           )}
         </div>
         <div className="flex flex-wrap gap-2">
+          {seccion === 'impresoras' && <>
           <a
             href={printerApi.downloadAgentUrl(detectedOS === 'linux' ? 'linux' : detectedOS === 'mac' ? 'mac' : 'windows')}
             className="dax-btn-secondary text-xs"
@@ -416,6 +443,8 @@ export function PrinterSettings() {
           >
             <i className="fa-solid fa-plus" /> Instalar impresora
           </button>
+          </>}
+          {seccion !== 'cajon' && <>
           <button onClick={save} disabled={saving} className="dax-btn-primary text-xs">
             {saving ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-floppy-disk" /> Guardar</>}
           </button>
@@ -426,9 +455,27 @@ export function PrinterSettings() {
           >
             {testing ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-paper-plane" /> Probar</>}
           </button>
+          </>}
         </div>
       </div>
 
+      {/* Secciones del módulo */}
+      <div role="tablist" aria-label="Secciones de configuración" className="flex flex-wrap gap-2 border-b pb-3" style={{ borderColor: 'var(--dax-border-dim)' }}>
+        {SECCIONES.map(s => (
+          <button
+            key={s.id}
+            type="button"
+            role="tab"
+            aria-selected={seccion === s.id}
+            onClick={() => setSeccion(s.id)}
+            className={`${seccion === s.id ? 'dax-btn-primary' : 'dax-btn-ghost'} text-sm min-h-[44px]`}
+          >
+            <i className={`fa-solid ${s.icon}`} aria-hidden="true" /> {s.label}
+          </button>
+        ))}
+      </div>
+
+      {seccion === 'impresoras' && <>
       {/* OS / Mode Tabs */}
       <div className="flex flex-wrap gap-1 p-1 rounded-xl w-fit" style={{ background: 'var(--dax-elevated)' }}>
         {([
@@ -477,9 +524,8 @@ export function PrinterSettings() {
         </a>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* Columna izquierda — agente */}
-        <div className="space-y-4">
+        {/* Agente */}
+        <div className="space-y-4 max-w-3xl">
 
           {tab === 'windows' && (
             <>
@@ -913,9 +959,21 @@ export function PrinterSettings() {
           )}
 
         </div>
+      </>}
 
-        {/* Columna derecha — Editor de ticket */}
-        <div className="space-y-4">
+      {seccion === 'cajon' && (
+        <div className="max-w-xl">
+          <CajonCard
+            impresora={config.printer_name}
+            agenteEnLinea={agentOnline}
+            abreAlCobrar={config.open_drawer_on_print}
+            onCambiarAbreAlCobrar={cambiarAbreAlCobrar}
+          />
+        </div>
+      )}
+
+      {seccion === 'ticket' && (
+        <div className="space-y-4 max-w-3xl">
 
           {/* Ancho de papel */}
           <DaxCard>
@@ -936,42 +994,6 @@ export function PrinterSettings() {
                 </button>
               ))}
             </div>
-          </DaxCard>
-
-          {/* Cajón de dinero */}
-          <DaxCard>
-            <p className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--dax-text-faint)' }}>
-              <i className="fa-solid fa-cash-register mr-1.5" />Cajón de Dinero
-            </p>
-            <label className="flex items-start gap-3 cursor-pointer mb-3">
-              <input
-                type="checkbox"
-                checked={config.open_drawer_on_print}
-                onChange={e => setConfig(c => ({ ...c, open_drawer_on_print: e.target.checked }))}
-                className="mt-0.5 accent-indigo-500"
-              />
-              <span className="text-sm text-slate-300 leading-tight">
-                Abrir cajón al imprimir ticket
-                <span className="block text-[11px] text-slate-500 mt-0.5">
-                  Solo se abre si el pago incluye efectivo. El cajón debe estar conectado a la térmica por RJ-11.
-                </span>
-              </span>
-            </label>
-            <button
-              disabled={!config.printer_name || !agentOnline}
-              onClick={async () => {
-                if (!config.printer_name) return
-                try {
-                  await printerApi.openDrawerViaAgent(config.printer_name)
-                  showToast('Cajón abierto')
-                } catch (e) {
-                  showToast(`Error: ${(e as Error).message}`, 'error')
-                }
-              }}
-              className="w-full py-2 rounded-xl border text-sm font-semibold text-white bg-indigo-600/10 border-indigo-500/40 hover:bg-indigo-600/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              <i className="fa-solid fa-inbox mr-2" />Abrir cajón ahora
-            </button>
           </DaxCard>
 
           {/* Logo de sucursal */}
@@ -1109,7 +1131,7 @@ export function PrinterSettings() {
           </DaxCard>
 
         </div>
-      </div>
+      )}
     </div>
   )
 }

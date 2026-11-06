@@ -25,13 +25,13 @@ describe('menú en modo básico', () => {
 
   it('cajera: exactamente seis entradas (spec §4.1)', () => {
     expect([...menu('CAJERO', 'basico')].sort()).toEqual(
-      ['/atlas-pos', '/cash-history', '/pos', '/printer-settings', '/products', '/sales'],
+      ['/atlas-pos', '/cash-history', '/configuracion', '/pos', '/products', '/sales'],
     )
   })
 
   it('administradora: exactamente ocho entradas (spec §4.2)', () => {
     expect([...menu('ADMINISTRADOR', 'basico')].sort()).toEqual(
-      ['/cash-history', '/hq/operations', '/hq/reports-hub', '/organization', '/printer-settings', '/products', '/sales', '/users'],
+      ['/cash-history', '/configuracion', '/hq/operations', '/hq/reports-hub', '/organization', '/products', '/sales', '/users'],
     )
   })
 

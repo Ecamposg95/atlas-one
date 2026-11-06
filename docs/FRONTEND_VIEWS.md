@@ -50,7 +50,7 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 | `/home` | `home/PresetHome` | Admin, Dueño (gastro) | — |
 | `/atlas-pos` | `pos/AtlasPOS` | Gerente, Cajero | pos |
 | `/pos` | `pos/POS` | Cajero, Gerente | pos |
-| `/printer-settings` | `pos/PrinterSettings` | Cajero, Gerente | pos |
+| `/configuracion` | `pos/Configuracion` | Todos los roles de tienda | pos |
 | `/sales` | `sales/SalesHistory` (Ventas: cajera y gerente ven su sucursal; admin y dueño toda la org, con selector si hay más de una sucursal que vende) | Todos | pos |
 | `/quotes`, `/quotes/new` | `sales/Quotes`, `QuoteMaker` | Admin, Dueño | quotes |
 | `/returns` | `sales/Returns` (cajera: `ReturnsBranchView`; gerente, admin y dueño: bandeja con periodo; admin y dueño con selector de sucursal) | Todos | returns |
@@ -187,13 +187,13 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Datos/API:** `salesApi.list` (hoy, limit 5).
 - **Notas:** Errores silenciados; reloj cada 10s. **Gotcha:** hooks tras early-return (`useIsBranchUser` antes del return) — patrón frágil.
 
-### `/printer-settings` — Configuración de impresora
-- **Archivo:** `pages/pos/PrinterSettings.tsx` (1200 líneas)
-- **Propósito:** Instalar/descargar el agente local por SO, elegir impresora (o Bluetooth BLE), ancho de papel, cajón, logo y editor de ticket con preview realista.
-- **Quién la ve:** Cajero, Gerente — módulo `pos`.
-- **Datos/API:** `client.get/put('/branches/:id')`, logo `post/delete`, `client.get('/organization/')`, `printerApi.*`, Web Bluetooth API.
-- **Componentes clave:** `AgentDiagnosticsPanel`, `PrinterInstallWizard`, `TicketPreview` (interno).
-- **Notas:** Tabs por SO con autodetección; banner si el agente está offline. CUPS server-side deprecado (solo agente local). Datos de muestra hardcodeados en el preview.
+### `/configuracion` — Configuración
+- **Archivo:** `pages/pos/Configuracion.tsx` elige por rol (`utils/vistaDeConfiguracion.ts`) entre `PrinterSettings.tsx` y `PrinterSettingsCajera.tsx`. `/printer-settings` redirige aquí.
+- **Propósito:** impresoras, cajón de dinero y ticket. Gerente, admin y dueño tienen pestañas **Impresoras** (agente por sistema, Bluetooth, instalar impresora), **Cajón** (`components/pos/CajonCard`: abrir ahora y si abre solo al cobrar, guarda al momento) y **Ticket** (papel, logo, editor con vista previa). La cajera elige la impresora de su PC, prueba y abre el cajón; nada de su pantalla escribe en la sucursal, y en teléfono solo se explica que eso se hace desde la PC.
+- **Quién la ve:** todos los roles de tienda — módulo `pos`.
+- **Datos/API:** `client.get/put('/branches/:id')`, logo `post/delete`, `client.get('/organization/')`, `printerApi.*` (`abrirCajonManual` abre por el agente y registra `DRAWER_OPENED_MANUAL` con `POST /printer/drawer-opened`), Web Bluetooth API.
+- **Componentes clave:** `AgentDiagnosticsPanel`, `PrinterInstallWizard`, `CajonCard`, `TicketPreview` (interno).
+- **Notas:** el cajón abre dentro de los bytes del ticket; sin ticket (efectivo sin imprimir, venta sin red) el POS lo pide aparte respetando `open_drawer_on_print`, y al cerrar turno el corte lo abre (`open_drawer`); reimprimir no. CUPS server-side deprecado (solo agente local). Datos de muestra hardcodeados en el preview.
 
 ### `/sales` — Ventas 📱
 - **Archivo:** `pages/sales/SalesHistory.tsx`. Sustituye también a `hq/HQSalesLog.tsx` (borrada 2026-10-25, Fase 3 del admin; `/hq/sales` redirige con su consulta).

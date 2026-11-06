@@ -31,7 +31,7 @@ describe('el menú de la boutique', () => {
   it('le da a la administradora camino para reimprimir, etiquetar y configurar la impresora', () => {
     const urls = menu('ADMINISTRADOR', BOUTIQUE)
     expect(urls).toEqual(expect.arrayContaining([
-      '/sales', '/products', '/labels', '/printer-settings',
+      '/sales', '/products', '/labels', '/configuracion',
     ]))
   })
 
@@ -87,7 +87,7 @@ describe('los grupos del menú', () => {
     expect(grupo('Compras')).toEqual(['/purchases', '/expenses', '/purchasing'])
     expect(grupo('Clientes')).toEqual(['/customers', '/appointments', '/commissions', '/memberships'])
     expect(grupo('Restaurante')).toEqual(['/menu', '/tables', '/mobile/comanda', '/kitchen', '/recipes', '/meseros', '/bar/bottles'])
-    expect(grupo('Organización')).toEqual(['/organization', '/hq/branches', '/users', '/hr', '/printer-settings'])
+    expect(grupo('Organización')).toEqual(['/organization', '/hq/branches', '/users', '/hr', '/configuracion'])
     expect(grupo('Inteligencia')).toEqual(['/ai'])
   })
 
@@ -143,7 +143,13 @@ describe('el título de la barra superior', () => {
     expect(routeTitle('/sales')).toBe('Ventas')
     expect(routeTitle('/products')).toBe('Productos')
     expect(routeTitle('/cash-history')).toBe('Corte de caja')
-    expect(routeTitle('/printer-settings')).toBe('Impresora')
+    expect(routeTitle('/configuracion')).toBe('Configuración')
+  })
+
+  it('todos los roles de tienda entran a Configuración', () => {
+    for (const rol of ['CAJERO', 'GERENTE', 'ADMINISTRADOR', 'DUEÑO'] as const) {
+      expect(ROLE_ROUTES[rol], rol).toContain('/configuracion')
+    }
   })
 
   it('cae al ítem más específico del que cuelga la URL', () => {
@@ -245,7 +251,7 @@ describe('los ítems que recibieron `module:` en SP2', () => {
 
   it('la operación diaria sigue sin `module:` (no hay vía nueva para esconderle la caja a una tienda)', () => {
     for (const u of ['/atlas-pos', '/pos', '/sales', '/cash-history', '/returns', '/products', '/reports',
-                     '/printer-settings', '/hq/operations', '/organization', '/hq/branches', '/users']) {
+                     '/configuracion', '/hq/operations', '/organization', '/hq/branches', '/users']) {
       expect(conModulo[u], u).toBeUndefined()
     }
   })

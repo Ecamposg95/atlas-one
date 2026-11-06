@@ -160,6 +160,8 @@ Auditoría del crédito (2026-10-28, `docs/AUDITORIA-CRM-CREDITO-2026-10-28.md`)
 ## Impresora · `/api/printer`
 `POST /test-print · /print-ticket · /reprint-ticket/{id} · /reprint-refunded/{id} · /print-cash-cut · /print-abono/{payment_id}` · `GET /printers · /download-agent`. Genera ESC/POS base64 (el agente local imprime, no el server). Registra `PrintJob`. `reprint-ticket`/`reprint-refunded` aceptan `pin` (2026-09-19): si la venta no es propia-y-reciente, primero prueban el PIN de reimpresión de un supervisor (`users.reprint_pin_hash`) y si no, su contraseña.
 
+`POST /print-cash-cut` acepta `open_drawer` (por omisión `false`): solo el cierre de turno lo manda, y `branch.open_drawer_on_print` manda sobre él. `POST /drawer-opened` `{printer_name?}` → 204: registra `DRAWER_OPENED_MANUAL` en `cash_audit_log` con la caja abierta del usuario; la apertura la hace el agente local (2026-11-06).
+
 `GET /download-agent?platform=windows|linux|mac` — redirige (302) al repositorio del
 agente, <https://github.com/Ecamposg95/Atlas-Print-Agent> (ZIP de `main`; dentro,
 `legacy/print_agent/` trae los launchers e instaladores de autoarranque). El agente ya no
