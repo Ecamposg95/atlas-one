@@ -365,6 +365,13 @@ export const printerApi = {
     }
   },
 
+  /** Apertura pedida a mano desde Configuración: deja rastro en la auditoría de caja. */
+  abrirCajonManual: async (printerName: string): Promise<void> => {
+    await printerApi.openDrawerViaAgent(printerName)
+    // El cajón ya se abrió: un fallo del registro no es un error para la cajera.
+    client.post('/printer/drawer-opened', { printer_name: printerName }).catch(() => {})
+  },
+
   /**
    * Track 4: TODA la impresión va por agente local. El backend solo genera
    * los bytes ESC/POS. Server-side CUPS deprecado.
@@ -411,21 +418,21 @@ export const printerApi = {
     return data.content_base64 ?? data.base64 ?? ''
   },
 
-  /** Obtener corte de caja en base64 para imprimir vía agente local */
-  getCashCutBase64: async (sessionId: number): Promise<string> => {
+  /** Corte de caja en base64. `openDrawer` solo al cerrar turno: reimprimir no abre el cajón. */
+  getCashCutBase64: async (sessionId: number, openDrawer = false): Promise<string> => {
     const { data } = await client.post<{ content_base64?: string; base64?: string }>(
       '/printer/print-cash-cut',
-      { session_id: sessionId }
+      { session_id: sessionId, open_drawer: openDrawer }
     )
     return data.content_base64 ?? data.base64 ?? ''
   },
 
   /**
-   * Imprimir corte de caja end-to-end: pide bytes al backend y los envía
-   * al agente local. Reemplaza al antiguo `printCashCut(server)`.
+   * Imprimir el corte al cerrar turno: pide bytes al backend (con la orden de
+   * abrir el cajón) y los envía al agente local. Reemplaza al antiguo `printCashCut(server)`.
    */
   printCashCut: async (sessionId: number, printerName: string): Promise<void> => {
-    const b64 = await printerApi.getCashCutBase64(sessionId)
+    const b64 = await printerApi.getCashCutBase64(sessionId, true)
     if (!b64) throw new Error('No se pudo generar el corte (bytes vacíos).')
     await printerApi.printViaAgent(printerName, b64)
   },
