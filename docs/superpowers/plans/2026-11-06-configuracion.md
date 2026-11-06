@@ -16,7 +16,8 @@
 |---|---|---|
 | Botón **Abrir cajón ahora** | Solo admin y dueño | `2120e540` (2026-09-29) dio a caja y gerente una pantalla simple sin él |
 | Interruptor **Abrir cajón al imprimir** | Solo admin y dueño, y no se guarda hasta pulsar Guardar | Mismo commit. El backend sí deja al gerente (`branches.py:159`) |
-| Instalar impresora, descargar agente, logo, editor de ticket | El gerente los perdió; la cajera no tiene ni la descarga del agente | Mismo commit |
+| Instalar impresora, descargar agente, logo, editor de ticket | La cajera no tiene ni la descarga del agente | Mismo commit |
+| **El gerente no entra a la pantalla** | `/printer-settings` no está en `ROLE_ROUTES.GERENTE`, así que no elige impresora ni ve el cajón, aunque el backend le permite editar | Hallado al probar la Tarea 4; `2120e540` lo daba por visto |
 | **Cobro en efectivo sin ticket abre el cajón** | No abre: la orden viaja dentro de los bytes del ticket | Atlas-Rmazh lo corrigió (`openDrawerOnly`); aquí nunca llegó |
 | **Venta offline en efectivo abre el cajón** | No abre | Igual |
 | **Cerrar turno abre el cajón** | No abre. `build_cash_cut_bytes(open_drawer=)` existe pero el endpoint nunca lo pasa | Rmazh sí lo manda al cerrar |
@@ -25,7 +26,7 @@
 ## Rulings
 
 - **Ruling: la URL cambia a `/configuracion` y `/printer-settings` redirige** — el usuario renombró el módulo; la receta "Retirar una URL" de CLAUDE.md §5 ya cubre el redirect — si fuera mal, basta volver a la URL vieja sin tocar datos.
-- **Ruling: el gerente vuelve a la pantalla completa** — responde por la sucursal, el backend ya se lo permite y Rmazh hace lo mismo — si no se quiere, es una línea en `vistaDeConfiguracion`.
+- **Ruling: el gerente entra y ve la pantalla completa** — responde por la sucursal, el backend ya se lo permite y Rmazh hace lo mismo; se agrega a `ROLE_ROUTES.GERENTE` — si no se quiere, son dos líneas (`navConfig` y `vistaDeConfiguracion`).
 - **Ruling: la cajera abre el cajón pero no cambia el interruptor** — `2120e540` dejó a propósito que nada de su pantalla escriba en la sucursal — Rmazh sí la deja; se abre si lo piden.
 - **Ruling: la apertura manual se audita** — no estaba pedido, pero dar a la caja un botón que abre el cajón sin venta es el hueco clásico de faltantes, y `TICKET_REPRINTED` ya marca el patrón. Es informativo: nunca frena la apertura, y sin red se pierde el registro — hoy solo se ve en `/platform/cash-audit`.
 - **Ruling: pestañas dentro de `PrinterSettings`, sin partirlo** — el estado (`config`, `save`) es uno solo; Rmazh partió el suyo en 1,000 líneas y aquí no hace falta para este PR — queda deuda de tamaño, no de comportamiento.
