@@ -586,10 +586,45 @@ def print_abono_endpoint(
     }
 
 
+class DrawerOpenedRequest(BaseModel):
+    printer_name: Optional[str] = None
+
+
+@router.post("/drawer-opened", status_code=204)
+def drawer_opened_endpoint(
+    req: DrawerOpenedRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    org_id: int = Depends(get_current_active_organization)
+):
+    """Registra una apertura manual del cajon. La hace el agente local de la PC;
+    FAILSAFE como el resto de `audit_cash_event`: nunca frena a la cajera."""
+    from app.models.cash import CashSession
+    from app.services.cash_audit import audit_cash_event
+
+    sesion = db.query(CashSession).filter(
+        CashSession.user_id == current_user.id,
+        CashSession.organization_id == org_id,
+        CashSession.status == "OPEN",
+    ).first()
+    audit_cash_event(
+        db,
+        event_type=CashAuditEvent.DRAWER_OPENED_MANUAL,
+        organization_id=org_id,
+        session_id=sesion.id if sesion else None,
+        branch_id=sesion.branch_id if sesion else current_user.branch_id,
+        user_id=current_user.id,
+        payload={"printer_name": req.printer_name},
+    )
+    db.commit()
+
+
 class PrintCashCutRequest(BaseModel):
     session_id: int
     # Track 4: `mode` ignorado (deprecated). Siempre return_base64.
     mode: str = "return_base64"
+    # Solo el cierre de turno lo manda; reimprimir un corte viejo no abre el cajon.
+    open_drawer: bool = False
 
 
 @router.post("/print-cash-cut")
@@ -602,7 +637,7 @@ def print_cash_cut_endpoint(
 ):
     """Track 4: corte de caja siempre en base64."""
     from app.routers.cash import get_session_audit_data, _verify_session_access
-    _verify_session_access(db, req.session_id, current_user)
+    session = _verify_session_access(db, req.session_id, current_user)
     audit_data = get_session_audit_data(db, req.session_id)
     if not audit_data:
         raise HTTPException(404, "Sesión no encontrada")
@@ -612,7 +647,10 @@ def print_cash_cut_endpoint(
     printer, target_printer_name = _resolve_printer(current_user, organization)
 
     try:
-        raw_bytes = printer.build_cash_cut_bytes(audit_data)
+        raw_bytes = printer.build_cash_cut_bytes(
+            audit_data,
+            open_drawer=req.open_drawer and bool(getattr(session.branch, "open_drawer_on_print", False)),
+        )
     except Exception as e:
         raise HTTPException(500, f"Error impresión: {str(e)}")
 
