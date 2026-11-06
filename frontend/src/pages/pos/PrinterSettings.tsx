@@ -90,6 +90,7 @@ export function PrinterSettings() {
   // mañana no cambia hasta que el dueño convierta la caja en persona.
   const esAdmin = user?.role === 'ADMINISTRADOR' || user?.role === 'DUEÑO'
   const setPrinterName = usePOSStore(s => s.setPrinterName)
+  const impresoraDeEstaPc = usePOSStore(s => s.printerName)
   const detectedOS = detectOS()
   const initialTab: Tab = detectedOS === 'linux' ? 'linux' : detectedOS === 'mac' ? 'mac' : 'windows'
   const [tab, setTab] = useState<Tab>(initialTab)
@@ -468,7 +469,7 @@ export function PrinterSettings() {
             role="tab"
             aria-selected={seccion === s.id}
             onClick={() => setSeccion(s.id)}
-            className={`${seccion === s.id ? 'dax-btn-primary' : 'dax-btn-ghost'} text-sm min-h-[44px]`}
+            className={`${seccion === s.id ? 'dax-btn-primary' : 'dax-btn-ghost'} text-sm normal-case tracking-normal min-h-[44px]`}
           >
             <i className={`fa-solid ${s.icon}`} aria-hidden="true" /> {s.label}
           </button>
@@ -964,7 +965,7 @@ export function PrinterSettings() {
       {seccion === 'cajon' && (
         <div className="max-w-xl">
           <CajonCard
-            impresora={config.printer_name}
+            impresora={config.printer_name ?? impresoraDeEstaPc}
             agenteEnLinea={agentOnline}
             abreAlCobrar={config.open_drawer_on_print}
             onCambiarAbreAlCobrar={cambiarAbreAlCobrar}

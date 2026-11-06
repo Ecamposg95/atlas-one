@@ -151,7 +151,7 @@ export function PrinterSettingsCajera() {
 
       {!esTelefono && <CajonCard impresora={printerName} agenteEnLinea={agentOnline} abreAlCobrar={abreAlCobrar} />}
 
-      <DaxCard>
+      {!esTelefono && <DaxCard>
         <div className="p-4 flex items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-black" style={{ color: 'var(--dax-text)' }}>Papel</h2>
@@ -161,7 +161,7 @@ export function PrinterSettingsCajera() {
             {anchoPapel ? `${anchoPapel} mm` : '—'}
           </span>
         </div>
-      </DaxCard>
+      </DaxCard>}
     </div>
   )
 }
