@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
-  debeAbrirCajonSinTicket, guardarCajonAlCobrar, leerCajonAlCobrar, motivoSinCajon, pagoIncluyeEfectivo,
+  debeAbrirCajonSinTicket, guardarCajonAlCobrar, impresoraEfectiva, leerCajonAlCobrar, motivoSinCajon, pagoIncluyeEfectivo,
 } from './cajon'
 
 describe('motivoSinCajon', () => {
@@ -14,6 +14,15 @@ describe('motivoSinCajon', () => {
   it('sin motivo cuando hay impresora y el agente responde o sigue comprobándose', () => {
     expect(motivoSinCajon('POS-80', true)).toBeNull()
     expect(motivoSinCajon('POS-80', null)).toBeNull()
+  })
+})
+
+describe('impresoraEfectiva', () => {
+  it('manda la de esta PC; la de la sucursal es el respaldo', () => {
+    expect(impresoraEfectiva('POS-80', 'Zebra')).toBe('POS-80')
+    expect(impresoraEfectiva(null, 'Zebra')).toBe('Zebra')
+    expect(impresoraEfectiva('', 'Zebra')).toBe('Zebra')
+    expect(impresoraEfectiva(null, null)).toBeNull()
   })
 })
 

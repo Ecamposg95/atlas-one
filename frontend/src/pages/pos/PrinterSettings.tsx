@@ -28,7 +28,8 @@ declare global {
 import { useAuthStore } from '../../store/authStore'
 import type { Branch } from '../../types/auth'
 import { elegirSucursalParaImpresora } from '../../utils/sucursalParaImpresora'
-import { guardarCajonAlCobrar } from '../../utils/cajon'
+import { guardarCajonAlCobrar, impresoraEfectiva } from '../../utils/cajon'
+import { useEsTelefono } from '../../hooks/useIsMobile'
 import { usePOSStore } from '../../store/posStore'
 import { DaxCard } from '../../components/ui/DaxCard'
 import { Spinner } from '../../components/ui/Spinner'
@@ -86,11 +87,12 @@ const SAMPLE_TOTAL = 94.0
 
 export function PrinterSettings() {
   const { branch, org, user, setBranch } = useAuthStore()
-  // El bloque de autoarranque se le oculta a la cajera: su rutina de cada
-  // mañana no cambia hasta que el dueño convierta la caja en persona.
   const esAdmin = user?.role === 'ADMINISTRADOR' || user?.role === 'DUEÑO'
+  // La cajera nunca llega aquí (utils/vistaDeConfiguracion); el gerente instala como el dueño.
+  const puedeInstalar = esAdmin || user?.role === 'GERENTE'
+  const esTelefono = useEsTelefono()
   const setPrinterName = usePOSStore(s => s.setPrinterName)
-  const impresoraDeEstaPc = usePOSStore(s => s.printerName)
+  const impresoraLocal = usePOSStore(s => s.printerName)
   const detectedOS = detectOS()
   const initialTab: Tab = detectedOS === 'linux' ? 'linux' : detectedOS === 'mac' ? 'mac' : 'windows'
   const [tab, setTab] = useState<Tab>(initialTab)
@@ -104,6 +106,7 @@ export function PrinterSettings() {
     ticket_footer: '',
     open_drawer_on_print: true,
   })
+  const impresora = impresoraEfectiva(impresoraLocal, config.printer_name)
   const [logoUploading, setLogoUploading] = useState(false)
   const [logoError, setLogoError] = useState<string | null>(null)
   const logoInputRef = useRef<HTMLInputElement>(null)
@@ -164,7 +167,8 @@ export function PrinterSettings() {
         open_drawer_on_print: data.open_drawer_on_print ?? true,
       })
       guardarCajonAlCobrar(branch.id, data.open_drawer_on_print ?? true)
-      if (data.printer_name) setPrinterName(data.printer_name)
+      // La de la sucursal solo es el respaldo: abrir esta pantalla no le cambia la impresora a esta PC.
+      if (data.printer_name && !usePOSStore.getState().printerName) setPrinterName(data.printer_name)
     } catch { /* usa defaults */ }
   }, [branch?.id])
 
@@ -219,7 +223,6 @@ export function PrinterSettings() {
         paper_width_mm: config.paper_width_mm,
         ticket_header: config.ticket_header || null,
         ticket_footer: config.ticket_footer || null,
-        open_drawer_on_print: config.open_drawer_on_print,
       })
       showToast('Configuración guardada')
     } catch { showToast('Error al guardar', 'error') }
@@ -271,17 +274,17 @@ export function PrinterSettings() {
   }
 
   const testPrint = async () => {
-    if (!config.printer_name) { showToast('Selecciona una impresora primero', 'error'); return }
+    if (!impresora) { showToast('Selecciona una impresora primero', 'error'); return }
     setTesting(true)
     try {
       // Track 4: solo agente local. Server-side CUPS deprecado.
       // Refleja la selección actual aunque no se haya guardado todavía.
       const b64 = await printerApi.testPrintBase64({
-        printerName: config.printer_name,
+        printerName: impresora,
         paperWidthMm: config.paper_width_mm,
       })
       if (!b64) throw new Error('Sin datos del servidor')
-      await printerApi.printViaAgent(config.printer_name, b64)
+      await printerApi.printViaAgent(impresora, b64)
       showToast('Ticket de prueba enviado')
     } catch (e: unknown) {
       showToast(`Error: ${(e as Error).message ?? 'desconocido'}`, 'error')
@@ -400,7 +403,7 @@ export function PrinterSettings() {
       )}
 
       {/* Agente local — estado + diagnóstico */}
-      {seccion !== 'ticket' && <AgentDiagnosticsPanel />}
+      {seccion !== 'ticket' && !esTelefono && <AgentDiagnosticsPanel />}
 
       <PrinterInstallWizard
         open={wizardOpen}
@@ -445,13 +448,18 @@ export function PrinterSettings() {
             <i className="fa-solid fa-plus" /> Instalar impresora
           </button>
           </>}
+          {seccion === 'cajon' && (
+            <button onClick={loadLocalPrinters} className="dax-btn-secondary text-xs" title="Volver a comprobar el agente de esta PC">
+              <i className="fa-solid fa-rotate" aria-hidden="true" /> Actualizar
+            </button>
+          )}
           {seccion !== 'cajon' && <>
           <button onClick={save} disabled={saving} className="dax-btn-primary text-xs">
             {saving ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-floppy-disk" /> Guardar</>}
           </button>
           <button
             onClick={handleTestPrint}
-            disabled={testing || (tab === 'bluetooth' ? !btDevice : !config.printer_name)}
+            disabled={testing || (tab === 'bluetooth' ? !btDevice : !impresora)}
             className="dax-btn-secondary text-xs disabled:opacity-40"
           >
             {testing ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-paper-plane" /> Probar</>}
@@ -509,7 +517,7 @@ export function PrinterSettings() {
       </div>
 
       {/* Banner: agente offline — acepta el certificado */}
-      {!agentOnline && tab !== 'bluetooth' && (
+      {!esTelefono && !agentOnline && tab !== 'bluetooth' && (
         <a
           href={AGENT_BASE + '/health'}
           target="_blank"
@@ -615,7 +623,7 @@ export function PrinterSettings() {
                 </div>
                 <PrinterList
                   printers={localPrinters}
-                  selected={config.printer_name}
+                  selected={impresora}
                   onSelect={selectPrinter}
                   emptyMsg="Agente offline o sin impresoras. Descarga y ejecuta el agente primero."
                 />
@@ -716,14 +724,14 @@ export function PrinterSettings() {
                   </div>
                   <PrinterList
                     printers={localPrinters}
-                    selected={config.printer_name}
+                    selected={impresora}
                     onSelect={selectPrinter}
                     emptyMsg="Agente offline. Sigue las instrucciones arriba."
                   />
                 </DaxCard>
               )}
 
-              {esAdmin && (
+              {puedeInstalar && (
                 <AutostartCard
                   cmd={AUTOSTART_CMD_LINUX}
                   bullets={[
@@ -805,7 +813,7 @@ export function PrinterSettings() {
                 </div>
               </DaxCard>
 
-              {esAdmin && (
+              {puedeInstalar && (
                 <AutostartCard
                   cmd={AUTOSTART_CMD_MAC}
                   bullets={[
@@ -842,7 +850,7 @@ export function PrinterSettings() {
                 </div>
                 <PrinterList
                   printers={localPrinters}
-                  selected={config.printer_name}
+                  selected={impresora}
                   onSelect={selectPrinter}
                   emptyMsg="Agente offline. Sigue las instrucciones arriba."
                 />
@@ -965,7 +973,7 @@ export function PrinterSettings() {
       {seccion === 'cajon' && (
         <div className="max-w-xl">
           <CajonCard
-            impresora={config.printer_name ?? impresoraDeEstaPc}
+            impresora={impresora}
             agenteEnLinea={agentOnline}
             abreAlCobrar={config.open_drawer_on_print}
             onCambiarAbreAlCobrar={cambiarAbreAlCobrar}

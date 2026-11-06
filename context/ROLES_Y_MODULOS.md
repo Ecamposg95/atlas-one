@@ -115,7 +115,7 @@ Contextos operativos:
 | POS | Pedidos Móviles | `/pos/inbox` |
 | POS | Consulta Productos | `/products` |
 | POS | Devoluciones | `/returns` |
-| POS | Config. Impresora | `/printer-settings` |
+| POS | Configuración | `/configuracion` |
 | — | Mi Expediente | `/hr/me` |
 
 > El Cajero **no tiene acceso** a Reportes. Puede ver productos pero no editarlos (solo consulta).

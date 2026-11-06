@@ -15,6 +15,11 @@ export function motivoSinCajon(impresora: string | null | undefined, agente: boo
   return null
 }
 
+/** La impresora es de cada PC; la de la sucursal solo cubre a la PC que no ha elegido una. */
+export function impresoraEfectiva(local: string | null | undefined, sucursal: string | null | undefined): string | null {
+  return local || sucursal || null
+}
+
 export function pagoIncluyeEfectivo(pagos: Pago[]): boolean {
   return pagos.some((p) => ['CASH', 'EFECTIVO'].includes((p.method ?? '').toUpperCase()))
 }
