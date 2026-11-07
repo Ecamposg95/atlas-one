@@ -81,8 +81,8 @@ const HRMe            = lazy(() => import('./pages/hr/HRMe').then(m => ({ defaul
 // POS / Branch
 const AtlasPOS        = lazy(() => import('./pages/pos/AtlasPOS').then(m => ({ default: m.AtlasPOS })))
 const POS             = lazy(() => import('./pages/pos/POS').then(m => ({ default: m.POS })))
-// Admin/dueño: pantalla completa; caja: solo elegir impresora y probar (utils/vistaDeImpresora).
-const PrinterSettings = lazy(() => import('./pages/pos/PrinterSettingsPorRol').then(m => ({ default: m.PrinterSettingsPorRol })))
+// Gerente, admin y dueño: pantalla completa; caja: impresora, prueba y cajón (utils/vistaDeConfiguracion).
+const Configuracion   = lazy(() => import('./pages/pos/Configuracion').then(m => ({ default: m.Configuracion })))
 
 // Mobile
 const MobileDashboard = lazy(() => import('./pages/mobile/MobileDashboard').then(m => ({ default: m.MobileDashboard })))
@@ -377,7 +377,8 @@ export default function App() {
 
           {/* POS */}
           <Route path="pos"             element={<RutaPorRol url="/pos"><Suspense fallback={<PageLoader />}><POS /></Suspense></RutaPorRol>} />
-          <Route path="printer-settings" element={<RutaPorRol url="/printer-settings"><Suspense fallback={<PageLoader />}><PrinterSettings /></Suspense></RutaPorRol>} />
+          <Route path="configuracion" element={<RutaPorRol url="/configuracion"><Suspense fallback={<PageLoader />}><Configuracion /></Suspense></RutaPorRol>} />
+          <Route path="printer-settings" element={<RedirigirConQuery a="/configuracion" />} />
 
           <Route path="*" element={<Suspense fallback={<PageLoader />}><NotFoundPage /></Suspense>} />
         </Route>

@@ -119,7 +119,7 @@ export function SalesHistory() {
    */
   const reprintTicket = async (sale: SalesDocument, pin?: string): Promise<string | null> => {
     if (!printerName) {
-      toast.error('Configura una impresora en /printer-settings primero')
+      toast.error('Elige tu impresora en Configuración primero')
       return null
     }
     setReprinting(true)
@@ -409,7 +409,7 @@ export function SalesHistory() {
                 disabled={reprinting || !printerName}
                 onClick={() => reprintTicket(selected)}
                 className="dax-btn-secondary flex-1 justify-center disabled:opacity-40"
-                title={printerName ? 'Reimprimir vía agente local' : 'Configura una impresora en /printer-settings primero'}
+                title={printerName ? 'Reimprimir vía agente local' : 'Elige tu impresora en Configuración primero'}
               >
                 {reprinting
                   ? <i className="fa-solid fa-spinner fa-spin" aria-hidden="true" />

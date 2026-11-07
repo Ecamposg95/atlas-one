@@ -33,6 +33,9 @@ class CashAuditEvent:
     # que no ocurrio— se investiga con el mismo hilo: quien, cuando, que venta.
     TICKET_REPRINTED   = "TICKET_REPRINTED"
     REPRINT_PIN_FAILED = "REPRINT_PIN_FAILED"
+    # Abrir el cajon sin venta: no mueve efectivo, pero es por donde se investiga
+    # un faltante. La apertura la hace el agente local; esto solo deja el rastro.
+    DRAWER_OPENED_MANUAL = "DRAWER_OPENED_MANUAL"
 
 
 class CashAuditLog(Base):

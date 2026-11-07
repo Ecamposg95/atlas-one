@@ -20,12 +20,12 @@ const menu = (role: Role, plan: PlanOrg | null, enabledModules = ATLAS_POS) =>
 
 // Lo que la dueña y la cajera de una tienda FREE usan a diario: intocable.
 const DIARIO_ADMIN = [
-  '/hq/operations', '/hq/reports-hub', '/sales', '/products', '/labels', '/printer-settings',
+  '/hq/operations', '/hq/reports-hub', '/sales', '/products', '/labels', '/configuracion',
   '/cash-history', '/returns', '/inventory',
   '/users', '/hq/branches', '/organization',
 ]
 const DIARIO_CAJERA = [
-  '/atlas-pos', '/pos', '/sales', '/cash-history', '/returns', '/products', '/labels', '/printer-settings',
+  '/atlas-pos', '/pos', '/sales', '/cash-history', '/returns', '/products', '/labels', '/configuracion',
 ]
 
 describe('perfil FREE', () => {
@@ -54,7 +54,7 @@ describe('perfil FREE', () => {
     expect(menu('VENDEDOR', ULTRA)).toContain('/mobile/dashboard')
   })
 
-  it('la cajera conserva Cobrar, Corte, Devoluciones, Productos e Impresora', () => {
+  it('la cajera conserva Cobrar, Corte, Devoluciones, Productos y Configuración', () => {
     expect(menu('CAJERO', FREE)).toEqual(expect.arrayContaining(DIARIO_CAJERA))
   })
 

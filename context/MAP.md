@@ -86,7 +86,7 @@
 |---|---|---|
 | **Nucleus: HQ** | `hq/HQOperations`, `HQReportsHub`, `HQControl`, `HQSalesLog`, `HQReturns`, `HQInventory`, `HQBranches`, `HQBranchDetail` | `/hq/*` |
 | **Nucleus: Admin** | `core/AdminCatalog`, `Users`, `Organization`, `Departments`, `Brands` | `/admin/catalog`, `/users`, `/organization`, `/departments`, `/brands` |
-| **Transaction: POS** | `pos/POS`, `pos/DataXPOS`, `pos/PrinterSettings` | `/pos`, `/dataxpos`, `/printer-settings` |
+| **Transaction: POS** | `pos/POS`, `pos/DataXPOS`, `pos/Configuracion` | `/pos`, `/dataxpos`, `/configuracion` |
 | **Transaction: Ventas** | `sales/SalesHistory`, `Quotes`, `QuoteMaker`, `Returns`, `Seguimiento` | `/sales`, `/quotes`, `/quotes/new`, `/returns`, `/seguimiento` |
 | **Transaction: Finanzas** | `finance/CashHistory`, `Reports`, `Purchases`, `Expenses` | `/cash-history`, `/reports`, `/purchases`, `/expenses` |
 | **Inventory** | `inventory/Inventory`, `Logistics`, `Boxes`, `Products` | `/inventory`, `/logistics`, `/boxes`, `/products` |

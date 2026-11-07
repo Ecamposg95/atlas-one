@@ -71,7 +71,7 @@ export const BRANCH_COPY = {
     returns: 'Devoluciones',
     products: 'Buscar producto',
     reports: 'Reportes',
-    printer: 'Impresora',
+    printer: 'Configuración',
     cashKpis: {
       // existing — kept for any out-of-scope consumers
       salesToday: 'Ventas del turno',

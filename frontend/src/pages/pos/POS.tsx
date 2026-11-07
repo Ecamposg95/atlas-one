@@ -8,6 +8,8 @@ import { buildSaleItems } from './saleItems'
 import { customerFields, customerFromCartJson } from './customerPayload'
 import { printerApi } from '../../api/printer'
 import { requierePin } from '../../utils/reimpresion'
+import { debeAbrirCajonSinTicket, guardarCajonAlCobrar, leerCajonAlCobrar } from '../../utils/cajon'
+import client from '../../api/client'
 import { usePOSStore } from '../../store/posStore'
 import { useAuthStore } from '../../store/authStore'
 import { useCapacidad, useEnabledModulesStore } from '../../store/enabledModulesStore'
@@ -247,6 +249,28 @@ export function POS() {
       })
   }
 
+  // El interruptor del cajón de la sucursal, recordado para cuando no haya red.
+  useEffect(() => {
+    const id = branch?.id
+    if (!id) return
+    client.get(`/branches/${id}`)
+      .then(({ data }) => guardarCajonAlCobrar(id, data?.open_drawer_on_print ?? true))
+      .catch(() => {})
+  }, [branch?.id])
+
+  /**
+   * La orden de abrir el cajón viaja dentro de los bytes del ticket: sin ticket
+   * hay que pedirla aparte o la cajera se queda con el billete en la mano.
+   * Nunca bloquea: la venta ya quedó registrada.
+   */
+  const abrirCajonSinTicket = (pagos: { method?: string | null }[]) => {
+    if (!savedPrinterName) return
+    if (!debeAbrirCajonSinTicket({ pagos, impresora: savedPrinterName, abreAlCobrar: leerCajonAlCobrar(branch?.id) })) return
+    printerApi.openDrawerViaAgent(savedPrinterName).catch(() => {
+      showToast('No se pudo abrir el cajón — ábrelo manualmente', 'error')
+    })
+  }
+
   /**
    * Aviso común a los tres botones de reimprimir del POS.
    *
@@ -324,6 +348,7 @@ export function POS() {
       // Auto-imprimir vía agente local si hay impresora configurada,
       // salvo que el cajero haya apagado "Imprimir Ticket" en el modal.
       if (saleId && shouldPrint) printViaAgent(saleId)
+      else if (!shouldPrint) abrirCajonSinTicket(payments)
     } catch (err: unknown) {
       // Red caída: encolar en IndexedDB y liberar el carrito para seguir operando.
       if (isNetworkError(err)) {
@@ -334,6 +359,8 @@ export function POS() {
           const updated = await listPending()
           setOfflineQueue(updated)
           showToast('Venta guardada — se enviará al reconectar')
+          // Sin red no hay ticket, pero el agente es local y sí responde.
+          abrirCajonSinTicket(payments)
         } catch (e) {
           console.error('[POS] enqueueSale failed:', e)
           showToast('No se pudo guardar la venta offline', 'error')
@@ -960,7 +987,7 @@ export function POS() {
             if (closed?.id) {
               if (savedPrinterName) {
                 showToast('Imprimiendo corte de caja...')
-                printerApi.getCashCutBase64(closed.id)
+                printerApi.getCashCutBase64(closed.id, true)
                   .then(b64 => b64 ? printerApi.printViaAgent(savedPrinterName, b64) : undefined)
                   .catch(() => {
                     showToast('Turno cerrado, pero no pude imprimir el corte. Verifica que el agente esté corriendo.', 'error')

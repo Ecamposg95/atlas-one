@@ -1,19 +1,22 @@
 import { useCallback, useEffect, useState } from 'react'
 import client from '../../api/client'
-import { AGENT_BASE, printerApi } from '../../api/printer'
+import { AGENT_BASE, detectOS, printerApi } from '../../api/printer'
 import { AgentDiagnosticsPanel } from '../../components/pos/AgentDiagnosticsPanel'
+import { CajonCard } from '../../components/pos/CajonCard'
 import { DaxCard } from '../../components/ui/DaxCard'
+import { useEsTelefono } from '../../hooks/useIsMobile'
 import { useAuthStore } from '../../store/authStore'
 import { usePOSStore } from '../../store/posStore'
 import { toast } from '../../store/toastStore'
+import { guardarCajonAlCobrar } from '../../utils/cajon'
 
 /**
- * Impresora — vista de la cajera.
+ * Configuración — vista de la cajera.
  *
- * Solo hace tres cosas: dice si el agente de esta PC responde, deja elegir la
- * impresora de ESTA PC (se guarda en el navegador, `posStore.printerName`, que
- * es lo que el POS usa al cobrar) y manda un ticket de prueba. El ancho de
- * papel se muestra pero no se edita: el ticket real sale con el de la
+ * Dice si el agente de esta PC responde, deja elegir la impresora de ESTA PC
+ * (se guarda en el navegador, `posStore.printerName`, que es lo que el POS usa
+ * al cobrar), manda un ticket de prueba y abre el cajón. En teléfono no hay
+ * agente, así que solo lo explica. El ancho de papel se muestra pero no se edita: el ticket real sale con el de la
  * sucursal (`_resolve_printer` en el servidor), y eso lo fija el
  * administrador en la pantalla completa. Nada de aquí escribe en la sucursal,
  * así que dos cajas de la misma tienda no se pisan la configuración.
@@ -26,6 +29,9 @@ export function PrinterSettingsCajera() {
   const [agentOnline, setAgentOnline] = useState<boolean | null>(null)
   const [impresoras, setImpresoras] = useState<string[]>([])
   const [anchoPapel, setAnchoPapel] = useState<number | null>(null)
+  const [abreAlCobrar, setAbreAlCobrar] = useState<boolean | null>(null)
+  const esTelefono = useEsTelefono()
+  const so = detectOS()
   const [testing, setTesting] = useState(false)
 
   const cargar = useCallback(async () => {
@@ -39,8 +45,13 @@ export function PrinterSettingsCajera() {
   useEffect(() => {
     if (!branch?.id) return
     client.get(`/branches/${branch.id}`)
-      .then(({ data }) => setAnchoPapel(data?.paper_width_mm ?? null))
-      .catch(() => setAnchoPapel(null))
+      .then(({ data }) => {
+        setAnchoPapel(data?.paper_width_mm ?? null)
+        const abre = data?.open_drawer_on_print ?? true
+        setAbreAlCobrar(abre)
+        guardarCajonAlCobrar(branch.id, abre)
+      })
+      .catch(() => { setAnchoPapel(null); setAbreAlCobrar(null) })
   }, [branch?.id])
 
   const probar = async () => {
@@ -64,11 +75,11 @@ export function PrinterSettingsCajera() {
     <div className="space-y-5 p-1 max-w-2xl">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <i className="fa-solid fa-print text-indigo-400 text-xl" />
-          <h1 className="text-2xl font-black" style={{ color: 'var(--dax-text)' }}>Impresora</h1>
+          <i className="fa-solid fa-gear text-indigo-400 text-xl" aria-hidden="true" />
+          <h1 className="text-2xl font-black" style={{ color: 'var(--dax-text)' }}>Configuración</h1>
           {branch && <span className="text-xs text-slate-400">{branch.name}</span>}
         </div>
-        <div className="flex gap-2">
+        {!esTelefono && <div className="flex gap-2">
           <button onClick={cargar} className="dax-btn-secondary text-xs" title="Volver a buscar impresoras">
             <i className="fa-solid fa-rotate" /> Actualizar
           </button>
@@ -76,25 +87,42 @@ export function PrinterSettingsCajera() {
                   className="dax-btn-primary text-xs disabled:opacity-40">
             {testing ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-paper-plane" /> Probar</>}
           </button>
-        </div>
+        </div>}
       </div>
 
-      <AgentDiagnosticsPanel />
+      {esTelefono ? (
+        <DaxCard>
+          <div className="p-4 space-y-2">
+            <h2 className="text-sm font-black" style={{ color: 'var(--dax-text)' }}>
+              <i className="fa-solid fa-mobile-screen mr-2" aria-hidden="true" />En este teléfono
+            </h2>
+            <p className="text-sm" style={{ color: 'var(--dax-text-muted)' }}>
+              La impresora y el cajón se usan desde la PC de la caja. Aquí, al cobrar, el ticket se manda por WhatsApp.
+            </p>
+          </div>
+        </DaxCard>
+      ) : <AgentDiagnosticsPanel />}
 
-      {agentOnline === false && (
+      {!esTelefono && agentOnline === false && (
+        <>
         <a href={AGENT_BASE + '/health'} target="_blank" rel="noreferrer"
            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold"
            style={{ background: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.35)' }}>
           <i className="fa-solid fa-triangle-exclamation text-lg flex-shrink-0" />
           <span className="flex-1">
             <span className="font-black">El agente de impresión no responde en esta PC.</span> Si ya está abierto, haz clic
-            aquí para aceptar el certificado y vuelve a esta página. Si no, avísale a tu administrador.
+            aquí para aceptar el certificado y vuelve a esta página. Si no está instalado, descárgalo.
           </span>
           <i className="fa-solid fa-arrow-up-right-from-square text-xs flex-shrink-0" />
         </a>
+        <a href={printerApi.downloadAgentUrl(so === 'linux' ? 'linux' : so === 'mac' ? 'mac' : 'windows')}
+           className="dax-btn-secondary text-xs w-fit min-h-[44px]">
+          <i className="fa-solid fa-download" aria-hidden="true" /> Descargar agente
+        </a>
+        </>
       )}
 
-      <DaxCard>
+      {!esTelefono && <DaxCard>
         <div className="p-4 space-y-3">
           <h2 className="text-sm font-black" style={{ color: 'var(--dax-text)' }}>Mi impresora</h2>
           <p className="text-xs text-slate-400">
@@ -119,9 +147,11 @@ export function PrinterSettingsCajera() {
             </div>
           )}
         </div>
-      </DaxCard>
+      </DaxCard>}
 
-      <DaxCard>
+      {!esTelefono && <CajonCard impresora={printerName} agenteEnLinea={agentOnline} abreAlCobrar={abreAlCobrar} />}
+
+      {!esTelefono && <DaxCard>
         <div className="p-4 flex items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-black" style={{ color: 'var(--dax-text)' }}>Papel</h2>
@@ -131,7 +161,7 @@ export function PrinterSettingsCajera() {
             {anchoPapel ? `${anchoPapel} mm` : '—'}
           </span>
         </div>
-      </DaxCard>
+      </DaxCard>}
     </div>
   )
 }
