@@ -246,6 +246,10 @@ class Organization(Base):
     perfil_ui = Column(String(12), nullable=True)
     # Tope de "se está acabando" del Inicio básico, en piezas. NULL = 3.
     umbral_poca_existencia = Column(Integer, nullable=True)
+    # Instrucciones del dueño para el asistente IA (SP4, 2026-10): escala de
+    # tallas, abreviaturas de marca en el SKU, departamentos. NULL = solo las
+    # convenciones del preset (app/modules/ai/prompts/).
+    ai_instrucciones = Column(Text, nullable=True)
 
     # SaaS
     status = Column(String, default="ACTIVE", index=True)  # ACTIVE, SUSPENDED

@@ -166,6 +166,9 @@ COLUMN_MIGRATIONS = [
     # NULL = tope de 3 piezas en "se está acabando".
     ("organization", "perfil_ui", "ALTER TABLE organization ADD COLUMN perfil_ui VARCHAR(12);"),
     ("organization", "umbral_poca_existencia", "ALTER TABLE organization ADD COLUMN umbral_poca_existencia INTEGER;"),
+    # Asistente IA (SP4, 2026-10): instrucciones del dueño. NULL para todas
+    # las organizaciones vivas; las tablas ai_* las crea `create_all`.
+    ("organization", "ai_instrucciones", "ALTER TABLE organization ADD COLUMN ai_instrucciones TEXT;"),
     # Atribucion por pago (2026-09-02) — ver los bloques de arriba.
     *MIGRACIONES_PAYMENTS_CASH_SESSION,
     *MIGRACIONES_CASH_MOVEMENT_AUTHOR,

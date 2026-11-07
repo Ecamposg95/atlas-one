@@ -12,6 +12,10 @@ from app.services.perfil_ui import normalizar_perfil_ui
 # texto que el PUT rechaza.
 TERMS_MAX_LEN = 2000
 
+# Tope de las instrucciones del asistente IA. El textarea de Empresa usa el
+# mismo `maxLength`.
+AI_INSTRUCCIONES_MAX = 4000
+
 # Estilo del renglon de producto del ticket. 'compact' es el de siempre (una
 # linea); 'detailed' imprime marca / nombre completo / talla (boutique).
 TICKET_LINE_STYLES = ("compact", "detailed")
@@ -136,6 +140,9 @@ class OrganizationUpdate(BaseModel):
     # Tope de "se está acabando" del Inicio básico. Cae FUERA de la whitelist
     # de no-admins del router: solo ADMINISTRADOR/DUEÑO lo cambia.
     umbral_poca_existencia: Optional[int] = Field(default=None, ge=0, le=1000)
+    # Instrucciones para el asistente IA (SP4). Caen FUERA de la whitelist de
+    # no-admins del router: solo ADMINISTRADOR/DUEÑO las cambia.
+    ai_instrucciones: Optional[str] = Field(default=None, max_length=AI_INSTRUCCIONES_MAX)
 
     _estilo_valido = field_validator("ticket_line_style")(_valida_estilo_de_linea)
     _perfil_valido = field_validator("perfil_ui")(normalizar_perfil_ui)
@@ -161,6 +168,8 @@ class OrganizationRead(OrganizationBase):
     # Modo básico: la plataforma lee el perfil forzado; Empresa, el tope.
     perfil_ui: Optional[str] = None
     umbral_poca_existencia: Optional[int] = None
+    # Instrucciones para el asistente IA; el panel de Empresa las edita.
+    ai_instrucciones: Optional[str] = None
 
     class Config:
         from_attributes = True

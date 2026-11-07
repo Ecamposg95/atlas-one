@@ -109,3 +109,6 @@ from .exchange_rate import ExchangeRate  # noqa: F401
 # 16. Conteo físico de inventario (2026-10-22) — tablas inventory_counts e
 #     inventory_count_lines; las crea `create_all`.
 from app.modules.conteos import models as _conteos_models  # noqa: F401
+# 17. Asistente IA (SP4): conversaciones, mensajes, propuestas y uso diario.
+#     Registradas aqui para `create_all`.
+from app.modules.ai import models as _ai_models  # noqa: F401
