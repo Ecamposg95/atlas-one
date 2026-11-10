@@ -18,9 +18,11 @@ describe('isValidCount', () => {
 })
 
 describe('shouldRevealExpected', () => {
-  it('oculta el esperado hasta que hay conteo', () => {
-    expect(shouldRevealExpected('')).toBe(false)
-    expect(shouldRevealExpected('1530.00')).toBe(true)
+  it('no revela con el turno abierto aunque haya conteo', () => {
+    expect(shouldRevealExpected(false)).toBe(false)
+  })
+  it('revela solo con el turno cerrado', () => {
+    expect(shouldRevealExpected(true)).toBe(true)
   })
 })
 

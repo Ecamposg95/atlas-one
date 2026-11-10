@@ -159,7 +159,7 @@ interface CloseShiftModalProps {
 // Resultado del arqueo ya cerrado — se muestra en pantalla en vez de
 // depender del ticket impreso. Antes, si no había impresora configurada
 // (frecuente en campo), el cajero cerraba turno y nunca veía su faltante.
-interface CloseResult {
+export interface CloseResult {
   expected: number
   counted: number
   diff: number
@@ -175,7 +175,8 @@ function CloseShiftModal({ onClosed, onCancel }: CloseShiftModalProps) {
 
   useEffect(() => {
     // Conteo ciego: NO pre-llenar "contado" con el esperado. El cajero captura
-    // su propio conteo físico; el esperado se revela después (shouldRevealExpected).
+    // su propio conteo físico; el esperado y la diferencia salen solo con el
+    // turno ya cerrado (shouldRevealExpected), en CloseResultPanel.
     cashApi.getSummary()
       .then((s) => setSummary(s))
       .catch(() => setLoadError(true))
@@ -268,7 +269,8 @@ function CloseShiftModal({ onClosed, onCancel }: CloseShiftModalProps) {
               )}
               <div className="border-t border-stone-200 dark:border-slate-700 pt-2 flex justify-between font-bold text-slate-900 dark:text-slate-100">
                 <span>Esperado en caja</span>
-                {shouldRevealExpected(counted) ? (
+                {/* Esta vista solo se pinta antes de cerrar (sin `result`): enmascarado. */}
+                {shouldRevealExpected(result != null) ? (
                   <span className="tabular-nums">{fmtMoney(String(expected))}</span>
                 ) : (
                   <span
@@ -279,11 +281,9 @@ function CloseShiftModal({ onClosed, onCancel }: CloseShiftModalProps) {
                   </span>
                 )}
               </div>
-              {!shouldRevealExpected(counted) && (
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
-                  {BLIND_LABEL} · se revela al capturar tu conteo
-                </p>
-              )}
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+                {BLIND_LABEL} · el esperado y la diferencia se muestran al cerrar
+              </p>
             </div>
 
             <label className={`block ${ui.kpiLabel} mb-1`}>Efectivo contado</label>
@@ -295,11 +295,6 @@ function CloseShiftModal({ onClosed, onCancel }: CloseShiftModalProps) {
               autoFocus
               className={ui.input}
             />
-            {!isNaN(countedNum) && diff !== 0 && (
-              <p className={`text-xs mt-2 font-semibold ${diff > 0 ? brand.greenText : 'text-rose-600 dark:text-rose-400'}`}>
-                Diferencia: {diff > 0 ? '+' : ''}{fmtMoney(String(diff))}
-              </p>
-            )}
 
             <div className="flex gap-2 mt-5">
               <button onClick={onCancel} className={`${ui.btnSecondary} flex-1`} disabled={submitting}>
@@ -330,7 +325,7 @@ const SEVERITY_STYLE: Record<string, string> = {
   warning: 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300',
 }
 
-function CloseResultPanel({ result, onDone }: { result: CloseResult; onDone: () => void }) {
+export function CloseResultPanel({ result, onDone }: { result: CloseResult; onDone: () => void }) {
   const { expected, counted, diff, warnings } = result
   // Veredicto: el mismo `difference` que ya devolvió el backend, solo vestido.
   const verdict = closeVerdict(diff)
@@ -786,6 +781,10 @@ export function CashBranchView() {
                 ] as const
               ).map(({ key, icon, iconBg, iconColor }) => {
                 const amount = (methodTotals as Record<string, number | undefined>)[key] ?? 0
+                // Conteo ciego: con turno abierto el efectivo es lo que el cajero
+                // cuenta, así que se enmascara. Tarjeta y transferencia no son
+                // conteo físico y se quedan.
+                const enmascarar = key === 'CASH' && !!current
                 return (
                   <div
                     key={key}
@@ -803,7 +802,7 @@ export function CashBranchView() {
                         {PAY_METHOD_LABELS[key] ?? key}
                       </p>
                       <p className="text-sm font-bold tabular-nums text-slate-800 dark:text-slate-100 mt-0.5">
-                        {fmtMoney(String(amount))}
+                        {enmascarar ? BLIND_MASK : fmtMoney(String(amount))}
                       </p>
                     </div>
                   </div>
