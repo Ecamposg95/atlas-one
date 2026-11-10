@@ -186,7 +186,7 @@ function CloseShiftModal({ onClosed, onCancel }: CloseShiftModalProps) {
   // Conteo ciego: con el turno abierto tampoco se enseña el desglose de
   // efectivo (fondo, ventas, entradas, salidas, reembolsos): sumado da el esperado.
   const revelar = shouldRevealExpected(result != null)
-  const CIEGO = 'text-slate-400 dark:text-slate-500'
+  const CIEGO = 'text-dax-muted'
   const titleCiego = `${BLIND_LABEL} — cuenta el efectivo y captúralo abajo`
   const countedNum = parseFloat(counted)
   const diff = !isNaN(countedNum) ? countedNum - expected : 0
@@ -235,7 +235,9 @@ function CloseShiftModal({ onClosed, onCancel }: CloseShiftModalProps) {
   // Tras cerrar, el modal muta a pantalla de resultado (no se cierra solo):
   // es el único lugar donde el cajero ve esperado/contado/diferencia si no
   // hay impresora configurada (ver toast.error de arriba en ese caso).
-  const dismiss = result ? onClosed : onCancel
+  // Con el cierre en vuelo no se descarta: el turno podría cerrarse sin que
+  // el cajero llegue a ver el resultado.
+  const dismiss = submitting ? () => {} : result ? onClosed : onCancel
 
   return (
     <div
@@ -247,7 +249,7 @@ function CloseShiftModal({ onClosed, onCancel }: CloseShiftModalProps) {
           <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
             {result ? 'Turno cerrado' : 'Finalizar turno'}
           </h3>
-          <button onClick={dismiss} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1" aria-label="Cerrar">
+          <button onClick={dismiss} disabled={submitting} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1" aria-label="Cerrar">
             <i className="fa-solid fa-xmark text-lg" />
           </button>
         </div>
@@ -304,7 +306,7 @@ function CloseShiftModal({ onClosed, onCancel }: CloseShiftModalProps) {
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+              <p className={`text-[11px] ${CIEGO} mt-1`}>
                 {BLIND_LABEL} · el desglose, el esperado y la diferencia se muestran al cerrar
               </p>
             </div>
@@ -424,7 +426,10 @@ export function CashBranchView() {
   const [past, setPast] = useState<CashSession[]>([])
   const [loading, setLoading] = useState(true)
   const [reprintingId, setReprintingId] = useState<number | null>(null)
-  const [showCloseWizard, setShowCloseWizard] = useState(false)
+  // Id del turno que se está cerrando (null = modal de cierre oculto). Guardar
+  // el id y no un booleano permite descartarlo si ya hay OTRO turno abierto.
+  const [closeWizardFor, setCloseWizardFor] = useState<number | null>(null)
+  const showCloseWizard = closeWizardFor != null
   const [movementModal, setMovementModal] = useState<'IN' | 'OUT' | null>(null)
   const [openShiftModalVisible, setOpenShiftModalVisible] = useState(false)
   const [summary, setSummary] = useState<CashSummary | null>(null)
@@ -440,7 +445,6 @@ export function CashBranchView() {
     const t = setTimeout(() => setJustOpened(false), 2400)
     return () => clearTimeout(t)
   }, [justOpened])
-
 
   const COPY = BRANCH_COPY.pages
 
@@ -498,8 +502,11 @@ export function CashBranchView() {
   //   1) cuando la pestaña recupera foco / visibilidad
   //   2) cada 30s mientras la pestaña esté visible
   // Silent (sin spinner) para no parpadear los KPIs durante el día.
+  // En pausa mientras el modal de cierre está abierto: tras cerrar, el refresco
+  // vaciaría `current` y desmontaría el resultado (esperado/contado/diferencia,
+  // lo único que el cajero ve del conteo ciego) antes de que pulse "Listo".
   useEffect(() => {
-    if (!current) return
+    if (!current || showCloseWizard) return
     const onWake = () => {
       if (document.visibilityState === 'visible') loadAll(true)
     }
@@ -513,10 +520,16 @@ export function CashBranchView() {
       window.removeEventListener('focus', onWake)
       window.clearInterval(interval)
     }
-  }, [current, loadAll])
+  }, [current, loadAll, showCloseWizard])
+
+  // Un modal de cierre que quedara colgado de un turno anterior no debe
+  // reaparecer solo cuando se abre el siguiente.
+  useEffect(() => {
+    if (current && closeWizardFor != null && current.id !== closeWizardFor) setCloseWizardFor(null)
+  }, [current, closeWizardFor])
 
   function handleShiftClosed() {
-    setShowCloseWizard(false)
+    setCloseWizardFor(null)
     loadAll()
   }
 
@@ -695,7 +708,7 @@ export function CashBranchView() {
                 <span className="text-base font-bold text-slate-900 dark:text-slate-100">Salida</span>
               </button>
               <button
-                onClick={() => setShowCloseWizard(true)}
+                onClick={() => setCloseWizardFor(current.id)}
                 className={`${ui.card} p-5 flex flex-col items-center gap-2 hover:bg-amber-50 dark:hover:bg-amber-900/10 transition-colors col-span-2`}
               >
                 <i className="fa-solid fa-moon text-3xl text-amber-600 dark:text-amber-400" />
@@ -921,10 +934,12 @@ export function CashBranchView() {
       </div>
 
       {/* ── Close-shift modal overlay ──────────────────────────────────── */}
-      {showCloseWizard && current && (
+      {/* Sin `&& current`: el resultado del cierre debe seguir en pantalla
+          aunque `current` ya no tenga turno; se quita solo con "Listo". */}
+      {showCloseWizard && (
         <CloseShiftModal
           onClosed={handleShiftClosed}
-          onCancel={() => setShowCloseWizard(false)}
+          onCancel={() => setCloseWizardFor(null)}
         />
       )}
 

@@ -50,8 +50,9 @@ export function CloseSessionModal({ onClose, onConfirm }: Props) {
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
       style={{ background: 'var(--dax-modal-backdrop)' }}
-      // Con el turno ya cerrado el fondo no cierra: solo "Listo".
-      onClick={resultado ? undefined : onClose}
+      // Con el turno ya cerrado el fondo no cierra (solo "Listo"), y con el
+      // cierre en vuelo tampoco: se perdería el resultado.
+      onClick={resultado || loading ? undefined : onClose}
     >
       <div className="dax-card dax-modal p-6 pb-0 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
         {resultado ? (
@@ -101,7 +102,7 @@ export function CloseSessionModal({ onClose, onConfirm }: Props) {
               </div>
 
               <div className="dax-modal-footer flex gap-2 pb-6">
-                <button onClick={onClose} className="dax-btn-secondary flex-1 min-h-[44px]">Cancelar</button>
+                <button onClick={onClose} disabled={loading} className="dax-btn-secondary flex-1 min-h-[44px]">Cancelar</button>
                 <button
                   onClick={submit}
                   disabled={loading || !closingAmount}

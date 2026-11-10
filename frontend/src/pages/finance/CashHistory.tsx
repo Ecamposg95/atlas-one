@@ -147,8 +147,9 @@ function CloseModal({ summary, onClose, onDone, onConfirm }: {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
-      // Con el turno ya cerrado el fondo no cierra: solo "Listo".
-      onClick={result ? undefined : onClose}
+      // Con el turno ya cerrado el fondo no cierra (solo "Listo"), y con el
+      // cierre en vuelo tampoco: se perdería el resultado.
+      onClick={result || loading ? undefined : onClose}
     >
       <div className="dax-card dax-modal p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-black text-dax-text mb-4">{result ? 'Turno cerrado' : 'Finalizar Turno'}</h3>
@@ -182,7 +183,7 @@ function CloseModal({ summary, onClose, onDone, onConfirm }: {
           <input type="number" value={closing} onChange={(e) => setClosing(e.target.value)} className="dax-input" step="0.01" />
         </div>
         <div className="dax-modal-footer -mx-6 px-6 flex gap-2 mt-5">
-          <button onClick={onClose} className="dax-btn-secondary flex-1">Cancelar</button>
+          <button onClick={onClose} disabled={loading} className="dax-btn-secondary flex-1">Cancelar</button>
           <button onClick={submit} disabled={loading || !isValidCount(closing)} className="dax-btn-danger flex-1 justify-center">
             {loading ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-lock" /> Cerrar Turno</>}
           </button>

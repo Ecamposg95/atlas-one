@@ -2,11 +2,23 @@ import { BRANCH_COPY, PAY_METHOD_LABELS } from '../../copy/branchCopy'
 import { ui, brand, fmtMoney } from './branchUI'
 import { useCountUp } from '../../hooks/useCountUp'
 import type { DashboardToday } from '../../types/branchDashboard'
+import { BLIND_LABEL, BLIND_MASK } from '../../utils/blindCash'
 
-interface TodayProps { today: DashboardToday }
+/**
+ * `shiftOpen`: con el turno abierto rige el conteo ciego. Los importes de este
+ * tablero son del turno activo, así que el efectivo neto (y el total de ventas,
+ * el ticket promedio × tickets o el % de la meta, de los que se despeja restando
+ * tarjeta y transferencia) se enmascaran hasta el cierre.
+ */
+interface TodayProps { today: DashboardToday; shiftOpen?: boolean }
+
+/** Importe enmascarado del conteo ciego, con su nota al pasar el cursor. */
+function Ciego({ className = '' }: { className?: string }) {
+  return <span className={`text-dax-muted ${className}`} title={BLIND_LABEL}>{BLIND_MASK}</span>
+}
 
 /** Col-span-5: large sales total + ticket count + inline goal bar */
-function HeroSales({ today }: TodayProps) {
+function HeroSales({ today, shiftOpen = false }: TodayProps) {
   const salesTotal = useCountUp(Number(today.sales_total ?? 0))
   const goalPct = today.goal_progress_pct ?? null
   // Goal bar: purple fill (brand) for ≥80%, amber for mid, rose for low
@@ -20,8 +32,9 @@ function HeroSales({ today }: TodayProps) {
       <div>
         <p className={`${ui.kpiLabel} mb-1`}>{BRANCH_COPY.cockpit.salesToday}</p>
         <p className={`${ui.kpiHero} text-emerald-500 dark:text-emerald-400`}>
-          {fmtMoney(salesTotal)}
+          {shiftOpen ? <Ciego /> : fmtMoney(salesTotal)}
         </p>
+        {shiftOpen && <p className={`text-xs ${ui.muted}`}>{BLIND_LABEL} · se muestra al cerrar el turno</p>}
         <p className={`mt-2 text-sm ${ui.muted}`}>
           {BRANCH_COPY.cockpit.salesTickets(today.sales_count)}
         </p>
@@ -32,15 +45,18 @@ function HeroSales({ today }: TodayProps) {
           <div className="flex items-center justify-between mb-1.5">
             <p className={ui.kpiLabel}>{BRANCH_COPY.cockpit.goalLabel}</p>
             <span className="text-sm font-bold tabular-nums text-slate-700 dark:text-slate-200">
-              {goalPct ?? 0}%
+              {/* % × meta = ventas del turno (1 decimal): también va ciego. */}
+              {shiftOpen ? <Ciego /> : `${goalPct ?? 0}%`}
             </span>
           </div>
-          <div className="h-2 bg-stone-100 dark:bg-slate-800 rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all ${barColor}`}
-              style={{ width: `${Math.min(100, goalPct ?? 0)}%` }}
-            />
-          </div>
+          {!shiftOpen && (
+            <div className="h-2 bg-stone-100 dark:bg-slate-800 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${barColor}`}
+                style={{ width: `${Math.min(100, goalPct ?? 0)}%` }}
+              />
+            </div>
+          )}
           <p className={`mt-1 text-xs ${ui.muted}`}>
             {BRANCH_COPY.cockpit.goalOf(fmtMoney(today.goal))}
           </p>
@@ -51,7 +67,7 @@ function HeroSales({ today }: TodayProps) {
 }
 
 /** Col-span-3: ticket promedio */
-function SecondaryKPIs({ today }: TodayProps) {
+function SecondaryKPIs({ today, shiftOpen = false }: TodayProps) {
   return (
     <div className="flex flex-col gap-4 h-full">
       {/* Ticket promedio */}
@@ -61,7 +77,8 @@ function SecondaryKPIs({ today }: TodayProps) {
           <p className={ui.kpiLabel}>{BRANCH_COPY.cockpit.avgTicket}</p>
         </div>
         <p className="text-2xl font-extrabold tabular-nums tracking-tight text-slate-900 dark:text-slate-100 mt-0.5">
-          {fmtMoney(today.avg_ticket)}
+          {/* Ticket promedio × tickets = ventas del turno: ciego con turno abierto. */}
+          {shiftOpen ? <Ciego /> : fmtMoney(today.avg_ticket)}
         </p>
       </div>
     </div>
@@ -105,7 +122,7 @@ const FIXED_METHODS = [
   { key: 'TRANSFER', icon: 'fa-building-columns', iconBg: 'rgba(59,130,246,0.1)', iconColor: '#60a5fa' },
 ] as const
 
-function PaymentMethods({ today }: TodayProps) {
+function PaymentMethods({ today, shiftOpen = false }: TodayProps) {
   const payMethods = today.payment_methods ?? {}
 
   return (
@@ -115,6 +132,8 @@ function PaymentMethods({ today }: TodayProps) {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {FIXED_METHODS.map(({ key, icon, iconBg, iconColor }) => {
           const amount = Number(payMethods[key] ?? 0)
+          // Solo el efectivo es conteo físico; tarjeta y transferencia se ven.
+          const enmascarar = shiftOpen && key === 'CASH'
           return (
             <div
               key={key}
@@ -132,7 +151,7 @@ function PaymentMethods({ today }: TodayProps) {
                   {PAY_METHOD_LABELS[key] ?? key}
                 </p>
                 <p className="text-sm font-bold tabular-nums text-slate-800 dark:text-slate-100 mt-0.5">
-                  {fmtMoney(amount)}
+                  {enmascarar ? <Ciego /> : fmtMoney(amount)}
                 </p>
               </div>
             </div>
