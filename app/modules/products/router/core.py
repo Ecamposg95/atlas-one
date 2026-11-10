@@ -112,6 +112,13 @@ def read_products(
     # Para admin con override, el helper también hace INNER JOIN. Sin override queda como antes
     # (admin ve todo incluyendo sin PBS).
 
+    # Orden determinista: sin ORDER BY, cada página del SELECT DISTINCT sale en
+    # el orden que Postgres quiera y entre páginas se repiten y se saltan
+    # productos (visto en prod: total=620, recorrido=607). Desempate por id para
+    # nombres repetidos. Solo columnas de Product: con DISTINCT, Postgres exige
+    # que el ORDER BY esté en el SELECT.
+    query = query.order_by(Product.name, Product.id)
+
     total_count = query.count()
     products_db = query.offset(skip).limit(limit).all()
     # --- Optimización N+1 Stock ---
