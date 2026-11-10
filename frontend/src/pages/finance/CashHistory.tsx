@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from 'react'
 import { BLIND_MASK, BLIND_LABEL, isValidCount, shouldRevealExpected } from '../../utils/blindCash'
 import { useIsBranchUser } from '../../components/branch/useIsBranchUser'
-import { CashBranchView, CloseResultPanel, type CloseResult } from '../../components/branch/CashBranchView'
+import { CashBranchView } from '../../components/branch/CashBranchView'
 import { cashApi, type CashSummary } from '../../api/cash'
 import { printerApi } from '../../api/printer'
 import { usePOSStore } from '../../store/posStore'
-import type { CashSession } from '../../types/cash'
+import type { CashSession, CashWarning } from '../../types/cash'
+import { closeVerdict } from '../../theme/verdict'
 import { DaxCard } from '../../components/ui/DaxCard'
 import { Spinner } from '../../components/ui/Spinner'
 import { formatCurrency } from '../../utils/currency'
@@ -61,6 +62,51 @@ function MovementModal({ type, onClose, onConfirm }: { type: 'IN' | 'OUT'; onClo
   )
 }
 
+// Resultado del cierre ya hecho: Esperado / Contado / Diferencia con la
+// `difference` que devolvió el backend (contado − esperado).
+interface CloseResult {
+  expected: number
+  counted: number
+  diff: number
+  warnings: CashWarning[]
+}
+
+function ResultadoCierre({ result, onDone }: { result: CloseResult; onDone: () => void }) {
+  const { expected, counted, diff, warnings } = result
+  const verdict = closeVerdict(diff)
+  return (
+    <div>
+      <div className={`anim-pop ${verdict.className} p-4 text-center mb-4`} role="status">
+        <p className="text-2xl font-black tabular-nums">{formatCurrency(Math.abs(diff))}</p>
+        <p className="text-sm font-bold">{verdict.label}</p>
+      </div>
+      <div className="space-y-2 text-sm mb-4">
+        <div className="flex justify-between"><span className="text-dax-muted">Esperado en caja</span><span className="tabular-nums text-dax-text">{formatCurrency(expected)}</span></div>
+        <div className="flex justify-between"><span className="text-dax-muted">Contado</span><span className="tabular-nums text-dax-text">{formatCurrency(counted)}</span></div>
+        <div className="flex justify-between font-bold text-dax-text border-t border-dax-border pt-2">
+          <span>Diferencia</span>
+          <span className={`tabular-nums ${diff > 0 ? 'text-dax-success' : diff < 0 ? 'text-dax-danger' : ''}`}>
+            {diff > 0 ? '+' : ''}{formatCurrency(diff)}
+          </span>
+        </div>
+      </div>
+      {warnings.length > 0 && (
+        <div className="space-y-2 mb-4">
+          {warnings.map((w, i) => (
+            <div key={`${w.code}-${i}`} className="rounded-lg border border-dax-border bg-dax-warning-soft text-dax-warning px-3 py-2 text-xs">
+              <p className="font-semibold mb-0.5"><i className="fa-solid fa-triangle-exclamation mr-1" />{w.code}</p>
+              <p>{w.message}</p>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="dax-modal-footer -mx-6 px-6 flex gap-2 mt-5">
+        <button onClick={onDone} className="dax-btn-primary flex-1 justify-center" autoFocus>Listo</button>
+      </div>
+    </div>
+  )
+}
+
 function CloseModal({ summary, onClose, onDone, onConfirm }: {
   summary: CashSummary
   onClose: () => void
@@ -75,6 +121,11 @@ function CloseModal({ summary, onClose, onDone, onConfirm }: {
   const [closing, setClosing] = useState('')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<CloseResult | null>(null)
+  // Con el turno abierto tampoco se enseña el desglose de efectivo (fondo,
+  // ventas, entradas, salidas, reembolsos): sumado da el esperado.
+  const revelar = shouldRevealExpected(result != null)
+  const titleCiego = `${BLIND_LABEL} — cuenta el efectivo y captúralo abajo`
+  const monto = (texto: string) => (revelar ? texto : BLIND_MASK)
 
   const submit = async () => {
     if (!isValidCount(closing)) return
@@ -102,28 +153,28 @@ function CloseModal({ summary, onClose, onDone, onConfirm }: {
       <div className="dax-card dax-modal p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-black text-dax-text mb-4">{result ? 'Turno cerrado' : 'Finalizar Turno'}</h3>
         {result ? (
-          <CloseResultPanel result={result} onDone={onDone} />
+          <ResultadoCierre result={result} onDone={onDone} />
         ) : (
         <>
         <div className="space-y-3 text-sm mb-4">
-          <div className="flex justify-between"><span className="text-slate-500">Fondo inicial</span><span>{formatCurrency(summary.opening_amount)}</span></div>
-          <div className="flex justify-between"><span className="text-slate-500">Ventas efectivo</span><span>{formatCurrency(summary.total_cash)}</span></div>
-          <div className="flex justify-between"><span className="text-slate-500">Entradas</span><span className="text-emerald-400">+{formatCurrency(summary.total_inflows)}</span></div>
-          <div className="flex justify-between"><span className="text-slate-500">Salidas</span><span className="text-red-400">-{formatCurrency(summary.total_outflows)}</span></div>
+          <div className="flex justify-between"><span className="text-dax-muted">Fondo inicial</span><span className="tabular-nums" title={revelar ? undefined : titleCiego}>{monto(formatCurrency(summary.opening_amount))}</span></div>
+          <div className="flex justify-between"><span className="text-dax-muted">Ventas efectivo</span><span className="tabular-nums" title={revelar ? undefined : titleCiego}>{monto(formatCurrency(summary.total_cash))}</span></div>
+          <div className="flex justify-between"><span className="text-dax-muted">Entradas</span><span className={`tabular-nums ${revelar ? 'text-dax-success' : ''}`} title={revelar ? undefined : titleCiego}>{monto(`+${formatCurrency(summary.total_inflows)}`)}</span></div>
+          <div className="flex justify-between"><span className="text-dax-muted">Salidas</span><span className={`tabular-nums ${revelar ? 'text-dax-danger' : ''}`} title={revelar ? undefined : titleCiego}>{monto(`-${formatCurrency(summary.total_outflows)}`)}</span></div>
           {summary.cash_refunds > 0 && (
             <div className="flex justify-between">
-              <span className="text-slate-500">Reembolsos efectivo {summary.returns_count > 0 ? `(${summary.returns_count})` : ''}</span>
-              <span className="text-red-400">-{formatCurrency(summary.cash_refunds)}</span>
+              <span className="text-dax-muted">Reembolsos efectivo {summary.returns_count > 0 ? `(${summary.returns_count})` : ''}</span>
+              <span className={`tabular-nums ${revelar ? 'text-dax-danger' : ''}`} title={revelar ? undefined : titleCiego}>{monto(`-${formatCurrency(summary.cash_refunds)}`)}</span>
             </div>
           )}
-          <div className="flex justify-between font-bold text-white border-t border-slate-700/50 pt-2">
+          <div className="flex justify-between font-bold text-dax-text border-t border-dax-border pt-2">
             <span>Esperado en caja</span>
-            <span title={`${BLIND_LABEL} — cuenta el efectivo y captúralo abajo`}>
-              {shouldRevealExpected(result != null) ? formatCurrency(summary.expected_cash) : BLIND_MASK}
+            <span className="tabular-nums" title={revelar ? undefined : titleCiego}>
+              {monto(formatCurrency(summary.expected_cash))}
             </span>
           </div>
           <p className="text-[11px] text-dax-muted">
-            {BLIND_LABEL} · el esperado y la diferencia se muestran al cerrar
+            {BLIND_LABEL} · el desglose, el esperado y la diferencia se muestran al cerrar
           </p>
         </div>
         <div>

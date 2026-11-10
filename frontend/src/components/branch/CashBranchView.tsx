@@ -159,7 +159,7 @@ interface CloseShiftModalProps {
 // Resultado del arqueo ya cerrado — se muestra en pantalla en vez de
 // depender del ticket impreso. Antes, si no había impresora configurada
 // (frecuente en campo), el cajero cerraba turno y nunca veía su faltante.
-export interface CloseResult {
+interface CloseResult {
   expected: number
   counted: number
   diff: number
@@ -183,6 +183,11 @@ function CloseShiftModal({ onClosed, onCancel }: CloseShiftModalProps) {
   }, [])
 
   const expected = summary?.expected_cash ?? 0
+  // Conteo ciego: con el turno abierto tampoco se enseña el desglose de
+  // efectivo (fondo, ventas, entradas, salidas, reembolsos): sumado da el esperado.
+  const revelar = shouldRevealExpected(result != null)
+  const CIEGO = 'text-slate-400 dark:text-slate-500'
+  const titleCiego = `${BLIND_LABEL} — cuenta el efectivo y captúralo abajo`
   const countedNum = parseFloat(counted)
   const diff = !isNaN(countedNum) ? countedNum - expected : 0
 
@@ -256,33 +261,51 @@ function CloseShiftModal({ onClosed, onCancel }: CloseShiftModalProps) {
         ) : (
           <>
             <div className="space-y-2 text-sm mb-5">
-              <Row label="Fondo inicial"  value={fmtMoney(String(summary.opening_amount))} />
-              <Row label="Ventas efectivo" value={fmtMoney(String(summary.total_cash))} />
-              <Row label="Entradas"        value={`+${fmtMoney(String(summary.total_inflows))}`}  valueClass={brand.greenText} />
-              <Row label="Salidas"         value={`-${fmtMoney(String(summary.total_outflows))}`} valueClass="text-rose-600 dark:text-rose-400" />
+              <Row
+                label="Fondo inicial"
+                value={revelar ? fmtMoney(String(summary.opening_amount)) : BLIND_MASK}
+                valueClass={revelar ? undefined : CIEGO}
+                title={revelar ? undefined : titleCiego}
+              />
+              <Row
+                label="Ventas efectivo"
+                value={revelar ? fmtMoney(String(summary.total_cash)) : BLIND_MASK}
+                valueClass={revelar ? undefined : CIEGO}
+                title={revelar ? undefined : titleCiego}
+              />
+              <Row
+                label="Entradas"
+                value={revelar ? `+${fmtMoney(String(summary.total_inflows))}` : BLIND_MASK}
+                valueClass={revelar ? brand.greenText : CIEGO}
+                title={revelar ? undefined : titleCiego}
+              />
+              <Row
+                label="Salidas"
+                value={revelar ? `-${fmtMoney(String(summary.total_outflows))}` : BLIND_MASK}
+                valueClass={revelar ? 'text-rose-600 dark:text-rose-400' : CIEGO}
+                title={revelar ? undefined : titleCiego}
+              />
               {summary.cash_refunds > 0 && (
                 <Row
                   label={`Reembolsos efectivo${summary.returns_count > 0 ? ` (${summary.returns_count})` : ''}`}
-                  value={`-${fmtMoney(String(summary.cash_refunds))}`}
-                  valueClass="text-rose-600 dark:text-rose-400"
+                  value={revelar ? `-${fmtMoney(String(summary.cash_refunds))}` : BLIND_MASK}
+                  valueClass={revelar ? 'text-rose-600 dark:text-rose-400' : CIEGO}
+                  title={revelar ? undefined : titleCiego}
                 />
               )}
               <div className="border-t border-stone-200 dark:border-slate-700 pt-2 flex justify-between font-bold text-slate-900 dark:text-slate-100">
                 <span>Esperado en caja</span>
                 {/* Esta vista solo se pinta antes de cerrar (sin `result`): enmascarado. */}
-                {shouldRevealExpected(result != null) ? (
+                {revelar ? (
                   <span className="tabular-nums">{fmtMoney(String(expected))}</span>
                 ) : (
-                  <span
-                    className="tabular-nums text-slate-400 dark:text-slate-500"
-                    title={`${BLIND_LABEL} — cuenta el efectivo y captúralo abajo`}
-                  >
+                  <span className={`tabular-nums ${CIEGO}`} title={titleCiego}>
                     {BLIND_MASK}
                   </span>
                 )}
               </div>
               <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
-                {BLIND_LABEL} · el esperado y la diferencia se muestran al cerrar
+                {BLIND_LABEL} · el desglose, el esperado y la diferencia se muestran al cerrar
               </p>
             </div>
 
@@ -325,7 +348,7 @@ const SEVERITY_STYLE: Record<string, string> = {
   warning: 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300',
 }
 
-export function CloseResultPanel({ result, onDone }: { result: CloseResult; onDone: () => void }) {
+function CloseResultPanel({ result, onDone }: { result: CloseResult; onDone: () => void }) {
   const { expected, counted, diff, warnings } = result
   // Veredicto: el mismo `difference` que ya devolvió el backend, solo vestido.
   const verdict = closeVerdict(diff)
@@ -377,11 +400,11 @@ export function CloseResultPanel({ result, onDone }: { result: CloseResult; onDo
   )
 }
 
-function Row({ label, value, valueClass }: { label: string; value: string; valueClass?: string }) {
+function Row({ label, value, valueClass, title }: { label: string; value: string; valueClass?: string; title?: string }) {
   return (
     <div className="flex justify-between">
       <span className={ui.muted}>{label}</span>
-      <span className={`tabular-nums ${valueClass ?? ''}`}>{value}</span>
+      <span className={`tabular-nums ${valueClass ?? ''}`} title={title}>{value}</span>
     </div>
   )
 }
@@ -418,8 +441,6 @@ export function CashBranchView() {
     return () => clearTimeout(t)
   }, [justOpened])
 
-  // Solo presentación: el fondo mostrado sale del mismo dato de la sesión.
-  const openingAnimated = useCountUp(current ? parseNum(current.opening_balance) : 0)
 
   const COPY = BRANCH_COPY.pages
 
@@ -618,8 +639,9 @@ export function CashBranchView() {
                       <i className="fa-solid fa-clock mr-1 text-white/50" />
                       {formatElapsed(current.opened_at)}
                     </p>
-                    <p className="text-white/90 text-sm font-semibold tabular-nums">
-                      Fondo {fmtMoney(openingAnimated)}
+                    {/* Conteo ciego: el fondo es parte del esperado; se ve al cerrar. */}
+                    <p className="text-white/90 text-sm font-semibold tabular-nums" title={BLIND_LABEL}>
+                      Fondo {BLIND_MASK}
                     </p>
                   </div>
                 ) : todayClosedSession ? (
@@ -688,7 +710,10 @@ export function CashBranchView() {
           <KpiCard
             icon="fa-coins"
             label={COPY.cashKpis.totalSales}
-            value={summary ? fmtMoney(String(summary.total_sales)) : '—'}
+            // Con turno abierto se enmascara: ventas totales − tarjeta −
+            // transferencia − fiado = ventas en efectivo (parte del esperado).
+            value={current ? BLIND_MASK : summary ? fmtMoney(String(summary.total_sales)) : '—'}
+            sub={current ? BLIND_LABEL : undefined}
             iconBg="rgba(16,185,129,0.12)"
             iconColor="#10b981"
             valueClass="text-emerald-600 dark:text-emerald-400"
@@ -728,7 +753,7 @@ export function CashBranchView() {
             }
             sub={
               current
-                ? `Inicial: ${fmtMoney(current.opening_balance)}`
+                ? BLIND_LABEL
                 : todayClosedSession
                   ? `Inicial: ${fmtMoney(todayClosedSession.opening_balance)}`
                   : undefined
@@ -739,7 +764,8 @@ export function CashBranchView() {
           <KpiCard
             icon="fa-arrow-down"
             label={COPY.cashKpis.inflows}
-            value={summary ? `+${fmtMoney(String(summary.total_inflows))}` : '—'}
+            value={current ? BLIND_MASK : summary ? `+${fmtMoney(String(summary.total_inflows))}` : '—'}
+            sub={current ? BLIND_LABEL : undefined}
             iconBg="rgba(16,185,129,0.12)"
             iconColor="#10b981"
             valueClass="text-emerald-600 dark:text-emerald-400"
@@ -747,7 +773,8 @@ export function CashBranchView() {
           <KpiCard
             icon="fa-arrow-up"
             label={COPY.cashKpis.outflows}
-            value={summary ? `-${fmtMoney(String(summary.total_outflows))}` : '—'}
+            value={current ? BLIND_MASK : summary ? `-${fmtMoney(String(summary.total_outflows))}` : '—'}
+            sub={current ? BLIND_LABEL : undefined}
             iconBg="rgba(244,63,94,0.12)"
             iconColor="#f43f5e"
             valueClass="text-rose-600 dark:text-rose-400"
