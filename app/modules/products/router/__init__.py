@@ -145,6 +145,12 @@ def delete_department(
     ).first()
     if not dept:
         raise HTTPException(status_code=404, detail="Departamento no encontrado")
+    # Los hijos pasan a raiz (parent_id no tiene FK). ORM, no UPDATE masivo,
+    # para que `updated_at` se mueva y la tienda web los resincronice.
+    for hijo in db.query(Department).filter(
+        Department.parent_id == dept.id, Department.organization_id == org_id,
+    ).all():
+        hijo.parent_id = None
     db.delete(dept)
     db.commit()
     return {"status": "ok"}

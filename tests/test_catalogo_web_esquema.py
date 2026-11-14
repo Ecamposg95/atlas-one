@@ -124,3 +124,22 @@ def test_modulo_en_catalogo_sin_presets(db):
     assert m is not None and m.name == "Tienda en línea"
     for preset in db.query(IndustryPreset).all():
         assert "tienda_en_linea" not in (preset.modules or [])
+
+
+def test_borrar_padre_deja_hijos_en_raiz(client, db, org, auth_admin):
+    ropa = _crear(client, org, auth_admin, "Ropa").json()
+    camisas = _crear(client, org, auth_admin, "Camisas", ropa["id"]).json()
+    otra = Organization(name="Otra org 2")
+    db.add(otra)
+    db.flush()
+    ajeno = Department(name="Ajeno hijo", organization_id=otra.id, parent_id=ropa["id"])
+    db.add(ajeno)
+    db.commit()
+    antes = db.query(Department).get(camisas["id"]).updated_at
+    time.sleep(0.01)
+    r = client.delete(f"/api/departments/{ropa['id']}", headers=_h(auth_admin, org))
+    assert r.status_code == 200, r.text
+    db.expire_all()
+    c = db.query(Department).get(camisas["id"])
+    assert c is not None and c.parent_id is None and c.updated_at > antes
+    assert db.query(Department).get(ajeno.id).parent_id == ropa["id"]
