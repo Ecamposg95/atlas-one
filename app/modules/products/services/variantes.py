@@ -21,6 +21,7 @@ from app.services.barcodes import AsignadorDeCodigos
 
 from .codigos import asignar_barcode_interno, validar_barcode_libre, validar_sku_unico
 from .sucursales import registrar_stock_inicial
+from .web import tocar_producto
 
 logger = logging.getLogger(__name__)
 
@@ -160,5 +161,6 @@ def crear_variantes(
                                 notas="Creación de variante")
         nuevas.append(v)
     producto.has_variants = True
+    tocar_producto(db, producto.id)
     db.flush()
     return nuevas

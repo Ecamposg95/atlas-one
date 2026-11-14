@@ -9,7 +9,7 @@ reverse-shim that re-exports from here.
 Owns: Department, Brand, UnitOfMeasure, Product, ProductVariant,
 ProductPrice, PackagingUnit, ProductBranchStatus.
 """
-from sqlalchemy import Column, String, Boolean, ForeignKey, Numeric, Integer, UniqueConstraint, Index
+from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Numeric, Integer, UniqueConstraint, Index, false
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 from app.models.mixins import UUIDMixin, AuditMixin, TenantMixin
@@ -21,6 +21,9 @@ class Department(Base, UUIDMixin, AuditMixin, TenantMixin):
 
     name = Column(String, index=True)
     description = Column(String, nullable=True)
+    # Jerarquia de dos niveles para la tienda web (raiz -> hijo). NULL = raiz.
+    # Sin FK a proposito: `validar_padre` (services/web.py) impone la regla.
+    parent_id = Column(String(36), nullable=True)
 
 class Brand(Base, UUIDMixin, AuditMixin, TenantMixin):
     __tablename__ = "brands"
@@ -28,6 +31,8 @@ class Brand(Base, UUIDMixin, AuditMixin, TenantMixin):
 
     name = Column(String, index=True)
     logo_url = Column(String, nullable=True)
+    # Marca "premium" para la tienda web (la tienda decide como destacarla).
+    is_premium = Column(Boolean, nullable=False, default=False, server_default=false())
 
 class UnitOfMeasure(Base, UUIDMixin, AuditMixin, TenantMixin):
     __tablename__ = "uom"
@@ -59,6 +64,11 @@ class Product(Base, UUIDMixin, AuditMixin, TenantMixin):
     model = Column(String(80), nullable=True)
     # `material` es informativo (ficha y etiqueta CSV); NO entra en el nombre.
     material = Column(String(80), nullable=True)
+
+    # Publicacion en la tienda web (canal tienda_en_linea). Nace apagado: nada
+    # sale a la web sin que alguien lo publique.
+    web_published = Column(Boolean, nullable=False, default=False, server_default=false())
+    web_published_at = Column(DateTime(timezone=True), nullable=True)
 
     has_variants = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True) # "Global" soft-delete or active flag
