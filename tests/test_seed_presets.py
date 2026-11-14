@@ -62,5 +62,7 @@ def test_seed_enterprise_includes_all_modules(db):
     # sembrados por seed_global_modules (customer_portal/kds/invoicing/…) —
     # un segundo catálogo divergente que no gobierna este test.
     from scripts.init_presets_v2 import MODULES_CATALOG
-    catalog_keys = {k for k, *_ in MODULES_CATALOG}
+    # `tienda_en_linea` (canal web) es de contratación aparte: está en el
+    # catálogo pero ningún preset, Enterprise incluido, lo trae.
+    catalog_keys = {k for k, *_ in MODULES_CATALOG if k != "tienda_en_linea"}
     assert set(enterprise.modules) == catalog_keys

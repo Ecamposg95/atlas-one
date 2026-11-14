@@ -157,6 +157,11 @@ COLUMN_MIGRATIONS = [
     # nombre de venta de quien no los capture sigue siendo su `name` de hoy.
     # `ticket_line_style` nace 'compact': ninguna tienda viva estrena un
     # renglon de tres lineas por un deploy; su dueño lo enciende en Empresa.
+    # Catalogo web (canal tienda_en_linea). Nacen apagados/NULL.
+    ("products", "web_published",    "ALTER TABLE products ADD COLUMN web_published BOOLEAN NOT NULL DEFAULT FALSE;"),
+    ("products", "web_published_at", "ALTER TABLE products ADD COLUMN web_published_at TIMESTAMPTZ;"),
+    ("brands", "is_premium",         "ALTER TABLE brands ADD COLUMN is_premium BOOLEAN NOT NULL DEFAULT FALSE;"),
+    ("departments", "parent_id",     "ALTER TABLE departments ADD COLUMN parent_id VARCHAR(36);"),
     ("products", "gender",   "ALTER TABLE products ADD COLUMN gender VARCHAR(10);"),
     ("products", "model",    "ALTER TABLE products ADD COLUMN model VARCHAR(80);"),
     ("products", "material", "ALTER TABLE products ADD COLUMN material VARCHAR(80);"),
@@ -270,6 +275,12 @@ INDEX_MIGRATIONS = [
     # Atribucion por pago (2026-09-02)
     *INDICES_PAYMENTS_CASH_SESSION,
     *INDICES_CASH_MOVEMENT_AUTHOR,
+    # Sincronizacion de la tienda web por `updated_at` (canal tienda_en_linea).
+    *[
+        (f"ix_{t}_org_updated",
+         f"CREATE INDEX IF NOT EXISTS ix_{t}_org_updated ON {t} (organization_id, updated_at);")
+        for t in ("products", "product_variants", "brands", "departments", "product_images")
+    ],
 ]
 
 
@@ -428,6 +439,14 @@ def run_migrations():
 
     with engine.connect() as conn:
         aplicar_migraciones_de_columna(conn, COLUMN_MIGRATIONS)
+
+    # Galeria de la tienda web: una imagen primaria por producto con image_url
+    # y sin galeria. Idempotente (solo toca productos sin ninguna imagen).
+    from app.modules.products.imagenes import backfill_imagenes
+    with SessionLocal() as _db:
+        _n = backfill_imagenes(_db)
+        _db.commit()
+    print(f"  ✓ product_images backfill: {_n} imagen(es) primaria(s) creadas")
 
     # --- Index migrations (idempotent via CREATE INDEX IF NOT EXISTS) ---
     with engine.connect() as conn:

@@ -16,6 +16,7 @@ from app.modules.products.sale_name import normalizar_genero
 class DepartmentRead(BaseModel):
     id: str # UUID
     name: str
+    parent_id: Optional[str] = None
     class Config:
         from_attributes = True
 
@@ -226,6 +227,13 @@ class ProductRead(BaseModel):
     image_url: Optional[str] = None
     is_active: bool
     department: Optional[DepartmentRead] = None
+    # Publicado en la tienda web. Un objeto recien creado aun sin flush trae None.
+    web_published: bool = False
+
+    @field_validator("web_published", mode="before")
+    @classmethod
+    def _web_published_none(cls, v):
+        return bool(v)
 
     # Ficha boutique. `sale_name` ("Louis Vuitton · Chamarra mezclilla") lo
     # llena `_compute_product_read`; sin marca ni modelo es exactamente `name`.
