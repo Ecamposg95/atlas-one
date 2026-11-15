@@ -57,6 +57,8 @@ xhtml2pdf==0.2.17
 psycopg2-binary
 gunicorn
 cloudinary==1.41.0
+anthropic>=1.0,<2
+pypdf>=5
 
 # Testing
 pytest>=8.0
