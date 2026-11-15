@@ -91,3 +91,17 @@ def test_cantidad_vacia_o_cero_marca_duda():
     rs = renglones_desde_excel(_tabla([["A", None, 1, 1], ["B", 0, 1, 1], ["C", 2, 1, 1]]), MAPA, {})
     assert rs[0].duda == "Cantidad vacía" and rs[1].duda == "Cantidad vacía"
     assert rs[0].cantidad == 0 and rs[2].duda is None
+
+
+def test_separadores_decimales_y_de_miles():
+    from app.modules.cargas.lectura_excel import _importe
+    casos = {"10,5": "10.5", "1,500": "1500", "1,500.50": "1500.50", "1.500,50": "1500.50",
+             "$1,250,000": "1250000", "7": "7"}
+    for texto, esperado in casos.items():
+        assert _importe(texto) == Decimal(esperado), texto
+
+
+def test_csv_coma_decimal_conserva_el_valor():
+    t = leer_tablas("Desc;Cant;Precio\nBolsa;2;10,5\n".encode("latin-1"), "csv")[0]
+    m = MapaColumnas(campos={"descripcion_original": 0, "cantidad": 1}, columnas_dinero=[2])
+    assert renglones_desde_excel(t, m, {2: "precio"})[0].precio == Decimal("10.5")

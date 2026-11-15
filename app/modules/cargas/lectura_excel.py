@@ -148,12 +148,30 @@ def mapear_columnas(tabla: TablaCruda, cliente: ClienteEstructurado,
             resp.tokens_entrada, resp.tokens_salida)
 
 
+def _normalizar_numero(v: str) -> str:
+    """Quita $ y espacios y decide qué separador es el decimal.
+
+    "10,5" -> 10.5 · "1,500" -> 1500 · "1,500.50" -> 1500.50 · "1.500,50" -> 1500.50.
+    """
+    v = v.strip().replace("$", "").replace(" ", "")
+    if "," in v and "." in v:
+        if v.rfind(",") > v.rfind("."):  # 1.500,50: la coma es el decimal
+            return v.replace(".", "").replace(",", ".")
+        return v.replace(",", "")
+    if "," in v:
+        entera, _, dec = v.rpartition(",")
+        if v.count(",") == 1 and 1 <= len(dec) <= 2:
+            return f"{entera}.{dec}"
+        return v.replace(",", "")
+    return v
+
+
 def _importe(v: Any) -> Optional[Decimal]:
     """Dinero de una celda; vacío o basura -> None (nunca 0)."""
     if celda_vacia(v):
         return None
     if isinstance(v, str):
-        v = v.strip().replace("$", "").replace(",", "").replace(" ", "")
+        v = _normalizar_numero(v)
         if v == "":
             return None
     d = celda_decimal(v, default=None)
