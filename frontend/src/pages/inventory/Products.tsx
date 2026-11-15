@@ -20,6 +20,9 @@ import { sortByName } from '../../utils/sortByName'
 import { toast } from '../../store/toastStore'
 import { Modal } from '../../components/ui/Modal'
 import { FormularioProducto } from '../../components/products/FormularioProducto'
+import { DialogoPublicarWeb } from '../../components/products/DialogoPublicarWeb'
+import { BarraPublicacionWeb } from '../../components/products/BarraPublicacionWeb'
+import { useCanalTienda } from '../../hooks/useCanalTienda'
 import { expandVariantRows, grupoDeVariantes, nombreDeVariante, priceRange, sumStock } from './variantRows'
 import { cerrarImportacion, debeCerrarSolo } from './importacion'
 import { CatalogKpis } from '../../components/catalog/CatalogKpis'
@@ -378,6 +381,21 @@ function AccionesDeFila({ p, onEditar, conTexto = false, catalogo = false, conMa
   )
 }
 
+function InsigniaWeb({ p }: { p: Product }) {
+  return p.web_published
+    ? <span className="dax-badge dax-badge-green text-[10px]">Publicado</span>
+    : <span className="text-dax-muted text-xs">—</span>
+}
+
+function CasillaWeb({ p, marcada, onToggle }: { p: Product; marcada: boolean; onToggle: (id: string) => void }) {
+  return (
+    <label className="inline-flex items-center gap-2 max-md:min-h-[44px]">
+      <input type="checkbox" aria-label={`Seleccionar ${p.sale_name ?? p.name}`} checked={marcada} onChange={() => onToggle(p.id)} />
+      <InsigniaWeb p={p} />
+    </label>
+  )
+}
+
 // ─── Main Products Page ─────────────────────────────────────────────────────────
 
 export function Products() {
@@ -398,6 +416,11 @@ function ProductsHQView() {
   const esTelefono = useEsTelefono()
   // Modo básico: sin importador, etiquetas CSV, códigos ni rejilla (render condicional).
   const modoBasico = useModoBasico()
+  // Canal «Tienda en línea»: columna Web, casillas y barra de publicación en bloque (solo admin/dueño con el módulo).
+  const { puedePublicar } = useCanalTienda()
+  const [seleccion, setSeleccion] = useState<Set<string>>(new Set())
+  const [publicandoWeb, setPublicandoWeb] = useState(false)
+  const [ofrecerWeb, setOfrecerWeb] = useState<Product | null>(null)
 
   // Catálogo (fusión de /admin/catalog, Fase 3): cifras, aprobación, archivados y acciones
   // por producto. Solo HQ en perfil completo: el básico escondía el Catálogo a propósito y
@@ -549,13 +572,49 @@ function ProductsHQView() {
   const pages = Math.ceil(total / LIMIT)
 
   const openEdit = (p: Product) => setEditor({ mode: 'edit', productId: p.id })
-  const handleSaved = () => { setEditor(null); load(search, deptId, page); cargarKpis() }
+  const handleSaved = (creado?: Product) => {
+    if (editor?.mode === 'create' && creado) setOfrecerWeb(creado)
+    setEditor(null); load(search, deptId, page); cargarKpis()
+  }
   const handleNewProductClick = () => setEditor({ mode: 'create' })
 
   // Acciones del catálogo (antes en AdminCatalog). Tras cada una se releen lista y cifras.
   const detalleError = (e: unknown, respaldo: string) => {
     const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
     toast.error(typeof detail === 'string' ? detail : respaldo)
+  }
+  // La selección vale solo para lo que está en pantalla: cualquier cambio de filtro, página o vista la limpia.
+  useEffect(() => { setSeleccion(new Set()) }, [search, deptId, brandId, aprobacion, incluirArchivados, soloSinSucursal, page, viewMode])
+  // «Todo lo filtrado» solo cuando los filtros en pantalla caben exactos en el `filtro` del servidor.
+  const filtradoExacto = aprobacion === 'ALL' && !soloSinSucursal && !incluirArchivados
+  const alternarSeleccion = (id: string) => setSeleccion((prev) => {
+    const sig = new Set(prev)
+    if (sig.has(id)) sig.delete(id); else sig.add(id)
+    return sig
+  })
+  const publicarWeb = async (payload: Parameters<typeof productsApi.webPublish>[0], ok: string) => {
+    setPublicandoWeb(true)
+    try {
+      const r = await productsApi.webPublish(payload)
+      toast.success(`${ok} (${r.processed}).`)
+      setSeleccion(new Set())
+      load(search, deptId, page)
+    } catch (e) {
+      detalleError(e, 'No se pudo actualizar la tienda web.')
+    } finally { setPublicandoWeb(false) }
+  }
+  const publicarFiltrado = async () => {
+    const si = await confirm({
+      title: 'Publicar en tienda web',
+      message: `Se publicarán ${total} productos que coinciden con los filtros actuales. ¿Continuar?`,
+      confirmText: 'Publicar',
+    })
+    if (!si) return
+    const filtro: { search?: string; brand_id?: string; department_id?: string } = {}
+    if (search.trim()) filtro.search = search.trim()
+    if (catalogo && brandId) filtro.brand_id = brandId
+    if (deptId) filtro.department_id = deptId
+    await publicarWeb({ filtro, published: true }, 'Publicados en la tienda web')
   }
   const recargarCatalogo = () => { load(search, deptId, page); cargarKpis() }
   const [accionEnCurso, setAccionEnCurso] = useState(false)
@@ -818,6 +877,18 @@ function ProductsHQView() {
         )}
       </BarraFiltros>
 
+      {puedePublicar && (
+        <BarraPublicacionWeb
+          seleccionados={seleccion.size}
+          ocupado={publicandoWeb}
+          onPublicarSeleccion={() => publicarWeb({ ids: [...seleccion], published: true }, 'Publicados en la tienda web')}
+          onQuitarSeleccion={() => publicarWeb({ ids: [...seleccion], published: false }, 'Quitados de la tienda web')}
+          onPublicarFiltrado={publicarFiltrado}
+          filtradoDisponible={filtradoExacto}
+          onLimpiar={() => setSeleccion(new Set())}
+        />
+      )}
+
       {/* Tabla */}
       <DaxCard padding={false}>
         {esTelefono && viewMode === 'list' ? (
@@ -836,6 +907,7 @@ function ProductsHQView() {
                       { etiqueta: 'Departamento', valor: p.department_name ?? '—' },
                       { etiqueta: 'Existencia', valor: <ExistenciaDeFila p={p} abierto={tallasAbiertas} className="max-md:min-h-[44px]" onToggle={() => setExpandedVariantsId(tallasAbiertas ? null : p.id)} /> },
                       ...(catalogo ? [{ etiqueta: 'Aprobación', valor: <EstadoAprobacion p={p} /> }] : []),
+                      ...(puedePublicar ? [{ etiqueta: 'Web', valor: <CasillaWeb p={p} marcada={seleccion.has(p.id)} onToggle={alternarSeleccion} /> }] : []),
                     ]}
                     acciones={canEdit ? <AccionesDeFila p={p} onEditar={openEdit} conTexto catalogo={catalogo} onAccion={correrAccion} ocupado={accionEnCurso} /> : undefined}
                   />
@@ -952,6 +1024,7 @@ function ProductsHQView() {
             <table className="dax-table w-full">
               <thead>
                 <tr>
+                  {puedePublicar && <th aria-label="Seleccionar" />}
                   <th>SKU</th>
                   <th>Producto</th>
                   <th>Departamento</th>
@@ -959,16 +1032,23 @@ function ProductsHQView() {
                   <th className="text-right">Stock</th>
                   <th>Estado</th>
                   {catalogo && <th>Aprobación</th>}
+                  {puedePublicar && <th>Web</th>}
                   {canEdit && <th />}
                 </tr>
               </thead>
               <tbody>
                 {products.map((p) => {
                   const tallasAbiertas = expandedVariantsId === p.id && (p.variants?.length ?? 0) > 1
-                  const colCount = 6 + (catalogo ? 1 : 0) + (canEdit ? 1 : 0)
+                  const colCount = 6 + (puedePublicar ? 2 : 0) + (catalogo ? 1 : 0) + (canEdit ? 1 : 0)
                   return (
                     <Fragment key={p.id}>
                       <tr>
+                        {puedePublicar && (
+                          <td>
+                            <input type="checkbox" aria-label={`Seleccionar ${p.sale_name ?? p.name}`}
+                              checked={seleccion.has(p.id)} onChange={() => alternarSeleccion(p.id)} />
+                          </td>
+                        )}
                         <td className="font-mono text-slate-400 text-xs">{p.sku}</td>
                         <td>
                           <div className="flex items-center gap-2">
@@ -993,6 +1073,7 @@ function ProductsHQView() {
                           <EstadoDeFila p={p} />
                         </td>
                         {catalogo && <td><EstadoAprobacion p={p} /></td>}
+                        {puedePublicar && <td><InsigniaWeb p={p} /></td>}
                         {canEdit && (
                           <td className="text-right">
                             <AccionesDeFila p={p} onEditar={openEdit} catalogo={catalogo} onAccion={correrAccion} ocupado={accionEnCurso} />
@@ -1001,6 +1082,7 @@ function ProductsHQView() {
                       </tr>
                       {tallasAbiertas && expandVariantRows([p]).map((row) => (
                         <tr key={row.variant.id} className="bg-slate-900/40 text-xs">
+                          {puedePublicar && <td />}
                           <td className="font-mono text-slate-500 pl-6">
                             {row.sku}
                             {row.barcode && (
@@ -1018,7 +1100,7 @@ function ProductsHQView() {
                           <td className={`text-right font-semibold ${colorExistencia(row.qty)}`}>
                             {row.qty}
                           </td>
-                          <td colSpan={colCount - 5} />
+                          <td colSpan={colCount - (puedePublicar ? 6 : 5)} />
                         </tr>
                       ))}
                     </Fragment>
@@ -1071,6 +1153,7 @@ function ProductsHQView() {
           />
         </Modal>
       )}
+      {ofrecerWeb && <DialogoPublicarWeb producto={{ id: ofrecerWeb.id, name: ofrecerWeb.sale_name ?? ofrecerWeb.name }} onClose={() => { setOfrecerWeb(null); load(search, deptId, page) }} />}
       {matrixProduct && (
         <ProductBranchMatrix
           product={matrixProduct}

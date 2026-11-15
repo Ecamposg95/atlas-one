@@ -17,6 +17,8 @@ import { ProductVariantsEditor } from './ProductVariantsEditor'
 import { ProductBranchMatrixSection } from './ProductBranchMatrixSection'
 import { ProductInitialStockSection } from './ProductInitialStockSection'
 import { ProductImageUploader } from './ProductImageUploader'
+import { GaleriaProducto } from './GaleriaProducto'
+import { useCanalTienda } from '../../hooks/useCanalTienda'
 import { campoVisible } from './camposProducto'
 import {
   EMPTY_PRODUCT_FORM, type BranchActivation, type Brand, type Branch, type Department,
@@ -58,6 +60,9 @@ export function FormularioProducto({ mode, productId, variantId, presentacion, o
   const hasVariantsModule = useEnabledModulesStore((s) => s.enabledModules.includes('variants'))
   const campos = useCamposProducto()
   const modoBasico = useModoBasico()
+  const { activo: canalActivo, puedePublicar } = useCanalTienda()
+  // Canal web: la casilla se aplica al guardar (solo si cambió).
+  const [webPublicado, setWebPublicado] = useState(false)
 
   const [departments, setDepartments] = useState<Department[]>([])
   const [brands, setBrands] = useState<Brand[]>([])
@@ -106,6 +111,7 @@ export function FormularioProducto({ mode, productId, variantId, presentacion, o
       loaders.push(productsApi.getById(productId).then((p) => {
         if (cancelled) return
         setLoaded(p)
+        setWebPublicado(!!p.web_published)
         const estado = formDesdeProducto(p, variantId)
         // La casilla arranca marcada solo si todas las tallas ya comparten el
         // precio de la principal (ver precioATodasPorDefecto).
@@ -196,6 +202,12 @@ export function FormularioProducto({ mode, productId, variantId, presentacion, o
         // Primero el producto: si revienta (409 por SKU), la talla queda intacta.
         let actualizado = await productsApi.update(loaded.id, plan.productPatch)
         if (plan.variantPatch) actualizado = await productsApi.updateVariant(plan.variantPatch.variantId, plan.variantPatch.patch)
+        if (puedePublicar && webPublicado !== !!loaded.web_published) {
+          try {
+            await productsApi.webPublish({ ids: [loaded.id], published: webPublicado })
+            actualizado = { ...actualizado, web_published: webPublicado }
+          } catch { toast.error('Se guardó el producto, pero no se pudo actualizar la tienda web.') }
+        }
         toast.success('Producto actualizado.')
         onDone(actualizado)
       }
@@ -238,6 +250,17 @@ export function FormularioProducto({ mode, productId, variantId, presentacion, o
       <ProductBasicsSection value={form} onChange={setField} errors={errors} onSuggestSku={sugerirSku} suggestingSku={sugiriendoSku} campos={campos} />
       {mode === 'edit' && loaded && campoVisible(campos, 'image_url', loaded.image_url) && (
         <ProductImageUploader product={loaded} onUpdated={(p) => { setLoaded(p); setField('image_url', p.image_url ?? '') }} />
+      )}
+      {mode === 'edit' && loaded && canalActivo && (
+        <div className="space-y-4">
+          {puedePublicar && (
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={webPublicado} onChange={(e) => setWebPublicado(e.target.checked)} />
+              Publicado en tienda web
+            </label>
+          )}
+          <GaleriaProducto productId={loaded.id} imagenHeredada={loaded.image_url} />
+        </div>
       )}
       <ProductCommercialSection value={form} onChange={setField} errors={errors} departments={departments} brands={brands} campos={campos} />
       <ProductTieredPricesSection prices={prices} onChange={setPrices} errors={errors}

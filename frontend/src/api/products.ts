@@ -3,6 +3,7 @@ import type {
   Product,
   Brand,
   Department,
+  ImagenProducto,
   ProductBranchStatus,
   CatalogKpis,
   UploadPreviewResponse,
@@ -428,6 +429,45 @@ export const productsApi = {
     return data
   },
 
+  /** POST /products/web-publish — publica/despublica en la tienda web (admin/dueño; 404 si el canal está apagado). */
+  webPublish: async (payload: {
+    ids?: string[] | null
+    filtro?: { search?: string; brand_id?: string; department_id?: string } | null
+    published: boolean
+  }): Promise<{ processed: number }> => {
+    const { data } = await client.post<{ processed: number }>('/products/web-publish', {
+      ids: payload.ids ?? null,
+      filtro: payload.filtro ?? null,
+      published: payload.published,
+    })
+    return data
+  },
+
+  listImages: async (id: string): Promise<ImagenProducto[]> => {
+    const { data } = await client.get<ImagenProducto[]>(`/products/${id}/images`)
+    return Array.isArray(data) ? data : []
+  },
+
+  addImage: async (id: string, file: File, alt?: string): Promise<ImagenProducto> => {
+    const form = new FormData()
+    form.append('file', file)
+    if (alt) form.append('alt', alt)
+    const { data } = await client.post<ImagenProducto>(`/products/${id}/images`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return data
+  },
+
+  orderImages: async (id: string, ids: string[], primaryId: string): Promise<ImagenProducto[]> => {
+    const { data } = await client.put<ImagenProducto[]>(`/products/${id}/images/order`, { ids, primary_id: primaryId })
+    return data
+  },
+
+  removeImage: async (id: string, imageId: string): Promise<ImagenProducto[]> => {
+    const { data } = await client.delete<ImagenProducto[]>(`/products/${id}/images/${imageId}`)
+    return data
+  },
+
   getBrands: async (): Promise<Brand[]> => {
     const { data } = await client.get<Brand[]>('/brands/')
     return Array.isArray(data) ? data : (data as any)?.items ?? []
@@ -438,7 +478,7 @@ export const productsApi = {
     return data
   },
 
-  updateBrand: async (id: string, payload: { name?: string; logo_url?: string }): Promise<Brand> => {
+  updateBrand: async (id: string, payload: { name?: string; logo_url?: string; is_premium?: boolean }): Promise<Brand> => {
     // Sin barra final: el backend registra PUT /brands/{id} (sin `/`) y no hay
     // redirect 307 en ese sentido — con `/` cae en el catch-all SPA y da 405.
     const { data } = await client.put<Brand>(`/brands/${id}`, payload)
@@ -454,12 +494,12 @@ export const productsApi = {
     return Array.isArray(data) ? data : (data as any)?.items ?? []
   },
 
-  createDepartment: async (payload: { name: string }): Promise<Department> => {
+  createDepartment: async (payload: { name: string; parent_id?: string | null }): Promise<Department> => {
     const { data } = await client.post<Department>('/departments/', payload)
     return data
   },
 
-  updateDepartment: async (id: string, payload: { name?: string }): Promise<Department> => {
+  updateDepartment: async (id: string, payload: { name?: string; parent_id?: string | null }): Promise<Department> => {
     // Igual que brands: el backend no tiene la barra final en PUT/DELETE.
     const { data } = await client.put<Department>(`/departments/${id}`, payload)
     return data
