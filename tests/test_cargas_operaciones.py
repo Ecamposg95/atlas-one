@@ -78,7 +78,8 @@ def test_recalcular_arma_plan_y_numera_dudas(db, org):
     rs = _renglones(db, carga)
     assert rs[1].grupo == rs[2].grupo and rs[1].grupo != rs[3].grupo
     assert {r.clase for r in rs.values()} == {"NUEVO"}
-    assert rs[1].sku == "PLAY" and rs[2].sku == "PLAY-G"
+    # Marca Uno no tiene SKU todavía: su prefijo se deriva como en `sku_sugerido`.
+    assert rs[1].sku == "MU-PLAY" and rs[2].sku == "MU-PLAY-G"
     dudas = _dudas(db, carga)
     assert [(n, d.tipo, d.estado) for n, d in sorted(dudas.items())] == [
         (1, "marca_nueva", "abierta"), (2, "precio_faltante", "abierta"),

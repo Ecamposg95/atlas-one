@@ -10,12 +10,13 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.modules.cargas.models import CargaMercancia, CargaRenglon
-from app.modules.cargas.normalizar import _llave, prefijo_de_marca, sku_para
+from app.modules.cargas.normalizar import _limpia_sku, _llave, prefijo_de_marca, sku_para
 from app.modules.cargas.reglas import ReglasCarga
 from app.modules.cargas.tipos import Grupo, RenglonNormalizado
 from app.modules.conteos.models import CERRADO, InventoryCount
 from app.models.inventory import InventoryMovement
 from app.modules.products.models import Brand, Department, Product, ProductVariant
+from app.modules.products.sale_name import _marca_corta
 
 
 class Coincidencia(BaseModel):
@@ -68,6 +69,54 @@ def _skus_de_marca(db: Session, org_id: int, brand_id: str) -> list[str]:
         .all()
     )
     return [s for (s,) in filas if s]
+
+
+def prefijos_de_marcas(db: Session, org_id: int, nombres: list[Optional[str]]) -> dict[str, Optional[str]]:
+    """Prefijo de SKU por marca (llave sin acentos -> prefijo).
+
+    Una marca con SKU vivos conserva su convención (el prefijo más común, o
+    ninguno si sus SKU no lo llevan). Una marca sin SKU (nueva o sin productos)
+    lo deriva como `sku_sugerido` (iniciales o 3 letras); si ese prefijo ya es
+    de otra marca de la org o de otra marca nueva de esta carga, se le añade un
+    dígito (2, 3…). Determinista: mismo catálogo y mismo orden, mismo prefijo."""
+    skus_por_marca: dict[str, list[str]] = {}
+    for brand_id, sku in (
+        db.query(Product.brand_id, ProductVariant.sku)
+        .join(Product, Product.id == ProductVariant.product_id)
+        .filter(Product.organization_id == org_id, ProductVariant.organization_id == org_id,
+                Product.brand_id != None, ProductVariant.sku != None,  # noqa: E711
+                Product.deleted_at == None, ProductVariant.deleted_at == None)  # noqa: E711
+        .all()
+    ):
+        skus_por_marca.setdefault(brand_id, []).append(sku)
+    marcas = {b.id: b for b in db.query(Brand).filter(
+        Brand.organization_id == org_id, Brand.deleted_at == None)}  # noqa: E711
+    por_llave = {_llave(b.name): b for b in sorted(marcas.values(), key=lambda b: (b.name, b.id))}
+    # prefijo (mayúsculas) -> llave de la marca que lo usa
+    usados: dict[str, str] = {}
+    for bid, skus in skus_por_marca.items():
+        p = prefijo_de_marca(skus)
+        if p and bid in marcas:
+            usados.setdefault(p.upper(), _llave(marcas[bid].name))
+    resultado: dict[str, Optional[str]] = {}
+    for nombre in nombres:
+        llave = _llave(nombre)
+        if not llave or llave in resultado:
+            continue
+        b = por_llave.get(llave)
+        if b is not None and skus_por_marca.get(b.id):
+            resultado[llave] = prefijo_de_marca(skus_por_marca[b.id])
+            continue
+        base = _limpia_sku(_marca_corta(nombre))
+        if not base:
+            resultado[llave] = None
+            continue
+        candidato, n = base, 2
+        while usados.get(candidato.upper(), llave) != llave:
+            candidato, n = f"{base}{n}", n + 1
+        usados[candidato.upper()] = llave
+        resultado[llave] = candidato
+    return resultado
 
 
 def _producto_vivo(db: Session, org_id: int, product_id: str) -> Optional[Product]:

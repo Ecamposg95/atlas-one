@@ -315,12 +315,19 @@ def _conteos(db, org):
             db.query(PlatformAuditLog).count())
 
 
+def _con_costos_distintos():
+    """Renglones 4 y 5: la misma talla nueva (G) de la Playera que ya existe, con
+    costos distintos; la aplicación falla al dar de alta esa talla (después de
+    crear el Pantalón)."""
+    return [_pantalon("Ch", "2"), _pantalon("G", "1"), _crudo(talla="M", cantidad="1"),
+            {**_crudo(talla="G", cantidad="1"), "costo_unitario": "100", "moneda": "MXN"},
+            {**_crudo(talla="G", cantidad="1"), "costo_unitario": "120", "moneda": "MXN"}]
+
+
 def test_falla_a_media_no_deja_nada(db, org, branch_a, admin_a, catalogo):
-    _con_sku_archivado(db, org, catalogo)
-    carga = _carga(db, org, [_pantalon("Ch", "2"), _pantalon("G", "1"),
-                             _crudo(talla="Ch", cantidad="1", precio="350")])
+    carga = _carga(db, org, _con_costos_distintos())
     rs = _renglones(db, carga)
-    assert rs[3].clase == "NUEVO" and rs[3].sku == "PLAY"
+    assert rs[4].clase == "NUEVO" and rs[4].sku == "PLAY-G"
     _contestar(db, carga, admin_a)
     antes = _conteos(db, org)
 
@@ -328,18 +335,26 @@ def test_falla_a_media_no_deja_nada(db, org, branch_a, admin_a, catalogo):
         aplicar_carga(db, carga, admin_a)
 
     assert e.value.status_code == 422
-    assert "PLAY" in e.value.detail and "renglón 3" in e.value.detail
+    assert "los renglones 4, 5" in e.value.detail
     assert _conteos(db, org) == antes
     assert _movs(db, carga) == []
     assert db.query(Brand).filter_by(organization_id=org.id, name="Casa Dos").count() == 0
-    assert carga.estado == "error" and "PLAY" in carga.error
+    assert carga.estado == "error" and "los renglones 4, 5" in carga.error
     assert all(r.resultado is None for r in _renglones(db, carga).values())
 
 
-def test_reintento_tras_error_funciona(db, org, branch_a, admin_a, catalogo):
+def test_sku_archivado_ya_no_hace_fallar_la_carga(db, org, branch_a, admin_a, catalogo):
+    """Antes chocaba con el SKU archivado y fallaba al aplicar; ahora toma otro."""
     _con_sku_archivado(db, org, catalogo)
-    carga = _carga(db, org, [_pantalon("Ch", "2"), _pantalon("G", "1"),
-                             _crudo(talla="Ch", cantidad="1", precio="350")])
+    carga = _carga(db, org, [_crudo(talla="Ch", cantidad="1", precio="350")])
+    assert _renglones(db, carga)[1].sku != "PLAY"
+    _contestar(db, carga, admin_a)
+    aplicar_carga(db, carga, admin_a)
+    assert carga.estado == "aplicada"
+
+
+def test_reintento_tras_error_funciona(db, org, branch_a, admin_a, catalogo):
+    carga = _carga(db, org, _con_costos_distintos())
     _contestar(db, carga, admin_a)
     with pytest.raises(HTTPException):
         aplicar_carga(db, carga, admin_a)
@@ -349,12 +364,12 @@ def test_reintento_tras_error_funciona(db, org, branch_a, admin_a, catalogo):
 
     volver_a_plan(db, carga)
     assert carga.estado == "plan" and carga.error is None
-    _, rechazos = aplicar_operaciones(db, carga, admin_a, [{"op": "ignorar", "renglones": [3]}], None)
+    _, rechazos = aplicar_operaciones(db, carga, admin_a, [{"op": "ignorar", "renglones": [4, 5]}], None)
     assert rechazos == []
     resumen = aplicar_carga(db, carga, admin_a)
     assert carga.estado == "aplicada" and resumen.productos_nuevos == 1
-    assert len(_movs(db, carga)) == 2
-    assert _renglones(db, carga)[3].resultado is None
+    assert len(_movs(db, carga)) == 3
+    assert _renglones(db, carga)[4].resultado is None
 
 
 def test_volver_a_plan_solo_desde_error(db, org, branch_a, admin_a, catalogo):
@@ -636,3 +651,61 @@ def test_resurtido_igual_en_la_misma_sucursal_pregunta_y_se_puede_cargar(db, org
     _contestar(db, segunda, admin_a, {"ya_cargado": "cargar"})
     aplicar_carga(db, segunda, admin_a)
     assert _stock(db, catalogo["variante"].id, branch_a) == D("2") + D("1") + D("1") + D("4")
+
+
+# ── SKU de marcas sin prefijo (I2) ────────────────────────────────────────
+
+def _skus_nuevos(db, carga):
+    return {o: r.sku for o, r in _renglones(db, carga).items()}
+
+
+def test_dos_marcas_nuevas_mismo_tipo_sku_distintos_y_aplica(db, org, branch_a, admin_a, catalogo):
+    crudos = [_crudo(marca="Dama Norte", talla="M", cantidad="1"),
+              _crudo(marca="Dama Nube", talla="M", cantidad="2")]
+    carga = _carga(db, org, crudos)
+    skus = _skus_nuevos(db, carga)
+    assert skus == {1: "DN-PLAY", 2: "DN2-PLAY"}
+    _contestar(db, carga, admin_a)
+    resumen = aplicar_carga(db, carga, admin_a)
+    assert carga.estado == "aplicada" and resumen.productos_nuevos == 2
+    assert _variante(db, org, "DN2-PLAY").price == D("350")
+
+
+def test_prefijo_derivado_que_choca_con_otra_marca(db, org, branch_a, admin_a, catalogo):
+    otra = Brand(name="Casa Dos", organization_id=org.id)
+    db.add(otra)
+    db.flush()
+    p = Product(name="Playera", brand_id=otra.id, organization_id=org.id, is_active=True)
+    db.add(p)
+    db.flush()
+    db.add(ProductVariant(product_id=p.id, sku="CD-PLAY", size="M", price=D("200"), cost=D("100"),
+                          organization_id=org.id))
+    db.flush()
+    carga = _carga(db, org, [_crudo(marca="Casa Diez", talla="M", cantidad="1")])
+    assert _skus_nuevos(db, carga) == {1: "CD2-PLAY"}
+    _contestar(db, carga, admin_a)
+    aplicar_carga(db, carga, admin_a)
+    assert carga.estado == "aplicada"
+
+
+def test_sku_en_uso_por_otra_marca_se_resuelve_con_sufijo(db, org, branch_a, admin_a, catalogo):
+    """Casa Dos ya tiene SKU sin prefijo: su Playera calcularía "PLAY", que es de Marca Uno."""
+    otra = Brand(name="Casa Dos", organization_id=org.id)
+    db.add(otra)
+    db.flush()
+    p = Product(name="Gorra", brand_id=otra.id, organization_id=org.id, is_active=True)
+    db.add(p)
+    db.flush()
+    db.add(ProductVariant(product_id=p.id, sku="GORRA", price=D("90"), cost=D("40"),
+                          organization_id=org.id))
+    db.flush()
+    carga = _carga(db, org, [_crudo(marca="Casa Dos", talla="M", cantidad="1"),
+                             _crudo(marca="Casa Dos", talla="G", cantidad="1")])
+    assert _skus_nuevos(db, carga) == {1: "PLAY-2", 2: "PLAY-2-G"}
+    # Estable entre recálculos.
+    recalcular_plan(db, carga)
+    assert _skus_nuevos(db, carga) == {1: "PLAY-2", 2: "PLAY-2-G"}
+    _contestar(db, carga, admin_a)
+    aplicar_carga(db, carga, admin_a)
+    assert carga.estado == "aplicada"
+    assert _variante(db, org, "PLAY").product_id == catalogo["producto"].id  # el de Marca Uno, intacto

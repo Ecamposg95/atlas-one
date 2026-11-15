@@ -45,7 +45,12 @@ Hay dos lugares, con funciones distintas:
   - `sucursal_recibe`: sucursal que recibe la mercancía por omisión;
   - `activar_en`: `todas_las_que_venden` o `sucursal_recibe`;
   - `mapa_tallas` (p. ej. `S` → `Ch`) y `escala_ropa` (orden de las tallas);
-  - `tipos`: por tipo de prenda, su `codigo_sku` y su `departamento`;
+  - `tipos`: por tipo de prenda, su `codigo_sku` y su `departamento`. El SKU de un producto nuevo es
+    `PREFIJO-CODIGO[-MAT][-DAMA][-N]`: el prefijo es el que ya usan los SKU de la marca; una marca sin SKU
+    (nueva) lo deriva como el SKU sugerido (iniciales o 3 letras) y, si ese prefijo ya es de otra marca, le
+    añade un dígito (`DN`, `DN2`). Si el SKU calculado ya existe en la tienda (incluso archivado) o lo
+    calculó otro producto de la misma carga, toma `-2`, `-3`…: la carga nunca falla al aplicar por SKU
+    repetido;
   - `materiales_aparte` y `material_normal`: materiales que separan un producto de otro;
   - `genero_por_marca`, `genero_por_omision` y `sufijo_dama`;
   - `matriz_por_omision`: `completa` (todas las tallas en 0) o `solo_lo_que_hay`;

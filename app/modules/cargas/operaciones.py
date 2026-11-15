@@ -24,15 +24,15 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError,
 from sqlalchemy.orm import Session
 
 from app.modules.cargas.cruce import (
-    _armar, _marca_por_nombre, _producto_vivo, _skus_de_marca, clasificar,
-    cruzar_con_catalogo, marcar_ya_cargado,
+    _armar, _producto_vivo, clasificar, cruzar_con_catalogo, marcar_ya_cargado,
+    prefijos_de_marcas,
 )
 from app.modules.cargas.dudas import DudaNueva, generar_dudas, opcion_a_operaciones
 from app.modules.cargas.lectura_excel import (
     MapaColumnas, leer_tablas, normalizar_numero, renglones_desde_excel,
 )
 from app.modules.cargas.models import CargaArchivo, CargaCambio, CargaDuda, CargaMercancia, CargaRenglon
-from app.modules.cargas.normalizar import agrupar, normalizar_renglon, prefijo_de_marca, sku_para
+from app.modules.cargas.normalizar import _llave, agrupar, normalizar_renglon, sku_para
 from app.modules.cargas.reglas import reglas_de_la_org
 from app.modules.cargas.tipos import RenglonCrudo, RenglonNormalizado
 from app.modules.products.services.codigos import sku_en_uso
@@ -408,20 +408,37 @@ def _contestada_por_el_usuario(d: DudaNueva, por_orden: dict[int, CargaRenglon])
     return all(contestada(_usuario(por_orden[n])) for n in d.renglones if n in por_orden)
 
 
-def _sufijo_aparte(db: Session, org_id: int, g, reglas, prefijo: Optional[str],
-                   tomados: set[str]) -> str:
+def _skus_del_grupo(g, reglas, prefijo: Optional[str]) -> list[str]:
+    return [sku_para(g, t or None, reglas, prefijo) for t in (g.tallas or {"": None})]
+
+
+def _ocupado(db: Session, org_id: int, sku: str, tomados: set[str]) -> bool:
+    return sku.lower() in tomados or sku_en_uso(db, org_id, sku)
+
+
+def _sufijo_libre(db: Session, org_id: int, g, reglas, prefijo: Optional[str],
+                  tomados: set[str]) -> str:
     """Primer "-N" (N ≥ 2) cuyos SKU no existen en la org (archivados incluidos)
-    ni en otro grupo de esta carga."""
+    ni los tomó otro grupo de esta carga. Lo usan "darlo de alta aparte" y un
+    producto nuevo cuyo SKU calculado ya está en uso."""
     original = g.sufijo
     try:
         for n in range(2, 100):
             g.sufijo = f"{original}-{n}"
-            skus = [sku_para(g, t or None, reglas, prefijo) for t in (g.tallas or {"": None})]
-            if not any(s.lower() in tomados or sku_en_uso(db, org_id, s) for s in skus):
+            if not any(_ocupado(db, org_id, s, tomados) for s in _skus_del_grupo(g, reglas, prefijo)):
                 return g.sufijo
     finally:
         g.sufijo = original
-    raise ValueError(f'no hay SKU libre para dar de alta aparte "{g.llave}"')
+    raise ValueError(f'no hay SKU libre para dar de alta "{g.llave}"')
+
+
+def _sku_libre(db: Session, org_id: int, sku: str, tomados: set[str]) -> str:
+    """Talla nueva de un producto que ya existe cuyo SKU calculado está en uso."""
+    for n in range(2, 100):
+        candidato = f"{sku}-{n}"
+        if not _ocupado(db, org_id, candidato, tomados):
+            return candidato
+    raise ValueError(f'no hay SKU libre para "{sku}"')
 
 
 def _conciliar_dudas(db: Session, carga: CargaMercancia, nuevas: list[DudaNueva],
@@ -483,9 +500,9 @@ def recalcular_plan(db: Session, carga: CargaMercancia) -> None:
 
     grupos = agrupar(norm)
     coincidencias = cruzar_con_catalogo(db, org_id, grupos, norm, reglas)
-    prefijos: dict[str, Optional[str]] = {}
-    # SKU que los grupos de esta carga ya calculan: un grupo "aparte" no los toma.
-    tomados = {(f.sku or "").lower() for f in activos if f.sku}
+    prefijos = prefijos_de_marcas(db, org_id, [g.marca for g in grupos])
+    # SKU que ya calcularon los grupos anteriores de esta carga (en este recálculo).
+    tomados: set[str] = set()
     reabrir: set[str] = set()
     for g in grupos:
         correcciones = [_usuario(activos[i]) for i in g.renglones]
@@ -506,13 +523,12 @@ def recalcular_plan(db: Session, carga: CargaMercancia) -> None:
                 reabrir.add(f"casi_igual|{g.llave}")
         c = coincidencias.get(g.llave)
 
-        marca = _marca_por_nombre(db, org_id, g.marca)
-        if marca is not None and marca.id not in prefijos:
-            prefijos[marca.id] = prefijo_de_marca(_skus_de_marca(db, org_id, marca.id))
-        prefijo = prefijos.get(marca.id) if marca is not None else None
-        if aparte:
-            propios = {(activos[i].sku or "").lower() for i in g.renglones}
-            g.sufijo = _sufijo_aparte(db, org_id, g, reglas, prefijo, tomados - propios)
+        prefijo = prefijos.get(_llave(g.marca))
+        # Un producto nuevo nunca falla al aplicar por SKU repetido: si su SKU ya
+        # existe en la org o lo calculó otro grupo de esta carga, toma "-N".
+        if aparte or (c is None and any(_ocupado(db, org_id, sku, tomados)
+                                        for sku in _skus_del_grupo(g, reglas, prefijo))):
+            g.sufijo = _sufijo_libre(db, org_id, g, reglas, prefijo, tomados)
         ids = list(c.variante_por_talla.values()) if c else []
         sku_variante = {v.id: v.sku for v in db.query(ProductVariant).filter(
             ProductVariant.organization_id == org_id, ProductVariant.id.in_(ids))} if ids else {}
@@ -520,11 +536,16 @@ def recalcular_plan(db: Session, carga: CargaMercancia) -> None:
         for i, clase in clasificar(g, c, carga.proposito, norm):
             f = activos[i]
             vid = c.variante_por_talla.get(norm[i].talla or "") if c else None
+            sku = sku_variante.get(vid) or sku_para(g, norm[i].talla, reglas, prefijo)
+            if clase == "NUEVO" and c is not None and _ocupado(db, org_id, sku, tomados):
+                sku = _sku_libre(db, org_id, sku, tomados)
             f.clase = clase
             f.grupo = g.llave
             f.product_id = c.product_id if c else None
             f.variant_id = vid
-            f.sku = sku_variante.get(vid) or sku_para(g, norm[i].talla, reglas, prefijo)
+            f.sku = sku
+        # Los SKU de este grupo quedan tomados para los grupos que siguen.
+        tomados |= {(activos[i].sku or "").lower() for i in g.renglones if activos[i].sku}
     db.flush()
 
     ya_cargados = marcar_ya_cargado(db, org_id, carga, activos, reglas.ventana_ya_cargado_dias,
