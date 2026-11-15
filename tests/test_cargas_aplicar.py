@@ -524,7 +524,8 @@ def test_migracion_crea_departamento_solo_con_crear(db, org, branch_a, admin_a, 
     assert carga.totales["departamentos_nuevos"] == 1 and resumen.productos_nuevos == 1
 
 
-def test_migracion_departamento_escrito_sin_crear_falla(db, org, branch_a, admin_a, catalogo):
+def test_migracion_departamento_escrito_que_no_existe_se_reabre(db, org, branch_a, admin_a, catalogo):
+    """Como en entrada: un nombre escrito que no existe no se crea ni falla al aplicar en bucle."""
     reglas = _reglas(branch_a)
     reglas["tipos"]["Sudadera"] = {"codigo_sku": "SUD", "departamento": "Sudaderas"}
     org.reglas_carga = reglas
@@ -533,11 +534,16 @@ def test_migracion_departamento_escrito_sin_crear_falla(db, org, branch_a, admin
     _, rechazos = aplicar_operaciones(db, carga, admin_a, [
         {"op": "resolver_duda", "numero": d.numero, "opcion": "", "valor": "Ropa de abrigo"}], None)
     assert rechazos == []
-    _contestar(db, carga, admin_a)
+    [otra] = [x for x in _abiertas(db, carga) if x.tipo == "departamento"]
+    assert otra.numero == d.numero and '"Ropa de abrigo"' in otra.texto
     with pytest.raises(HTTPException) as e:
         aplicar_carga(db, carga, admin_a)
-    assert e.value.status_code == 422 and '"Ropa de abrigo" no existe' in e.value.detail
+    assert e.value.status_code == 409
     assert db.query(Department).filter_by(organization_id=org.id, name="Ropa de abrigo").count() == 0
+    # Con "crear" ya no se reabre y la carga aplica.
+    _contestar(db, carga, admin_a, {"departamento": "crear"})
+    aplicar_carga(db, carga, admin_a)
+    assert db.query(Department).filter_by(organization_id=org.id, name="Ropa de abrigo").count() == 1
 
 
 def test_suma_activa_la_variante_en_la_que_recibe(db, org, branch_a, branch_b, admin_a, catalogo):

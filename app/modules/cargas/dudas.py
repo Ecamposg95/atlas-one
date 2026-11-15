@@ -39,6 +39,8 @@ _CON_TEXTO = {
     "precio_fuera_familia", "departamento", "sin_costo",
 }
 _INACTIVAS = ("YA_CARGADO", "IGNORADO")
+SIN_DEPARTAMENTOS = ("Esta tienda no tiene departamentos. Crea uno en Catálogo y vuelve a "
+                     "esta carga.")
 _SOLO_DIGITOS = re.compile(r"\d+(\.\d+)?")
 _GENEROS = (("HOMBRE", "Hombre"), ("MUJER", "Mujer"), ("UNISEX", "Unisex"), ("NINO", "Niño"))
 
@@ -455,6 +457,14 @@ def _departamento(db: Session, org_id: int, carga: CargaMercancia, plan: _Plan) 
             por_tipo.setdefault(_llave(plan.norm[i].tipo), []).append(i)
     if not por_tipo:
         return []
+    if not deptos and carga.proposito == "entrada":
+        # En entrada no se crean departamentos y no hay ninguno que elegir: una
+        # sola duda sin opciones que se va sola cuando exista uno.
+        idxs = sorted({i for v in por_tipo.values() for i in v})
+        return [DudaNueva(
+            tipo="departamento", texto=SIN_DEPARTAMENTOS,
+            renglones=[plan.orden(i) for i in idxs], clave="departamento|sin_departamentos",
+        )]
     dudas: list[DudaNueva] = []
     for llave, idxs in por_tipo.items():
         tipo = plan.norm[idxs[0]].tipo

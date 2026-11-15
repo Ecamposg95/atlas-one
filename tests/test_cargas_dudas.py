@@ -437,3 +437,15 @@ def test_departamento_de_las_reglas_que_no_existe(db, org):
             assert opcion_a_operaciones(_guardada(d), "crear", None) == [
                 {"op": "fijar_campo", "renglones": [1, 2], "campo": "departamento",
                  "valor": "Playeras"}]
+
+
+def test_entrada_en_tienda_sin_departamentos_dice_que_cree_uno(db, org):
+    _marca(db, org)
+    crudos = [_crudo(tipo="Sudadera"), _crudo(tipo="Gorra")]
+    [d] = [d for d in _dudas(db, org, crudos) if d.tipo == "departamento"]
+    assert d.texto == ("Esta tienda no tiene departamentos. Crea uno en Catálogo y vuelve a "
+                       "esta carga.")
+    assert d.opciones == [] and d.recomendada is None and d.renglones == [1, 2]
+    # En migración sí se puede crear desde la carga.
+    dudas = [d for d in _dudas(db, org, crudos, carga=_carga("migracion")) if d.tipo == "departamento"]
+    assert len(dudas) == 2 and all(_claves(x) == ["crear"] for x in dudas)

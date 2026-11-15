@@ -435,6 +435,18 @@ def _ocupado(db: Session, org_id: int, sku: str, tomados: set[str]) -> bool:
     return sku.lower() in tomados or sku_en_uso(db, org_id, sku)
 
 
+def _departamentos_con_crear(db: Session, carga: CargaMercancia) -> set[str]:
+    """Claves de las dudas de departamento contestadas con su opción "crear"."""
+    salida = set()
+    for d in _dudas(db, carga):
+        if d.tipo != "departamento" or d.estado != "resuelta":
+            continue
+        crear = next((o for o in (d.opciones or []) if o.get("clave") == "crear"), None)
+        if crear is not None and d.respuesta == crear.get("etiqueta"):
+            salida.add(d.clave)
+    return salida
+
+
 def _sufijo_libre(db: Session, org_id: int, g, reglas, prefijo: Optional[str],
                   tomados: set[str]) -> str:
     """Primer "-N" (N ≥ 2) cuyos SKU no existen en la org (archivados incluidos)
@@ -577,10 +589,11 @@ def recalcular_plan(db: Session, carga: CargaMercancia) -> None:
     nuevas = generar_dudas(db, org_id, carga, activos, grupos, coincidencias, reglas,
                            ya_cargados={cid: [f.orden for f in fs] for cid, fs in ya_cargados.items()})
     por_orden = {f.orden: f for f in activos}
-    if carga.proposito == "entrada":
-        # En entrada no se crean departamentos: si la respuesta nombró uno que no
-        # existe (o dejó de existir), la pregunta vuelve a abrirse.
-        reabrir |= {d.clave for d in nuevas if d.tipo == "departamento"}
+    # Si la respuesta de departamento nombró uno que no existe (o dejó de
+    # existir), la pregunta vuelve a abrirse. En migración no, si se contestó
+    # "crear": ese departamento se crea al aplicar.
+    con_crear = _departamentos_con_crear(db, carga) if carga.proposito == "migracion" else set()
+    reabrir |= {d.clave for d in nuevas if d.tipo == "departamento" and d.clave not in con_crear}
     _conciliar_dudas(db, carga, [d for d in nuevas if not _contestada_por_el_usuario(d, por_orden)],
                      reabrir)
 
