@@ -1,7 +1,9 @@
 /**
  * Corte de caja — CONTEO CIEGO.
  *
- * El monto esperado se oculta hasta que el cajero captura su conteo físico.
+ * El monto esperado y la diferencia se ocultan mientras el turno está abierto,
+ * aunque el cajero ya haya capturado su conteo; se muestran solo con el turno
+ * cerrado, tomados de la respuesta del backend.
  *
  * Por qué: al abrir el modal de cierre se pre-llenaba el campo "contado" con
  * el esperado, así que bastaba dar clic para cerrar con diferencia $0.00.
@@ -34,11 +36,13 @@ export function isValidCount(counted: string): boolean {
 }
 
 /**
- * En el modal de cierre: el esperado y la diferencia se revelan sólo cuando el
- * cajero ya capturó un conteo válido.
+ * El esperado y la diferencia se revelan solo con el turno YA cerrado.
+ *
+ * Antes se revelaban en cuanto el cajero tecleaba un conteo válido, y como el
+ * campo seguía editable bastaba corregir el número hasta ver diferencia $0.
  */
-export function shouldRevealExpected(counted: string): boolean {
-  return isValidCount(counted)
+export function shouldRevealExpected(closed: boolean): boolean {
+  return closed
 }
 
 /**

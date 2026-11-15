@@ -982,7 +982,7 @@ export function POS() {
                 ),
                 'error'
               )
-              return
+              return null
             }
             if (closed?.id) {
               if (savedPrinterName) {
@@ -997,7 +997,9 @@ export function POS() {
               }
             }
             store.setSession(null)
-            setClosingSession(false)
+            // El modal NO se cierra aquí: pasa a mostrar el resultado del corte
+            // (conteo ciego) y se cierra con su botón "Listo" (onClose).
+            return { difference: closed?.difference ?? null }
           }}
         />
       )}

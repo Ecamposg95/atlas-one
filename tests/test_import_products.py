@@ -119,3 +119,11 @@ class TestImportacion:
     def test_precio_invalido_es_error_claro(self, db, org, branch_a, tmp_path):
         with pytest.raises(ValueError, match="precio"):
             imp.import_products(db, _csv(tmp_path, [{**FILA, "Precio*": "no-es-numero"}]), org.id, branch_a.id)
+
+    def test_costo_en_blanco_queda_en_cero(self, db, org, branch_a, tmp_path):
+        fila = {**FILA, "Código": "FOL-02", "Costo unitario": ""}
+        imp.import_products(db, _csv(tmp_path, [fila]), org.id, branch_a.id)
+        v = db.query(ProductVariant).filter(
+            ProductVariant.organization_id == org.id, ProductVariant.sku == "FOL-02").one()
+        assert v.cost is not None, "costo NULL rompe margenes y ficha"
+        assert float(v.cost) == 0.0

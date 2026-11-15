@@ -64,10 +64,10 @@ export function Cockpit() {
         {/* Row 2 — KPI columns: Hero sales | Secondary KPIs | Top products */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           <div className="lg:col-span-5 anim-cascade" style={{ '--i': 1 } as CSSProperties}>
-            <CockpitDayKPIs.HeroSales today={data.today} />
+            <CockpitDayKPIs.HeroSales today={data.today} shiftOpen={data.shift.is_open} />
           </div>
           <div className="lg:col-span-3 anim-cascade" style={{ '--i': 2 } as CSSProperties}>
-            <CockpitDayKPIs.SecondaryKPIs today={data.today} />
+            <CockpitDayKPIs.SecondaryKPIs today={data.today} shiftOpen={data.shift.is_open} />
           </div>
           <div className="lg:col-span-4 anim-cascade" style={{ '--i': 3 } as CSSProperties}>
             <CockpitDayKPIs.TopProducts today={data.today} />
@@ -77,7 +77,7 @@ export function Cockpit() {
         {/* Row 3 — Payment methods | Alerts */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           <div className="lg:col-span-7 anim-cascade" style={{ '--i': 4 } as CSSProperties}>
-            <CockpitDayKPIs.PaymentMethods today={data.today} />
+            <CockpitDayKPIs.PaymentMethods today={data.today} shiftOpen={data.shift.is_open} />
           </div>
           <div className="lg:col-span-5 anim-cascade" style={{ '--i': 5 } as CSSProperties}>
             <CockpitAlerts alerts={data.alerts} />

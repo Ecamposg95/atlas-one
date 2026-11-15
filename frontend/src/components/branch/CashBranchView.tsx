@@ -175,13 +175,19 @@ function CloseShiftModal({ onClosed, onCancel }: CloseShiftModalProps) {
 
   useEffect(() => {
     // Conteo ciego: NO pre-llenar "contado" con el esperado. El cajero captura
-    // su propio conteo físico; el esperado se revela después (shouldRevealExpected).
+    // su propio conteo físico; el esperado y la diferencia salen solo con el
+    // turno ya cerrado (shouldRevealExpected), en CloseResultPanel.
     cashApi.getSummary()
       .then((s) => setSummary(s))
       .catch(() => setLoadError(true))
   }, [])
 
   const expected = summary?.expected_cash ?? 0
+  // Conteo ciego: con el turno abierto tampoco se enseña el desglose de
+  // efectivo (fondo, ventas, entradas, salidas, reembolsos): sumado da el esperado.
+  const revelar = shouldRevealExpected(result != null)
+  const CIEGO = 'text-dax-muted'
+  const titleCiego = `${BLIND_LABEL} — cuenta el efectivo y captúralo abajo`
   const countedNum = parseFloat(counted)
   const diff = !isNaN(countedNum) ? countedNum - expected : 0
 
@@ -229,7 +235,9 @@ function CloseShiftModal({ onClosed, onCancel }: CloseShiftModalProps) {
   // Tras cerrar, el modal muta a pantalla de resultado (no se cierra solo):
   // es el único lugar donde el cajero ve esperado/contado/diferencia si no
   // hay impresora configurada (ver toast.error de arriba en ese caso).
-  const dismiss = result ? onClosed : onCancel
+  // Con el cierre en vuelo no se descarta: el turno podría cerrarse sin que
+  // el cajero llegue a ver el resultado.
+  const dismiss = submitting ? () => {} : result ? onClosed : onCancel
 
   return (
     <div
@@ -241,7 +249,7 @@ function CloseShiftModal({ onClosed, onCancel }: CloseShiftModalProps) {
           <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
             {result ? 'Turno cerrado' : 'Finalizar turno'}
           </h3>
-          <button onClick={dismiss} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1" aria-label="Cerrar">
+          <button onClick={dismiss} disabled={submitting} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1" aria-label="Cerrar">
             <i className="fa-solid fa-xmark text-lg" />
           </button>
         </div>
@@ -255,35 +263,52 @@ function CloseShiftModal({ onClosed, onCancel }: CloseShiftModalProps) {
         ) : (
           <>
             <div className="space-y-2 text-sm mb-5">
-              <Row label="Fondo inicial"  value={fmtMoney(String(summary.opening_amount))} />
-              <Row label="Ventas efectivo" value={fmtMoney(String(summary.total_cash))} />
-              <Row label="Entradas"        value={`+${fmtMoney(String(summary.total_inflows))}`}  valueClass={brand.greenText} />
-              <Row label="Salidas"         value={`-${fmtMoney(String(summary.total_outflows))}`} valueClass="text-rose-600 dark:text-rose-400" />
+              <Row
+                label="Fondo inicial"
+                value={revelar ? fmtMoney(String(summary.opening_amount)) : BLIND_MASK}
+                valueClass={revelar ? undefined : CIEGO}
+                title={revelar ? undefined : titleCiego}
+              />
+              <Row
+                label="Ventas efectivo"
+                value={revelar ? fmtMoney(String(summary.total_cash)) : BLIND_MASK}
+                valueClass={revelar ? undefined : CIEGO}
+                title={revelar ? undefined : titleCiego}
+              />
+              <Row
+                label="Entradas"
+                value={revelar ? `+${fmtMoney(String(summary.total_inflows))}` : BLIND_MASK}
+                valueClass={revelar ? brand.greenText : CIEGO}
+                title={revelar ? undefined : titleCiego}
+              />
+              <Row
+                label="Salidas"
+                value={revelar ? `-${fmtMoney(String(summary.total_outflows))}` : BLIND_MASK}
+                valueClass={revelar ? 'text-rose-600 dark:text-rose-400' : CIEGO}
+                title={revelar ? undefined : titleCiego}
+              />
               {summary.cash_refunds > 0 && (
                 <Row
                   label={`Reembolsos efectivo${summary.returns_count > 0 ? ` (${summary.returns_count})` : ''}`}
-                  value={`-${fmtMoney(String(summary.cash_refunds))}`}
-                  valueClass="text-rose-600 dark:text-rose-400"
+                  value={revelar ? `-${fmtMoney(String(summary.cash_refunds))}` : BLIND_MASK}
+                  valueClass={revelar ? 'text-rose-600 dark:text-rose-400' : CIEGO}
+                  title={revelar ? undefined : titleCiego}
                 />
               )}
               <div className="border-t border-stone-200 dark:border-slate-700 pt-2 flex justify-between font-bold text-slate-900 dark:text-slate-100">
                 <span>Esperado en caja</span>
-                {shouldRevealExpected(counted) ? (
+                {/* Esta vista solo se pinta antes de cerrar (sin `result`): enmascarado. */}
+                {revelar ? (
                   <span className="tabular-nums">{fmtMoney(String(expected))}</span>
                 ) : (
-                  <span
-                    className="tabular-nums text-slate-400 dark:text-slate-500"
-                    title={`${BLIND_LABEL} — cuenta el efectivo y captúralo abajo`}
-                  >
+                  <span className={`tabular-nums ${CIEGO}`} title={titleCiego}>
                     {BLIND_MASK}
                   </span>
                 )}
               </div>
-              {!shouldRevealExpected(counted) && (
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
-                  {BLIND_LABEL} · se revela al capturar tu conteo
-                </p>
-              )}
+              <p className={`text-[11px] ${CIEGO} mt-1`}>
+                {BLIND_LABEL} · el desglose, el esperado y la diferencia se muestran al cerrar
+              </p>
             </div>
 
             <label className={`block ${ui.kpiLabel} mb-1`}>Efectivo contado</label>
@@ -295,11 +320,6 @@ function CloseShiftModal({ onClosed, onCancel }: CloseShiftModalProps) {
               autoFocus
               className={ui.input}
             />
-            {!isNaN(countedNum) && diff !== 0 && (
-              <p className={`text-xs mt-2 font-semibold ${diff > 0 ? brand.greenText : 'text-rose-600 dark:text-rose-400'}`}>
-                Diferencia: {diff > 0 ? '+' : ''}{fmtMoney(String(diff))}
-              </p>
-            )}
 
             <div className="flex gap-2 mt-5">
               <button onClick={onCancel} className={`${ui.btnSecondary} flex-1`} disabled={submitting}>
@@ -382,11 +402,11 @@ function CloseResultPanel({ result, onDone }: { result: CloseResult; onDone: () 
   )
 }
 
-function Row({ label, value, valueClass }: { label: string; value: string; valueClass?: string }) {
+function Row({ label, value, valueClass, title }: { label: string; value: string; valueClass?: string; title?: string }) {
   return (
     <div className="flex justify-between">
       <span className={ui.muted}>{label}</span>
-      <span className={`tabular-nums ${valueClass ?? ''}`}>{value}</span>
+      <span className={`tabular-nums ${valueClass ?? ''}`} title={title}>{value}</span>
     </div>
   )
 }
@@ -406,7 +426,10 @@ export function CashBranchView() {
   const [past, setPast] = useState<CashSession[]>([])
   const [loading, setLoading] = useState(true)
   const [reprintingId, setReprintingId] = useState<number | null>(null)
-  const [showCloseWizard, setShowCloseWizard] = useState(false)
+  // Id del turno que se está cerrando (null = modal de cierre oculto). Guardar
+  // el id y no un booleano permite descartarlo si ya hay OTRO turno abierto.
+  const [closeWizardFor, setCloseWizardFor] = useState<number | null>(null)
+  const showCloseWizard = closeWizardFor != null
   const [movementModal, setMovementModal] = useState<'IN' | 'OUT' | null>(null)
   const [openShiftModalVisible, setOpenShiftModalVisible] = useState(false)
   const [summary, setSummary] = useState<CashSummary | null>(null)
@@ -422,9 +445,6 @@ export function CashBranchView() {
     const t = setTimeout(() => setJustOpened(false), 2400)
     return () => clearTimeout(t)
   }, [justOpened])
-
-  // Solo presentación: el fondo mostrado sale del mismo dato de la sesión.
-  const openingAnimated = useCountUp(current ? parseNum(current.opening_balance) : 0)
 
   const COPY = BRANCH_COPY.pages
 
@@ -482,8 +502,11 @@ export function CashBranchView() {
   //   1) cuando la pestaña recupera foco / visibilidad
   //   2) cada 30s mientras la pestaña esté visible
   // Silent (sin spinner) para no parpadear los KPIs durante el día.
+  // En pausa mientras el modal de cierre está abierto: tras cerrar, el refresco
+  // vaciaría `current` y desmontaría el resultado (esperado/contado/diferencia,
+  // lo único que el cajero ve del conteo ciego) antes de que pulse "Listo".
   useEffect(() => {
-    if (!current) return
+    if (!current || showCloseWizard) return
     const onWake = () => {
       if (document.visibilityState === 'visible') loadAll(true)
     }
@@ -497,10 +520,16 @@ export function CashBranchView() {
       window.removeEventListener('focus', onWake)
       window.clearInterval(interval)
     }
-  }, [current, loadAll])
+  }, [current, loadAll, showCloseWizard])
+
+  // Un modal de cierre que quedara colgado de un turno anterior no debe
+  // reaparecer solo cuando se abre el siguiente.
+  useEffect(() => {
+    if (current && closeWizardFor != null && current.id !== closeWizardFor) setCloseWizardFor(null)
+  }, [current, closeWizardFor])
 
   function handleShiftClosed() {
-    setShowCloseWizard(false)
+    setCloseWizardFor(null)
     loadAll()
   }
 
@@ -623,8 +652,9 @@ export function CashBranchView() {
                       <i className="fa-solid fa-clock mr-1 text-white/50" />
                       {formatElapsed(current.opened_at)}
                     </p>
-                    <p className="text-white/90 text-sm font-semibold tabular-nums">
-                      Fondo {fmtMoney(openingAnimated)}
+                    {/* Conteo ciego: el fondo es parte del esperado; se ve al cerrar. */}
+                    <p className="text-white/90 text-sm font-semibold tabular-nums" title={BLIND_LABEL}>
+                      Fondo {BLIND_MASK}
                     </p>
                   </div>
                 ) : todayClosedSession ? (
@@ -678,7 +708,7 @@ export function CashBranchView() {
                 <span className="text-base font-bold text-slate-900 dark:text-slate-100">Salida</span>
               </button>
               <button
-                onClick={() => setShowCloseWizard(true)}
+                onClick={() => setCloseWizardFor(current.id)}
                 className={`${ui.card} p-5 flex flex-col items-center gap-2 hover:bg-amber-50 dark:hover:bg-amber-900/10 transition-colors col-span-2`}
               >
                 <i className="fa-solid fa-moon text-3xl text-amber-600 dark:text-amber-400" />
@@ -693,7 +723,10 @@ export function CashBranchView() {
           <KpiCard
             icon="fa-coins"
             label={COPY.cashKpis.totalSales}
-            value={summary ? fmtMoney(String(summary.total_sales)) : '—'}
+            // Con turno abierto se enmascara: ventas totales − tarjeta −
+            // transferencia − fiado = ventas en efectivo (parte del esperado).
+            value={current ? BLIND_MASK : summary ? fmtMoney(String(summary.total_sales)) : '—'}
+            sub={current ? BLIND_LABEL : undefined}
             iconBg="rgba(16,185,129,0.12)"
             iconColor="#10b981"
             valueClass="text-emerald-600 dark:text-emerald-400"
@@ -733,7 +766,7 @@ export function CashBranchView() {
             }
             sub={
               current
-                ? `Inicial: ${fmtMoney(current.opening_balance)}`
+                ? BLIND_LABEL
                 : todayClosedSession
                   ? `Inicial: ${fmtMoney(todayClosedSession.opening_balance)}`
                   : undefined
@@ -744,7 +777,8 @@ export function CashBranchView() {
           <KpiCard
             icon="fa-arrow-down"
             label={COPY.cashKpis.inflows}
-            value={summary ? `+${fmtMoney(String(summary.total_inflows))}` : '—'}
+            value={current ? BLIND_MASK : summary ? `+${fmtMoney(String(summary.total_inflows))}` : '—'}
+            sub={current ? BLIND_LABEL : undefined}
             iconBg="rgba(16,185,129,0.12)"
             iconColor="#10b981"
             valueClass="text-emerald-600 dark:text-emerald-400"
@@ -752,7 +786,8 @@ export function CashBranchView() {
           <KpiCard
             icon="fa-arrow-up"
             label={COPY.cashKpis.outflows}
-            value={summary ? `-${fmtMoney(String(summary.total_outflows))}` : '—'}
+            value={current ? BLIND_MASK : summary ? `-${fmtMoney(String(summary.total_outflows))}` : '—'}
+            sub={current ? BLIND_LABEL : undefined}
             iconBg="rgba(244,63,94,0.12)"
             iconColor="#f43f5e"
             valueClass="text-rose-600 dark:text-rose-400"
@@ -786,6 +821,10 @@ export function CashBranchView() {
                 ] as const
               ).map(({ key, icon, iconBg, iconColor }) => {
                 const amount = (methodTotals as Record<string, number | undefined>)[key] ?? 0
+                // Conteo ciego: con turno abierto el efectivo es lo que el cajero
+                // cuenta, así que se enmascara. Tarjeta y transferencia no son
+                // conteo físico y se quedan.
+                const enmascarar = key === 'CASH' && !!current
                 return (
                   <div
                     key={key}
@@ -803,7 +842,7 @@ export function CashBranchView() {
                         {PAY_METHOD_LABELS[key] ?? key}
                       </p>
                       <p className="text-sm font-bold tabular-nums text-slate-800 dark:text-slate-100 mt-0.5">
-                        {fmtMoney(String(amount))}
+                        {enmascarar ? BLIND_MASK : fmtMoney(String(amount))}
                       </p>
                     </div>
                   </div>
@@ -895,10 +934,12 @@ export function CashBranchView() {
       </div>
 
       {/* ── Close-shift modal overlay ──────────────────────────────────── */}
-      {showCloseWizard && current && (
+      {/* Sin `&& current`: el resultado del cierre debe seguir en pantalla
+          aunque `current` ya no tenga turno; se quita solo con "Listo". */}
+      {showCloseWizard && (
         <CloseShiftModal
           onClosed={handleShiftClosed}
-          onCancel={() => setShowCloseWizard(false)}
+          onCancel={() => setCloseWizardFor(null)}
         />
       )}
 
