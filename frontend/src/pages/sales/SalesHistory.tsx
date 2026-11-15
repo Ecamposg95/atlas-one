@@ -78,7 +78,12 @@ const badgeEstado = (s: SalesDocument) => <Badge variant={statusVariant(s.status
 
 export function SalesHistory() {
   const printerName = usePOSStore((s) => s.printerName)
-  const esHq = esRolHq(useAuthStore((s) => s.user?.role))
+  const rol = useAuthStore((s) => s.user?.role)
+  const esHq = esRolHq(rol)
+  // La cajera ve solo las ventas de hoy de su sucursal, sin totales (el backend lo impone).
+  const esCajera = rol === 'CAJERO'
+  // La cajera solo ve hoy: su lista vacía no es "del periodo".
+  const textoSinVentas = esCajera ? 'Sin ventas hoy' : 'Sin ventas en este periodo'
   const esTelefono = useEsTelefono()
   // Solo los roles de oficina piden la lista; el selector sale con más de una sucursal que vende.
   const sucursales = useSucursalesVendibles(esHq)
@@ -101,7 +106,7 @@ export function SalesHistory() {
   const [total, setTotal] = useState(0)
   const [busqueda, setBusqueda] = useState('')
   // HQ veía PENDING/DRAFT por defecto (HQSalesLog); la cajera no (SalesHistory). Cada rol conserva su costumbre.
-  const [includeOpenStates, setIncludeOpenStates] = useState(esHq)
+  const [includeOpenStates, setIncludeOpenStates] = useState(esHq && !esCajera)
   const [selected, setSel] = useState<SalesDocument | null>(null)
   const [returnSale, setReturnSale] = useState<SalesDocument | null>(null)
   const [ticketWa, setTicketWa] = useState<SalesDocument | null>(null)
@@ -151,7 +156,8 @@ export function SalesHistory() {
     setLoading(true)
     setError(null)
     try {
-      const params: Record<string, unknown> = { start_date: r.inicio, end_date: r.fin, limit: LIMIT, skip: pg * LIMIT }
+      const params: Record<string, unknown> = { limit: LIMIT, skip: pg * LIMIT }
+      if (!esCajera) { params.start_date = r.inicio; params.end_date = r.fin }
       // Se manda por si el backend lo respeta; el filtro de abajo (en cliente) siempre aplica.
       if (!includeOpenStates) params.statuses = ESTADOS_CERRADOS
       // `branch_id` solo cuando un rol de oficina eligió sucursal. Sin él, el backend
@@ -159,7 +165,7 @@ export function SalesHistory() {
       if (bid !== '') params.branch_id = bid
       const [listRes, statsRes] = await Promise.allSettled([
         salesApi.list(params),
-        salesApi.getStats({ start_date: r.inicio, end_date: r.fin, ...(bid !== '' ? { branch_id: bid } : {}) }),
+        esCajera ? Promise.resolve(null) : salesApi.getStats({ start_date: r.inicio, end_date: r.fin, ...(bid !== '' ? { branch_id: bid } : {}) }),
       ])
       if (mio !== reqId.current) return
       if (listRes.status === 'fulfilled') {
@@ -179,7 +185,7 @@ export function SalesHistory() {
     } finally {
       if (mio === reqId.current) setLoading(false)
     }
-  }, [includeOpenStates])
+  }, [includeOpenStates, esCajera])
 
   useEffect(() => { load(rango, page, sucursal) }, [load, rango, page, sucursal])
 
@@ -257,7 +263,11 @@ export function SalesHistory() {
         titulo={
           <div className="flex items-center gap-3">
             <i className="fa-solid fa-receipt text-dax-accent-text text-xl" aria-hidden="true" />
-            <h1 className="text-2xl font-black text-dax-text">Ventas</h1>
+            <h1 className="text-2xl font-black text-dax-text">
+              {esCajera
+                ? `Ventas de hoy · ${new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'short' })}`
+                : 'Ventas'}
+            </h1>
           </div>
         }
       />
@@ -273,16 +283,17 @@ export function SalesHistory() {
         </div>
       )}
 
+      {/* Cajera: solo el buscador; periodo, fechas, sucursal y abiertas no aplican. */}
       {/* `!items-center` conserva la alineación de hoy (BarraFiltros trae items-end). */}
       <BarraFiltros
         className="!items-center"
-        accion={
+        accion={esCajera ? undefined : (
           <button type="button" onClick={aplicarFechas} className="dax-btn-primary text-xs">
             <i className="fa-solid fa-search" aria-hidden="true" /> Filtrar
           </button>
-        }
+        )}
       >
-        <div className="flex flex-wrap gap-1" role="group" aria-label="Periodo">
+        {!esCajera && <div className="flex flex-wrap gap-1" role="group" aria-label="Periodo">
           {PRESETS.map((p) => (
             <button
               key={p.clave}
@@ -294,11 +305,11 @@ export function SalesHistory() {
               {p.etiqueta}
             </button>
           ))}
-        </div>
-        <ParFechas>
+        </div>}
+        {!esCajera && <ParFechas>
           <input type="date" aria-label="Desde" value={desde} onChange={(e) => setDesde(e.target.value)} className="dax-input w-36 text-xs" />
           <input type="date" aria-label="Hasta" value={hasta} onChange={(e) => setHasta(e.target.value)} className="dax-input w-36 text-xs" />
-        </ParFechas>
+        </ParFechas>}
         {conSucursales && (
           <select
             aria-label="Sucursal"
@@ -318,17 +329,17 @@ export function SalesHistory() {
           onChange={(e) => setBusqueda(e.target.value)}
           className="dax-input text-xs w-44"
         />
-        <label className="flex items-center gap-1.5 text-[10px] text-dax-muted cursor-pointer max-md:min-h-[44px]">
+        {!esCajera && <label className="flex items-center gap-1.5 text-[10px] text-dax-muted cursor-pointer max-md:min-h-[44px]">
           <input type="checkbox" checked={includeOpenStates} onChange={(e) => { setIncludeOpenStates(e.target.checked); setPage(0) }} className="rounded" />
           Incluir abiertas/borradores
-        </label>
+        </label>}
       </BarraFiltros>
 
       {/* Teléfono: tarjetas; escritorio: la tabla de siempre (nunca ambos) */}
       {esTelefono ? (
         <>
           {error && !loading ? <DaxCard padding={false}>{mensajeError}</DaxCard> : (
-          <ListaTarjetas cargando={loading} vacio={visibles.length === 0} textoVacio="Sin ventas en este periodo">
+          <ListaTarjetas cargando={loading} vacio={visibles.length === 0} textoVacio={textoSinVentas}>
             {visibles.map((s) => (
               <TarjetaFila
                 key={s.id}
@@ -351,7 +362,7 @@ export function SalesHistory() {
       ) : (
         <DaxCard padding={false}>
           {loading ? <Spinner text="Cargando ventas..." /> : error ? mensajeError : visibles.length === 0 ? (
-            <div className="p-12 text-center text-dax-faint">Sin ventas en este periodo</div>
+            <div className="p-12 text-center text-dax-faint">{textoSinVentas}</div>
           ) : (
             <TablaDesplazable sangrado={false}>
               <table className="dax-table w-full">

@@ -21,7 +21,7 @@ describe('useTemaGrafica', () => {
 
   it('sin la variable usa el respaldo del tema oscuro', () => {
     expect(leerTemaGrafica().danger).toBe('#F87171')
-    expect(leerTemaGrafica().borde).toBe('rgba(237, 237, 248, 0.08)')
+    expect(leerTemaGrafica().borde).toBe('rgba(255, 255, 255, 0.08)')
   })
 
   it('se vuelve a leer al cambiar la clase de <html>', async () => {

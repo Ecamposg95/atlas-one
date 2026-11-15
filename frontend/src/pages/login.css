@@ -1,555 +1,413 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:ital,wght@1,400;1,500&family=IBM+Plex+Mono:wght@400;500&display=swap');
+/* ─────────────────────────────────────────────────────────────
+   Login — distribución del ejemplo del usuario (negro, saludo a la
+   izquierda, formulario a la derecha) con la identidad de
+   atlasone.com.mx (paleta, Archivo Black, cejilla, botón y ticket).
+   Login.tsx se importa sin lazy, así que esta hoja viaja en el CSS
+   global: todo va bajo `.login` para no filtrarse a otras pantallas.
+   Archivo Black la inyecta Login.tsx (useFuenteTitulos).
+   ───────────────────────────────────────────────────────────── */
 
-/* ============================================================
-   Login Atlas One — índigo profundo · auroras · acrílico
-   Fondo oscuro con auroras a la deriva; el formulario vive en
-   una tarjeta de vidrio. Firma: arco hairline (eco del dial).
-   ============================================================ */
-
-.login-scene {
-  --void: #0B0B22;
-  --void-deep: #070714;
-  --text: #EDEDF8;
-  --text-muted: #9C9CBC;
-  --accent: #6C6CFF;
-  --accent-bright: #8A8AFF;
-  --violet: #9D6CFF;
-  --cyan: #4FB8FF;
-  --hairline: rgba(237, 237, 248, 0.16);
-  --hairline-soft: rgba(237, 237, 248, 0.08);
-  --glass: rgba(255, 255, 255, 0.06);
-  --glass-border: rgba(255, 255, 255, 0.14);
-  --error: #FF8078;
-
-  --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
-  --font-serif: 'IBM Plex Serif', Georgia, serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+.login {
+  /* Paleta del sitio */
+  --anil: #16345F;
+  --anil-hondo: #0D2140;
+  --anil-claro: #24548F;
+  --cal: #F4F0E4;
+  --maiz: #F0B429;
+  --jamaica: #C42B33;
+  --jade: #0F7B5F;
+  --papel: #FBFAF6;
+  --tinta: #14120F;
+  --gris-ticket: #6B6459;
+  --display: 'Archivo Black', 'IBM Plex Sans', system-ui, sans-serif;
+  --texto: 'IBM Plex Sans', system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, monospace;
 
   position: relative;
+  isolation: isolate;
+  min-height: 100vh;
   min-height: 100dvh;
-  overflow: hidden;
-  background:
-    radial-gradient(120% 90% at 80% 10%, #14143A 0%, var(--void) 45%, var(--void-deep) 100%);
-  color: var(--text);
-  font-family: var(--font-sans);
-  display: grid;
-  grid-template-rows: auto 1fr auto;
+  display: flex;
+  flex-direction: column;
+  background: #000;
+  color: var(--cal);
+  font-family: var(--texto);
+  font-size: 16px;
+  line-height: 1.6;
+  overflow-x: hidden;
 }
 
-/* ── Auroras ────────────────────────────────────────────── */
-
-.aurora-field {
+/* Brillos tenues añil y jade sobre negro (eco de .heroe::before del sitio) */
+.login::before {
+  content: "";
   position: absolute;
   inset: 0;
-  overflow: hidden;
+  z-index: -1;
   pointer-events: none;
+  background:
+    radial-gradient(60rem 32rem at 10% -12%, rgba(36, 84, 143, .38), transparent 60%),
+    radial-gradient(40rem 26rem at 96% 6%, rgba(15, 123, 95, .16), transparent 62%);
 }
 
-.aurora {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(90px);
-  opacity: 0.55;
-  will-change: transform;
+.login *,
+.login *::before,
+.login *::after { box-sizing: border-box; }
+
+.login :focus-visible {
+  outline: 3px solid var(--maiz);
+  outline-offset: 3px;
+  border-radius: 2px;
 }
 
-.au-1 {
-  width: 55vw;
-  height: 55vw;
-  left: -12vw;
-  top: -18vw;
-  background: radial-gradient(circle, rgba(108, 108, 255, 0.55), transparent 65%);
-  animation: drift-1 26s ease-in-out infinite alternate;
+/* ── Barra superior ───────────────────────────────────────── */
+.login-barra {
+  width: min(100% - 2.5rem, 1180px);
+  margin-inline: auto;
+  padding: 1.1rem 0;
+  border-bottom: 1px solid rgba(244, 240, 228, .14);
 }
-
-.au-2 {
-  width: 48vw;
-  height: 48vw;
-  right: -10vw;
-  bottom: -16vw;
-  background: radial-gradient(circle, rgba(157, 108, 255, 0.42), transparent 65%);
-  animation: drift-2 34s ease-in-out infinite alternate;
-}
-
-.au-3 {
-  width: 34vw;
-  height: 34vw;
-  right: 18vw;
-  top: 6vh;
-  background: radial-gradient(circle, rgba(79, 184, 255, 0.30), transparent 65%);
-  animation: drift-3 30s ease-in-out infinite alternate;
-}
-
-@keyframes drift-1 {
-  to { transform: translate(9vw, 7vh) scale(1.12); }
-}
-
-@keyframes drift-2 {
-  to { transform: translate(-8vw, -6vh) scale(1.18); }
-}
-
-@keyframes drift-3 {
-  to { transform: translate(-10vw, 9vh) scale(0.9); }
-}
-
-/* ── Arco firma ─────────────────────────────────────────── */
-
-.arc {
-  position: absolute;
-  top: 50%;
-  right: 0;
-  width: min(135vh, 78vw);
-  height: min(135vh, 78vw);
-  /* rotate -90°: el segmento acento (12 del dial) queda en el borde
-     izquierdo del arco, la única zona visible en desktop */
-  transform: translate(46%, -50%) rotate(-90deg);
-  color: var(--text);
-  pointer-events: none;
-}
-
-.arc circle {
-  stroke: var(--hairline-soft);
-  stroke-width: 0.7;
-}
-
-.arc-ticks line {
-  stroke: var(--hairline);
-  stroke-width: 0.8;
-}
-
-.arc-accent {
-  stroke: var(--accent-bright);
-  stroke-width: 1.6;
-  opacity: 0.9;
-}
-
-.arc-spin {
-  transform-origin: 450px 450px;
-  animation: arc-rotate 180s linear infinite;
-}
-
-@keyframes arc-rotate {
-  to { transform: rotate(360deg); }
-}
-
-/* ── Marco: header y footer ─────────────────────────────── */
-
-.scene-top,
-.scene-foot {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 28px clamp(24px, 5vw, 64px);
-}
-
-.scene-brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.scene-brand-name {
-  font-weight: 500;
-  font-size: 16px;
-  letter-spacing: -0.01em;
-}
-
-.scene-tag,
-.scene-foot {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.scene-foot {
-  border-top: 1px solid var(--hairline-soft);
-  padding-top: 20px;
-  padding-bottom: 24px;
-}
-
-/* ── Paso 1: hero ───────────────────────────────────────── */
-
-.hero {
-  position: relative;
-  z-index: 1;
-  align-self: center;
-  padding: 0 clamp(24px, 7vw, 96px);
-  max-width: 880px;
-  opacity: 1;
-  transform: none;
-  visibility: visible;
-  transition: opacity 0.35s ease, transform 0.35s ease, visibility 0s 0s;
-}
-
-.login-scene.is-revealed .hero {
-  opacity: 0;
-  transform: translateY(-14px);
-  visibility: hidden;
-  pointer-events: none;
-  transition: opacity 0.3s ease, transform 0.3s ease, visibility 0s 0.3s;
-}
-
-/* Entrada escalonada al cargar */
-.hero-eyebrow,
-.hero-headline,
-.hero-description,
-.reveal-cta {
-  animation: rise-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-.hero-headline    { animation-delay: 0.12s; }
-.hero-description { animation-delay: 0.26s; }
-.reveal-cta       { animation-delay: 0.4s; }
-
-@keyframes rise-in {
-  from { opacity: 0; transform: translateY(26px); }
-  to   { opacity: 1; transform: none; }
-}
-
-.hero-eyebrow {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--accent-bright);
-  margin: 0 0 26px;
-}
-
-.hero-headline {
-  margin: 0;
-  font-weight: 500;
-  font-size: clamp(40px, 6.4vw, 76px);
-  line-height: 1.06;
-  letter-spacing: -0.025em;
-  min-height: 2.2em;
-  opacity: 1;
-  transform: none;
-  transition: opacity 0.45s ease, transform 0.45s ease;
-}
-
-.hero-headline.is-fading {
-  opacity: 0;
-  transform: translateY(8px);
-}
-
-.hh-title {
-  display: block;
-  text-shadow: 0 2px 30px rgba(7, 7, 20, 0.6);
-}
-
-.hh-emphasis {
-  display: block;
-  font-family: var(--font-serif);
-  font-style: italic;
-  font-weight: 500;
-  background: linear-gradient(100deg, var(--accent-bright), var(--violet) 55%, var(--cyan));
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
-}
-
-.hero-description {
-  margin: 30px 0 0;
-  max-width: 42ch;
-  font-size: 16px;
-  font-weight: 400;
-  line-height: 1.65;
-  color: var(--text-muted);
-}
-
-.reveal-cta {
+.login-marca {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
-  margin-top: 44px;
-  padding: 16px 32px;
-  background: var(--glass);
-  border: 1px solid var(--glass-border);
-  border-radius: 999px;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  color: var(--text);
-  font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0.1em;
+  gap: .6rem;
+  font-family: var(--display);
+  font-size: 1.05rem;
+  letter-spacing: .06em;
+  color: var(--cal);
+}
+/* AtlasMark pinta en currentColor; el cuadro de enfrente va en maíz */
+.login-marca svg rect:last-child { fill: var(--maiz); }
+.login-marca__punto { color: var(--maiz); }
+
+/* ── Reja principal ───────────────────────────────────────── */
+.login-reja {
+  flex: 1;
+  width: min(100% - 2.5rem, 1180px);
+  margin-inline: auto;
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: center;
+  gap: 2rem;
+  padding: 2rem 0;
+}
+@media (min-width: 900px) {
+  .login-reja {
+    grid-template-columns: 1.08fr .92fr;
+    gap: clamp(2.5rem, 5vw, 4rem);
+    padding: clamp(3rem, 7vw, 5rem) 0;
+  }
+}
+
+/* ── Saludo ───────────────────────────────────────────────── */
+.login-cejilla {
+  font-family: var(--mono);
+  font-size: .78rem;
+  letter-spacing: .19em;
   text-transform: uppercase;
-  cursor: pointer;
-  transition: background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+  color: var(--maiz);
+  margin: 0 0 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: .7rem;
 }
-
-.reveal-cta svg {
-  transition: transform 0.25s ease;
+.login-cejilla::after {
+  content: "";
+  flex: 1;
+  height: 2px;
+  max-width: 9rem;
+  background: linear-gradient(90deg, var(--maiz), transparent);
 }
-
-.reveal-cta:hover,
-.reveal-cta:focus-visible {
-  background: var(--accent);
-  border-color: var(--accent);
-  box-shadow: 0 8px 40px rgba(108, 108, 255, 0.45);
+.login-titular {
+  position: relative;
+  z-index: 0;
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(2.1rem, 7.2vw, 4.4rem);
+  line-height: .98;
+  letter-spacing: -.02em;
+  margin: 0 0 1.35rem;
+  text-wrap: balance;
 }
-
-.reveal-cta:hover svg {
-  transform: translateX(4px);
+.login-titular em {
+  font-style: normal;
+  color: var(--maiz);
+  position: relative;
+  white-space: nowrap;
 }
-
-/* ── Paso 2: tarjeta acrílica ───────────────────────────── */
-
-.panel {
+.login-titular em::after {
+  content: "";
   position: absolute;
-  z-index: 3;
-  inset: 0;
-  margin: auto;
-  width: min(430px, calc(100vw - 40px));
-  height: fit-content;
-  padding: clamp(32px, 5vh, 48px) clamp(26px, 4vw, 44px);
-  background: var(--glass);
-  border: 1px solid var(--glass-border);
-  border-radius: 24px;
-  backdrop-filter: blur(28px) saturate(150%);
-  -webkit-backdrop-filter: blur(28px) saturate(150%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    0 24px 90px rgba(4, 4, 14, 0.6);
-  opacity: 0;
-  transform: translateY(16px) scale(0.985);
-  visibility: hidden;
-  pointer-events: none;
-  transition: opacity 0.3s ease, transform 0.3s ease, visibility 0s 0.3s;
+  left: -.04em;
+  right: -.04em;
+  bottom: .06em;
+  height: .14em;
+  background: var(--jamaica);
+  z-index: -1;
 }
-
-.login-scene.is-revealed .panel {
-  opacity: 1;
-  transform: none;
-  visibility: visible;
-  pointer-events: auto;
-  transition: opacity 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.12s,
-              transform 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.12s,
-              visibility 0s 0.12s;
+.login-entrada {
+  font-size: 1.1rem;
+  max-width: 34rem;
+  color: rgba(244, 240, 228, .86);
+  margin: 0 0 1.5rem;
 }
-
-.login-scene.is-success .panel {
-  opacity: 0;
-  transform: translateY(-10px);
-  pointer-events: none;
-}
-
-.panel-title {
-  margin: 0;
+.login-enlace {
   font-weight: 600;
-  font-size: 26px;
-  letter-spacing: -0.02em;
+  color: var(--maiz);
+  text-decoration: none;
+  border-bottom: 2px solid rgba(240, 180, 41, .4);
+  padding-bottom: 2px;
+  transition: border-color .18s ease;
+}
+.login-enlace:hover { border-bottom-color: var(--maiz); }
+
+/* ── Lado derecho: ticket detrás + tarjeta ────────────────── */
+.login-lado {
+  position: relative;
+  width: 100%;
+  max-width: 26rem;
+  justify-self: center;
+}
+@media (min-width: 900px) {
+  .login-lado { justify-self: end; }
 }
 
-.panel-subtitle {
-  margin: 8px 0 36px;
-  font-size: 14px;
-  color: var(--text-muted);
+/* Ticket térmico: asoma a la izquierda de la tarjeta. La franja visible (10rem)
+   es la columna izquierda del ticket, todo alineado a la izquierda, para que
+   se lean palabras enteras; importes y valores quedan detrás de la tarjeta. */
+.login-ticket {
+  position: absolute;
+  top: -1.4rem;
+  left: -10rem;
+  width: 15.5rem;
+  z-index: 0;
+  pointer-events: none;
+  transform: rotate(-1.4deg);
+  filter: drop-shadow(0 22px 44px rgba(0, 0, 0, .6));
+}
+/* 900–1199: dos columnas sin hueco a la izquierda de la tarjeta (el titular llena
+   la suya); el ticket asoma por arriba y se leen su marca y su primer renglón. */
+@media (min-width: 900px) and (max-width: 1199px) {
+  .login-ticket {
+    top: -4.4rem;
+    left: 1.25rem;
+    transform: rotate(-2deg);
+  }
+  .login-lado { margin-top: 2.5rem; }   /* aire para lo que asoma, aun en pantallas bajas */
+}
+.login-ticket__papel {
+  --sierra: 13px;
+  background: var(--papel);
+  color: var(--tinta);
+  font-family: var(--mono);
+  font-size: .74rem;
+  line-height: 1.6;
+  padding: 1.5rem 1.25rem calc(var(--sierra) + 1.1rem);
+  -webkit-mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / var(--sierra) 100%;
+          mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / var(--sierra) 100%;
+}
+.login-ticket__marca {
+  font-family: var(--display);
+  font-size: 1rem;
+  letter-spacing: .16em;
+  text-align: left;
+  margin: 0 0 .1rem;
+}
+.login-ticket__sub {
+  text-align: left;
+  font-size: .64rem;
+  letter-spacing: .1em;
+  margin: 0 0 .9rem;
+  color: var(--gris-ticket);
+}
+.login-ticket__regla {
+  border: 0;
+  border-top: 1px dashed #B9B2A5;
+  margin: .7rem 0;
+}
+.login-ticket__renglon {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.login-ticket__renglon span:last-child { color: var(--gris-ticket); }
+.login-ticket__partida { display: flex; gap: .6rem; }
+.login-ticket__partida b {
+  font-weight: 600;
+  color: #9A9284;
+  font-variant-numeric: tabular-nums;
+}
+.login-ticket__partida span:last-child {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.login-ticket__total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-weight: 600;
+  font-size: .86rem;
+}
+.login-ticket__total span:last-child { color: var(--jamaica); }
+.login-ticket__gracias {
+  text-align: left;
+  font-size: .66rem;
+  color: var(--gris-ticket);
+  margin: .75rem 0 0;
+  letter-spacing: .04em;
+}
+.login-ticket__codigo {
+  height: 30px;
+  margin: .75rem 0 0;
+  background: repeating-linear-gradient(90deg,
+    var(--tinta) 0 2px, transparent 2px 4px,
+    var(--tinta) 4px 5px, transparent 5px 9px,
+    var(--tinta) 9px 12px, transparent 12px 14px);
+  opacity: .82;
+}
+
+/* ── Tarjeta del formulario ───────────────────────────────── */
+.login-tarjeta {
+  position: relative;
+  z-index: 1;
+  background: rgba(0, 0, 0, .92);
+  /* El ticket asoma detrás: el desenfoque evita que sus letras se lean a través */
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(244, 240, 228, .14);
+  border-radius: 2px;
+  padding: clamp(1.5rem, 4vw, 2.25rem);
+}
+.login-tarjeta__titulo {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 1.55rem;
+  line-height: 1.1;
+  margin: 0 0 1.5rem;
+  color: var(--cal);
 }
 
 .login-form {
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 1.1rem;
 }
-
-.field label {
+.login-campo label {
   display: block;
-  margin-bottom: 8px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.16em;
+  font-family: var(--mono);
+  font-size: .74rem;
+  letter-spacing: .14em;
   text-transform: uppercase;
-  color: var(--text-muted);
+  color: rgba(244, 240, 228, .72);
+  margin-bottom: .45rem;
 }
-
-.field input {
+.login-campo input {
   width: 100%;
-  padding: 12px 14px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--hairline);
-  border-radius: 12px;
-  font-family: var(--font-sans);
-  font-size: 16px;
-  color: var(--text);
-  transition: border-color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease;
+  min-height: 48px;
+  padding: .75rem .9rem;
+  font-family: var(--texto);
+  font-size: 16px; /* evita el zoom de iOS al enfocar */
+  color: var(--cal);
+  background: rgba(244, 240, 228, .05);
+  border: 1px solid rgba(244, 240, 228, .22);
+  border-radius: 2px;
+  transition: border-color .15s ease, background .15s ease;
 }
-
-.field input::placeholder {
-  color: rgba(237, 237, 248, 0.3);
+.login-campo input:hover { border-color: rgba(244, 240, 228, .4); }
+.login-campo input:focus { border-color: var(--maiz); background: rgba(244, 240, 228, .08); }
+.login-campo input:-webkit-autofill {
+  -webkit-text-fill-color: var(--cal);
+  -webkit-box-shadow: 0 0 0 1000px #111 inset;
+  caret-color: var(--cal);
 }
-
-.field input:focus {
-  outline: none;
-  border-color: var(--accent-bright);
-  background: rgba(255, 255, 255, 0.08);
-  box-shadow: 0 0 0 3px rgba(108, 108, 255, 0.25);
-}
-
-/* Autofill del navegador sobre vidrio oscuro */
-.field input:-webkit-autofill {
-  -webkit-text-fill-color: var(--text);
-  -webkit-box-shadow: 0 0 0 60px #1A1A3E inset;
-  caret-color: var(--text);
-}
-
-.field-password {
-  position: relative;
-}
-
-.field-password input {
-  padding-right: 46px;
-}
-
-.pw-toggle {
+.login-campo__clave { position: relative; }
+.login-campo__clave input { padding-right: 3rem; }
+.login-ojo {
   position: absolute;
-  right: 8px;
   top: 50%;
+  right: .35rem;
   transform: translateY(-50%);
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
-  border: none;
-  border-radius: 8px;
-  color: var(--text-muted);
+  border: 0;
+  border-radius: 2px;
+  color: rgba(244, 240, 228, .6);
   cursor: pointer;
-  transition: color 0.2s ease;
+}
+.login-ojo:hover { color: var(--cal); }
+
+.login-error {
+  margin: 0;
+  padding: .65rem .8rem;
+  font-size: .9rem;
+  color: var(--cal);
+  background: rgba(196, 43, 51, .16);
+  border-left: 3px solid var(--jamaica);
+  border-radius: 2px;
 }
 
-.pw-toggle:hover,
-.pw-toggle:focus-visible {
-  color: var(--text);
-}
-
-.form-error {
-  margin: -6px 0 0;
-  font-size: 13px;
-  color: var(--error);
-}
-
-.submit-btn {
-  margin-top: 4px;
-  padding: 16px;
-  background: var(--accent);
-  border: 1px solid var(--accent);
-  border-radius: 999px;
-  color: #FFFFFF;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+/* Botón fuerte del sitio: maíz, texto añil hondo, sombra sólida jamaica */
+.login-boton {
+  margin-top: .4rem;
+  min-height: 50px;
+  padding: .85rem 1.7rem;
+  font-family: var(--texto);
+  font-weight: 600;
+  font-size: 1rem;
+  background: var(--maiz);
+  color: var(--anil-hondo);
+  border: 2px solid transparent;
+  border-radius: 2px;
+  box-shadow: 5px 5px 0 var(--jamaica);
   cursor: pointer;
-  transition: background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+  transition: transform .16s ease, box-shadow .16s ease, opacity .16s ease;
+}
+.login-boton:hover:not(:disabled) {
+  transform: translate(-2px, -2px);
+  box-shadow: 7px 7px 0 var(--jamaica);
+}
+.login-boton:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 3px 3px 0 var(--jamaica);
+}
+.login-boton:disabled { opacity: .7; cursor: progress; }
+
+.login-ayuda {
+  margin: 1.4rem 0 0;
+  font-size: .85rem;
+  color: rgba(244, 240, 228, .6);
 }
 
-.submit-btn:hover:not(:disabled),
-.submit-btn:focus-visible {
-  background: var(--accent-bright);
-  border-color: var(--accent-bright);
-  box-shadow: 0 8px 36px rgba(108, 108, 255, 0.5);
+/* ── Pie ──────────────────────────────────────────────────── */
+.login-pie {
+  width: min(100% - 2.5rem, 1180px);
+  margin-inline: auto;
+  padding: 1.1rem 0 1.4rem;
+  border-top: 1px solid rgba(244, 240, 228, .14);
+  font-family: var(--mono);
+  font-size: .74rem;
+  letter-spacing: .08em;
+  color: rgba(244, 240, 228, .55);
 }
 
-.submit-btn:disabled {
-  opacity: 0.55;
-  cursor: default;
+/* Éxito: la escena se desvanece mientras navega */
+.login.is-success .login-reja { opacity: .55; transition: opacity .4s ease; }
+
+/* ── Teléfono ─────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  .login-barra,
+  .login-reja,
+  .login-pie { width: calc(100% - 2rem); }
+  .login-reja { align-content: start; gap: 1.5rem; padding: 1.75rem 0; }
+  .login-titular { font-size: clamp(1.9rem, 9vw, 2.6rem); margin-bottom: .25rem; }
+  .login-lado { max-width: none; }
 }
-
-.panel-footer {
-  margin: 32px 0 0;
-  font-size: 13px;
-  color: var(--text-muted);
-  text-align: center;
-}
-
-/* Al revelar, el marco se atenúa para dar foco al formulario */
-.scene-top,
-.scene-foot {
-  transition: opacity 0.35s ease;
-}
-
-.login-scene.is-revealed .scene-foot {
-  opacity: 0.4;
-}
-
-/* ── Accesibilidad y foco ───────────────────────────────── */
-
-.login-scene :focus-visible {
-  outline: 2px solid var(--accent-bright);
-  outline-offset: 3px;
-}
-
-.field input:focus-visible {
-  outline: none; /* el borde + anillo acento ya marcan el foco */
-}
-
-/* ── Responsive ─────────────────────────────────────────── */
-
-@media (max-width: 720px) {
-  .arc {
-    width: 120vw;
-    height: 120vw;
-    top: auto;
-    bottom: 0;
-    right: 50%;
-    /* sin rotación: aquí las 12 del dial apuntan hacia arriba y se ven */
-    transform: translate(50%, 58%);
-  }
-
-  .au-1 { width: 110vw; height: 110vw; left: -40vw; top: -30vw; }
-  .au-2 { width: 95vw;  height: 95vw;  right: -35vw; bottom: -30vw; }
-  .au-3 { display: none; }
-
-  .scene-tag {
-    display: none;
-  }
-
-  .hero {
-    align-self: start;
-    padding-top: 8vh;
-  }
-
-  .hero-headline {
-    font-size: clamp(34px, 10vw, 44px);
-  }
-
-  .reveal-cta {
-    margin-top: 36px;
-    width: 100%;
-    justify-content: center;
-  }
-
-  .scene-foot {
-    font-size: 10px;
-  }
-}
-
-/* ── Movimiento reducido ────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
-  .arc-spin,
-  .aurora {
-    animation: none;
-  }
-
-  .hero-eyebrow,
-  .hero-headline,
-  .hero-description,
-  .reveal-cta {
-    animation: none;
-  }
-
-  .hero,
-  .panel,
-  .scene-foot,
-  .reveal-cta svg {
-    transition: none;
-  }
+  .login-boton,
+  .login-enlace,
+  .login.is-success .login-reja { transition: none; }
 }

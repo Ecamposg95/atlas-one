@@ -45,10 +45,11 @@ def playera(db, org, branch_a):
     return p, v_s, v_m
 
 
-def test_dashboard_low_stock_muestra_la_talla(client, db, org, playera, auth_cajero_a):
+def test_dashboard_low_stock_muestra_la_talla(client, db, org, playera, auth_gerente_a):
+    # Gerente: rol de sucursal que abre Reportes (la cajera ya no recibe el dashboard).
     p, v_s, v_m = playera
     r = client.get("/api/reports/dashboard",
-                   headers={**auth_cajero_a, "X-Organization-ID": str(org.id)})
+                   headers={**auth_gerente_a, "X-Organization-ID": str(org.id)})
     assert r.status_code == 200, r.text
     names = {row["name"] for row in r.json()["low_stock"]}
     assert "Playera (Rojo / M)" in names
