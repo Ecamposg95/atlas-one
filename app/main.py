@@ -274,6 +274,9 @@ app.include_router(kitchen_router,      prefix="/api/kitchen",      tags=["Cocin
 app.include_router(labels_router,       prefix="/api/labels",       tags=["Etiquetas"])
 app.include_router(conteos_router,      prefix="/api/inventory/counts", tags=["Conteos"])
 app.include_router(canal_config_router, prefix="/api/canal",        tags=["Canal tienda en línea"])
+# API de catálogo de solo lectura para la tienda externa (llave de servidor, sin CORS)
+from app.modules.canal.router import router as canal_api_router
+app.include_router(canal_api_router,    prefix="/api/channel/v1",   tags=["Canal API v1"])
 # daxpos.router eliminado en Sprint 3 (tech-debt roadmap).
 # Sus 15 rutas SSR fueron desactivadas: las que coinciden con rutas React
 # caen al catch-all de la SPA; las que necesitan cambio de destino están
