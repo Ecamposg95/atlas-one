@@ -60,6 +60,8 @@ _INSTRUCCIONES = (
     "tal como aparece. Pon en `duda` una nota breve cuando algo sea ilegible o ambiguo (no adivines). "
     "NO inventes precio de venta: `precio` solo si el documento lo trae como precio de venta; el costo va "
     "en `costo_unitario`. Cantidades y montos como texto numérico (p. ej. \"12\", \"3.50\"), sin símbolos. "
+    "En `moneda` pon, en cada renglón, el código ISO de la moneda de su costo (USD, CNY, EUR, MXN…), "
+    "aunque se repita en todos; null solo si el renglón no trae costo. "
     "`pagina` es el número de página dentro de este bloque (1 = primera página adjunta), o null. "
     "En `monedas` lista cada moneda que aparezca con su tipo de cambio si el documento lo indica (si no, null). "
     "`continua_en_siguiente` es true si el último renglón queda cortado al final de este bloque."

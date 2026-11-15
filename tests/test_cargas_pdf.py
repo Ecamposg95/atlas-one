@@ -144,3 +144,10 @@ def test_bloque_vacio_no_arrastra_ultimo_renglon():
     extraer_pdf(_pdf(31), c, "")
     assert "Vieja" in c.llamadas[1]["contenido"][1]["text"]
     assert "Vieja" not in c.llamadas[2]["contenido"][1]["text"]
+
+
+def test_instrucciones_piden_la_moneda_de_cada_renglon():
+    c = ClienteEstructuradoFalso([_resp([_r()])])
+    extraer_pdf(_pdf(1), c, "")
+    texto = c.llamadas[0]["contenido"][1]["text"]
+    assert "`moneda`" in texto and "cada renglón" in texto

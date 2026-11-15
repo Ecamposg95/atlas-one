@@ -377,3 +377,65 @@ def test_producto_elegido_que_se_desactiva_reabre_la_duda(db, org, admin_a):
     assert "usar_product_id" not in rs[1].normalizado["_usuario"]
     duda = _dudas(db, carga)[duda.numero]
     assert (duda.tipo, duda.estado, duda.respuesta) == ("casi_igual", "abierta", None)
+
+
+# ── moneda de los renglones de un PDF (I4) ────────────────────────────────
+
+def _con_costo(moneda=None):
+    return [_crudo(talla="M", precio="350", costo_unitario="10", moneda=moneda)]
+
+
+def test_pdf_con_una_moneda_declarada_la_heredan_los_renglones(db, org):
+    carga = _armar(db, org, _con_costo(), archivo_tipo="pdf", monedas={"USD": 18.0})
+    r = _renglones(db, carga)[1]
+    assert r.costo == Decimal("180.00") and r.normalizado["moneda"] == "USD"
+    assert "moneda" not in {d.tipo for d in _dudas(db, carga).values()}
+
+
+def test_pdf_con_varias_monedas_pregunta_y_no_asume_pesos(db, org, admin_a):
+    carga = _armar(db, org, _con_costo() + _con_costo(), archivo_tipo="pdf",
+                   monedas={"USD": 18.0, "CNY": 2.5})
+    rs = _renglones(db, carga)
+    assert rs[1].costo is None  # nunca pesos en silencio
+    [duda] = [d for d in _dudas(db, carga).values() if d.tipo == "moneda"]
+    assert duda.texto.startswith("2 renglones traen costo pero no dicen en qué moneda está")
+    assert [o["clave"] for o in duda.opciones] == ["USD", "CNY", "MXN"]
+    assert duda.renglones == [1, 2] and duda.estado == "abierta"
+    _, rechazos = aplicar_operaciones(
+        db, carga, admin_a, [{"op": "resolver_duda", "numero": duda.numero, "opcion": "USD"}], None)
+    assert rechazos == []
+    assert _renglones(db, carga)[1].costo == Decimal("180.00")
+    assert _dudas(db, carga)[duda.numero].estado == "resuelta"
+
+
+def test_pdf_sin_monedas_declaradas_y_con_costo_pregunta(db, org):
+    carga = _armar(db, org, _con_costo(), archivo_tipo="pdf", monedas={})
+    [duda] = [d for d in _dudas(db, carga).values() if d.tipo == "moneda"]
+    assert duda.texto.startswith("1 renglón trae costo pero no dice en qué moneda está")
+    assert [o["clave"] for o in duda.opciones] == ["MXN"]
+    assert _renglones(db, carga)[1].costo is None
+
+
+def test_pdf_renglon_con_moneda_propia_no_pregunta(db, org):
+    carga = _armar(db, org, _con_costo("CNY"), archivo_tipo="pdf", monedas={"USD": 18.0, "CNY": 2.5})
+    assert _renglones(db, carga)[1].costo == Decimal("25.00")
+    assert "moneda" not in {d.tipo for d in _dudas(db, carga).values()}
+
+
+def test_excel_sin_moneda_sigue_siendo_pesos(db, org):
+    carga = _armar(db, org, _con_costo(), archivo_tipo="xlsx")
+    assert _renglones(db, carga)[1].costo == Decimal("10.00")
+    assert "moneda" not in {d.tipo for d in _dudas(db, carga).values()}
+
+
+def test_fijar_moneda_se_valida(db, org, admin_a):
+    carga = _armar(db, org, _con_costo(), archivo_tipo="pdf", monedas={})
+    _, rechazos = aplicar_operaciones(
+        db, carga, admin_a, [{"op": "fijar_campo", "renglones": [1], "campo": "moneda",
+                              "valor": "dólares"}], None)
+    assert rechazos and "moneda" in rechazos[0]
+    _, rechazos = aplicar_operaciones(
+        db, carga, admin_a, [{"op": "fijar_campo", "renglones": [1], "campo": "moneda",
+                              "valor": " mxn "}], None)
+    assert rechazos == []
+    assert _renglones(db, carga)[1].costo == Decimal("10.00")

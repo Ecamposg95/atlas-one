@@ -15,6 +15,7 @@ las tareas siguientes dependen de eso para deshacer.
 from __future__ import annotations
 
 import copy
+import re
 import unicodedata
 from decimal import Decimal, InvalidOperation
 from typing import Annotated, Any, Callable, Literal, Optional, Union
@@ -41,10 +42,10 @@ from app.modules.tenants.models import Organization
 
 CAMPOS = (
     "marca", "tipo", "material", "color", "talla", "precio", "costo", "genero",
-    "departamento", "cantidad", "accion_precio",
+    "departamento", "cantidad", "accion_precio", "moneda",
 )
 # Se aplican sobre el renglón leído antes de normalizar (cambian grupo, talla, costo…).
-_ANTES_DE_NORMALIZAR = ("marca", "tipo", "material", "color", "talla", "precio", "cantidad")
+_ANTES_DE_NORMALIZAR = ("marca", "tipo", "material", "color", "talla", "precio", "cantidad", "moneda")
 # Se aplican sobre el renglón ya normalizado (ganan sobre lo que dicten las reglas).
 _DESPUES_DE_NORMALIZAR = ("genero", "departamento")
 GENEROS = ("HOMBRE", "MUJER", "UNISEX", "NINO")
@@ -203,6 +204,11 @@ def _valor_de_campo(campo: str, valor: str) -> str:
         if g not in GENEROS:
             raise _Rechazo(f'"{valor}" no es un género (hombre, mujer, unisex o niño)')
         return g
+    if campo == "moneda":
+        m = _sin_acentos(valor or "")
+        if not re.fullmatch(r"[A-Z]{3}", m):
+            raise _Rechazo(f'"{valor}" no es una moneda (escribe su código: USD, CNY, MXN…)')
+        return m
     if campo == "accion_precio":
         a = (valor or "").strip().lower()
         if a not in ACCIONES_PRECIO:
@@ -391,6 +397,19 @@ def _crudo_corregido(fila: CargaRenglon, usuario: dict) -> RenglonCrudo:
     return RenglonCrudo.model_validate(base)
 
 
+def _moneda_por_omision(carga: CargaMercancia) -> tuple[Optional[str], Optional[str]]:
+    """(moneda que heredan los costos sin moneda, moneda por omisión al normalizar).
+
+    Excel: pesos. PDF que declara UNA moneda: esa. PDF con varias o ninguna:
+    ninguna (el costo queda sin calcular y se pregunta con la duda `moneda`)."""
+    if carga.archivo_tipo != "pdf":
+        return None, "MXN"
+    declaradas = list(dict.fromkeys(k.strip().upper() for k in (carga.monedas or {}) if k.strip()))
+    if len(declaradas) == 1:
+        return declaradas[0], declaradas[0]
+    return None, None
+
+
 def _contestada_por_el_usuario(d: DudaNueva, por_orden: dict[int, CargaRenglon]) -> bool:
     """Dudas cuya respuesta ya está en las correcciones de sus renglones.
 
@@ -479,12 +498,16 @@ def recalcular_plan(db: Session, carga: CargaMercancia) -> None:
     reglas = reglas_de_la_org(db.get(Organization, org_id))
     monedas = {k: (None if v is None else Decimal(str(v))) for k, v in (carga.monedas or {}).items()}
 
+    heredada, por_omision = _moneda_por_omision(carga)
     filas = _renglones(db, carga)
     activos: list[CargaRenglon] = []
     norm: list[RenglonNormalizado] = []
     for f in filas:
         usuario = _usuario(f)
-        n = normalizar_renglon(_crudo_corregido(f, usuario), reglas, monedas)
+        crudo = _crudo_corregido(f, usuario)
+        if heredada and crudo.costo_unitario is not None and not crudo.moneda:
+            crudo.moneda = heredada
+        n = normalizar_renglon(crudo, reglas, monedas, moneda_por_omision=por_omision)
         for campo in _DESPUES_DE_NORMALIZAR:
             if campo in usuario:
                 setattr(n, campo, usuario[campo])

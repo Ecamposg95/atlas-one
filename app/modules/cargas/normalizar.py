@@ -58,9 +58,12 @@ def _talla_normalizada(talla: Optional[str], reglas: ReglasCarga) -> Optional[st
     return mapeada
 
 
-def _costo(r: RenglonCrudo, reglas: ReglasCarga, monedas: dict[str, Optional[Decimal]]) -> Optional[Decimal]:
+def _costo(r: RenglonCrudo, reglas: ReglasCarga, monedas: dict[str, Optional[Decimal]],
+           moneda_por_omision: Optional[str] = "MXN") -> Optional[Decimal]:
     if r.costo_unitario is not None:
-        moneda = (r.moneda or "MXN").strip().upper()
+        if not r.moneda and moneda_por_omision is None:
+            return None  # costo sin moneda en un PDF: se pregunta, nunca se asume pesos
+        moneda = (r.moneda or moneda_por_omision or "MXN").strip().upper()
         cambio = next((v for k, v in monedas.items() if k.strip().upper() == moneda), None)
         if cambio is None and moneda == "MXN":
             cambio = Decimal(1)
@@ -75,8 +78,11 @@ def _precio_llave(precio: Optional[Decimal]) -> str:
 
 
 def normalizar_renglon(
-    r: RenglonCrudo, reglas: ReglasCarga, monedas: dict[str, Optional[Decimal]]
+    r: RenglonCrudo, reglas: ReglasCarga, monedas: dict[str, Optional[Decimal]],
+    moneda_por_omision: Optional[str] = "MXN",
 ) -> RenglonNormalizado:
+    """`moneda_por_omision`: la del costo que no dice moneda (pesos en un Excel;
+    None en un PDF que no declara una sola moneda: el costo queda sin calcular)."""
     tipo = _buscar(reglas.tipos, r.tipo)
     genero = _buscar(reglas.genero_por_marca, r.marca) or reglas.genero_por_omision
     datos = r.model_dump()
@@ -93,7 +99,7 @@ def normalizar_renglon(
         **datos,
         genero=genero,
         departamento=tipo.departamento if tipo else None,
-        costo_mxn=_costo(r, reglas, monedas),
+        costo_mxn=_costo(r, reglas, monedas, moneda_por_omision),
         llave_grupo=llave,
     )
 

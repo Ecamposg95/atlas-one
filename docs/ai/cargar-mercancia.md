@@ -68,6 +68,15 @@ Hay dos lugares, con funciones distintas:
 
 No pongas en las instrucciones datos que no quieras que vea el proveedor (ver §4).
 
+**Preguntas que salen de lo leído** (además de las de las reglas):
+
+- `moneda` (solo PDF): el modelo debe dar la moneda del costo de cada renglón. Si un renglón trae costo sin
+  moneda y el documento declara **una sola** moneda, la hereda; si declara varias (o ninguna), hay una
+  pregunta por carga ("N renglones traen costo pero no dicen en qué moneda está") con cada moneda declarada
+  y MXN. Mientras no se conteste, ese costo no se calcula: nunca se asume pesos. En un Excel/CSV, un
+  costo sin moneda es en pesos.
+- `ya_cargado`: ver `ventana_ya_cargado_dias` arriba.
+
 ## 4. Qué ve el proveedor (Anthropic)
 
 | Llamada | Qué se envía |

@@ -28,7 +28,7 @@ from app.modules.cargas.tipos import Grupo, RenglonNormalizado
 from app.modules.products.models import Brand, Department, Product, ProductVariant
 
 TIPOS_DUDA = (
-    "columnas_dinero", "tipo_cambio", "marca_nueva", "marca_parecida", "casi_igual",
+    "columnas_dinero", "moneda", "tipo_cambio", "marca_nueva", "marca_parecida", "casi_igual",
     "precio_faltante", "precio_fuera_familia", "precio_distinto_existente",
     "departamento", "genero", "sin_costo", "extraccion", "ya_cargado",
 )
@@ -199,6 +199,29 @@ def _tipo_cambio(carga: CargaMercancia, plan: _Plan) -> list[DudaNueva]:
         )
         for m, idxs in sorted(por_moneda.items())
     ]
+
+
+def _moneda(carga: CargaMercancia, plan: _Plan) -> list[DudaNueva]:
+    """PDF: renglones con costo que no dicen su moneda y el documento no declara
+    una sola (si declara una, la heredan al normalizar). Nunca se asume pesos."""
+    if carga.archivo_tipo != "pdf":
+        return []
+    idxs = [i for i in plan.activos()
+            if plan.norm[i].costo_unitario is not None and not plan.norm[i].moneda]
+    if not idxs:
+        return []
+    monedas = list(dict.fromkeys(
+        [k.strip().upper() for k in (carga.monedas or {}) if k.strip()] + ["MXN"]))
+    n = len(idxs)
+    cuantos = ("1 renglón trae costo pero no dice" if n == 1
+               else f"{n} renglones traen costo pero no dicen")
+    return [DudaNueva(
+        tipo="moneda",
+        texto=f"{cuantos} en qué moneda está. ¿En qué moneda viene ese costo?",
+        opciones=[{"clave": m, "etiqueta": "Pesos (MXN)" if m == "MXN" else m} for m in monedas],
+        renglones=[plan.orden(i) for i in idxs],
+        clave="moneda|sin_moneda", contexto={"monedas": monedas},
+    )]
 
 
 def _marcas(db: Session, org_id: int, plan: _Plan) -> list[DudaNueva]:
@@ -544,7 +567,7 @@ def generar_dudas(
     `ya_cargados`: {id de carga previa: `orden` de los renglones que coinciden}."""
     plan = _Plan(renglones)
     columnas = _columnas_dinero(carga)
-    dudas = columnas + _tipo_cambio(carga, plan) + _marcas(db, org_id, plan)
+    dudas = columnas + _moneda(carga, plan) + _tipo_cambio(carga, plan) + _marcas(db, org_id, plan)
     dudas += _casi_igual(db, org_id, plan, grupos, coincidencias, reglas)
     if not columnas:
         # Mientras no se sepa qué columna es costo y cuál precio, preguntar por
@@ -612,6 +635,8 @@ def opcion_a_operaciones(duda: CargaDuda, clave: str, valor_texto: Optional[str]
         return _fijar(duda, "departamento", opciones[clave]["etiqueta"])
     if tipo == "genero":
         return _fijar(duda, "genero", clave)
+    if tipo == "moneda":
+        return _fijar(duda, "moneda", clave)
     if tipo == "ya_cargado":
         return [{"op": "forzar", "renglones": list(duda.renglones or [])}] if clave == "cargar" else []
     if tipo == "extraccion":
