@@ -46,6 +46,25 @@ def _cliente_por_telefono(db: Session, org_id: int, phone: str) -> Optional[int]
     return None
 
 
+def _contar(db: Session, org_id: int, product_ids: list, dia, source: str) -> None:
+    """UPSERT atómico del contador: dos clics simultáneos sobre una fila aún
+    inexistente no deben perder uno ni tumbar la petición con IntegrityError."""
+    if not product_ids:
+        return
+    if db.connection().dialect.name == "postgresql":
+        from sqlalchemy.dialects.postgresql import insert
+    else:
+        from sqlalchemy.dialects.sqlite import insert
+    t = ChannelProductMetric.__table__
+    for pid in product_ids:
+        stmt = insert(t).values(organization_id=org_id, product_id=pid, day=dia,
+                                source=source, count=1)
+        db.execute(stmt.on_conflict_do_update(
+            index_elements=[t.c.organization_id, t.c.product_id, t.c.day, t.c.source],
+            set_={"count": t.c.count + stmt.excluded.count},
+        ))
+
+
 def _responder(status: int, body: dict) -> JSONResponse:
     return JSONResponse(status_code=status, content=body)
 
@@ -84,17 +103,7 @@ def registrar(
         }
         validos = [p for p in pedidos if p in encontrados]
 
-    for pid in validos:
-        fila = (
-            db.query(ChannelProductMetric)
-            .filter_by(organization_id=org_id, product_id=pid, day=dia, source=payload.source)
-            .with_for_update().first()
-        )
-        if fila is None:
-            db.add(ChannelProductMetric(organization_id=org_id, product_id=pid, day=dia,
-                                        source=payload.source, count=1))
-        else:
-            fila.count = (fila.count or 0) + 1
+    _contar(db, org_id, validos, dia, payload.source)
 
     phone = normalizar_telefono(payload.phone)
     if phone is None:

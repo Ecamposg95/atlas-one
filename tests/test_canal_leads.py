@@ -189,3 +189,15 @@ def test_reporte_solo_admin(client, db, org, auth_cajero_a):
 def test_reporte_404_sin_canal(client, db, org, auth_admin):
     r = client.get("/api/reports/tienda-en-linea?desde=2026-11-10&hasta=2026-11-10", headers=auth_admin)
     assert r.status_code == 404
+
+
+def test_metrica_nueva_usa_upsert_atomico(client, db, org, ctx):
+    """Dos clics sobre una fila nueva suman 2 y el código ya no hace SELECT FOR UPDATE."""
+    import inspect
+    from app.modules.canal import leads_router
+    assert "with_for_update" not in inspect.getsource(leads_router)
+    p = _prod(db, org)
+    body = {"source": "web_selection", "product_ids": [p.id], "occurred_at": "2026-11-10T18:00:00Z"}
+    assert client.post(URL, headers=_h(ctx), json=body).status_code == 202
+    assert client.post(URL, headers=_h(ctx), json=body).status_code == 202
+    assert db.query(ChannelProductMetric).one().count == 2

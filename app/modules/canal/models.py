@@ -74,7 +74,10 @@ class ChannelLead(Base):
 class ChannelIdempotency(Base):
     """Respuesta guardada por `Idempotency-Key` (se purga a los 7 días)."""
     __tablename__ = "channel_idempotency"
-    __table_args__ = {'extend_existing': True}
+    __table_args__ = (
+        Index("ix_channel_idempotency_created", "created_at"),
+        {'extend_existing': True},
+    )
 
     organization_id = Column(Integer, primary_key=True)
     key = Column(String(200), primary_key=True)
