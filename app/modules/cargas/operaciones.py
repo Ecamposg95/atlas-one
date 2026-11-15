@@ -28,8 +28,10 @@ from app.modules.cargas.cruce import (
     cruzar_con_catalogo, marcar_ya_cargado,
 )
 from app.modules.cargas.dudas import DudaNueva, generar_dudas, opcion_a_operaciones
-from app.modules.cargas.lectura_excel import normalizar_numero
-from app.modules.cargas.models import CargaCambio, CargaDuda, CargaMercancia, CargaRenglon
+from app.modules.cargas.lectura_excel import (
+    MapaColumnas, leer_tablas, normalizar_numero, renglones_desde_excel,
+)
+from app.modules.cargas.models import CargaArchivo, CargaCambio, CargaDuda, CargaMercancia, CargaRenglon
 from app.modules.cargas.normalizar import agrupar, normalizar_renglon, prefijo_de_marca, sku_para
 from app.modules.cargas.reglas import reglas_de_la_org
 from app.modules.cargas.tipos import RenglonCrudo, RenglonNormalizado
@@ -525,6 +527,59 @@ def recalcular_plan(db: Session, carga: CargaMercancia) -> None:
                      reabrir)
 
 
+# ── renglones del Excel ──────────────────────────────────────────────────
+
+def roles_completos(lectura: Optional[dict]) -> bool:
+    """True si toda columna de dinero de toda tabla ya tiene rol (costo, precio o ignorar)."""
+    tablas = (lectura or {}).get("tablas") or []
+    if not tablas:
+        return False
+    for t in tablas:
+        roles = {str(k) for k in (t.get("rol_dinero") or {})}
+        if any(str(c) not in roles for c in (t.get("mapa") or {}).get("columnas_dinero") or []):
+            return False
+    return True
+
+
+def rearmar_renglones_excel(db: Session, carga: CargaMercancia) -> None:
+    """Arma los renglones de un Excel/CSV desde el archivo guardado y el mapa de
+    `carga.lectura` cuando ya se sabe qué es cada columna de dinero.
+
+    Se actualizan en su lugar por `orden` (las correcciones del usuario en
+    `normalizado` sobreviven a un cambio de rol). Mientras falte un rol, o si la
+    carga no tiene archivo guardado, no hace nada."""
+    if not roles_completos(carga.lectura):
+        return
+    archivo = (db.query(CargaArchivo)
+               .filter(CargaArchivo.organization_id == carga.organization_id,
+                       CargaArchivo.carga_id == carga.id)
+               .first())
+    if archivo is None:  # carga armada sin archivo (solo en pruebas): sus renglones quedan igual
+        return
+    por_pestana = {t.pestana: t for t in leer_tablas(archivo.contenido, carga.archivo_tipo or "")}
+    crudos: list[RenglonCrudo] = []
+    for t in carga.lectura["tablas"]:
+        tabla = por_pestana.get(t.get("pestana"))
+        if tabla is None:
+            continue
+        mapa = MapaColumnas.model_validate(t.get("mapa") or {})
+        roles = {int(k): v for k, v in (t.get("rol_dinero") or {}).items()}
+        crudos += renglones_desde_excel(tabla, mapa, roles)
+
+    existentes = {f.orden: f for f in _renglones(db, carga)}
+    for orden, c in enumerate(crudos, 1):
+        datos = c.model_dump(mode="json")
+        f = existentes.pop(orden, None)
+        if f is None:
+            db.add(CargaRenglon(organization_id=carga.organization_id, carga_id=carga.id,
+                                orden=orden, crudo=datos, cantidad=c.cantidad))
+        else:
+            f.crudo = datos
+    for f in existentes.values():
+        db.delete(f)
+    db.flush()
+
+
 # ── foto, resumen y deshacer ──────────────────────────────────────────────
 
 _CAMPOS_DUDA = ("numero", "tipo", "texto", "opciones", "recomendada", "renglones", "clave",
@@ -540,7 +595,8 @@ def _foto(db: Session, carga: CargaMercancia) -> dict:
     db.flush()
     return {
         "renglones": {
-            f.id: {"orden": f.orden, "normalizado": copy.deepcopy(f.normalizado), "clase": f.clase,
+            f.id: {"orden": f.orden, "crudo": copy.deepcopy(f.crudo),
+                   "normalizado": copy.deepcopy(f.normalizado), "clase": f.clase,
                    "grupo": f.grupo, "product_id": f.product_id, "variant_id": f.variant_id,
                    "sku": f.sku, "cantidad": _texto_dec(f.cantidad),
                    "precio": _texto_dec(f.precio), "costo": _texto_dec(f.costo)}
@@ -572,6 +628,18 @@ def _uno_o_lista(valores: list):
     return unicos[0] if len(unicos) == 1 else unicos
 
 
+def titulo_grupo(normalizado: dict) -> str:
+    """Cómo se le nombra un grupo al usuario: "Marca Uno · Playera", más el
+    material cuando separa el grupo (está en su llave). Nunca la llave técnica."""
+    n = normalizado or {}
+    partes = [p for p in (n.get("marca"), n.get("tipo")) if p]
+    texto = " · ".join(partes) or (n.get("descripcion_original") or "Sin descripción")
+    llave = (n.get("llave_grupo") or "").split("|")
+    if len(llave) >= 3 and llave[2] and n.get("material"):
+        texto += f" {n['material'].strip().lower()}"
+    return texto
+
+
 def _resumen(antes: dict, despues: dict) -> dict:
     """Lo que la pantalla enseña: por grupo afectado, campo: antes -> después."""
     por_grupo: dict[str, dict] = {}
@@ -583,12 +651,16 @@ def _resumen(antes: dict, despues: dict) -> dict:
         cambios = {k: (va[k], vd[k]) for k in vd if va[k] != vd[k]}
         if not cambios:
             continue
-        g = por_grupo.setdefault(d["grupo"] or a["grupo"] or "", {"renglones": [], "cambios": {}})
+        # El título humano se guarda ya: la llave del grupo (lleva el precio)
+        # puede dejar de existir después de deshacer o de otro cambio.
+        g = por_grupo.setdefault(d["grupo"] or a["grupo"] or "", {
+            "renglones": [], "cambios": {},
+            "titulo": titulo_grupo(d.get("normalizado") or a.get("normalizado") or {})})
         g["renglones"].append(d["orden"])
         for k, par in cambios.items():
             g["cambios"].setdefault(k, []).append(par)
     grupos = [
-        {"grupo": llave, "renglones": sorted(g["renglones"]),
+        {"grupo": llave, "titulo": g["titulo"], "renglones": sorted(g["renglones"]),
          "cambios": {k: {"antes": _uno_o_lista([p[0] for p in pares]),
                          "despues": _uno_o_lista([p[1] for p in pares])}
                      for k, pares in g["cambios"].items()}}
@@ -656,6 +728,10 @@ def aplicar_operaciones(
     if not aplicadas:
         return None, rechazos
 
+    if carga.lectura != antes["lectura"]:
+        # Cambió el rol de una columna de dinero del Excel: los renglones se
+        # (re)arman aquí, dentro del mismo cambio, para que deshacer los quite.
+        rearmar_renglones_excel(db, carga)
     recalcular_plan(db, carga)
     despues = _foto(db, carga)
     previos = (db.query(CargaCambio.secuencia)
@@ -688,10 +764,24 @@ def deshacer_cambio(db: Session, carga: CargaMercancia, cambio_id: str) -> None:
         raise HTTPException(status_code=409, detail="Solo se puede deshacer el último cambio.")
 
     foto = cambio.antes or {}
+    renglones_foto = foto.get("renglones") or {}
+    vivos = _renglones(db, carga)
+    for f in vivos:
+        if f.id not in renglones_foto:  # lo creó este cambio (renglones del Excel)
+            db.delete(f)
+    db.flush()
+    presentes = {f.id for f in vivos}
+    for rid, r in renglones_foto.items():
+        if rid not in presentes and "crudo" in r:  # lo borró este cambio
+            db.add(CargaRenglon(id=rid, organization_id=carga.organization_id, carga_id=carga.id,
+                                orden=r["orden"], crudo=copy.deepcopy(r["crudo"]), cantidad=Decimal(0)))
+    db.flush()
     for f in _renglones(db, carga):
-        r = (foto.get("renglones") or {}).get(f.id)
+        r = renglones_foto.get(f.id)
         if r is None:
             continue
+        if "crudo" in r:
+            f.crudo = copy.deepcopy(r["crudo"])
         f.normalizado = copy.deepcopy(r["normalizado"])
         for k in ("clase", "grupo", "product_id", "variant_id", "sku"):
             setattr(f, k, r[k])
