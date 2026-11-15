@@ -5,6 +5,8 @@ import type { SalesDocument } from '../../../types/sales'
 import { saleLabel } from '../../../types/sales'
 import { formatCurrency } from '../../../utils/currency'
 import { useEsTelefono } from '../../../hooks/useIsMobile'
+import { useAuthStore } from '../../../store/authStore'
+import { errorDetailText } from '../../../utils/errorDetail'
 
 interface ReturnLine {
   variant_id: string
@@ -59,6 +61,7 @@ function buildLines(sale: SalesDocument): ReturnLine[] {
 export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }: Props) {
   const [folio, setFolio] = useState('')
   const esTelefono = useEsTelefono()
+  const esCajera = useAuthStore((s) => s.user?.role) === 'CAJERO'
   const [sale, setSale] = useState<SalesDocument | null>(initialSale ?? null)
   const [lines, setLines] = useState<ReturnLine[]>(initialSale ? buildLines(initialSale) : [])
   const [refundMethod, setRefundMethod] = useState<RefundMethod>(
@@ -120,7 +123,13 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
       // scoping de organización/sucursal — no hace falta re-filtrar aquí.
       const res = await salesApi.list({ folio_search: folio.trim(), limit: 5 })
       const found = res.items[0]
-      if (!found) { setError('Ticket no encontrado'); return }
+      if (!found) {
+        // La cajera solo ve ventas de hoy: un folio viejo llega vacío, no "inexistente".
+        setError(esCajera
+          ? 'Ticket no encontrado. Solo aparecen ventas de hoy; para días anteriores pide al gerente.'
+          : 'Ticket no encontrado')
+        return
+      }
       if (found.status === 'CANCELLED') { setError('Este ticket fue cancelado'); return }
       setSale(found)
       setLines(buildLines(found))
@@ -172,7 +181,7 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
       // Surface FastAPI `detail` (e.g. "Cantidad excede lo disponible…",
       // "Ya existe una devolución pendiente…") so the cashier can act.
       const detail = err?.response?.data?.detail
-      setError(typeof detail === 'string' && detail.trim() ? detail : 'Error al registrar devolución')
+      setError(errorDetailText(detail, 'Error al registrar devolución'))
     } finally { setSubmitting(false) }
   }
 
