@@ -82,6 +82,9 @@ class CargaDuda(Base, UUIDMixin, AuditMixin, TenantMixin):
     opciones = Column(JSON, nullable=True)  # [{"clave","etiqueta"}]
     recomendada = Column(String, nullable=True)
     renglones = Column(JSON, nullable=True)
+    # Identidad estable "<tipo>|<objeto>" para reconocer la misma duda entre recálculos.
+    clave = Column(String(200), nullable=True)
+    contexto = Column(JSON, nullable=True)
     estado = Column(String(16), nullable=False, default="abierta")  # abierta | resuelta
     respuesta = Column(Text, nullable=True)
     resuelta_por = Column(Integer, ForeignKey("users.id"), nullable=True)
