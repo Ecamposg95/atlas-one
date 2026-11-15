@@ -5,7 +5,7 @@ import { resolve } from 'node:path'
 /** Pantallas de la ola 2 del responsivo (catálogo y personas) y, desde SP6, todo el grupo HQ; desde la Fase 2 del admin, Reportes. */
 export const PAGINAS = [
   'core/Brands.tsx', 'core/Departments.tsx', 'core/Users.tsx', 'crm/Customers.tsx', 'crm/Cobranza.tsx', 'inventory/Inventory.tsx',
-  'inventory/Products.tsx', 'hq/Inicio.tsx',
+  'inventory/Products.tsx', 'inventory/cargas/Cargas.tsx', 'hq/Inicio.tsx',
   'reports/Reportes.tsx', 'sales/SalesHistory.tsx', 'sales/Returns.tsx', 'hq/HQBranches.tsx', 'hq/HQValorInventario.tsx',
 ]
 /** Tienen tarjetas propias y no usan TarjetaFila (HQValorInventario las delega en `components/reports/DistribucionValor`). */

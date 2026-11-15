@@ -42,6 +42,18 @@ describe('Productos HQ', () => {
     expect(screen.getByLabelText('Vista cuadrícula')).toBeTruthy()
   })
 
+  it('Cargar mercancía solo aparece con el módulo ai encendido', async () => {
+    useAuthStore.setState({ user: admin } as never); perfil('completo')
+    useEnabledModulesStore.setState({ enabledModules: [] } as never)
+    const sin = pintar()
+    await screen.findByLabelText('Importar productos')
+    expect(screen.queryByLabelText('Cargar mercancía')).toBeNull()
+    sin.unmount()
+    useEnabledModulesStore.setState({ enabledModules: ['ai'] } as never)
+    pintar()
+    expect(await screen.findByLabelText('Cargar mercancía')).toBeTruthy()
+  })
+
   it('básico: solo Nuevo producto (no se montan los demás)', async () => {
     useAuthStore.setState({ user: admin } as never); perfil('basico')
     pintar()

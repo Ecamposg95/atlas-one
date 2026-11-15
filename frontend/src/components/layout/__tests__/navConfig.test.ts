@@ -28,6 +28,15 @@ describe('el menú de la boutique', () => {
     expect(HQ_NAV_GROUPS.find((g) => g.header === 'Inventario')?.urls).toContain('/inventory/conteos')
   })
 
+  it('Cargar mercancía entra al menú del admin, dueño y gerente solo con el módulo ai', () => {
+    for (const rol of ['ADMINISTRADOR', 'DUEÑO', 'GERENTE'] as const) {
+      expect(menu(rol, [...BOUTIQUE, 'ai'])).toContain('/inventory/cargas')
+      expect(menu(rol, BOUTIQUE)).not.toContain('/inventory/cargas')
+    }
+    expect(menu('CAJERO', [...BOUTIQUE, 'ai'])).not.toContain('/inventory/cargas')
+    expect(HQ_NAV_GROUPS.find((g) => g.header === 'Inventario')?.urls).toContain('/inventory/cargas')
+  })
+
   it('le da a la administradora camino para reimprimir, etiquetar y configurar la impresora', () => {
     const urls = menu('ADMINISTRADOR', BOUTIQUE)
     expect(urls).toEqual(expect.arrayContaining([
@@ -83,7 +92,7 @@ describe('los grupos del menú', () => {
     expect(grupo('Operación')).toEqual(['/hq/operations', '/hq/reports-hub', '/hq/valor-inventario'])
     expect(grupo('Ventas')).toEqual(['/sales', '/returns', '/cash-history', '/quotes', '/quotes/new', '/seguimiento'])
     expect(grupo('Catálogo')).toEqual(['/products', '/departments', '/brands', '/labels'])
-    expect(grupo('Inventario')).toEqual(['/inventory', '/inventory/conteos', '/scanner', '/logistics', '/boxes'])
+    expect(grupo('Inventario')).toEqual(['/inventory', '/inventory/conteos', '/inventory/cargas', '/scanner', '/logistics', '/boxes'])
     expect(grupo('Compras')).toEqual(['/purchases', '/expenses', '/purchasing'])
     expect(grupo('Clientes')).toEqual(['/customers', '/appointments', '/commissions', '/memberships'])
     expect(grupo('Restaurante')).toEqual(['/menu', '/tables', '/mobile/comanda', '/kitchen', '/recipes', '/meseros', '/bar/bottles'])

@@ -36,6 +36,8 @@ const Inicio          = lazy(() => import('./pages/hq/Inicio').then(m => ({ defa
 const StoreScanner    = lazy(() => import('./pages/scanner/StoreScanner').then(m => ({ default: m.StoreScanner })))
 const Conteos       = lazy(() => import('./pages/inventory/conteos/Conteos').then(m => ({ default: m.Conteos })))
 const ConteoSesion  = lazy(() => import('./pages/inventory/conteos/ConteoSesion').then(m => ({ default: m.ConteoSesion })))
+const Cargas        = lazy(() => import('./pages/inventory/cargas/Cargas').then(m => ({ default: m.Cargas })))
+const CargaPlan     = lazy(() => import('./pages/inventory/cargas/CargaPlan'))
 const ConteoReporte = lazy(() => import('./pages/inventory/conteos/ConteoReporte').then(m => ({ default: m.ConteoReporte })))
 const Labels          = lazy(() => import('./pages/labels/Labels').then(m => ({ default: m.Labels })))
 const Departments     = lazy(() => import('./pages/core/Departments').then(m => ({ default: m.Departments })))
@@ -334,6 +336,9 @@ export default function App() {
           <Route path="inventory/conteos" element={<RutaPorRol url="/inventory/conteos"><Suspense fallback={<PageLoader />}><Conteos /></Suspense></RutaPorRol>} />
           <Route path="inventory/conteos/:id" element={<RutaPorRol url="/inventory/conteos"><Suspense fallback={<PageLoader />}><ConteoSesion /></Suspense></RutaPorRol>} />
           <Route path="inventory/conteos/:id/reporte" element={<RutaPorRol url="/inventory/conteos"><Suspense fallback={<PageLoader />}><ConteoReporte /></Suspense></RutaPorRol>} />
+          {/* Cargar mercancía con IA: lista/subida y plan de una carga (módulo `ai`). */}
+          <Route path="inventory/cargas" element={<RutaPorRol url="/inventory/cargas"><Suspense fallback={<PageLoader />}><Cargas /></Suspense></RutaPorRol>} />
+          <Route path="inventory/cargas/:id" element={<RutaPorRol url="/inventory/cargas"><Suspense fallback={<PageLoader />}><CargaPlan /></Suspense></RutaPorRol>} />
           <Route path="inventory" element={<Suspense fallback={<PageLoader />}><Inventory /></Suspense>} />
           <Route path="logistics" element={<RutaPorRol url="/logistics"><Suspense fallback={<PageLoader />}><Logistics /></Suspense></RutaPorRol>} />
           <Route path="boxes"     element={<RutaPorRol url="/boxes"><Suspense fallback={<PageLoader />}><Boxes /></Suspense></RutaPorRol>} />
