@@ -135,3 +135,10 @@ def test_timeout_invalido_usa_el_de_omision(monkeypatch, valor):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "k")
     monkeypatch.setenv("AI_TIMEOUT_SEG", valor)
     assert cliente_estructurado_por_defecto().timeout == 300.0
+
+
+def test_corte_por_max_tokens_es_respuesta_incompleta(monkeypatch):
+    from app.modules.ai.cliente_anthropic import RespuestaIncompleta
+    _sdk_falso(monkeypatch, mensaje=_mensaje(stop="max_tokens"))
+    with pytest.raises(RespuestaIncompleta):
+        ClienteAnthropic("k", "m").generar(sistema="s", contenido=[], esquema=ESQUEMA)

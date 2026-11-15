@@ -29,9 +29,13 @@ TIMEOUT_POR_DEFECTO = 300.0
 REINTENTOS = 1
 
 __all__ = [
-    "ProveedorNoDisponible", "RespuestaEstructurada", "ClienteEstructurado",
+    "ProveedorNoDisponible", "RespuestaIncompleta", "RespuestaEstructurada", "ClienteEstructurado",
     "ClienteAnthropic", "ClienteEstructuradoFalso", "cliente_estructurado_por_defecto",
 ]
+
+
+class RespuestaIncompleta(ProveedorNoDisponible):
+    """El modelo llegó a `max_tokens` (incluye su razonamiento) y el JSON quedó cortado."""
 
 
 @dataclass
@@ -76,7 +80,7 @@ class ClienteAnthropic:
         if getattr(mensaje, "stop_reason", None) == "refusal":
             raise ProveedorNoDisponible("El modelo rechazó procesar este documento.")
         if getattr(mensaje, "stop_reason", None) == "max_tokens":
-            raise ProveedorNoDisponible("La respuesta del modelo quedó incompleta (documento demasiado grande).")
+            raise RespuestaIncompleta("La respuesta del modelo quedó incompleta (documento demasiado grande).")
 
         texto = next((b.text for b in (mensaje.content or []) if getattr(b, "type", None) == "text"), None)
         if texto is None:

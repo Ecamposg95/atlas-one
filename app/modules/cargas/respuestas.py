@@ -15,14 +15,17 @@ from typing import Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.modules.ai.cliente_anthropic import ClienteEstructurado
+from app.modules.ai.cliente_anthropic import ClienteEstructurado, RespuestaIncompleta
 from app.modules.ai.uso import registrar_uso, verificar_cupo
 from app.modules.cargas.models import CargaDuda, CargaMercancia, CargaRenglon
 from app.modules.cargas.lectura_excel import normalizar_numero
 from app.modules.cargas.operaciones import CAMPOS, _exigir_plan, validar_operaciones
 from app.modules.cargas.schemas import LIMITE_RESPUESTA
 
-MAX_TOKENS = 8000
+# El modelo siempre razona y el razonamiento cuenta contra este tope.
+MAX_TOKENS = 16000
+RESPUESTA_LARGA = ("Tu respuesta fue demasiado larga para procesarla de una vez: contesta en partes "
+                   "(unas cuantas preguntas por mensaje).")
 _NUMERO = re.compile(r"\d[\d.,]*\d|\d")
 
 
@@ -174,11 +177,14 @@ def interpretar_respuesta(
     sistema = _SISTEMA
     if (instrucciones or "").strip():
         sistema += "\n\nContexto de la tienda, escrito por su dueño:\n" + instrucciones.strip()
-    r = cliente.generar(
-        sistema=sistema,
-        contenido=[{"type": "text", "text": json.dumps(datos, ensure_ascii=False)}],
-        esquema=ESQUEMA_OPERACIONES, max_tokens=MAX_TOKENS,
-    )
+    try:
+        r = cliente.generar(
+            sistema=sistema,
+            contenido=[{"type": "text", "text": json.dumps(datos, ensure_ascii=False)}],
+            esquema=ESQUEMA_OPERACIONES, max_tokens=MAX_TOKENS,
+        )
+    except RespuestaIncompleta as e:
+        raise HTTPException(status_code=422, detail=RESPUESTA_LARGA) from e
     registrar_uso(db, org_id, r.tokens_entrada, r.tokens_salida)
 
     escritos = _numeros_del_texto(texto)

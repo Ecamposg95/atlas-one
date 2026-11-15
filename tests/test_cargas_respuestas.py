@@ -203,3 +203,21 @@ def test_carga_fuera_de_plan_no_gasta_tokens(db, carga):
         interpretar_respuesta(db, carga, "el 2 a 350", falso, "")
     assert e.value.status_code == 409
     assert falso.llamadas == []
+
+
+def test_respuesta_con_tope_de_16000_tokens(db, carga):
+    from app.modules.cargas import respuestas
+    assert respuestas.MAX_TOKENS == 16000
+    falso = ClienteEstructuradoFalso([_respuesta()])
+    interpretar_respuesta(db, carga, "hola", falso, "")
+    assert falso.llamadas[0]["max_tokens"] == 16000
+
+
+def test_respuesta_cortada_pide_contestar_en_partes(db, carga):
+    from app.modules.ai.cliente_anthropic import RespuestaIncompleta
+    falso = ClienteEstructuradoFalso([RespuestaIncompleta("cortada")])
+    with pytest.raises(HTTPException) as e:
+        interpretar_respuesta(db, carga, "1. a 350 2. a 400", falso, "")
+    assert e.value.status_code == 422
+    assert "demasiado larga" in e.value.detail and "en partes" in e.value.detail
+    assert "documento" not in e.value.detail
