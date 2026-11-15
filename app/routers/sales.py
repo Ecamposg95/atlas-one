@@ -161,6 +161,8 @@ def get_sales_stats(
     devoluciones y hora pico. Criterio único en `app/services/metricas_ventas.py`
     (antes aquí sumaban pendientes y borradores). ADMINISTRADOR/DUEÑO sin
     `branch_id` ven toda la organización; GERENTE siempre su sucursal."""
+    if es_cajero(current_user):   # la cajera solo ve sus tickets de hoy, sin totales del día
+        raise HTTPException(403, "Los totales del día no están disponibles para la cajera.")
     periodo = mv.periodo_de_query(start_date, end_date)      # una sola fecha = ese día; invertido = 422
     ambito = mv.resolver_ambito(current_user, org_id, branch_id)
     if current_user.role == Role.GERENTE:   # branch-scoped como read_sales: la lista de abajo es de su sucursal

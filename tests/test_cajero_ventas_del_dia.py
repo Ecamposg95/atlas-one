@@ -116,3 +116,12 @@ def test_gerente_sigue_viendo_ayer(client, db, org, branch_a, cajero_a, auth_ger
     a = _ayer()
     r = client.get(f"/api/sales/?start_date={a}&end_date={a}", headers=auth_gerente_a)
     assert ayer.id in _ids(r)
+
+
+def test_gerente_stats_sigue_200(client, db, org, branch_a, branch_b, cajero_a, auth_gerente_a, products_setup):
+    _pos(db, org)
+    _venta(db, org, branch_a, cajero_a, _v(products_setup), "100")
+    _venta(db, org, branch_b, cajero_a, _v(products_setup), "200")
+    r = client.get("/api/sales/stats", headers=auth_gerente_a)
+    assert r.status_code == 200
+    assert r.json()["total_sales"] == 100.0
