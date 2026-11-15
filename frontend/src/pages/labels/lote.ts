@@ -32,10 +32,11 @@ export function normalizarCopias(valor: string | number): number {
   return Math.max(0, Math.min(MAX_COPIAS, Math.trunc(n)))
 }
 
-/** Copias de arranque: la sugerencia del backend (existencia topada en 99). */
+/** Copias de arranque: las piezas de la carga si la lista viene de una; si no, la
+ * sugerencia del backend (existencia topada en 99). */
 export function copiasIniciales(items: LabelCandidate[]): MapaCopias {
   const mapa: MapaCopias = {}
-  for (const it of items) mapa[it.variant_id] = normalizarCopias(it.copies_default)
+  for (const it of items) mapa[it.variant_id] = normalizarCopias(it.piezas_carga ?? it.copies_default)
   return mapa
 }
 
@@ -59,7 +60,7 @@ export function usarExistencia(
 ): MapaCopias {
   const siguiente = { ...copias }
   for (const it of alcance(items, seleccion)) {
-    siguiente[it.variant_id] = normalizarCopias(it.copies_default)
+    siguiente[it.variant_id] = normalizarCopias(it.piezas_carga ?? it.copies_default)
   }
   return siguiente
 }

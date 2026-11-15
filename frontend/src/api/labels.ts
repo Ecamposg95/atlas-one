@@ -34,6 +34,8 @@ export interface LabelCandidate {
   stock: number
   /** Copias sugeridas = existencia, truncada y topada en 99. */
   copies_default: number
+  /** Con `carga_id`: piezas que entraron en esa carga; `null` fuera de una carga. */
+  piezas_carga: number | null
   printable: boolean
   /** Por qué NO se puede imprimir. `null` cuando `printable` es true. */
   reason: string | null
@@ -56,6 +58,8 @@ export interface LabelCandidatesFilters {
   product_id?: string
   /** ISO 8601: solo tallas dadas de alta desde ese instante. */
   created_after?: string
+  /** Solo las variantes que recibieron piezas de esa carga. */
+  carga_id?: string
 }
 
 /** Texto del layout. `x,y` es la esquina superior izquierda, en dots. */
@@ -131,6 +135,7 @@ export const labelsApi = {
     if (filters.only_with_stock) params.only_with_stock = true
     if (filters.product_id) params.product_id = filters.product_id
     if (filters.created_after) params.created_after = filters.created_after
+    if (filters.carga_id) params.carga_id = filters.carga_id
     const { data } = await client.get<LabelCandidatesResponse>('/labels/candidates', { params })
     return { items: data?.items ?? [], total: data?.total ?? 0 }
   },

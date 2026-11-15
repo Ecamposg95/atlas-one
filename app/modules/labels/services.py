@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.crud.products import _is_admin, query_visible_products
 from app.models import Product, ProductVariant, StockOnHand, User
+from app.models.inventory import InventoryMovement
 from app.modules.labels.schemas import MAX_COPIAS
 from app.modules.products.sale_name import sale_name, variant_sale_name
 from app.services.labels import DatosEtiqueta, detect
@@ -103,6 +104,22 @@ def copias_por_omision(existencia: Decimal) -> int:
     return min(int(existencia), MAX_COPIAS)
 
 
+def piezas_de_carga(db: Session, org_id: int, carga_id: str) -> Dict[str, Decimal]:
+    """Piezas que entraron por variante en una carga: suma de `qty_change` de los
+    movimientos con `reference == "carga:<id>"` (convención del kardex de cargas).
+    Solo de esta organización."""
+    filas = (
+        db.query(InventoryMovement.variant_id, func.sum(InventoryMovement.qty_change))
+        .filter(
+            InventoryMovement.organization_id == org_id,
+            InventoryMovement.reference == f"carga:{carga_id}",
+        )
+        .group_by(InventoryMovement.variant_id)
+        .all()
+    )
+    return {vid: Decimal(str(total or 0)) for vid, total in filas}
+
+
 def variantes_visibles(
     db: Session,
     current_user: User,
@@ -114,6 +131,7 @@ def variantes_visibles(
     brand_id: Optional[str] = None,
     gender: Optional[str] = None,
     created_after: Optional[datetime] = None,
+    carga_id: Optional[str] = None,
 ) -> List[Par]:
     """Pares (producto, variante) vivos y visibles, ordenados por nombre.
 
@@ -123,7 +141,10 @@ def variantes_visibles(
     Mismo alcance que el CSV de etiquetas: el filtro de sucursal es a nivel
     PRODUCTO (`query_visible_products`), así que si un producto está activo en
     la sucursal, se listan todas sus tallas.
+
+    `carga_id` deja solo las variantes que recibieron piezas de esa carga.
     """
+    en_carga = set(piezas_de_carga(db, org_id, carga_id)) if carga_id else None
     q = (
         query_visible_products(db, current_user, org_id, search=search)
         .options(
@@ -148,6 +169,7 @@ def variantes_visibles(
         for p in productos
         for v in sorted(p.variants, key=lambda x: (x.sku or ""))
         if v.deleted_at is None and _alta_desde(v, created_after)
+        and (en_carga is None or v.id in en_carga)
     ]
 
 
@@ -184,6 +206,8 @@ def candidatos(
     """Filas de la tabla de etiquetas. Las no imprimibles NO se esconden: van
     marcadas con su motivo para que se note el dato a medias."""
     pares = variantes_visibles(db, current_user, org_id, **filtros)
+    carga_id = filtros.get("carga_id")
+    de_carga = piezas_de_carga(db, org_id, carga_id) if carga_id else None
     stock = existencias(db, current_user, org_id, [v.id for _, v in pares])
 
     filas: List[dict] = []
@@ -212,6 +236,11 @@ def candidatos(
             "price": float(variante.price or 0),
             "stock": float(existencia),
             "copies_default": copias_por_omision(existencia),
+            # Lo que entró en la carga (None fuera de una carga).
+            "piezas_carga": (
+                copias_por_omision(de_carga.get(variante.id, Decimal(0)))
+                if de_carga is not None else None
+            ),
             "printable": motivo is None,
             "reason": motivo,
             "created_at": _en_utc(variante.created_at),
