@@ -110,8 +110,9 @@ nota de seguridad en `docs/infra/deployment-map.md`.
 ### Cargar mercancía con IA
 
 Variables nuevas en el `env_file:` del servidor (detalle en [`ai/cargar-mercancia.md §6`](ai/cargar-mercancia.md)):
-`ANTHROPIC_API_KEY` (clave del proveedor; sin ella las cargas quedan en `error`), `AI_MODELO`
-(por omisión `claude-opus-5-5`) y `AI_TOKENS_DIA_ORG` (por omisión `200000`). `CARGAS_PROCESO_EN_LINEA=1`
+`ANTHROPIC_API_KEY` (clave del proveedor; sin ella subir un archivo responde 503 y no se crea la carga),
+`AI_MODELO` (por omisión `claude-opus-5-5`), `AI_TOKENS_DIA_ORG` (por omisión `200000`) y `AI_TIMEOUT_SEG`
+(tope por llamada al proveedor, por omisión `300`). `CARGAS_PROCESO_EN_LINEA=1`
 es solo para pruebas. Las dependencias `anthropic` y `pypdf` están en `requirements.txt`, así que la etapa
 `pydeps` de la imagen las instala sola; no hay paso manual. Tras desplegar, `railway_init.py` crea las
 tablas `cargas_*` y la columna `organization.reglas_carga`.

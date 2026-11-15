@@ -40,6 +40,9 @@ class CargaMercancia(Base, UUIDMixin, AuditMixin, TenantMixin):
     # Mapa de columnas del Excel y estado de lectura entre la subida y las respuestas.
     lectura = Column(JSON, nullable=True)
     error = Column(Text, nullable=True)
+    # Lectura vigente: la subida y cada "Volver a intentar" ponen un uuid nuevo.
+    # Un hilo cuyo intento ya no es este descarta lo que leyó (no pisa la carga).
+    intento = Column(String(36), nullable=True)
     aplicada_por = Column(Integer, ForeignKey("users.id"), nullable=True)
     aplicada_at = Column(DateTime(timezone=True), nullable=True)
     tokens_entrada = Column(Integer, nullable=True)

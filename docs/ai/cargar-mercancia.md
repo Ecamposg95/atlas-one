@@ -27,8 +27,9 @@ hay).
 2. **Encender el módulo.** En `/platform/organizations/{id}` activa el módulo `ai` para la organización
    (tabla `organization_modules`). El gate (`exigir_modulo_ai`) es estricto: ADMINISTRADOR/DUEÑO tampoco
    lo saltan.
-3. **Clave en el servidor.** `ANTHROPIC_API_KEY` en el `.env` del VPS (ver §6). Sin clave, la carga queda
-   en `error` con "IA no configurada: falta ANTHROPIC_API_KEY en el servidor."
+3. **Clave en el servidor.** `ANTHROPIC_API_KEY` en el `.env` del VPS (ver §6). Sin clave, subir un archivo
+   responde 503 "IA no configurada: falta ANTHROPIC_API_KEY en el servidor." y **no se crea la carga**
+   (contestar por escrito y "Volver a intentar" responden igual).
 4. Con el módulo encendido aparece "Cargar mercancía" en el menú de Inventario (`/inventory/cargas`) y la
    sección "Reglas de carga" en Empresa (`/organization`).
 
@@ -91,9 +92,10 @@ Para consultar el precio vigente, usa la lista del proveedor; este documento no 
 
 | Variable | Para qué | Por omisión |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | Clave del proveedor. Sin ella la lectura falla con un mensaje claro | vacía |
+| `ANTHROPIC_API_KEY` | Clave del proveedor. Sin ella subir, contestar por escrito y reintentar responden 503 y no se crea carga | vacía |
 | `AI_MODELO` | Modelo que lee y traduce las respuestas | `claude-opus-5-5` |
 | `AI_TOKENS_DIA_ORG` | Tope de tokens por organización y día | `200000` |
+| `AI_TIMEOUT_SEG` | Tope en segundos de cada llamada al proveedor (un bloque de 15 páginas, un mapa de columnas, una respuesta escrita); el SDK reintenta una sola vez | `300` |
 | `CARGAS_PROCESO_EN_LINEA` | Con `1`, la lectura corre en el mismo hilo de la petición en vez de uno de fondo. Solo para pruebas | sin definir (hilo de fondo) |
 
 Se capturan en el `env_file:` del `docker-compose.yml` del servidor ([`DEPLOY.md §6`](../DEPLOY.md)).
@@ -106,10 +108,10 @@ frecuentes:
 
 | Mensaje | Causa | Qué hacer |
 |---|---|---|
-| "IA no configurada…" | Falta `ANTHROPIC_API_KEY` | Capturarla y recrear el contenedor; luego Volver a intentar |
+| "IA no configurada…" (503 al subir, sin carga) | Falta `ANTHROPIC_API_KEY` | Capturarla y recrear el contenedor; luego subir de nuevo |
 | Límite diario | Se alcanzó `AI_TOKENS_DIA_ORG` | Esperar al día siguiente o subir el tope |
 | Falla del proveedor (rechazo, 429, 5xx) | Lado del proveedor | Volver a intentar en unos minutos |
-| Reinicio a media lectura | El proceso se reinició mientras leía | Volver a intentar |
+| Reinicio a media lectura | El proceso se reinició mientras leía, o la lectura dejó de avanzar 10 minutos | Volver a intentar |
 | Falla al aplicar | Una validación o la base rechazó algo; **se revirtió todo** | Corregir lo indicado y Volver a intentar |
 
 **"Volver a intentar"** (`POST /api/cargas/{id}/reintentar`) depende de dónde falló:
@@ -119,7 +121,15 @@ frecuentes:
   autorizar otra vez.
 
 Nunca queda nada a medias: la aplicación es una sola transacción. Una carga `descartada` o `aplicada` ya
-no se reintenta. Una carga en `error` también puede descartarse.
+no se reintenta, y una carga que **alguna vez se aplicó** (`aplicada_at` puesto) tampoco vuelve a leerse ni
+a revisión aunque aparezca en `error` (409): eso metería las piezas dos veces. Una carga en `error` también
+puede descartarse.
+
+**Lecturas largas.** La lectura de fondo marca su avance (`updated_at`) tras cada bloque de 15 páginas del
+PDF y tras mapear cada pestaña del Excel, así que la recuperación de cargas colgadas (10 minutos sin
+moverse) no toca una lectura viva. Cada subida y cada "Volver a intentar" ponen un intento nuevo
+(`cargas_mercancia.intento`, uuid): si al terminar la carga ya no está en `leyendo` o su intento cambió,
+el hilo descarta lo leído y no la toca (los tokens gastados sí se cuentan).
 
 ## 8. Rastro de lo aplicado
 

@@ -6,7 +6,7 @@ import io
 import re
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
-from typing import Optional
+from typing import Callable, Optional
 
 from pypdf import PasswordType, PdfReader, PdfWriter
 
@@ -156,7 +156,9 @@ def _unir(previo: RenglonCrudo, nuevo: RenglonCrudo) -> None:
         previo.duda = "; ".join(x for x in (previo.duda, nuevo.duda) if x)
 
 
-def extraer_pdf(contenido: bytes, cliente: ClienteEstructurado, instrucciones: str) -> ExtraccionPdf:
+def extraer_pdf(contenido: bytes, cliente: ClienteEstructurado, instrucciones: str,
+                al_terminar_bloque: Optional[Callable[[], None]] = None) -> ExtraccionPdf:
+    """`al_terminar_bloque` se llama tras leer cada bloque (el latido de la carga)."""
     bloques, _ = _bloques(contenido)
     sistema = (
         "Eres un asistente que lee documentos de importación y facturas de mercancía para una tienda. "
@@ -204,5 +206,7 @@ def extraer_pdf(contenido: bytes, cliente: ClienteEstructurado, instrucciones: s
             elif tc is not None and res.monedas[cod] != tc:
                 res.monedas[cod] = None
                 contradichas.add(cod)
+        if al_terminar_bloque is not None:
+            al_terminar_bloque()
     return res
 

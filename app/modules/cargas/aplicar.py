@@ -43,6 +43,8 @@ from app.routers.inventory import aplicar_ajuste
 from app.services.barcodes import AsignadorDeCodigos
 
 _APLICABLES = ("EXISTE", "SUMA", "NUEVO")
+YA_APLICADA = ("Esta carga ya se aplicó al inventario: no se puede volver a leer ni a revisar. "
+               "Si falta algo, sube el archivo de lo que falta como una carga nueva.")
 
 
 class ResumenAplicacion(BaseModel):
@@ -532,6 +534,10 @@ def volver_a_plan(db: Session, carga: CargaMercancia) -> None:
     if carga.estado != "error":
         raise HTTPException(status_code=409,
                             detail="Solo una carga que falló al aplicarse vuelve a revisión.")
+    if carga.aplicada_at is not None:
+        # Una lectura vieja pudo dejarla en `error` después de aplicada: volver a
+        # revisión y autorizar metería las piezas dos veces.
+        raise HTTPException(status_code=409, detail=YA_APLICADA)
     if not _renglones(db, carga):
         raise HTTPException(status_code=409,
                             detail="La carga no tiene renglones: vuelve a subir el archivo.")

@@ -44,7 +44,7 @@ def test_modelo_por_omision_y_por_variable(monkeypatch):
     assert cliente_estructurado_por_defecto().modelo == "otro-modelo"
 
 
-def _sdk_falso(monkeypatch, mensaje=None, error=None, capturar=None):
+def _sdk_falso(monkeypatch, mensaje=None, error=None, capturar=None, constructor=None):
     class Flujo:
         def __init__(self, kw):
             self.kw = kw
@@ -61,7 +61,9 @@ def _sdk_falso(monkeypatch, mensaje=None, error=None, capturar=None):
             return mensaje
 
     class Falso:
-        def __init__(self, api_key=None):
+        def __init__(self, api_key=None, **kw):
+            if constructor is not None:
+                constructor.update(kw, api_key=api_key)
             self.beta = SimpleNamespace(messages=SimpleNamespace(stream=self._stream))
 
         def _stream(self, **kw):
@@ -112,3 +114,24 @@ def test_error_de_api_se_vuelve_proveedor_no_disponible(monkeypatch, hacer):
     _sdk_falso(monkeypatch, error=hacer(req))
     with pytest.raises(ProveedorNoDisponible):
         ClienteAnthropic("k", "m").generar(sistema="s", contenido=[], esquema=ESQUEMA)
+
+
+def test_timeout_y_reintentos_explicitos(monkeypatch):
+    """Tope de tiempo de la lectura (spec §7): 300 s y un solo reintento por omisión."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "k")
+    monkeypatch.delenv("AI_TIMEOUT_SEG", raising=False)
+    construido = {}
+    _sdk_falso(monkeypatch, mensaje=_mensaje(), constructor=construido)
+    cliente_estructurado_por_defecto().generar(sistema="s", contenido=[], esquema=ESQUEMA)
+    assert construido["timeout"] == 300.0 and construido["max_retries"] == 1
+
+    monkeypatch.setenv("AI_TIMEOUT_SEG", "90")
+    cliente_estructurado_por_defecto().generar(sistema="s", contenido=[], esquema=ESQUEMA)
+    assert construido["timeout"] == 90.0
+
+
+@pytest.mark.parametrize("valor", ["", "abc", "0", "-5", "inf", "nan"])
+def test_timeout_invalido_usa_el_de_omision(monkeypatch, valor):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "k")
+    monkeypatch.setenv("AI_TIMEOUT_SEG", valor)
+    assert cliente_estructurado_por_defecto().timeout == 300.0

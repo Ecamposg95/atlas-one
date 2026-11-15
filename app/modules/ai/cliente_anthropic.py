@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -23,6 +24,9 @@ logger = logging.getLogger(__name__)
 MODELO_POR_DEFECTO = "claude-opus-5-5"
 BETA_FALLBACK = "server-side-fallback-2026-07-01"
 NO_CONFIGURADO = "IA no configurada: falta ANTHROPIC_API_KEY en el servidor."
+# Tope por llamada (spec §7): sin él el SDK espera 10 min y reintenta 2 veces.
+TIMEOUT_POR_DEFECTO = 300.0
+REINTENTOS = 1
 
 __all__ = [
     "ProveedorNoDisponible", "RespuestaEstructurada", "ClienteEstructurado",
@@ -43,16 +47,18 @@ class ClienteEstructurado(Protocol):
 
 
 class ClienteAnthropic:
-    def __init__(self, api_key: str, modelo: str):
+    def __init__(self, api_key: str, modelo: str, timeout: float = TIMEOUT_POR_DEFECTO):
         self.api_key = api_key
         self.modelo = modelo
+        self.timeout = timeout
 
     def generar(self, *, sistema: str, contenido: list[dict], esquema: dict,
                 max_tokens: int = 64000) -> RespuestaEstructurada:
         import anthropic
 
         try:
-            client = anthropic.Anthropic(api_key=self.api_key)
+            client = anthropic.Anthropic(api_key=self.api_key, timeout=self.timeout,
+                                         max_retries=REINTENTOS)
             with client.beta.messages.stream(
                 model=self.modelo,
                 max_tokens=max_tokens,
@@ -113,4 +119,13 @@ def cliente_estructurado_por_defecto() -> ClienteAnthropic:
     if not clave:
         raise HTTPException(status_code=503, detail=NO_CONFIGURADO)
     modelo = (os.getenv("AI_MODELO") or "").strip() or MODELO_POR_DEFECTO
-    return ClienteAnthropic(api_key=clave, modelo=modelo)
+    return ClienteAnthropic(api_key=clave, modelo=modelo, timeout=_timeout())
+
+
+def _timeout() -> float:
+    """`AI_TIMEOUT_SEG` (segundos por llamada); vacío o inválido → 300."""
+    try:
+        valor = float((os.getenv("AI_TIMEOUT_SEG") or "").strip())
+    except ValueError:
+        return TIMEOUT_POR_DEFECTO
+    return valor if math.isfinite(valor) and valor > 0 else TIMEOUT_POR_DEFECTO
