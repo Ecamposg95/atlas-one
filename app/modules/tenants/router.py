@@ -78,6 +78,9 @@ def update_organization(
     # `exclude_unset` una sola vez: el bloque de permisos y el de escritura
     # tienen que mirar exactamente el mismo diccionario.
     data_to_update = org_in.dict(exclude_unset=True)
+    # La columna es JSON: los Decimal de ReglasCarga se guardan como texto.
+    if data_to_update.get("reglas_carga") is not None and org_in.reglas_carga is not None:
+        data_to_update["reglas_carga"] = org_in.reglas_carga.model_dump(mode="json")
 
     # Plan, estado y activacion son campos de PLATAFORMA: solo se cambian por
     # `/api/platform/organizations/{id}`. Un admin de tienda no puede subirse

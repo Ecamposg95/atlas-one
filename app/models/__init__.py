@@ -112,3 +112,5 @@ from app.modules.conteos import models as _conteos_models  # noqa: F401
 # 17. Asistente IA (SP4): conversaciones, mensajes, propuestas y uso diario.
 #     Registradas aqui para `create_all`.
 from app.modules.ai import models as _ai_models  # noqa: F401
+# 18. Cargar mercancía con IA: cargas, archivos, renglones, dudas y cambios.
+from app.modules.cargas import models as _cargas_models  # noqa: F401

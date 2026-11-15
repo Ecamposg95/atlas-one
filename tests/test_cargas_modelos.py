@@ -1,0 +1,66 @@
+"""Tablas de cargas y reglas_carga por organización."""
+import pytest
+from sqlalchemy.exc import IntegrityError
+
+from app.modules.ai.limpieza import borrar_datos_ai_de_org
+from app.modules.cargas.models import (
+    CargaArchivo, CargaCambio, CargaDuda, CargaMercancia, CargaRenglon,
+)
+from app.modules.cargas.reglas import reglas_de_la_org
+
+
+def _carga(db, org, folio=1):
+    c = CargaMercancia(organization_id=org.id, folio=folio, archivo_nombre="lista.xlsx")
+    db.add(c)
+    db.flush()
+    return c
+
+
+def test_tablas_se_crean_y_fk_uuid_son_string36(db, org):
+    assert CargaRenglon.__table__.c.carga_id.type.length == 36
+    c = _carga(db, org)
+    assert len(c.id) == 36
+    assert c.estado == "leyendo" and c.proposito == "entrada"
+    db.add(CargaRenglon(organization_id=org.id, carga_id=c.id, orden=1, cantidad=2))
+    db.flush()
+
+
+def test_folio_unico_por_org(db, org):
+    _carga(db, org, folio=7)
+    with pytest.raises(IntegrityError):
+        _carga(db, org, folio=7)
+
+
+def test_reglas_vacias_dan_defaults(org):
+    r = reglas_de_la_org(org)
+    assert r.costo_si_falta == "preguntar"
+    assert r.ventana_ya_cargado_dias == 14
+
+
+def test_reglas_invalidas_dan_422(client, auth_admin_a):
+    r = client.put("/api/organization/", json={"reglas_carga": {"costo_si_falta": "x"}}, headers=auth_admin_a)
+    assert r.status_code == 422
+
+
+def test_reglas_validas_se_guardan_y_se_leen(client, auth_admin_a, db, org):
+    r = client.put(
+        "/api/organization/",
+        json={"reglas_carga": {"costo_si_falta": "fraccion_precio", "fraccion": "0.6"}},
+        headers=auth_admin_a,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["reglas_carga"]["costo_si_falta"] == "fraccion_precio"
+    db.refresh(org)
+    assert str(reglas_de_la_org(org).fraccion) == "0.6"
+
+
+def test_limpieza_borra_cargas_de_la_org(db, org):
+    c = _carga(db, org)
+    db.add(CargaArchivo(organization_id=org.id, carga_id=c.id, contenido=b"x"))
+    db.add(CargaRenglon(organization_id=org.id, carga_id=c.id, orden=1, cantidad=1))
+    db.add(CargaDuda(organization_id=org.id, carga_id=c.id, numero=1, tipo="t", texto="?"))
+    db.add(CargaCambio(organization_id=org.id, carga_id=c.id, operaciones=[]))
+    db.flush()
+    borrar_datos_ai_de_org(db, org.id)
+    for m in (CargaMercancia, CargaArchivo, CargaRenglon, CargaDuda, CargaCambio):
+        assert db.query(m).filter(m.organization_id == org.id).count() == 0
