@@ -1,5 +1,35 @@
 import client from './client'
 
+/** Espejo de `app/modules/cargas/reglas.py`. Los Decimal viajan como texto. */
+export interface TipoPrendaRegla { codigo_sku: string; departamento: string }
+export interface RangoPrecioRegla { tipo: string; marca: string | null; precios: string[] }
+export interface ReglasCarga {
+  costo_si_falta: 'preguntar' | 'fraccion_precio'
+  fraccion: string
+  iva: boolean
+  sucursal_recibe: number | null
+  activar_en: 'todas_las_que_venden' | 'sucursal_recibe'
+  mapa_tallas: Record<string, string>
+  escala_ropa: string[]
+  tipos: Record<string, TipoPrendaRegla>
+  materiales_aparte: string[]
+  material_normal: string | null
+  genero_por_marca: Record<string, string>
+  genero_por_omision: string | null
+  sufijo_dama: string | null
+  matriz_por_omision: 'completa' | 'solo_lo_que_hay'
+  precios_familia: RangoPrecioRegla[]
+  ventana_ya_cargado_dias: number
+}
+
+export const REGLAS_CARGA_POR_OMISION: ReglasCarga = {
+  costo_si_falta: 'preguntar', fraccion: '0.5', iva: false, sucursal_recibe: null,
+  activar_en: 'todas_las_que_venden', mapa_tallas: {}, escala_ropa: [], tipos: {},
+  materiales_aparte: [], material_normal: null, genero_por_marca: {},
+  genero_por_omision: null, sufijo_dama: null, matriz_por_omision: 'solo_lo_que_hay',
+  precios_familia: [], ventana_ya_cargado_dias: 14,
+}
+
 export interface Organization {
   id: number
   name: string
@@ -36,6 +66,9 @@ export interface Organization {
   // lee y el PUT de tenant lo descarta. El tope es de "se está acabando".
   perfil_ui?: string | null
   umbral_poca_existencia?: number | null
+  // Cargar mercancía con IA: solo ADMINISTRADOR/DUEÑO las escribe.
+  ai_instrucciones?: string | null
+  reglas_carga?: ReglasCarga | null
 }
 
 /** Respuesta de GET /api/organization/exchange-rate. */

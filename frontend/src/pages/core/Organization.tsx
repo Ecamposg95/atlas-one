@@ -9,7 +9,8 @@ import { confirm as confirmDialog } from '../../components/ui/ConfirmDialog'
 import client from '../../api/client'
 import { errorDetailText } from '../../utils/errorDetail'
 import { MasOpciones } from '../../components/ui/MasOpciones'
-import { useModoBasico } from '../../store/enabledModulesStore'
+import { ReglasCarga } from './ReglasCarga'
+import { useModoBasico, useEnabledModulesStore } from '../../store/enabledModulesStore'
 
 const BRANCH_TYPES: Branch['branch_type'][] = ['HQ', 'STORE', 'WAREHOUSE', 'OFFICE']
 const branchTypeLabel = (t: string) =>
@@ -62,11 +63,14 @@ export function Organization() {
   const [fxRefreshing, setFxRefreshing] = useState(false)
   // Modo básico: logo, dólares, comisión y lo boutique del ticket van plegados.
   const modoBasico = useModoBasico()
+  const tieneIA = useEnabledModulesStore((s) => s.enabledModules.includes('ai'))
+  const [instrucciones, setInstrucciones] = useState('')
+  const [guardandoIA, setGuardandoIA] = useState(false)
 
   useEffect(() => {
     setLoading(true)
     Promise.all([
-      organizationApi.getOrg().then((o) => { setOrg(o); setOrgForm(o) }),
+      organizationApi.getOrg().then((o) => { setOrg(o); setOrgForm(o); setInstrucciones(o.ai_instrucciones ?? '') }),
       organizationApi.getBranches().then(setBranches),
       organizationApi.getExchangeRate().then(setFxInfo).catch(() => {}),
     ]).catch(() => {}).finally(() => setLoading(false))
@@ -96,6 +100,17 @@ export function Organization() {
       // capturar un tipo de cambio mayor que cero.").
       toast.error(errorDetailText(e?.response?.data?.detail, 'Error al guardar la organización'))
     } finally { setSaving(false) }
+  }
+
+  const saveInstrucciones = async () => {
+    setGuardandoIA(true)
+    try {
+      const updated = await organizationApi.updateOrg({ ai_instrucciones: instrucciones })
+      setOrg((prev) => (prev ? { ...prev, ai_instrucciones: updated.ai_instrucciones } : prev))
+      toast.success('Instrucciones guardadas')
+    } catch (e: any) {
+      toast.error(errorDetailText(e?.response?.data?.detail, 'No se pudieron guardar las instrucciones'))
+    } finally { setGuardandoIA(false) }
   }
 
   const refreshFx = async () => {
@@ -562,6 +577,25 @@ export function Organization() {
                 </div>
               </div>
             </DaxCard>
+          )}
+
+          {tieneIA && (
+            <>
+              <DaxCard>
+                <p className="text-[10px] font-bold text-dax-faint uppercase tracking-widest mb-4">Instrucciones para la IA</p>
+                <label htmlFor="ai-instrucciones" className="dax-label">Instrucciones para la IA</label>
+                <textarea id="ai-instrucciones" value={instrucciones} onChange={(e) => setInstrucciones(e.target.value)}
+                  maxLength={4000} rows={5} className="dax-input w-full"
+                  placeholder="Ej.: nuestras tallas, cómo nombramos los productos, qué marcas vendemos…" />
+                <p className="text-[10px] mt-1 text-dax-faint">Texto libre que la IA lee en cada carga. Máx. 4000 caracteres.</p>
+                <div className="flex justify-end mt-3">
+                  <button type="button" onClick={saveInstrucciones} disabled={guardandoIA} className="dax-btn-primary disabled:opacity-40">
+                    {guardandoIA ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Guardar instrucciones</>}
+                  </button>
+                </div>
+              </DaxCard>
+              <ReglasCarga org={org} branches={branches} onGuardado={(o) => setOrg((prev) => (prev ? { ...prev, reglas_carga: o.reglas_carga } : prev))} />
+            </>
           )}
         </div>
       )}
