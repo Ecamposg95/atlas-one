@@ -82,6 +82,8 @@ export function SalesHistory() {
   const esHq = esRolHq(rol)
   // La cajera ve solo las ventas de hoy de su sucursal, sin totales (el backend lo impone).
   const esCajera = rol === 'CAJERO'
+  // La cajera solo ve hoy: su lista vacía no es "del periodo".
+  const textoSinVentas = esCajera ? 'Sin ventas hoy' : 'Sin ventas en este periodo'
   const esTelefono = useEsTelefono()
   // Solo los roles de oficina piden la lista; el selector sale con más de una sucursal que vende.
   const sucursales = useSucursalesVendibles(esHq)
@@ -337,7 +339,7 @@ export function SalesHistory() {
       {esTelefono ? (
         <>
           {error && !loading ? <DaxCard padding={false}>{mensajeError}</DaxCard> : (
-          <ListaTarjetas cargando={loading} vacio={visibles.length === 0} textoVacio="Sin ventas en este periodo">
+          <ListaTarjetas cargando={loading} vacio={visibles.length === 0} textoVacio={textoSinVentas}>
             {visibles.map((s) => (
               <TarjetaFila
                 key={s.id}
@@ -360,7 +362,7 @@ export function SalesHistory() {
       ) : (
         <DaxCard padding={false}>
           {loading ? <Spinner text="Cargando ventas..." /> : error ? mensajeError : visibles.length === 0 ? (
-            <div className="p-12 text-center text-dax-faint">Sin ventas en este periodo</div>
+            <div className="p-12 text-center text-dax-faint">{textoSinVentas}</div>
           ) : (
             <TablaDesplazable sangrado={false}>
               <table className="dax-table w-full">

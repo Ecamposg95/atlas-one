@@ -252,6 +252,24 @@ describe('Ventas de hoy (cajera)', () => {
     expect(list).toHaveBeenCalledWith({ limit: 100, skip: 0, statuses: 'PAID,REFUNDED_PARTIAL,REFUNDED_TOTAL,CANCELLED' })
   })
 
+  it('cajera sin ventas: "Sin ventas hoy" en escritorio y en teléfono', async () => {
+    usuario('CAJERO', 1)
+    list.mockResolvedValue({ items: [], total: 0, page: 0, pages: 0 })
+    pintar()
+    expect(await screen.findByText('Sin ventas hoy')).toBeTruthy()
+    cleanup()
+    telefono.valor = true
+    pintar()
+    expect(await screen.findByText('Sin ventas hoy')).toBeTruthy()
+  })
+
+  it('gerente sin ventas: conserva "Sin ventas en este periodo"', async () => {
+    usuario('GERENTE', 1)
+    list.mockResolvedValue({ items: [], total: 0, page: 0, pages: 0 })
+    pintar()
+    expect(await screen.findByText('Sin ventas en este periodo')).toBeTruthy()
+  })
+
   it('gerente: conserva KPIs y periodo', async () => {
     usuario('GERENTE', 1)
     pintar()
