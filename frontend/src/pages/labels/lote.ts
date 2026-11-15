@@ -60,7 +60,7 @@ export function usarExistencia(
 ): MapaCopias {
   const siguiente = { ...copias }
   for (const it of alcance(items, seleccion)) {
-    siguiente[it.variant_id] = normalizarCopias(it.piezas_carga ?? it.copies_default)
+    siguiente[it.variant_id] = normalizarCopias(it.copies_default)
   }
   return siguiente
 }

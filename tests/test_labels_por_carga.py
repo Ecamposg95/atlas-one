@@ -29,14 +29,17 @@ def test_filtra_solo_variantes_de_la_carga(client, db, org, branch_a, tienda, au
 
 
 def test_piezas_carga_es_lo_que_entro(client, db, org, branch_a, tienda, auth_admin):
-    _, v = tienda["chamarra"]  # existencia 5... entraron 3 de 2 renglones
+    """Existencia 3 (fixture) pero la carga metió 5 en dos renglones; otro
+    movimiento de la misma variante, de otra referencia, no cuenta."""
+    _, v = tienda["chamarra"]
+    _entrada(db, org.id, branch_a, v, "3", "carga:abc")
     _entrada(db, org.id, branch_a, v, "2", "carga:abc")
-    _entrada(db, org.id, branch_a, v, "1", "carga:abc")
+    _entrada(db, org.id, branch_a, v, "7", "compra:xyz")
     db.commit()
     fila = client.get("/api/labels/candidates?carga_id=abc",
                       headers=_h(auth_admin, org)).json()["items"][0]
     assert fila["stock"] == 3.0
-    assert fila["piezas_carga"] == 3
+    assert fila["piezas_carga"] == 5
     # Sin filtro de carga el campo no se llena.
     sin = _por_sku(client.get("/api/labels/candidates", headers=_h(auth_admin, org)).json()["items"])
     assert sin["LV-CHAM-SLI-NEG-M"]["piezas_carga"] is None
