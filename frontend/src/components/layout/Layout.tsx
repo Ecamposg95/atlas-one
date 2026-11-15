@@ -114,7 +114,7 @@ export function Layout() {
           className="flex items-center justify-between px-5 flex-shrink-0"
           style={{
             height: '60px',
-            background: theme === 'dark' ? 'rgba(11,11,34,0.85)' : 'rgba(246,245,241,0.88)',
+            background: theme === 'dark' ? 'rgba(0,0,0,0.9)' : 'rgba(246,245,241,0.88)',
             borderBottom: '1px solid var(--dax-border-dim)',
             backdropFilter: 'blur(12px)',
           }}
@@ -233,7 +233,7 @@ export function Layout() {
           style={{
             height: 'calc(40px + env(safe-area-inset-bottom, 0px))',
             paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-            background: theme === 'dark' ? 'rgba(11,11,34,0.5)' : 'rgba(241,240,234,0.6)',
+            background: theme === 'dark' ? 'rgba(0,0,0,0.5)' : 'rgba(241,240,234,0.6)',
             borderTop: '1px solid var(--dax-border-dim)',
           }}
         >

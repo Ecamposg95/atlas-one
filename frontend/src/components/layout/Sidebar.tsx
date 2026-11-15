@@ -103,7 +103,7 @@ function NavPill({ item, active, color, pendingReturns }: {
         className={`fa-solid ${item.icon}`}
         style={{
           fontSize: '16px', width: '18px', textAlign: 'center', flexShrink: 0,
-          color: active ? color : 'rgba(237,237,248,0.55)',
+          color: active ? color : 'rgba(255,255,255,0.55)',
           filter: active ? `drop-shadow(0 0 6px ${alpha(color, 60)})` : undefined,
         }}
         aria-hidden="true"

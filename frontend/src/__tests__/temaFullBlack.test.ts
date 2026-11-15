@@ -37,3 +37,14 @@ describe('tema full black', () => {
       expect(dark.toLowerCase()).not.toContain(hex)
   })
 })
+
+describe('capa de layout sin tinte índigo', () => {
+  for (const f of ['Layout.tsx', 'Sidebar.tsx', 'MobileLayout.tsx']) {
+    it(`${f} no pinta índigo`, () => {
+      const src = readFileSync(resolve(__dirname, '..', 'components/layout', f), 'utf8').toLowerCase()
+      expect(src).not.toMatch(/11,\s*11,\s*34|237,\s*237,\s*248|#ededf8/)
+      for (const hex of ['#0b0b22', '#10102a', '#14142e', '#0e0e28', '#101022']) expect(src).not.toContain(hex)
+    })
+  }
+})
+
