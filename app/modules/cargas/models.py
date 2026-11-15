@@ -95,6 +95,8 @@ class CargaCambio(Base, UUIDMixin, AuditMixin, TenantMixin):
 
     carga_id = Column(String(36), ForeignKey("cargas_mercancia.id"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    # Orden de los cambios dentro de la carga (1, 2, 3…): solo se deshace el último.
+    secuencia = Column(Integer, nullable=False, default=0)
     texto = Column(Text, nullable=True)
     operaciones = Column(JSON, nullable=True)
     antes = Column(JSON, nullable=True)
