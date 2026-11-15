@@ -439,3 +439,52 @@ def test_fijar_moneda_se_valida(db, org, admin_a):
                               "valor": " mxn "}], None)
     assert rechazos == []
     assert _renglones(db, carga)[1].costo == Decimal("10.00")
+
+
+# ── renglones sin tipo o sin marca (I3) ──────────────────────────────────
+
+def _sin(**kw):
+    return _crudo(precio="300", **kw)
+
+
+def test_renglones_sin_tipo_no_se_funden_y_preguntan_que_prenda_es(db, org, admin_a):
+    carga = _armar(db, org, [_sin(descripcion_original="Blusa seda", tipo=None, talla="M"),
+                             _sin(descripcion_original="Falda corta", tipo=None, talla="M")])
+    rs = _renglones(db, carga)
+    assert rs[1].grupo != rs[2].grupo
+    dudas = {d.clave: d for d in _dudas(db, carga).values()}
+    d1, d2 = dudas["sin_tipo|1"], dudas["sin_tipo|2"]
+    assert d1.tipo == "sin_tipo" and d1.texto.startswith("¿Qué prenda es? Blusa seda")
+    assert d1.renglones == [1] and d1.recomendada is None
+    assert [o["clave"] for o in d1.opciones] == ["ignorar"]
+    # Escrita: fija el tipo de ESE renglón.
+    _, rechazos = aplicar_operaciones(db, carga, admin_a, [
+        {"op": "resolver_duda", "numero": d1.numero, "opcion": "", "valor": "Playera"}], None)
+    assert rechazos == []
+    assert _renglones(db, carga)[1].normalizado["tipo"] == "Playera"
+    assert _renglones(db, carga)[2].normalizado["tipo"] is None
+    # Botón: ignorar ese renglón.
+    _, rechazos = aplicar_operaciones(db, carga, admin_a, [
+        {"op": "resolver_duda", "numero": d2.numero, "opcion": "ignorar"}], None)
+    assert rechazos == []
+    assert _renglones(db, carga)[2].clase == "IGNORADO"
+
+
+def test_renglones_sin_marca_no_se_funden_y_preguntan_la_marca(db, org, admin_a):
+    carga = _armar(db, org, [_sin(descripcion_original="Playera lisa", marca=None, talla="M"),
+                             _sin(descripcion_original="Playera rayas", marca=None, talla="G")])
+    rs = _renglones(db, carga)
+    assert rs[1].grupo != rs[2].grupo
+    d = next(d for d in _dudas(db, carga).values() if d.clave == "sin_marca|2")
+    assert d.texto.startswith("¿De qué marca es? Playera rayas")
+    _, rechazos = aplicar_operaciones(db, carga, admin_a, [
+        {"op": "resolver_duda", "numero": d.numero, "opcion": "", "valor": "Marca Uno"}], None)
+    assert rechazos == []
+    assert _renglones(db, carga)[2].normalizado["marca"] == "Marca Uno"
+
+
+def test_con_marca_y_tipo_se_siguen_agrupando(db, org):
+    carga = _armar(db, org, [_sin(talla="M"), _sin(talla="G")])
+    rs = _renglones(db, carga)
+    assert rs[1].grupo == rs[2].grupo
+    assert not [d for d in _dudas(db, carga).values() if d.tipo in ("sin_tipo", "sin_marca")]

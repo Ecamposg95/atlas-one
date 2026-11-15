@@ -124,6 +124,7 @@ def test_flujo_completo_pdf(client, db, tienda, auth_admin_a, falso):
     assert grupo["titulo"] == "Marca Uno · Playera"
     assert [x["orden"] for x in grupo["renglones"]] == [1, 2]
     assert grupo["renglones"][0]["cantidad"] == "3" and grupo["renglones"][0]["origen"] == "pág. 1"
+    assert grupo["renglones"][0]["descripcion"] == "Playera Marca Uno"
     precio = next(d for d in _abiertas(det) if d["tipo"] == "precio_faltante")
     assert precio["acepta_texto"] is True
 
@@ -214,7 +215,7 @@ def test_deshacer_devuelve_el_detalle(client, db, tienda, auth_admin_a, falso):
 # ── flujo Excel ───────────────────────────────────────────────────────────
 
 def _mapa(dinero=(3, 4)):
-    return {"campos": {"descripcion_original": 0, "marca": 1, "tipo": None, "material": None,
+    return {"campos": {"descripcion_original": 0, "marca": 1, "tipo": 0, "material": None,
                        "color": None, "talla": 2, "cantidad": 5, "observacion": None},
             "columnas_dinero": list(dinero), "texto_libre": []}
 
@@ -592,3 +593,15 @@ def test_etiquetas_incluyen_lo_que_suma_a_existentes(client, db, tienda, auth_ad
     assert por_sku["PLAY"]["barcode"] == "7500000000017" and por_sku["PLAY"]["talla"] == "M"
     assert any(e["talla"] == "G" and e["piezas"] == "1" for e in etiquetas)
     assert etiquetas == r.json()["etiquetas"]
+
+
+def test_dudas_sin_tipo_y_sin_marca_aceptan_texto(client, db, tienda, auth_admin_a, falso):
+    falso.guion = [_resp_pdf([_r(tipo=None, precio="100"), _r(marca=None, precio="100")])]
+    alta = _subir(client, auth_admin_a, "f.pdf", _pdf()).json()
+    det = _detalle(client, auth_admin_a, alta["id"])
+    por_tipo = {d["tipo"]: d for d in _abiertas(det)}
+    assert por_tipo["sin_tipo"]["acepta_texto"] is True
+    assert por_tipo["sin_marca"]["acepta_texto"] is True
+    r = client.post(f"/api/cargas/{alta['id']}/dudas/{por_tipo['sin_tipo']['numero']}",
+                    headers=auth_admin_a, json={"opcion": "", "valor": "Playera"})
+    assert r.status_code == 200 and r.json()["rechazos"] == []

@@ -51,6 +51,8 @@ export interface RenglonPlan {
   clase: ClaseRenglon
   sku: string | null
   origen: string
+  /** Lo que decía el archivo en ese renglón (se enseña para ver qué se juntó). */
+  descripcion: string
 }
 
 export interface GrupoPlan {

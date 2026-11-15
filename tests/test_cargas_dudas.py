@@ -410,15 +410,13 @@ def test_precio_distinto_con_existente_sin_precio_no_truena(db, org):
     assert "sin precio" in d.texto and "$120.00" in d.texto
 
 
-def test_departamento_sin_tipo_no_ofrece_crear(db, org):
+def test_sin_tipo_pregunta_la_prenda_antes_que_el_departamento(db, org):
     _marca(db, org)
     db.add(Department(name="Varios", organization_id=org.id))
     db.flush()
-    d = next(d for d in _dudas(db, org, [_crudo(tipo=None)], carga=_carga("migracion"))
-             if d.tipo == "departamento")
-    assert "crear" not in _claves(d) and d.recomendada is None
-    with pytest.raises(ValueError):
-        opcion_a_operaciones(_guardada(d), "crear", None)
+    dudas = _dudas(db, org, [_crudo(tipo=None)], carga=_carga("migracion"))
+    assert "departamento" not in [d.tipo for d in dudas]
+    assert "sin_tipo" in [d.tipo for d in dudas]
 
 
 def test_departamento_de_las_reglas_que_no_existe(db, org):

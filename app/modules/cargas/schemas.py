@@ -76,6 +76,7 @@ class RenglonPlan(BaseModel):
     clase: str
     sku: Optional[str] = None
     origen: str
+    descripcion: str = ""
 
 
 class GrupoPlan(BaseModel):

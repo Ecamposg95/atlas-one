@@ -28,14 +28,14 @@ from app.modules.cargas.tipos import Grupo, RenglonNormalizado
 from app.modules.products.models import Brand, Department, Product, ProductVariant
 
 TIPOS_DUDA = (
-    "columnas_dinero", "moneda", "tipo_cambio", "marca_nueva", "marca_parecida", "casi_igual",
+    "columnas_dinero", "moneda", "tipo_cambio", "sin_tipo", "sin_marca", "marca_nueva", "marca_parecida", "casi_igual",
     "precio_faltante", "precio_fuera_familia", "precio_distinto_existente",
     "departamento", "genero", "sin_costo", "extraccion", "ya_cargado",
 )
 
 # Tipos que también aceptan una respuesta escrita (además de sus opciones).
 _CON_TEXTO = {
-    "tipo_cambio", "marca_nueva", "marca_parecida", "precio_faltante",
+    "tipo_cambio", "sin_tipo", "sin_marca", "marca_nueva", "marca_parecida", "precio_faltante",
     "precio_fuera_familia", "departamento", "sin_costo",
 }
 _INACTIVAS = ("YA_CARGADO", "IGNORADO")
@@ -222,6 +222,27 @@ def _moneda(carga: CargaMercancia, plan: _Plan) -> list[DudaNueva]:
         renglones=[plan.orden(i) for i in idxs],
         clave="moneda|sin_moneda", contexto={"monedas": monedas},
     )]
+
+
+def _sin_tipo_o_marca(plan: _Plan) -> list[DudaNueva]:
+    """Una por renglón al que le falta la prenda o la marca: no se agrupa con
+    otros hasta que el dueño lo diga (escribiéndolo) o lo ignore."""
+    dudas: list[DudaNueva] = []
+    for campo, tipo, pregunta in (("tipo", "sin_tipo", "¿Qué prenda es?"),
+                                  ("marca", "sin_marca", "¿De qué marca es?")):
+        for i in plan.activos():
+            n = plan.norm[i]
+            if (getattr(n, campo) or "").strip():
+                continue
+            orden = plan.orden(i)
+            desc = (n.descripcion_original or "").strip() or "(sin descripción)"
+            dudas.append(DudaNueva(
+                tipo=tipo,
+                texto=f"{pregunta} {desc} ({n.origen}). Escríbelo, o no lo cargues.",
+                opciones=[{"clave": "ignorar", "etiqueta": "No lo cargues"}],
+                renglones=[orden], clave=f"{tipo}|{orden}", contexto={"renglon": orden},
+            ))
+    return dudas
 
 
 def _marcas(db: Session, org_id: int, plan: _Plan) -> list[DudaNueva]:
@@ -427,6 +448,8 @@ def _departamento(db: Session, org_id: int, carga: CargaMercancia, plan: _Plan) 
     # y la misma clave ya contestada no se reabre.
     por_tipo: dict[str, list[int]] = {}
     for i in plan.activos():
+        if not (plan.norm[i].tipo or "").strip():
+            continue  # primero la duda `sin_tipo`: sin prenda no hay departamento que sugerir
         nombre = plan.norm[i].departamento
         if not nombre or _llave(nombre) not in existentes:
             por_tipo.setdefault(_llave(plan.norm[i].tipo), []).append(i)
@@ -567,7 +590,8 @@ def generar_dudas(
     `ya_cargados`: {id de carga previa: `orden` de los renglones que coinciden}."""
     plan = _Plan(renglones)
     columnas = _columnas_dinero(carga)
-    dudas = columnas + _moneda(carga, plan) + _tipo_cambio(carga, plan) + _marcas(db, org_id, plan)
+    dudas = columnas + _moneda(carga, plan) + _tipo_cambio(carga, plan) + _sin_tipo_o_marca(plan)
+    dudas += _marcas(db, org_id, plan)
     dudas += _casi_igual(db, org_id, plan, grupos, coincidencias, reglas)
     if not columnas:
         # Mientras no se sepa qué columna es costo y cuál precio, preguntar por
@@ -607,8 +631,10 @@ def opcion_a_operaciones(duda: CargaDuda, clave: str, valor_texto: Optional[str]
             raise ValueError(f'"{clave or texto}" no es una respuesta válida para esta pregunta')
         if tipo == "tipo_cambio":
             return [{"op": "tipo_cambio", "moneda": ctx.get("moneda"), "valor": _monto(texto)}]
-        if tipo in ("marca_nueva", "marca_parecida"):
+        if tipo in ("marca_nueva", "marca_parecida", "sin_marca"):
             return _fijar(duda, "marca", texto)
+        if tipo == "sin_tipo":
+            return _fijar(duda, "tipo", texto)
         if tipo in ("precio_faltante", "precio_fuera_familia"):
             return _fijar(duda, "precio", _monto(texto))
         if tipo == "sin_costo":
@@ -637,6 +663,8 @@ def opcion_a_operaciones(duda: CargaDuda, clave: str, valor_texto: Optional[str]
         return _fijar(duda, "genero", clave)
     if tipo == "moneda":
         return _fijar(duda, "moneda", clave)
+    if tipo in ("sin_tipo", "sin_marca"):  # única opción: ignorar
+        return [{"op": "ignorar", "renglones": list(duda.renglones or [])}]
     if tipo == "ya_cargado":
         return [{"op": "forzar", "renglones": list(duda.renglones or [])}] if clave == "cargar" else []
     if tipo == "extraccion":

@@ -12,6 +12,8 @@ const TONO: Record<RenglonPlan['clase'], Tone> = {
 }
 const apagado = (r: RenglonPlan) => r.clase === 'YA_CARGADO' || r.clase === 'IGNORADO'
 const dinero = (v: string | null) => (v == null ? '—' : formatCurrency(v))
+/** "CAMISA LINO 3201 · pág. 2": de dónde salió el renglón. */
+const deDonde = (r: RenglonPlan) => [r.descripcion, r.origen].filter(Boolean).join(' · ')
 
 /** El plan agrupado por producto: tallas × piezas, precio, costo y clase. Tabla en PC, tarjetas en teléfono. */
 export function TablaPlan({ grupos }: { grupos: GrupoPlan[] }) {
@@ -27,8 +29,11 @@ export function TablaPlan({ grupos }: { grupos: GrupoPlan[] }) {
                 <TarjetaFila
                   titulo={`${r.talla ?? 'Única'}${r.color ? ` · ${r.color}` : ''} × ${cantidad(r.cantidad)}`}
                   subtitulo={r.sku ?? undefined}
+                  datos={[
+                    { etiqueta: 'Precio', valor: dinero(r.precio) }, { etiqueta: 'Costo', valor: dinero(r.costo) },
+                    ...(deDonde(r) ? [{ etiqueta: 'En el archivo', valor: deDonde(r) }] : []),
+                  ]}
                   estado={<StatusChip tone={TONO[r.clase]} label={CLASES[r.clase]} />}
-                  datos={[{ etiqueta: 'Precio', valor: dinero(r.precio) }, { etiqueta: 'Costo', valor: dinero(r.costo) }]}
                 />
               </div>
             ))}
@@ -54,7 +59,10 @@ export function TablaPlan({ grupos }: { grupos: GrupoPlan[] }) {
           )}
           {grupos.map((g) => g.renglones.map((r, i) => (
             <tr key={`${g.grupo}-${r.orden}`} className={`border-t border-dax-border-dim ${apagado(r) ? 'opacity-60' : ''}`}>
-              <td className="p-3 text-dax-text font-semibold">{i === 0 ? g.titulo : ''}</td>
+              <td className="p-3">
+                {i === 0 && <div className="text-dax-text font-semibold">{g.titulo}</div>}
+                {deDonde(r) && <div className="text-xs text-dax-muted">{deDonde(r)}</div>}
+              </td>
               <td className="p-3 text-dax-muted">{r.sku ?? '—'}</td>
               <td className="p-3 text-dax-text">{r.talla ?? '—'}{r.color ? ` · ${r.color}` : ''}</td>
               <td className="p-3 text-right tabular-nums text-dax-text">{cantidad(r.cantidad)}</td>

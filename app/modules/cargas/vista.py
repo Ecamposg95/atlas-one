@@ -22,7 +22,7 @@ from app.modules.products.models import Brand
 
 # Dudas que la pantalla deja contestar escribiendo (contrato, última línea).
 ACEPTAN_TEXTO = frozenset({"tipo_cambio", "precio_faltante", "sin_costo", "marca_nueva",
-                           "precio_fuera_familia"})
+                           "precio_fuera_familia", "sin_tipo", "sin_marca"})
 _INACTIVAS = ("YA_CARGADO", "IGNORADO")
 
 
@@ -139,6 +139,8 @@ def _grupo(llave: str, titulo: str, filas: list[CargaRenglon]) -> dict:
             "cantidad": _piezas(f.cantidad), "precio": _dinero(f.precio), "costo": _dinero(f.costo),
             "clase": f.clase or "NUEVO", "sku": f.sku,
             "origen": (f.crudo or {}).get("origen") or "",
+            # Lo que decía el archivo: el dueño ve qué se juntó en cada producto.
+            "descripcion": (f.crudo or {}).get("descripcion_original") or "",
         } for f in filas],
     }
 

@@ -79,10 +79,12 @@ def _precio_llave(precio: Optional[Decimal]) -> str:
 
 def normalizar_renglon(
     r: RenglonCrudo, reglas: ReglasCarga, monedas: dict[str, Optional[Decimal]],
-    moneda_por_omision: Optional[str] = "MXN",
+    moneda_por_omision: Optional[str] = "MXN", orden: Optional[int] = None,
 ) -> RenglonNormalizado:
     """`moneda_por_omision`: la del costo que no dice moneda (pesos en un Excel;
-    None en un PDF que no declara una sola moneda: el costo queda sin calcular)."""
+    None en un PDF que no declara una sola moneda: el costo queda sin calcular).
+    `orden`: un renglón sin tipo o sin marca no se agrupa con otros (lleva su
+    `orden` en la llave) hasta que el dueño diga qué prenda o qué marca es."""
     tipo = _buscar(reglas.tipos, r.tipo)
     genero = _buscar(reglas.genero_por_marca, r.marca) or reglas.genero_por_omision
     datos = r.model_dump()
@@ -92,6 +94,7 @@ def normalizar_renglon(
             _llave(r.marca),
             _llave(r.tipo),
             _material_efectivo(r.material, reglas) or "",
+            *([f"#{orden}"] if orden is not None and not (_llave(r.marca) and _llave(r.tipo)) else []),
             _precio_llave(r.precio),
         ]
     )

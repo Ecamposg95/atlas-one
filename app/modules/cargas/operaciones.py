@@ -507,7 +507,8 @@ def recalcular_plan(db: Session, carga: CargaMercancia) -> None:
         crudo = _crudo_corregido(f, usuario)
         if heredada and crudo.costo_unitario is not None and not crudo.moneda:
             crudo.moneda = heredada
-        n = normalizar_renglon(crudo, reglas, monedas, moneda_por_omision=por_omision)
+        n = normalizar_renglon(crudo, reglas, monedas, moneda_por_omision=por_omision,
+                               orden=f.orden)
         for campo in _DESPUES_DE_NORMALIZAR:
             if campo in usuario:
                 setattr(n, campo, usuario[campo])

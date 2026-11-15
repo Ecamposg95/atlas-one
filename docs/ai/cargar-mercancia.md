@@ -20,6 +20,22 @@ alguien con rol ADMINISTRADOR o DUEÑO pulse Autorizar.
 Propósito al subir: **entrada** (las piezas se suman) o **migración** (la existencia del archivo es la que
 hay).
 
+**Límites de hoy (léelos antes de migrar una tienda):**
+
+- Una hoja cuya única columna de texto es la **descripción** (lo normal en la exportación de otro punto de
+  venta) **todavía no se interpreta sola**: el modelo solo dice qué columna es cuál, no separa marca y
+  prenda de una descripción. Cada renglón sin prenda o sin marca queda aparte (no se junta con otros) y
+  pregunta "¿Qué prenda es?" / "¿De qué marca es?" (dudas `sin_tipo` y `sin_marca`, se contestan
+  escribiendo o con "No lo cargues"). Con cientos de renglones eso es inmanejable.
+- Los **SKU y códigos de barras del sistema de origen no se conservan**: la carga calcula SKU propios y
+  asigna códigos nuevos; las etiquetas ya impresas de la tienda dejarían de leerse.
+- Por eso, **para migrar un catálogo completo sigue vigente el importador existente** (playbook de altas,
+  `scripts/import_rmazh_export.py` o la importación de productos). Cargar mercancía en migración sirve
+  para hojas que ya traen columnas de marca y prenda.
+
+La tabla del plan enseña, debajo de cada renglón, la descripción original y de dónde salió (`pág. 3`,
+`Hoja1!R12`), para ver qué se juntó en cada producto.
+
 ## 2. Activar el módulo `ai` en una organización
 
 1. **Plan.** El módulo `ai` entra desde el plan SCALE (`_SCALE = _BUSINESS | {"ai"}` en

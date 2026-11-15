@@ -27,7 +27,7 @@ const detalle = () => ({
   contadores: { EXISTE: 0, SUMA: 1, NUEVO: 2, YA_CARGADO: 0, IGNORADO: 0, piezas: '5.00' },
   dudas: [], cambios: [], ultimos_conteos: [{ departamento: 'Ropa', numero: 3, cerrado_at: '2026-11-10T10:00:00Z' }],
   grupos: [{ grupo: 'g1', titulo: 'Marca Uno · Camisa lino', marca: 'Marca Uno', tipo: 'Camisa', departamento: 'Ropa', genero: null, product_id: null,
-    renglones: [{ orden: 1, talla: 'M', color: null, cantidad: '5.00', precio: '500.00', costo: '250.00', clase: 'NUEVO', sku: 'MU-CAM-M', origen: 'pdf' }] }],
+    renglones: [{ orden: 1, talla: 'M', color: null, cantidad: '5.00', precio: '500.00', costo: '250.00', clase: 'NUEVO', sku: 'MU-CAM-M', origen: 'pág. 2', descripcion: 'CAMISA LINO MU 3201' }] }],
   puede_autorizar: true,
 })
 const D = (over: any = {}) => { const d: any = detalle(); const { carga, ...resto } = over; Object.assign(d, resto); Object.assign(d.carga, carga ?? {}); return d }
@@ -167,6 +167,17 @@ describe('Cargar mercancía: plan', () => {
     pintar()
     await screen.findByText(/se descartó/)
     expect(screen.getByRole('link', { name: /Volver a las cargas/ })).toBeTruthy()
+  })
+
+  it('cada renglón enseña la descripción original y su origen', async () => {
+    pintar()
+    await screen.findByText('Marca Uno · Camisa lino')
+    expect(screen.getByText('CAMISA LINO MU 3201 · pág. 2')).toBeTruthy()
+    cleanup()
+    anchoDePantalla(true)
+    pintar()
+    await screen.findByText('Marca Uno · Camisa lino')
+    expect(screen.getByText('CAMISA LINO MU 3201 · pág. 2')).toBeTruthy()
   })
 
   it('en teléfono el plan va en tarjetas y la caja de respuesta existe', async () => {
