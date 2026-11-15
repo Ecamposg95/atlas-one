@@ -302,3 +302,89 @@ def test_config_put_solo_admin(client, db, org, auth_cajero_a, auth_gerente_a):
     _encender(db, org)
     for h in (auth_cajero_a, auth_gerente_a):
         assert client.put("/api/canal/config", json={"sucursales_web": None}, headers=h).status_code == 403
+
+
+# ── Imagen heredada (image_url sin galería) ──────────────────────────────────
+def test_subir_a_galeria_respeta_image_url_heredada(client, db, org, auth_admin):
+    p = _producto(db, org)
+    p.image_url = "https://viejo.test/a.jpg"
+    db.flush()
+    r = _subir(client, p, auth_admin)
+    assert r.status_code == 200, r.text
+    assert r.json()["is_primary"] is False
+    db.refresh(p)
+    assert p.image_url == "https://viejo.test/a.jpg"
+    lista = client.get(f"/api/products/{p.id}/images", headers=auth_admin).json()
+    assert len(lista) == 2
+    assert lista[0]["url"] == "https://viejo.test/a.jpg" and lista[0]["is_primary"] is True
+    assert lista[1]["position"] == 1
+
+
+def test_borrar_imagen_heredada_deja_nulo(client, db, org, auth_admin):
+    p = _producto(db, org)
+    p.image_url = "https://viejo.test/b.jpg"
+    db.flush()
+    # Adopción por la galería vacía: GET no muta, así que la adopta el primer borrado.
+    from app.modules.products.imagenes import adoptar_imagen_heredada
+    adoptar_imagen_heredada(db, p)
+    iid = db.query(ProductImage).filter(ProductImage.product_id == p.id).first().id
+    r = client.delete(f"/api/products/{p.id}/images/{iid}", headers=auth_admin)
+    assert r.status_code == 200, r.text
+    db.refresh(p)
+    assert p.image_url is None
+
+
+def test_legacy_delete_una_imagen_deja_nulo(client, db, org, auth_admin):
+    p = _producto(db, org)
+    client.post(f"/api/products/{p.id}/image", files=_png(), headers=auth_admin)
+    r = client.delete(f"/api/products/{p.id}/image", headers=auth_admin)
+    assert r.status_code == 200, r.text
+    db.refresh(p)
+    assert p.image_url is None
+
+
+def test_legacy_delete_con_dos_promueve_siguiente(client, db, org, auth_admin):
+    p = _producto(db, org)
+    i1 = _subir(client, p, auth_admin).json()
+    i2 = _subir(client, p, auth_admin).json()
+    r = client.delete(f"/api/products/{p.id}/image", headers=auth_admin)
+    assert r.status_code == 200, r.text
+    db.refresh(p)
+    assert p.image_url == i2["url"]
+    lista = client.get(f"/api/products/{p.id}/images", headers=auth_admin).json()
+    assert [x["id"] for x in lista] == [i2["id"]] and lista[0]["is_primary"] is True
+
+
+# ── Publicar: casos extra ────────────────────────────────────────────────────
+def test_publicar_filtro_por_marca(client, db, org, auth_admin):
+    from app.models import Brand
+    _encender(db, org)
+    marca = Brand(name="Marca X", organization_id=org.id)
+    db.add(marca)
+    db.flush()
+    a, b = _producto(db, org), _producto(db, org)
+    a.brand_id = marca.id
+    db.flush()
+    r = client.post("/api/products/web-publish",
+                    json={"filtro": {"brand_id": marca.id}, "published": True}, headers=auth_admin)
+    assert r.json()["processed"] == 1
+    db.refresh(a); db.refresh(b)
+    assert a.web_published and not b.web_published
+
+
+def test_publicar_sin_ids_ni_filtro_422(client, db, org, auth_admin):
+    _encender(db, org)
+    r = client.post("/api/products/web-publish", json={"published": True}, headers=auth_admin)
+    assert r.status_code == 422
+
+
+def test_republicar_tras_despublicar_renueva_fecha(client, db, org, auth_admin):
+    _encender(db, org)
+    p = _producto(db, org)
+    client.post("/api/products/web-publish", json={"ids": [p.id], "published": True}, headers=auth_admin)
+    db.refresh(p)
+    primera = p.web_published_at
+    client.post("/api/products/web-publish", json={"ids": [p.id], "published": False}, headers=auth_admin)
+    client.post("/api/products/web-publish", json={"ids": [p.id], "published": True}, headers=auth_admin)
+    db.refresh(p)
+    assert p.web_published is True and p.web_published_at != primera

@@ -42,9 +42,33 @@ def backfill_imagenes(db: Session) -> int:
     creó."""
     filas = db.execute(text(_CANDIDATOS)).fetchall()
     for pid, org_id, url in filas:
-        db.add(ProductImage(
-            id=str(uuid.uuid4()), organization_id=org_id, product_id=pid,
-            url=url, position=0, is_primary=True,
-        ))
+        _crear_primaria(db, org_id, pid, url)
     db.flush()
     return len(filas)
+
+
+def _crear_primaria(db: Session, org_id: int, product_id: str, url: str) -> ProductImage:
+    img = ProductImage(
+        id=str(uuid.uuid4()), organization_id=org_id, product_id=product_id,
+        url=url, position=0, is_primary=True,
+    )
+    db.add(img)
+    return img
+
+
+def adoptar_imagen_heredada(db: Session, product) -> bool:
+    """Si el producto tiene `image_url` pero ninguna imagen viva en la galería
+    (p. ej. la puso un import o script entre deploys), crea su primaria a partir
+    de ella para que la galería no la pise. Sin commit. True si adoptó."""
+    if not product.image_url:
+        return False
+    vivas = db.query(ProductImage.id).filter(
+        ProductImage.product_id == product.id,
+        ProductImage.organization_id == product.organization_id,
+        ProductImage.deleted_at.is_(None),
+    ).first()
+    if vivas is not None:
+        return False
+    _crear_primaria(db, product.organization_id, product.id, product.image_url)
+    db.flush()
+    return True

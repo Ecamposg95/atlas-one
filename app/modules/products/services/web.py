@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.modules.products.imagenes import ProductImage
+from app.modules.products.imagenes import ProductImage, adoptar_imagen_heredada
 from app.modules.products.models import Department, Product
 
 
@@ -77,7 +77,9 @@ def sincronizar_image_url(db: Session, product: Product) -> None:
 
 
 def agregar_imagen(db: Session, product: Product, url: str, alt: Optional[str] = None) -> ProductImage:
-    """Agrega una imagen al final de la galería; la primera queda primaria."""
+    """Agrega una imagen al final de la galería; la primera queda primaria.
+    Una `image_url` heredada se adopta antes y sigue siendo la primaria."""
+    adoptar_imagen_heredada(db, product)
     imgs = imagenes_vivas(db, product.organization_id, product.id)
     img = ProductImage(
         id=str(uuid.uuid4()), organization_id=product.organization_id,
@@ -92,6 +94,7 @@ def agregar_imagen(db: Session, product: Product, url: str, alt: Optional[str] =
 
 def fijar_imagen_primaria(db: Session, product: Product, url: str) -> None:
     """Camino legacy (`POST /{id}/image`): crea o reemplaza la primaria."""
+    adoptar_imagen_heredada(db, product)
     imgs = imagenes_vivas(db, product.organization_id, product.id)
     primaria = next((i for i in imgs if i.is_primary), None)
     if primaria is not None:
@@ -109,6 +112,7 @@ def fijar_imagen_primaria(db: Session, product: Product, url: str) -> None:
 
 def borrar_imagen(db: Session, product: Product, image_id: str) -> None:
     """Soft delete; si era la primaria, la siguiente toma su lugar."""
+    adoptar_imagen_heredada(db, product)
     img = next((i for i in imagenes_vivas(db, product.organization_id, product.id)
                 if i.id == image_id), None)
     if img is None:
@@ -122,6 +126,7 @@ def borrar_imagen(db: Session, product: Product, image_id: str) -> None:
 def ordenar_imagenes(db: Session, product: Product, ids: list[str], primary_id: str) -> None:
     """Reordena la galería. `ids` debe ser exactamente el conjunto de imágenes
     vivas del producto (422 si trae ajenas o faltan) y `primary_id` una de ellas."""
+    adoptar_imagen_heredada(db, product)
     imgs = {i.id: i for i in imagenes_vivas(db, product.organization_id, product.id)}
     if len(set(ids)) != len(ids) or set(ids) != set(imgs):
         raise HTTPException(status_code=422, detail="La lista debe traer todas las imágenes del producto, sin repetir")
