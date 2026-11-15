@@ -8,6 +8,8 @@ import { useEsTelefono } from '../../../../hooks/useIsMobile'
 import { formatCurrency } from '../../../../utils/currency'
 import { cantidad } from '../formato'
 
+const pl = (n: number, uno: string, varios: string) => `${cantidad(n)} ${n === 1 ? uno : varios}`
+
 /** Carga aplicada: qué entró y las etiquetas por imprimir. */
 export function ResumenEtiquetas({ cargaId, folio, etiquetas, resumen }: {
   cargaId: string; folio: number; etiquetas: Etiqueta[]
@@ -20,7 +22,7 @@ export function ResumenEtiquetas({ cargaId, folio, etiquetas, resumen }: {
       <DaxCard>
         <p className="text-sm text-dax-text font-semibold">
           {resumen
-            ? `Carga aplicada: ${resumen.productos_nuevos} productos nuevos, ${resumen.variantes_nuevas} variantes nuevas, ${cantidad(resumen.piezas)} piezas, ${formatCurrency(resumen.valor_costo)} a costo.`
+            ? `Carga aplicada: ${pl(resumen.productos_nuevos, 'producto nuevo', 'productos nuevos')}, ${pl(resumen.variantes_nuevas, 'variante nueva', 'variantes nuevas')}, ${pl(Number(resumen.piezas), 'pieza', 'piezas')}, ${formatCurrency(resumen.valor_costo)} a costo.`
             : `Carga #${folio} aplicada.`}
         </p>
         <Link to={`/labels?carga=${cargaId}&folio=${folio}`}

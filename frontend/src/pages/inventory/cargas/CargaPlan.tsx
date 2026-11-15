@@ -29,6 +29,7 @@ import { CLASES, cantidad, fechaCorta } from './formato'
  */
 const CADA_MS = 3000
 
+const plural = (n: number, uno: string, varios: string) => `${cantidad(n)} ${n === 1 ? uno : varios}`
 const msg = (e: any, por: string) => errorDetailText(e?.response?.data?.detail, por)
 
 export default function CargaPlan() {
@@ -53,7 +54,9 @@ export default function CargaPlan() {
       setFalloCarga(false)
     } catch {
       setFalloCarga(true)
+      return false
     }
+    return true
   }, [id])
 
   useEffect(() => { void cargar() }, [cargar])
@@ -88,7 +91,7 @@ export default function CargaPlan() {
   const tomarRespuesta = async (r: { cambio: Cambio | null; rechazos: string[] }) => {
     setCambio(r.cambio)
     setRechazos(r.rechazos)
-    await cargar()
+    if (!(await cargar())) toast.error('Se guardó, pero no se pudo actualizar el plan. Recarga la página.')
   }
 
   const elegir = (numero: number, opcion: string, valor?: string) =>
@@ -115,27 +118,34 @@ export default function CargaPlan() {
     correr(async () => { await cargasApi.reintentar(id); await cargar() }, 'No se pudo reintentar')
 
   const autorizar = async () => {
-    if (!det) return
+    if (!det || enVuelo.current) return
     const filas = det.grupos.flatMap((g) => g.renglones.map((r) => ({ g, r })))
       .filter(({ r }) => r.clase !== 'YA_CARGADO' && r.clase !== 'IGNORADO')
     const nuevos = new Set(filas.filter(({ g, r }) => r.clase === 'NUEVO' && !g.product_id).map(({ g }) => g.grupo)).size
     const piezas = filas.reduce((s, { r }) => s + Number(r.cantidad || 0), 0)
     const valor = filas.reduce((s, { r }) => s + Number(r.cantidad || 0) * Number(r.costo || 0), 0)
-    const ok = await confirm({
+    enVuelo.current = true
+    setOcupado(true)
+    let ok = false
+    try { ok = await confirm({
       title: 'Autorizar la carga',
-      message: `Entran ${nuevos} productos nuevos, ${cantidad(piezas)} piezas, ${formatCurrency(valor)} a costo. Esto escribe en el catálogo y en las existencias.`,
+      message: `Entran ${plural(nuevos, 'producto nuevo', 'productos nuevos')}, ${plural(piezas, 'pieza', 'piezas')}, ${formatCurrency(valor)} a costo. Esto escribe en el catálogo y en las existencias.`,
       confirmText: 'Autorizar', variant: 'warning',
-    })
+    }) } finally { enVuelo.current = false; setOcupado(false) }
     if (!ok) return
     await correr(async () => { setResumen(await cargasApi.autorizar(id)); await cargar() }, 'No se pudo autorizar')
   }
 
   const descartar = async () => {
-    const ok = await confirm({
+    if (enVuelo.current) return
+    enVuelo.current = true
+    setOcupado(true)
+    let ok = false
+    try { ok = await confirm({
       title: 'Descartar la carga',
       message: 'Se descarta el plan y no entra nada al catálogo.',
       confirmText: 'Descartar', variant: 'danger',
-    })
+    }) } finally { enVuelo.current = false; setOcupado(false) }
     if (!ok) return
     await correr(async () => { await cargasApi.descartar(id); navigate('/inventory/cargas') }, 'No se pudo descartar')
   }

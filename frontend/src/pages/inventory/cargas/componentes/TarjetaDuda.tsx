@@ -29,7 +29,7 @@ export function TarjetaDuda({ duda, ocupado, onElegir }: {
           e.preventDefault()
           const v = texto.trim()
           if (!v) return
-          onElegir(duda.numero, 'texto', v)
+          onElegir(duda.numero, '', v)
           setTexto('')
         }}>
           <input className="dax-input flex-1 min-w-0 text-sm" aria-label={`Respuesta a la duda ${duda.numero}`}

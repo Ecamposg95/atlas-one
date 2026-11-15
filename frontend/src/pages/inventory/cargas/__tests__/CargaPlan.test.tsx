@@ -7,12 +7,14 @@ const api = vi.hoisted(() => ({
   obtener: vi.fn(), responder: vi.fn(), resolverDuda: vi.fn(), deshacer: vi.fn(),
   reintentar: vi.fn(), autorizar: vi.fn(), descartar: vi.fn(), etiquetas: vi.fn(),
 }))
-const { confirmar } = vi.hoisted(() => ({ confirmar: vi.fn() }))
+const { confirmar, navegar } = vi.hoisted(() => ({ confirmar: vi.fn(), navegar: vi.fn() }))
+vi.mock('react-router-dom', async (o) => ({ ...(await o<typeof import('react-router-dom')>()), useNavigate: () => navegar }))
 vi.mock('../../../../api/cargas', () => ({ cargasApi: api }))
 vi.mock('../../../../components/ui/ConfirmDialog', () => ({ confirm: confirmar }))
 
 import CargaPlan from '../CargaPlan'
 import { useAuthStore } from '../../../../store/authStore'
+import { useToastStore } from '../../../../store/toastStore'
 
 const duda = (numero: number, extra: object = {}) => ({
   numero, tipo: 'precio_faltante', texto: `Duda ${numero}`, opciones: [{ clave: 'a', etiqueta: 'Opción A' }, { clave: 'b', etiqueta: 'Opción B' }],
@@ -43,6 +45,7 @@ const anchoDePantalla = (telefono: boolean) => {
     dispatchEvent: () => false,
   })) as unknown as typeof window.matchMedia
 }
+const avisos = () => useToastStore.getState().toasts.map((t) => `${t.type}:${t.message}`)
 const pintar = () => render(
   <MemoryRouter initialEntries={['/inventory/cargas/c1']}>
     <Routes><Route path="/inventory/cargas/:id" element={<CargaPlan />} /></Routes>
@@ -55,6 +58,7 @@ beforeEach(() => {
   confirmar.mockReset().mockResolvedValue(true)
   api.obtener.mockResolvedValue(D())
   conRol('ADMINISTRADOR')
+  useToastStore.setState({ toasts: [] })
 })
 afterEach(() => { cleanup(); vi.useRealTimers() })
 
@@ -91,7 +95,7 @@ describe('Cargar mercancía: plan', () => {
     pintar()
     fireEvent.change(await screen.findByLabelText('Respuesta a la duda 2'), { target: { value: '450' } })
     fireEvent.click(screen.getByRole('button', { name: 'Responder' }))
-    await waitFor(() => expect(api.resolverDuda).toHaveBeenCalledWith('c1', 2, 'texto', '450'))
+    await waitFor(() => expect(api.resolverDuda).toHaveBeenCalledWith('c1', 2, '', '450'))
   })
 
   it('enviar respuesta muestra antes/después, preguntas y rechazos; Deshacer usa el detalle devuelto', async () => {
@@ -131,7 +135,7 @@ describe('Cargar mercancía: plan', () => {
     pintar()
     fireEvent.click(await screen.findByRole('button', { name: 'Autorizar' }))
     await waitFor(() => expect(api.autorizar).toHaveBeenCalledWith('c1'))
-    expect(confirmar.mock.calls[0][0].message).toContain('1 productos nuevos, 5 piezas, $1,250.00')
+    expect(confirmar.mock.calls[0][0].message).toContain('1 producto nuevo, 5 piezas, $1,250.00')
     const enlace = await screen.findByRole('link', { name: /Imprimir etiquetas/ })
     expect(enlace.getAttribute('href')).toBe('/labels?carga=c1&folio=7')
     expect(screen.getByText('2000000000017')).toBeTruthy()
@@ -172,5 +176,48 @@ describe('Cargar mercancía: plan', () => {
     expect(document.querySelector('table')).toBeNull()
     expect(document.querySelectorAll('[data-tarjeta-fila]').length).toBe(1)
     expect(screen.getByPlaceholderText('Contesta por número: 1. … 2. …')).toBeTruthy()
+  })
+
+  it('Descartar confirma, descarta y vuelve a la lista', async () => {
+    api.descartar.mockResolvedValue({ id: 'c1', folio: 7, estado: 'descartada' })
+    pintar()
+    fireEvent.click(await screen.findByRole('button', { name: 'Descartar' }))
+    await waitFor(() => expect(api.descartar).toHaveBeenCalledWith('c1'))
+    expect(confirmar).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(navegar).toHaveBeenCalledWith('/inventory/cargas'))
+  })
+
+  it('al reabrir una carga aplicada pide las etiquetas', async () => {
+    api.obtener.mockResolvedValue(D({ carga: { estado: 'aplicada' } }))
+    api.etiquetas.mockResolvedValue([{ marca: 'Marca Uno', producto: 'Camisa lino', sku: 'MU-CAM-M', talla: 'M', barcode: '2000000000017', piezas: '5.00', precio: '500.00' }])
+    pintar()
+    await screen.findByText('2000000000017')
+    expect(api.etiquetas).toHaveBeenCalledWith('c1')
+    expect(screen.getByRole('link', { name: /Imprimir etiquetas/ }).getAttribute('href')).toBe('/labels?carga=c1&folio=7')
+  })
+
+  it('si una mutación falla muestra un aviso', async () => {
+    api.responder.mockRejectedValue({ response: { data: { detail: 'Carga bloqueada' } } })
+    pintar()
+    fireEvent.change(await screen.findByLabelText('Respuesta'), { target: { value: '1. 600' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }))
+    await waitFor(() => expect(avisos().some((a) => a.includes('Carga bloqueada'))).toBe(true))
+  })
+
+  it('si falla la recarga tras responder avisa', async () => {
+    api.responder.mockResolvedValue({ cambio: null, rechazos: [] })
+    api.obtener.mockResolvedValueOnce(D()).mockRejectedValue(new Error('red'))
+    pintar()
+    fireEvent.change(await screen.findByLabelText('Respuesta'), { target: { value: '1. 600' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }))
+    await waitFor(() => expect(avisos().some((a) => a.includes('no se pudo actualizar'))).toBe(true))
+  })
+
+  it('dos toques seguidos en Autorizar abren un solo diálogo', async () => {
+    confirmar.mockReturnValue(new Promise(() => {}))
+    pintar()
+    const b = await screen.findByRole('button', { name: 'Autorizar' })
+    fireEvent.click(b); fireEvent.click(b)
+    expect(confirmar).toHaveBeenCalledTimes(1)
   })
 })

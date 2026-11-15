@@ -162,7 +162,7 @@ export const cargasApi = {
   },
 
   resolverDuda: async (id: string, numero: number, opcion: string, valor?: string): Promise<RespuestaCambio> => {
-    const { data } = await client.post<RespuestaCambio>(`/cargas/${id}/dudas/${numero}`, { opcion, valor })
+    const { data } = await client.post<RespuestaCambio>(`/cargas/${id}/dudas/${numero}`, valor === undefined ? { opcion } : { opcion, valor })
     return data
   },
 
