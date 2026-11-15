@@ -11,12 +11,14 @@ en esa lista y las dudas/operaciones hablan de renglones por `orden`.
 from __future__ import annotations
 
 import re
+from datetime import timezone
 from decimal import Decimal
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.core.fechas import ZONA_NEGOCIO
 from app.modules.cargas.cruce import Coincidencia
 from app.modules.cargas.lectura_excel import normalizar_numero
 from app.modules.cargas.models import CargaDuda, CargaMercancia, CargaRenglon
@@ -28,7 +30,7 @@ from app.modules.products.models import Brand, Department, Product, ProductVaria
 TIPOS_DUDA = (
     "columnas_dinero", "tipo_cambio", "marca_nueva", "marca_parecida", "casi_igual",
     "precio_faltante", "precio_fuera_familia", "precio_distinto_existente",
-    "departamento", "genero", "sin_costo", "extraccion",
+    "departamento", "genero", "sin_costo", "extraccion", "ya_cargado",
 )
 
 # Tipos que también aceptan una respuesta escrita (además de sus opciones).
@@ -496,11 +498,50 @@ def _extraccion(plan: _Plan) -> list[DudaNueva]:
     return dudas
 
 
+def _fecha(dt) -> str:
+    if dt is None:
+        return "fecha desconocida"
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(ZONA_NEGOCIO).strftime("%d/%m/%Y")
+
+
+def _ya_cargado(db: Session, org_id: int, ya_cargados: dict[str, list[int]]) -> list[DudaNueva]:
+    """Una duda por carga previa con la que coinciden renglones (mismo archivo o
+    mismo SKU y cantidad en la ventana): se avisa y solo se cargan si el dueño
+    lo pide."""
+    if not ya_cargados:
+        return []
+    previas = {c.id: c for c in db.query(CargaMercancia).filter(
+        CargaMercancia.organization_id == org_id, CargaMercancia.id.in_(list(ya_cargados)))}
+    dudas: list[DudaNueva] = []
+    for cid, ordenes in ya_cargados.items():
+        previa = previas.get(cid)
+        if previa is None or not ordenes:
+            continue
+        n = len(ordenes)
+        cuantos = "1 renglón coincide" if n == 1 else f"{n} renglones coinciden"
+        dudas.append(DudaNueva(
+            tipo="ya_cargado",
+            texto=(f"{cuantos} con la Carga #{previa.folio} "
+                   f"({_fecha(previa.aplicada_at or previa.created_at)}). "
+                   "¿Los salto o los cargo de todos modos?"),
+            opciones=[{"clave": "saltar", "etiqueta": "Saltarlos (ya se cargaron)"},
+                      {"clave": "cargar", "etiqueta": "Cargarlos de todos modos"}],
+            recomendada="saltar",
+            renglones=sorted(ordenes),
+            clave=f"ya_cargado|{cid}", contexto={"carga_previa": cid, "folio": previa.folio},
+        ))
+    return dudas
+
+
 def generar_dudas(
     db: Session, org_id: int, carga: CargaMercancia, renglones: list[CargaRenglon],
     grupos: list[Grupo], coincidencias: dict[str, Optional[Coincidencia]], reglas: ReglasCarga,
+    ya_cargados: Optional[dict[str, list[int]]] = None,
 ) -> list[DudaNueva]:
-    """Dudas que implica el plan actual, ordenadas por tipo según `TIPOS_DUDA`."""
+    """Dudas que implica el plan actual, ordenadas por tipo según `TIPOS_DUDA`.
+    `ya_cargados`: {id de carga previa: `orden` de los renglones que coinciden}."""
     plan = _Plan(renglones)
     columnas = _columnas_dinero(carga)
     dudas = columnas + _tipo_cambio(carga, plan) + _marcas(db, org_id, plan)
@@ -516,6 +557,7 @@ def generar_dudas(
     if not columnas:
         dudas += _sin_costo(carga, plan, grupos, reglas)
     dudas += _extraccion(plan)
+    dudas += _ya_cargado(db, org_id, ya_cargados or {})
     return sorted(dudas, key=lambda d: TIPOS_DUDA.index(d.tipo))
 
 
@@ -570,6 +612,8 @@ def opcion_a_operaciones(duda: CargaDuda, clave: str, valor_texto: Optional[str]
         return _fijar(duda, "departamento", opciones[clave]["etiqueta"])
     if tipo == "genero":
         return _fijar(duda, "genero", clave)
+    if tipo == "ya_cargado":
+        return [{"op": "forzar", "renglones": list(duda.renglones or [])}] if clave == "cargar" else []
     if tipo == "extraccion":
         return [{"op": "ignorar", "renglones": list(duda.renglones or [])}] if clave == "ignorar" else []
     raise ValueError(f"No sé contestar dudas de tipo {tipo}")

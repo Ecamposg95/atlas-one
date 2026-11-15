@@ -115,6 +115,12 @@ class Ignorar(_Op):
     renglones: list[int] = Field(min_length=1)
 
 
+class Forzar(_Op):
+    """Cargar renglones que coinciden con una carga previa (duda `ya_cargado`)."""
+    op: Literal["forzar"]
+    renglones: list[int] = Field(min_length=1)
+
+
 class TipoCambio(_Op):
     op: Literal["tipo_cambio"]
     moneda: str
@@ -134,12 +140,13 @@ class RolColumna(_Op):
 
 
 Operacion = Annotated[
-    Union[FijarCampo, ResolverDuda, UsarExistente, NuevoProducto, Ignorar, TipoCambio, RolColumna],
+    Union[FijarCampo, ResolverDuda, UsarExistente, NuevoProducto, Ignorar, TipoCambio, RolColumna,
+          Forzar],
     Field(discriminator="op"),
 ]
 _ADAPTADOR: TypeAdapter = TypeAdapter(Operacion)
 NOMBRES_OP = ("fijar_campo", "resolver_duda", "usar_existente", "nuevo_producto",
-              "ignorar", "tipo_cambio", "rol_columna")
+              "ignorar", "tipo_cambio", "rol_columna", "forzar")
 
 
 class _Rechazo(Exception):
@@ -312,6 +319,10 @@ def _preparar(ctx: _Contexto, op: _Op) -> Callable[[], None]:
             for f in filas:
                 f.clase = "IGNORADO"
         return aplicar
+
+    if isinstance(op, Forzar):
+        filas = ctx.renglones(op.renglones)
+        return lambda: _corregir(filas, {"forzar": True})
 
     if isinstance(op, TipoCambio):
         moneda = op.moneda.strip().upper()
@@ -516,8 +527,10 @@ def recalcular_plan(db: Session, carga: CargaMercancia) -> None:
             f.sku = sku_variante.get(vid) or sku_para(g, norm[i].talla, reglas, prefijo)
     db.flush()
 
-    marcar_ya_cargado(db, org_id, carga, activos, reglas.ventana_ya_cargado_dias)
-    nuevas = generar_dudas(db, org_id, carga, activos, grupos, coincidencias, reglas)
+    ya_cargados = marcar_ya_cargado(db, org_id, carga, activos, reglas.ventana_ya_cargado_dias,
+                                    branch_id=carga.sucursal_destino_id or reglas.sucursal_recibe)
+    nuevas = generar_dudas(db, org_id, carga, activos, grupos, coincidencias, reglas,
+                           ya_cargados={cid: [f.orden for f in fs] for cid, fs in ya_cargados.items()})
     por_orden = {f.orden: f for f in activos}
     if carga.proposito == "entrada":
         # En entrada no se crean departamentos: si la respuesta nombró uno que no

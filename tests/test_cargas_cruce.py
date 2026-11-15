@@ -127,11 +127,16 @@ def _plan(db, org, carga, sku="UNO-PLAY", cant="2"):
     return r
 
 
+def _n(por_carga):
+    return sum(len(rs) for rs in por_carga.values())
+
+
 def test_mismo_sha_aplicado_marca_todo_ya_cargado(db, org):
-    _carga(db, org, 1, estado="aplicada")
+    previa = _carga(db, org, 1, estado="aplicada")
     nueva = _carga(db, org, 2)
     rs = [_plan(db, org, nueva), _plan(db, org, nueva, sku="OTRO")]
-    assert marcar_ya_cargado(db, org.id, nueva, rs, 14) == 2
+    marcados = marcar_ya_cargado(db, org.id, nueva, rs, 14)
+    assert list(marcados) == [previa.id] and _n(marcados) == 2
     assert {r.clase for r in rs} == {"YA_CARGADO"}
 
 
@@ -139,15 +144,24 @@ def test_mismo_contenido_otro_nombre_marca_ya_cargado(db, org):
     _carga(db, org, 1, estado="aplicada", nombre="viejo.xlsx")
     nueva = _carga(db, org, 2, nombre="nuevo.xlsx")
     rs = [_plan(db, org, nueva)]
-    assert marcar_ya_cargado(db, org.id, nueva, rs, 14) == 1
+    assert _n(marcar_ya_cargado(db, org.id, nueva, rs, 14)) == 1
 
 
 def test_sha_no_aplicado_o_propio_no_marca(db, org):
     _carga(db, org, 1, estado="plan")
     nueva = _carga(db, org, 2)
     rs = [_plan(db, org, nueva)]
-    assert marcar_ya_cargado(db, org.id, nueva, rs, 14) == 0
+    assert marcar_ya_cargado(db, org.id, nueva, rs, 14) == {}
     assert rs[0].clase == "SUMA"
+
+
+def test_renglon_forzado_no_se_marca(db, org, branch_a):
+    _carga(db, org, 1, estado="aplicada")
+    nueva = _carga(db, org, 2)
+    forzado, normal = _plan(db, org, nueva), _plan(db, org, nueva, sku="OTRO")
+    forzado.normalizado = {"_usuario": {"forzar": True}}
+    assert _n(marcar_ya_cargado(db, org.id, nueva, [forzado, normal], 14)) == 1
+    assert (forzado.clase, normal.clase) == ("SUMA", "YA_CARGADO")
 
 
 def _mov(db, org, branch, variante, ref, dias, qty="2"):
@@ -162,25 +176,48 @@ def _mov(db, org, branch, variante, ref, dias, qty="2"):
 
 def test_renglon_de_carga_reciente_marca_ya_cargado(db, org, branch_a):
     _, vs, _ = _catalogo(db, org)
-    _mov(db, org, branch_a, vs[0], "carga:otra", 3)
+    previa = _carga(db, org, 1, sha="yyy", estado="aplicada")
+    _mov(db, org, branch_a, vs[0], f"carga:{previa.id}", 3)
     nueva = _carga(db, org, 2, sha="zzz")
     rs = [_plan(db, org, nueva), _plan(db, org, nueva, cant="5")]
-    assert marcar_ya_cargado(db, org.id, nueva, rs, 14) == 1
+    marcados = marcar_ya_cargado(db, org.id, nueva, rs, 14, branch_id=branch_a.id)
+    assert list(marcados) == [previa.id] and [r.orden for r in marcados[previa.id]] == [1]
     assert [r.clase for r in rs] == ["YA_CARGADO", "SUMA"]
+
+
+def test_movimiento_de_otra_sucursal_no_marca(db, org, branch_a, branch_b):
+    """Un resurtido igual en otra sucursal no es la misma entrada."""
+    _, vs, _ = _catalogo(db, org)
+    previa = _carga(db, org, 1, sha="yyy", estado="aplicada")
+    _mov(db, org, branch_b, vs[0], f"carga:{previa.id}", 3)
+    nueva = _carga(db, org, 2, sha="zzz")
+    assert marcar_ya_cargado(db, org.id, nueva, [_plan(db, org, nueva)], 14,
+                             branch_id=branch_a.id) == {}
+
+
+def test_sin_sucursal_que_recibe_no_compara_por_sku(db, org, branch_a):
+    _, vs, _ = _catalogo(db, org)
+    previa = _carga(db, org, 1, sha="yyy", estado="aplicada")
+    _mov(db, org, branch_a, vs[0], f"carga:{previa.id}", 3)
+    nueva = _carga(db, org, 2, sha="zzz")
+    assert marcar_ya_cargado(db, org.id, nueva, [_plan(db, org, nueva)], 14) == {}
 
 
 def test_fuera_de_ventana_no_marca(db, org, branch_a):
     _, vs, _ = _catalogo(db, org)
-    _mov(db, org, branch_a, vs[0], "carga:otra", 20)
+    previa = _carga(db, org, 1, sha="yyy", estado="aplicada")
+    _mov(db, org, branch_a, vs[0], f"carga:{previa.id}", 20)
     nueva = _carga(db, org, 2, sha="zzz")
-    assert marcar_ya_cargado(db, org.id, nueva, [_plan(db, org, nueva)], 14) == 0
+    assert marcar_ya_cargado(db, org.id, nueva, [_plan(db, org, nueva)], 14,
+                             branch_id=branch_a.id) == {}
 
 
 def test_movimientos_de_la_propia_carga_no_marcan(db, org, branch_a):
     _, vs, _ = _catalogo(db, org)
     nueva = _carga(db, org, 2, sha="zzz")
     _mov(db, org, branch_a, vs[0], f"carga:{nueva.id}", 1)
-    assert marcar_ya_cargado(db, org.id, nueva, [_plan(db, org, nueva)], 14) == 0
+    assert marcar_ya_cargado(db, org.id, nueva, [_plan(db, org, nueva)], 14,
+                             branch_id=branch_a.id) == {}
 
 
 def test_ultimo_conteo_por_departamento(db, org, branch_a):

@@ -439,6 +439,19 @@ def test_segunda_aplicacion_del_mismo_archivo_sale_ya_cargado(db, org, branch_a,
 
     segunda = _carga(db, org, crudos, sha="a" * 64)
     assert {r.clase for r in _renglones(db, segunda).values()} == {"YA_CARGADO"}
+    # Se avisa: una pregunta por carga previa, recomendada "saltar".
+    [duda] = _abiertas(db, segunda)
+    assert duda.tipo == "ya_cargado" and duda.recomendada == "saltar"
+    assert duda.texto.startswith(f"2 renglones coinciden con la Carga #{primera.folio} (")
+    assert duda.texto.endswith("¿Los salto o los cargo de todos modos?")
+    assert [o["clave"] for o in duda.opciones] == ["saltar", "cargar"]
+    assert duda.contexto == {"carga_previa": primera.id, "folio": primera.folio}
+    assert duda.clave == f"ya_cargado|{primera.id}" and duda.renglones == [1, 2]
+    with pytest.raises(HTTPException) as e:  # abierta, bloquea como cualquier otra
+        aplicar_carga(db, segunda, admin_a)
+    assert e.value.status_code == 409
+    _contestar(db, segunda, admin_a)  # saltar
+    assert {r.clase for r in _renglones(db, segunda).values()} == {"YA_CARGADO"}
     resumen = aplicar_carga(db, segunda, admin_a)
 
     assert segunda.estado == "aplicada"
@@ -589,3 +602,37 @@ def test_misma_talla_con_costos_distintos_falla(db, org, branch_a, admin_a, cata
         aplicar_carga(db, carga, admin_a)
     assert e.value.status_code == 422 and "renglones 1, 2" in e.value.detail
     assert _conteos(db, org) == antes and carga.estado == "error"
+
+
+def test_mismo_archivo_con_cargar_si_mete_piezas(db, org, branch_a, admin_a, catalogo):
+    crudos = [_crudo(talla="M", cantidad="3")]
+    primera = _carga(db, org, crudos, sha="b" * 64)
+    _contestar(db, primera, admin_a)
+    aplicar_carga(db, primera, admin_a)
+    assert _stock(db, catalogo["variante"].id, branch_a) == D("5")
+
+    segunda = _carga(db, org, crudos, sha="b" * 64)
+    _contestar(db, segunda, admin_a, {"ya_cargado": "cargar"})
+    r = _renglones(db, segunda)[1]
+    assert r.clase == "SUMA" and r.normalizado["_usuario"]["forzar"] is True
+    resumen = aplicar_carga(db, segunda, admin_a)
+    assert resumen.piezas == D("3")
+    assert _stock(db, catalogo["variante"].id, branch_a) == D("8")
+
+
+def test_resurtido_igual_en_la_misma_sucursal_pregunta_y_se_puede_cargar(db, org, branch_a, admin_a,
+                                                                         catalogo):
+    """Mismo SKU y cantidad dentro de la ventana, otro archivo: se avisa y se puede forzar."""
+    primera = _carga(db, org, [_crudo(talla="M", cantidad="1")], sha="c" * 64)
+    _contestar(db, primera, admin_a)
+    aplicar_carga(db, primera, admin_a)
+
+    segunda = _carga(db, org, [_crudo(talla="M", cantidad="1"), _crudo(talla="M", cantidad="4")],
+                     sha="d" * 64)
+    clases = {o: r.clase for o, r in _renglones(db, segunda).items()}
+    assert clases == {1: "YA_CARGADO", 2: "SUMA"}
+    [duda] = [d for d in _abiertas(db, segunda) if d.tipo == "ya_cargado"]
+    assert duda.texto.startswith(f"1 renglón coincide con la Carga #{primera.folio}")
+    _contestar(db, segunda, admin_a, {"ya_cargado": "cargar"})
+    aplicar_carga(db, segunda, admin_a)
+    assert _stock(db, catalogo["variante"].id, branch_a) == D("2") + D("1") + D("1") + D("4")

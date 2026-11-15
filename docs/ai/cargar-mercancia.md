@@ -50,7 +50,12 @@ Hay dos lugares, con funciones distintas:
   - `genero_por_marca`, `genero_por_omision` y `sufijo_dama`;
   - `matriz_por_omision`: `completa` (todas las tallas en 0) o `solo_lo_que_hay`;
   - `precios_familia`: precios que ya maneja cada tipo (y marca); un precio fuera de ellos es una duda;
-  - `ventana_ya_cargado_dias` (14): cuánto atrás se busca un renglón ya aplicado.
+  - `ventana_ya_cargado_dias` (14, entre 0 y 90): cuánto atrás se busca un renglón ya aplicado. Un renglón
+    sale `YA_CARGADO` si el archivo es idéntico (sha256) a una carga aplicada, o si su SKU y cantidad
+    coinciden con una entrada de otra carga **en la misma sucursal que recibe** dentro de la ventana. Nunca
+    se quita en silencio: hay una pregunta `ya_cargado` por carga previa ("N renglones coinciden con la
+    Carga #M (fecha). ¿Los salto o los cargo de todos modos?"); "saltar" (recomendada) los deja fuera y
+    "cargar" los fuerza (`_usuario.forzar`) y entran como cualquier otro.
   Un valor inválido se rechaza al guardar con el campo señalado.
 - **Instrucciones para la IA** (`organization.ai_instrucciones`, texto libre, misma pantalla): convenciones
   de redacción que no caben en una regla (cómo se escribe el nombre sin la marca, abreviaturas de marca,

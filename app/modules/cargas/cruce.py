@@ -183,13 +183,25 @@ def clasificar(
     return salida
 
 
+def _forzado(r: CargaRenglon) -> bool:
+    """El dueño contestó "cargarlos de todos modos" a la duda `ya_cargado`."""
+    return bool(((r.normalizado or {}).get("_usuario") or {}).get("forzar"))
+
+
 def marcar_ya_cargado(
     db: Session, org_id: int, carga: CargaMercancia,
     renglones_plan: list[CargaRenglon], ventana_dias: int,
-) -> int:
-    """Marca `YA_CARGADO` los renglones que ya entraron antes. Devuelve cuántos."""
-    candidatos = [r for r in renglones_plan if r.clase not in ("IGNORADO", "YA_CARGADO")]
-    marcados = 0
+    branch_id: Optional[int] = None,
+) -> dict[str, list[CargaRenglon]]:
+    """Marca `YA_CARGADO` los renglones que ya entraron antes (salvo los que el
+    dueño forzó). Devuelve {id de la carga previa: renglones que coinciden}.
+
+    Mismo archivo (sha256) que una carga aplicada: todos los renglones. Si no,
+    mismo (SKU, cantidad) que una entrada de otra carga en la ventana, solo en
+    la sucursal que recibe (sin sucursal no se compara)."""
+    candidatos = [r for r in renglones_plan
+                  if r.clase not in ("IGNORADO", "YA_CARGADO") and not _forzado(r)]
+    por_carga: dict[str, list[CargaRenglon]] = {}
 
     if carga.archivo_sha256:
         repetida = (
@@ -198,32 +210,44 @@ def marcar_ya_cargado(
                     CargaMercancia.id != carga.id,
                     CargaMercancia.estado == "aplicada",
                     CargaMercancia.archivo_sha256 == carga.archivo_sha256)
+            .order_by(CargaMercancia.aplicada_at.desc(), CargaMercancia.folio.desc())
             .first()
         )
         if repetida:
             for r in candidatos:
                 r.clase = "YA_CARGADO"
-                marcados += 1
+            if candidatos:
+                por_carga[repetida.id] = list(candidatos)
             db.flush()
-            return marcados
+            return por_carga
 
+    if branch_id is None:
+        return por_carga
     desde = datetime.now(timezone.utc) - timedelta(days=ventana_dias)
     movs = (
-        db.query(ProductVariant.sku, InventoryMovement.qty_change)
+        db.query(ProductVariant.sku, InventoryMovement.qty_change, InventoryMovement.reference)
         .join(ProductVariant, ProductVariant.id == InventoryMovement.variant_id)
         .filter(InventoryMovement.organization_id == org_id,
+                InventoryMovement.branch_id == branch_id,
                 InventoryMovement.reference.like("carga:%"),
                 InventoryMovement.reference != f"carga:{carga.id}",
                 InventoryMovement.created_at >= desde)
+        .order_by(InventoryMovement.created_at.desc(), InventoryMovement.id.desc())
         .all()
     )
-    vistos = {(sku, Decimal(q)) for sku, q in movs}
+    vistos: dict[tuple, str] = {}
+    for sku, q, ref in movs:  # la carga más reciente gana
+        vistos.setdefault((sku, Decimal(q)), ref.split(":", 1)[1])
+    validas = {cid for (cid,) in db.query(CargaMercancia.id).filter(
+        CargaMercancia.organization_id == org_id,
+        CargaMercancia.id.in_(set(vistos.values())))} if vistos else set()
     for r in candidatos:
-        if r.sku and (r.sku, Decimal(r.cantidad)) in vistos:
+        previa = vistos.get((r.sku, Decimal(r.cantidad))) if r.sku else None
+        if previa in validas:
             r.clase = "YA_CARGADO"
-            marcados += 1
+            por_carga.setdefault(previa, []).append(r)
     db.flush()
-    return marcados
+    return por_carga
 
 
 def ultimo_conteo_por_departamento(
