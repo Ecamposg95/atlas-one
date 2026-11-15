@@ -322,3 +322,44 @@ def test_fuera_de_plan_da_409(db, org, admin_a):
     with pytest.raises(HTTPException) as e:
         aplicar_operaciones(db, carga, admin_a, [{"op": "ignorar", "renglones": [1]}], None)
     assert e.value.status_code == 409
+
+
+def test_valor_numerico_de_un_boton(db, org, admin_a):
+    carga = _armar(db, org)
+    _, rechazos = aplicar_operaciones(db, carga, admin_a, [
+        {"op": "fijar_campo", "renglones": [3], "campo": "precio", "valor": 350},
+        {"op": "resolver_duda", "numero": 2, "opcion": "", "valor": 400},
+    ], None)
+    assert rechazos == []
+    rs = _renglones(db, carga)
+    assert (rs[1].precio, rs[3].precio) == (Decimal("400"), Decimal("350"))
+
+
+def test_producto_elegido_que_se_desactiva_reabre_la_duda(db, org, admin_a):
+    carga = _armar(db, org)
+    marca = db.query(Brand).filter_by(organization_id=org.id, name="Marca Uno").one()
+    otro = Department(name="Otro depto", organization_id=org.id)
+    db.add(otro)
+    db.flush()
+    p = Product(name="Playera vieja", organization_id=org.id, is_active=True,
+                brand_id=marca.id, department_id=otro.id)
+    db.add(p)
+    db.flush()
+    db.add(ProductVariant(product_id=p.id, sku="ZZ-1", size="M", organization_id=org.id,
+                          price=Decimal("350"), cost=Decimal("100")))
+    db.flush()
+    recalcular_plan(db, carga)
+    duda = next(d for d in _dudas(db, carga).values() if d.tipo == "casi_igual")
+    _, rechazos = aplicar_operaciones(db, carga, admin_a, [
+        {"op": "resolver_duda", "numero": duda.numero, "opcion": f"usar:{p.id}"}], None)
+    assert rechazos == []
+    assert _renglones(db, carga)[1].product_id == p.id and duda.estado == "resuelta"
+
+    p.is_active = False
+    db.flush()
+    recalcular_plan(db, carga)
+    rs = _renglones(db, carga)
+    assert rs[1].product_id is None and rs[1].clase == "NUEVO"
+    assert "usar_product_id" not in rs[1].normalizado["_usuario"]
+    duda = _dudas(db, carga)[duda.numero]
+    assert (duda.tipo, duda.estado, duda.respuesta) == ("casi_igual", "abierta", None)

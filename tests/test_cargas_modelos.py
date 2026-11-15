@@ -64,3 +64,23 @@ def test_limpieza_borra_cargas_de_la_org(db, org):
     borrar_datos_ai_de_org(db, org.id)
     for m in (CargaMercancia, CargaArchivo, CargaRenglon, CargaDuda, CargaCambio):
         assert db.query(m).filter(m.organization_id == org.id).count() == 0
+
+
+def test_numeracion_unica_por_carga(db, org):
+    """Respaldo de la numeración: en Postgres el candado lo evita, aquí lo frena la base."""
+    c = _carga(db, org)
+    otra = _carga(db, org, folio=2)
+    filas = [
+        (CargaRenglon, dict(orden=1, cantidad=1)),
+        (CargaDuda, dict(numero=1, tipo="t", texto="?")),
+        (CargaCambio, dict(secuencia=1, operaciones=[])),
+    ]
+    for modelo, datos in filas:
+        db.add(modelo(organization_id=org.id, carga_id=c.id, **datos))
+        db.add(modelo(organization_id=org.id, carga_id=otra.id, **datos))  # otra carga: sí
+        db.flush()
+        sp = db.begin_nested()
+        db.add(modelo(organization_id=org.id, carga_id=c.id, **datos))
+        with pytest.raises(IntegrityError):
+            db.flush()
+        sp.rollback()

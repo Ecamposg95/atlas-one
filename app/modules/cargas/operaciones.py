@@ -8,6 +8,9 @@ plan completo. Nada de aquí toca catálogo ni existencias.
 Las correcciones del usuario viven en `CargaRenglon.normalizado["_usuario"]`
 (campo -> valor, más `usar_product_id`, `nuevo`, `ignorado`) y se vuelven a
 aplicar en cada recálculo, así sobreviven a que el plan se rearme.
+
+Contrato: toda mutación del plan pasa por un `CargaCambio` (`aplicar_operaciones`);
+las tareas siguientes dependen de eso para deshacer.
 """
 from __future__ import annotations
 
@@ -51,6 +54,13 @@ _NO_EN_PLAN = "La carga ya no está en revisión; el plan no se puede cambiar."
 
 # ── operaciones (unión discriminada por `op`) ─────────────────────────────
 
+def _a_texto(v):
+    """Un botón puede mandar `350` como número JSON: se trata igual que "350"."""
+    if isinstance(v, (int, float, Decimal)) and not isinstance(v, bool):
+        return str(v)
+    return v
+
+
 class _Op(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -61,6 +71,11 @@ class FijarCampo(_Op):
     grupo: Optional[str] = None
     campo: Literal[CAMPOS]  # type: ignore[valid-type]
     valor: str
+
+    @field_validator("valor", mode="before")
+    @classmethod
+    def _numero_a_texto(cls, v):
+        return _a_texto(v)
 
     @model_validator(mode="after")
     def _un_destino(self):
@@ -74,6 +89,11 @@ class ResolverDuda(_Op):
     numero: int
     opcion: str = ""
     valor: Optional[str] = None
+
+    @field_validator("valor", mode="before")
+    @classmethod
+    def _numero_a_texto(cls, v):
+        return _a_texto(v)
 
 
 class UsarExistente(_Op):
@@ -367,9 +387,11 @@ def _contestada_por_el_usuario(d: DudaNueva, por_orden: dict[int, CargaRenglon])
                for n in d.renglones if n in por_orden)
 
 
-def _conciliar_dudas(db: Session, carga: CargaMercancia, nuevas: list[DudaNueva]) -> None:
-    """Por `clave`: la abierta conserva su número, la contestada no se reabre,
-    la abierta cuya causa desapareció se resuelve y la nueva toma el siguiente número."""
+def _conciliar_dudas(db: Session, carga: CargaMercancia, nuevas: list[DudaNueva],
+                     reabrir: frozenset | set = frozenset()) -> None:
+    """Por `clave`: la abierta conserva su número, la contestada no se reabre
+    (salvo las de `reabrir`, cuya respuesta dejó de valer), la abierta cuya causa
+    desapareció se resuelve y la nueva toma el siguiente número."""
     guardadas = _dudas(db, carga)
     por_clave = {d.clave: d for d in guardadas}
     siguiente = max((d.numero for d in guardadas), default=0) + 1
@@ -384,9 +406,11 @@ def _conciliar_dudas(db: Session, carga: CargaMercancia, nuevas: list[DudaNueva]
             db.add(CargaDuda(organization_id=carga.organization_id, carga_id=carga.id,
                              numero=siguiente, clave=clave, estado="abierta", **datos))
             siguiente += 1
-        elif g.estado == "abierta":
+        elif g.estado == "abierta" or clave in reabrir:
             for k, v in datos.items():
                 setattr(g, k, v)
+            if g.estado != "abierta":
+                g.estado, g.respuesta, g.resuelta_por = "abierta", None, None
     for g in guardadas:
         if g.estado == "abierta" and g.clave not in generadas:
             g.estado = "resuelta"
@@ -423,6 +447,7 @@ def recalcular_plan(db: Session, carga: CargaMercancia) -> None:
     grupos = agrupar(norm)
     coincidencias = cruzar_con_catalogo(db, org_id, grupos, norm, reglas)
     prefijos: dict[str, Optional[str]] = {}
+    reabrir: set[str] = set()
     for g in grupos:
         correcciones = [_usuario(activos[i]) for i in g.renglones]
         usar = next((u["usar_product_id"] for u in correcciones if u.get("usar_product_id")), None)
@@ -430,8 +455,13 @@ def recalcular_plan(db: Session, carga: CargaMercancia) -> None:
             coincidencias[g.llave] = None
         elif usar:
             producto = _producto_vivo(db, org_id, usar)
-            if producto is not None:
+            if producto is not None and producto.is_active is not False:
                 coincidencias[g.llave] = _armar(db, org_id, producto, g, {})
+            else:
+                # El producto elegido ya no existe o se desactivó: se olvida la
+                # elección y la pregunta "casi_igual" del grupo se reabre.
+                _corregir([activos[i] for i in g.renglones], {}, quitar=("usar_product_id",))
+                reabrir.add(f"casi_igual|{g.llave}")
         c = coincidencias.get(g.llave)
 
         marca = _marca_por_nombre(db, org_id, g.marca)
@@ -455,7 +485,8 @@ def recalcular_plan(db: Session, carga: CargaMercancia) -> None:
     marcar_ya_cargado(db, org_id, carga, activos, reglas.ventana_ya_cargado_dias)
     nuevas = generar_dudas(db, org_id, carga, activos, grupos, coincidencias, reglas)
     por_orden = {f.orden: f for f in activos}
-    _conciliar_dudas(db, carga, [d for d in nuevas if not _contestada_por_el_usuario(d, por_orden)])
+    _conciliar_dudas(db, carga, [d for d in nuevas if not _contestada_por_el_usuario(d, por_orden)],
+                     reabrir)
 
 
 # ── foto, resumen y deshacer ──────────────────────────────────────────────
@@ -552,13 +583,27 @@ def _exigir_plan(carga: CargaMercancia) -> None:
         raise HTTPException(status_code=409, detail=_NO_EN_PLAN)
 
 
+def _bloquear(db: Session, carga: CargaMercancia) -> CargaMercancia:
+    """Relee la carga con candado de fila para que dos envíos (doble clic, dos
+    pestañas) no rearmen el plan a la vez. El candado solo es real en Postgres;
+    en SQLite (pruebas) `with_for_update()` no hace nada y la numeración la
+    respaldan las restricciones únicas de las tablas."""
+    db.flush()  # lo pendiente en memoria no se pierde al releer
+    fila = (db.query(CargaMercancia)
+            .filter(CargaMercancia.id == carga.id,
+                    CargaMercancia.organization_id == carga.organization_id)
+            .with_for_update().populate_existing().one())
+    _exigir_plan(fila)
+    return fila
+
+
 def aplicar_operaciones(
     db: Session, carga: CargaMercancia, user, operaciones: list[dict], texto: Optional[str],
 ) -> tuple[Optional[CargaCambio], list[str]]:
     """Aplica las operaciones válidas, recalcula y deja el cambio en la bitácora.
 
     Devuelve (cambio, rechazos). Si todas se rechazan no se guarda nada: (None, rechazos)."""
-    _exigir_plan(carga)
+    carga = _bloquear(db, carga)
     antes = _foto(db, carga)
     ctx = _Contexto(db, carga, getattr(user, "id", None))
     aplicadas: list[dict] = []
@@ -593,7 +638,7 @@ def aplicar_operaciones(
 
 def deshacer_cambio(db: Session, carga: CargaMercancia, cambio_id: str) -> None:
     """Restaura la foto `antes` del último cambio no deshecho y lo marca deshecho."""
-    _exigir_plan(carga)
+    carga = _bloquear(db, carga)
     cambios = (db.query(CargaCambio)
                .filter(CargaCambio.organization_id == carga.organization_id,
                        CargaCambio.carga_id == carga.id).all())

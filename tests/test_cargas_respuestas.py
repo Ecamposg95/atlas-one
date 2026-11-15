@@ -95,7 +95,7 @@ def test_operaciones_inventadas_se_rechazan(db, carga):
         {"op": "fijar_campo", "renglones": [1], "grupo": None, "campo": "proveedor", "valor": "x"},
         _resolver(3, valor="Pantalones"),
     ])])
-    ops, rechazos, _, _ = interpretar_respuesta(db, carga, "texto", falso, "")
+    ops, rechazos, _, _ = interpretar_respuesta(db, carga, "el 1 a 10", falso, "")
     assert ops == [{"op": "resolver_duda", "numero": 3, "opcion": "", "valor": "Pantalones"}]
     assert rechazos == [
         "Operación 1: renglón 999 no es de esta carga",
@@ -169,3 +169,37 @@ def test_esquema_estricto():
     for o in objetos:
         assert o["additionalProperties"] is False
         assert sorted(o["required"]) == sorted(o["properties"])
+
+
+def _fijar_precio(grupo, valor):
+    return {"op": "fijar_campo", "renglones": None, "grupo": grupo, "campo": "precio", "valor": valor}
+
+
+@pytest.mark.parametrize("texto, aceptado", [("ponle 2500", False), ("ponle 3,000", True),
+                                             ("ponle $3,000.00", True)])
+def test_monto_que_no_escribio_el_usuario_se_rechaza(db, carga, texto, aceptado):
+    grupo = db.query(CargaRenglon).filter_by(carga_id=carga.id, orden=1).one().grupo
+    falso = ClienteEstructuradoFalso([_respuesta([
+        _fijar_precio(grupo, "3000"), _resolver(2, valor="3000"),
+        {"op": "tipo_cambio", "moneda": "USD", "valor": "18"},
+        _resolver(3, valor="Pantalones"),
+    ])])
+    ops, rechazos, _, _ = interpretar_respuesta(db, carga, texto, falso, "")
+    assert {"op": "resolver_duda", "numero": 3, "opcion": "", "valor": "Pantalones"} in ops
+    assert "No entendí: el monto 18 no aparece en tu respuesta" in rechazos
+    if aceptado:
+        assert _fijar_precio(grupo, "3000") | {"renglones": None} in [o | {"renglones": None} for o in ops]
+        assert not any("3000" in r for r in rechazos)
+    else:
+        assert len(ops) == 1
+        assert "No entendí: el monto 3000 no aparece en tu respuesta" in rechazos
+        assert "No entendí el punto 2: el monto 3000 no aparece en tu respuesta" in rechazos
+
+
+def test_carga_fuera_de_plan_no_gasta_tokens(db, carga):
+    carga.estado = "aplicada"
+    falso = ClienteEstructuradoFalso([])
+    with pytest.raises(HTTPException) as e:
+        interpretar_respuesta(db, carga, "el 2 a 350", falso, "")
+    assert e.value.status_code == 409
+    assert falso.llamadas == []

@@ -56,6 +56,8 @@ class CargaArchivo(Base, UUIDMixin, AuditMixin, TenantMixin):
 
 class CargaRenglon(Base, UUIDMixin, AuditMixin, TenantMixin):
     __tablename__ = "cargas_renglones"
+    # Dudas y operaciones nombran los renglones por `orden`.
+    __table_args__ = (UniqueConstraint("carga_id", "orden", name="uq_cargas_renglones_carga_orden"),)
 
     carga_id = Column(String(36), ForeignKey("cargas_mercancia.id"), nullable=False, index=True)
     orden = Column(Integer, nullable=False, default=0)
@@ -74,6 +76,7 @@ class CargaRenglon(Base, UUIDMixin, AuditMixin, TenantMixin):
 
 class CargaDuda(Base, UUIDMixin, AuditMixin, TenantMixin):
     __tablename__ = "cargas_dudas"
+    __table_args__ = (UniqueConstraint("carga_id", "numero", name="uq_cargas_dudas_carga_numero"),)
 
     carga_id = Column(String(36), ForeignKey("cargas_mercancia.id"), nullable=False, index=True)
     numero = Column(Integer, nullable=False)
@@ -92,6 +95,7 @@ class CargaDuda(Base, UUIDMixin, AuditMixin, TenantMixin):
 
 class CargaCambio(Base, UUIDMixin, AuditMixin, TenantMixin):
     __tablename__ = "cargas_cambios"
+    __table_args__ = (UniqueConstraint("carga_id", "secuencia", name="uq_cargas_cambios_carga_secuencia"),)
 
     carga_id = Column(String(36), ForeignKey("cargas_mercancia.id"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)

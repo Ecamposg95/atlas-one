@@ -120,7 +120,8 @@ def _carga(db, org, folio, sha="abc", estado="plan", nombre="a.xlsx"):
 
 
 def _plan(db, org, carga, sku="UNO-PLAY", cant="2"):
-    r = CargaRenglon(organization_id=org.id, carga_id=carga.id, sku=sku,
+    orden = db.query(CargaRenglon).filter_by(carga_id=carga.id).count() + 1  # único por carga
+    r = CargaRenglon(organization_id=org.id, carga_id=carga.id, sku=sku, orden=orden,
                      cantidad=Decimal(cant), clase="SUMA")
     db.add(r); db.flush()
     return r

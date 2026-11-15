@@ -8,6 +8,9 @@ por la misma validación que cualquier operación (`validar_operaciones`).
 from __future__ import annotations
 
 import json
+import re
+from decimal import Decimal, InvalidOperation
+from typing import Optional
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -15,10 +18,12 @@ from sqlalchemy.orm import Session
 from app.modules.ai.cliente_anthropic import ClienteEstructurado
 from app.modules.ai.uso import registrar_uso, verificar_cupo
 from app.modules.cargas.models import CargaDuda, CargaMercancia, CargaRenglon
-from app.modules.cargas.operaciones import CAMPOS, validar_operaciones
+from app.modules.cargas.lectura_excel import normalizar_numero
+from app.modules.cargas.operaciones import CAMPOS, _exigir_plan, validar_operaciones
 from app.modules.cargas.schemas import LIMITE_RESPUESTA
 
 MAX_TOKENS = 8000
+_NUMERO = re.compile(r"\d[\d.,]*\d|\d")
 
 
 def _objeto(propiedades: dict) -> dict:
@@ -115,6 +120,39 @@ def _grupos(db: Session, carga: CargaMercancia) -> tuple[list[dict], list[int]]:
     return resumen, ignorados
 
 
+def _como_numero(texto) -> Optional[Decimal]:
+    try:
+        valor = Decimal(normalizar_numero(str(texto)))
+    except InvalidOperation:
+        return None
+    return valor if valor.is_finite() else None
+
+
+def _numeros_del_texto(texto: str) -> set[Decimal]:
+    """Los montos que escribió el usuario ("2,500" y "2500" valen lo mismo)."""
+    return {n for m in _NUMERO.findall(texto) if (n := _como_numero(m)) is not None}
+
+
+def _monto_inventado(op, escritos: set[Decimal]) -> Optional[str]:
+    """Un precio, costo o tipo de cambio que el usuario no escribió: el modelo
+    no puede sacar dinero por su cuenta. Devuelve el monto o None."""
+    if not isinstance(op, dict):
+        return None
+    tipo = op.get("op")
+    if tipo == "fijar_campo" and op.get("campo") in ("precio", "costo"):
+        valor = op.get("valor")
+    elif tipo in ("tipo_cambio", "resolver_duda"):
+        valor = op.get("valor")
+    else:
+        return None
+    if valor is None:
+        return None
+    numero = _como_numero(valor)
+    if numero is None:  # texto que no es un monto (un nombre, un departamento)
+        return None
+    return None if numero in escritos else str(valor)
+
+
 def interpretar_respuesta(
     db: Session, carga: CargaMercancia, texto: str, cliente: ClienteEstructurado,
     instrucciones: str,
@@ -126,6 +164,7 @@ def interpretar_respuesta(
                             detail=f"La respuesta pasa de {LIMITE_RESPUESTA:,} caracteres.")
     if not texto.strip():
         raise HTTPException(status_code=422, detail="Escribe tu respuesta.")
+    _exigir_plan(carga)  # antes de gastar tokens
     org_id = carga.organization_id
     verificar_cupo(db, org_id)
 
@@ -142,11 +181,21 @@ def interpretar_respuesta(
     )
     registrar_uso(db, org_id, r.tokens_entrada, r.tokens_salida)
 
-    propuestas = [
-        {k: v for k, v in op.items() if v is not None} if isinstance(op, dict) else op
-        for op in (r.datos.get("operaciones") or [])
-    ]
+    escritos = _numeros_del_texto(texto)
+    propuestas, inventados = [], []
+    for op in r.datos.get("operaciones") or []:
+        if isinstance(op, dict):
+            op = {k: v for k, v in op.items() if v is not None}
+        monto = _monto_inventado(op, escritos)
+        if monto is None:
+            propuestas.append(op)
+            continue
+        numero = op.get("numero") if op.get("op") == "resolver_duda" else None
+        motivo = f"el monto {monto} no aparece en tu respuesta"
+        inventados.append(f"No entendí el punto {numero}: {motivo}" if numero is not None
+                          else f"No entendí: {motivo}")
     operaciones, rechazos = validar_operaciones(db, carga, propuestas)
+    rechazos += inventados
     for item in r.datos.get("no_entendido") or []:
         if not isinstance(item, dict):
             continue
