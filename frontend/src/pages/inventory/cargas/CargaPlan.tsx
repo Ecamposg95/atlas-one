@@ -193,11 +193,13 @@ export default function CargaPlan() {
       <div className="space-y-4">
         <CabeceraPagina titulo={titulo} descripcion={carga.archivo_nombre} />
         <ErrorState message={carga.error ?? 'No se pudo leer el documento.'} />
-        <div className="flex justify-center">
+        <div className="flex flex-wrap justify-center gap-2">
           <button type="button" disabled={ocupado} onClick={() => void reintentar()}
             className="dax-btn-primary max-md:min-h-[44px] disabled:opacity-40">
             <i className="fa-solid fa-rotate-right" /> Volver a intentar
           </button>
+          <button type="button" disabled={ocupado} onClick={() => void descartar()}
+            className="dax-btn-danger max-md:min-h-[44px] disabled:opacity-40">Descartar</button>
         </div>
         {volver}
       </div>

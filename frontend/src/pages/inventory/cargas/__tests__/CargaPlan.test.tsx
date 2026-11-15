@@ -253,6 +253,17 @@ describe('Cargar mercancía: plan', () => {
     expect(api.obtener).toHaveBeenCalledTimes(2)
   })
 
+  it('en error también se puede descartar, con confirmación', async () => {
+    api.obtener.mockResolvedValue(D({ carga: { estado: 'error', error: 'El PDF está vacío' } }))
+    api.descartar.mockResolvedValue({ id: 'c1', folio: 7, estado: 'descartada' })
+    pintar()
+    await screen.findByText('El PDF está vacío')
+    fireEvent.click(screen.getByRole('button', { name: 'Descartar' }))
+    await waitFor(() => expect(api.descartar).toHaveBeenCalledWith('c1'))
+    expect(confirmar).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(navegar).toHaveBeenCalledWith('/inventory/cargas'))
+  })
+
   it('dos toques seguidos en Autorizar abren un solo diálogo', async () => {
     confirmar.mockReturnValue(new Promise(() => {}))
     pintar()
