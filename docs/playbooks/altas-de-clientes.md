@@ -116,6 +116,21 @@ python scripts/onboard_org.py --name "<Nombre>" --industry ATLAS_POS --admin <us
   sistema; `formato=zip` = modo manual). Acepta `*.atlasone.com.mx` por omisión.
 - La prueba es una venta real con la cajera y su ticket impreso.
 
+## 6.1 Tienda en línea (canal `tienda_en_linea`)
+
+- **Encenderlo:** solo la plataforma, por org, fuera de los planes: `/platform/organizations/{id}` →
+  módulos → «Tienda en línea». Al encenderlo se recalcula la disponibilidad web de toda la org.
+- **Sucursales web:** el admin de la tienda las elige en Configuración → pestaña «Tienda en línea»
+  (`/api/canal/config`). Sin elegir = todas las activas que venden; lo elegido manda.
+- **Llave `catalog:read`:** se emite en `/platform/api-keys` para la org. Se entrega al equipo de la
+  tienda web por un canal seguro; **nunca** se pega en el chat ni en el repo (los ejemplos usan
+  `atlas_xxxxxxxx_…`). Si se filtró, revocarla y emitir otra.
+- **Disponibilidad tras SQL crudo:** el listener `before_flush` solo ve lo que pasa por el ORM. Tras
+  SQL crudo sobre existencias/productos, o tras cambiar el `can_sell` de una sucursal, correr
+  `scripts/recalcular_disponibilidad_web.py --org N` (ensayo) y luego `--ejecutar`. Los scripts que
+  hagan `UPDATE products` en SQL deben poner `updated_at = now()`, o la tienda no se entera del
+  cambio en su siguiente sincronización.
+
 ## 7. Lista de cierre de un alta
 
 - [ ] Respaldo previo tomado y nombrado en el reporte.

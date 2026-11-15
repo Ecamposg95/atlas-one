@@ -8,6 +8,7 @@ import json as _json
 from datetime import datetime, timezone
 
 from app.core.database import get_db
+from app.core.security.channel_keys import CHANNEL_SCOPES
 from app.models.organization import Organization
 from app.models.users import User
 from app.modules.platform.dependencies import require_platform_admin, require_superadmin
@@ -22,12 +23,9 @@ router = APIRouter()
 # + prefijo para display. Revoke = soft; Delete = hard (superadmin).
 # ─────────────────────────────────────────────────────────────────────────────
 
-_ALLOWED_SCOPES = {
-    "read:all",
-    "write:sales",
-    "write:inventory",
-    "admin:all",
-}
+# Los scopes de la llave son los del canal "Tienda en línea" (los viejos
+# read:all/write:* eran informativos y nadie los leía).
+_ALLOWED_SCOPES = set(CHANNEL_SCOPES)
 
 
 class ApiKeyCreate(BaseModel):

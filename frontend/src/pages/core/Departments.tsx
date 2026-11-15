@@ -9,10 +9,11 @@ import { useEsTelefono } from '../../hooks/useIsMobile'
 import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
 import { ListaTarjetas } from '../../components/ui/ListaTarjetas'
 import { TarjetaFila } from '../../components/ui/TarjetaFila'
+import { useCanalTienda } from '../../hooks/useCanalTienda'
 import type { Department } from '../../types/products'
 
-interface DeptForm { name: string }
-const EMPTY: DeptForm = { name: '' }
+interface DeptForm { name: string; parent_id: string }
+const EMPTY: DeptForm = { name: '', parent_id: '' }
 
 export function Departments() {
   const [departments, setDepartments] = useState<Department[]>([])
@@ -22,6 +23,9 @@ export function Departments() {
   const [form, setForm] = useState<DeptForm>(EMPTY)
   const [saving, setSaving] = useState(false)
   const esTelefono = useEsTelefono()
+  const { activo: canalActivo } = useCanalTienda()
+  // Solo 2 niveles: los padres posibles son las raíces (y nunca el propio departamento).
+  const raices = departments.filter((d) => !d.parent_id && d.id !== editing?.id)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -33,7 +37,7 @@ export function Departments() {
 
   const openCreate = () => { setForm(EMPTY); setEditing(null); setModal('create') }
   const openEdit = (d: Department) => {
-    setForm({ name: d.name })
+    setForm({ name: d.name, parent_id: d.parent_id ?? '' })
     setEditing(d); setModal('edit')
   }
 
@@ -41,8 +45,8 @@ export function Departments() {
     if (!form.name) return
     setSaving(true)
     try {
-      if (modal === 'create') await productsApi.createDepartment({ name: form.name })
-      else if (editing) await productsApi.updateDepartment(editing.id, { name: form.name })
+      if (modal === 'create') await productsApi.createDepartment({ name: form.name, ...(canalActivo ? { parent_id: form.parent_id || null } : {}) })
+      else if (editing) await productsApi.updateDepartment(editing.id, { name: form.name, ...(canalActivo ? { parent_id: form.parent_id || null } : {}) })
       setModal(null); load()
     } catch (e: any) {
       toast.error(errorDetailText(
@@ -143,9 +147,19 @@ export function Departments() {
             </div>
             <div>
               <label className="dax-label">Nombre</label>
-              <input value={form.name} onChange={(e) => setForm({ name: e.target.value })}
+              <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                 className="dax-input w-full" placeholder="Ej: Electrónicos" autoFocus />
             </div>
+            {canalActivo && (
+              <div className="mt-3">
+                <label className="dax-label" htmlFor="dep-padre">Departamento padre</label>
+                <select id="dep-padre" className="dax-input w-full" value={form.parent_id}
+                  onChange={(e) => setForm((f) => ({ ...f, parent_id: e.target.value }))}>
+                  <option value="">Ninguno (raíz)</option>
+                  {raices.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              </div>
+            )}
             <div className="dax-modal-footer -mx-6 px-6 flex gap-2 mt-5">
               <button onClick={() => setModal(null)} className="dax-btn-secondary flex-1">Cancelar</button>
               <button onClick={handleSave} disabled={saving || !form.name} className="dax-btn-primary flex-1 justify-center disabled:opacity-40">

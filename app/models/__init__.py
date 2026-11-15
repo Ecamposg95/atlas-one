@@ -112,3 +112,15 @@ from app.modules.conteos import models as _conteos_models  # noqa: F401
 # 17. Asistente IA (SP4): conversaciones, mensajes, propuestas y uso diario.
 #     Registradas aqui para `create_all`.
 from app.modules.ai import models as _ai_models  # noqa: F401
+# 18. Canal «Tienda en línea»: galería de imágenes (product_images) y, en tareas
+#     siguientes, el resto de tablas del canal. Registradas para `create_all`.
+from app.modules.canal import models as _canal_models  # noqa: F401
+
+# 19. Disponibilidad web: el listener `before_flush` vive en la clase Session,
+#     así que registrarlo aquí lo deja activo en todo proceso que cargue los
+#     modelos (la app, pero también scripts con `SessionLocal()` que llaman
+#     servicios). Módulo sin imports de la app (evita el ciclo). Idempotente:
+#     el startup de app/main.py lo vuelve a llamar.
+from app.services.canal_listener import registrar_listener as _registrar_listener_canal  # noqa: E402
+
+_registrar_listener_canal()

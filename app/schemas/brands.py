@@ -6,14 +6,16 @@ class BrandBase(BaseModel):
     logo_url: Optional[str] = None
 
 class BrandCreate(BrandBase):
-    pass
+    is_premium: bool = False
 
 class BrandUpdate(BrandBase):
-    pass
+    # En PUT el nombre ya era obligatorio; is_premium solo cambia si se manda.
+    is_premium: Optional[bool] = None
 
 class BrandResponse(BrandBase):
     id: str
     product_count: int = 0
+    is_premium: bool = False
 
     class Config:
         from_attributes = True

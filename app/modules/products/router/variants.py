@@ -27,6 +27,7 @@ from app.modules.products.services.variantes import (  # noqa: F401  (re-export 
     crear_variantes,
     pareja_repetida as _pareja_repetida,
 )
+from app.modules.products.services.web import tocar_producto
 from app.modules.products.variant_label import variant_label
 
 from ._shared import _PRODUCT_ADVANCED_ROLES, _compute_product_read
@@ -142,6 +143,7 @@ def editar_variante(
         v.cost = body.cost
     v.color, v.size = color, size
     v.variant_name = variant_label(color, size)
+    tocar_producto(db, v.product_id)
     db.commit()
     return _leer(db, current_user, org_id, v.product_id)
 
@@ -171,5 +173,6 @@ def retirar_variante(
     for pbs in db.query(ProductBranchStatus).filter(ProductBranchStatus.variant_id == v.id).all():
         pbs.is_active_pos = False
         pbs.is_visible = False
+    tocar_producto(db, v.product_id)
     db.commit()
     return Response(status_code=204)

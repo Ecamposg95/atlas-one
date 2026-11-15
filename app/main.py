@@ -78,6 +78,11 @@ app = FastAPI(
 @app.on_event("startup")
 async def startup_event():
     setup_abasto_subscribers()
+    # Disponibilidad web (canal tienda_en_linea): listener before_flush global.
+    # Ya lo registra app/models/__init__.py (cubre scripts); esto es idempotente.
+    # Sale sin consultar nada en orgs sin el módulo.
+    from app.services.canal_disponibilidad import registrar_listener
+    registrar_listener()
     from app.core.database import SessionLocal
     from app.services.capabilities_service import seed_global_modules
     db = SessionLocal()
@@ -247,6 +252,10 @@ from app.modules.kitchen.router      import router as kitchen_router
 from app.modules.labels.router       import router as labels_router
 # Conteo físico con escáner (2026-10-22) — sesiones por departamento, solo reporte
 from app.modules.conteos.router      import router as conteos_router
+# Canal «Tienda en línea» (2026-11) — configuración del canal
+from app.modules.canal.config_router import router as canal_config_router
+from app.modules.canal.leads_router import router as canal_leads_router
+from app.modules.canal.reporte_router import router as canal_reporte_router
 
 app.include_router(appointments_router, prefix="/api/appointments", tags=["Agenda"])
 
@@ -267,6 +276,12 @@ app.include_router(bar_router,          prefix="/api/bar",          tags=["Bar l
 app.include_router(kitchen_router,      prefix="/api/kitchen",      tags=["Cocina / KDS"])
 app.include_router(labels_router,       prefix="/api/labels",       tags=["Etiquetas"])
 app.include_router(conteos_router,      prefix="/api/inventory/counts", tags=["Conteos"])
+app.include_router(canal_config_router, prefix="/api/canal",        tags=["Canal tienda en línea"])
+# API de catálogo de solo lectura para la tienda externa (llave de servidor, sin CORS)
+from app.modules.canal.router import router as canal_api_router
+app.include_router(canal_api_router,    prefix="/api/channel/v1",   tags=["Canal API v1"])
+app.include_router(canal_leads_router,  prefix="/api/channel/v1",   tags=["Canal tienda en línea"])
+app.include_router(canal_reporte_router, prefix="/api/reports",     tags=["Reportes"])
 # daxpos.router eliminado en Sprint 3 (tech-debt roadmap).
 # Sus 15 rutas SSR fueron desactivadas: las que coinciden con rutas React
 # caen al catch-all de la SPA; las que necesitan cambio de destino están

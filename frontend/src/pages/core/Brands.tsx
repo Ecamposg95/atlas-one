@@ -8,10 +8,11 @@ import { useEsTelefono } from '../../hooks/useIsMobile'
 import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
 import { ListaTarjetas } from '../../components/ui/ListaTarjetas'
 import { TarjetaFila } from '../../components/ui/TarjetaFila'
+import { useCanalTienda } from '../../hooks/useCanalTienda'
 import type { Brand } from '../../types/products'
 
-interface BrandForm { name: string; logo_url: string }
-const EMPTY: BrandForm = { name: '', logo_url: '' }
+interface BrandForm { name: string; logo_url: string; is_premium: boolean }
+const EMPTY: BrandForm = { name: '', logo_url: '', is_premium: false }
 
 export function Brands() {
   const [brands, setBrands] = useState<Brand[]>([])
@@ -22,6 +23,7 @@ export function Brands() {
   const [saving, setSaving] = useState(false)
   const [search, setSearch] = useState('')
   const esTelefono = useEsTelefono()
+  const { activo: canalActivo } = useCanalTienda()
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -33,7 +35,7 @@ export function Brands() {
 
   const openCreate = () => { setForm(EMPTY); setEditing(null); setModal('create') }
   const openEdit = (b: Brand) => {
-    setForm({ name: b.name, logo_url: b.logo_url ?? '' })
+    setForm({ name: b.name, logo_url: b.logo_url ?? '', is_premium: !!b.is_premium })
     setEditing(b); setModal('edit')
   }
 
@@ -41,7 +43,7 @@ export function Brands() {
     if (!form.name) return
     setSaving(true)
     try {
-      const payload = { name: form.name, logo_url: form.logo_url || undefined }
+      const payload = { name: form.name, logo_url: form.logo_url || undefined, ...(canalActivo ? { is_premium: form.is_premium } : {}) }
       if (modal === 'create') await productsApi.createBrand(payload)
       else if (editing) await productsApi.updateBrand(editing.id, payload)
       setModal(null); load()
@@ -168,6 +170,13 @@ export function Brands() {
                   <img src={form.logo_url} alt="preview" className="mt-2 h-12 object-contain rounded border border-slate-700" onError={(e) => (e.currentTarget.style.display = 'none')} />
                 )}
               </div>
+              {canalActivo && (
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={form.is_premium}
+                    onChange={(e) => setForm((p) => ({ ...p, is_premium: e.target.checked }))} />
+                  Marca premium
+                </label>
+              )}
             </div>
             <div className="dax-modal-footer -mx-6 px-6 flex gap-2 mt-5">
               <button onClick={() => setModal(null)} className="dax-btn-secondary flex-1">Cancelar</button>

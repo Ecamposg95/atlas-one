@@ -86,6 +86,8 @@ export interface Product {
   global_stock?: number            // Total across all branches
   min_stock?: number | null
   image_url: string | null
+  /** Publicado en la tienda web (canal «Tienda en línea»). */
+  web_published?: boolean
   is_active: boolean
   barcode?: string | null
   has_iva?: boolean
@@ -121,11 +123,24 @@ export interface Brand {
   name: string
   logo_url: string | null
   product_count?: number
+  /** Canal «Tienda en línea»: marca premium. */
+  is_premium?: boolean
+}
+
+/** Foto de la galería del producto (canal «Tienda en línea»). */
+export interface ImagenProducto {
+  id: string
+  url: string
+  alt: string | null
+  position: number
+  is_primary: boolean
 }
 
 export interface Department {
   id: string                       // UUID
   name: string
+  /** Departamento padre (solo 2 niveles; null = raíz). */
+  parent_id?: string | null
 }
 
 export interface CatalogKpis {

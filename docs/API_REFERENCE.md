@@ -169,6 +169,63 @@ vive en este repo (2026-09-22). `ATLAS_PRINT_AGENT_URL` sobreescribe el destino 
 `{platform}` para cuando el repo publique un ZIP por plataforma. Runbook de
 autoarranque en `docs/superpowers/runbooks/print-agent-autostart.md`.
 
+## Canal Tienda en línea (`/api/channel/v1`) `[module:tienda_en_linea]`
+
+API de **solo lectura** para que una tienda web externa (eleven.boutique) sincronice el catálogo
+publicado de una organización. No usa JWT: autentica con una llave de servidor con scope
+`catalog:read` (`Authorization: Bearer atlas_xxxxxxxx_...` o `X-Api-Key`). Sin llave válida 401, sin
+scope 403, módulo apagado 404, más de 120 llamadas/min por llave 429. Sin CORS: se llama desde el
+servidor de la web, nunca desde el navegador. Nunca expone precios, costos, existencias, códigos de
+barras ni proveedores.
+
+Paginación común: `?updated_since=<ISO8601>&cursor=<opaco>&limit=<1..200, def 100>`. Orden
+`(updated_at, id)`. Respuesta `{ "items": [...], "next_cursor": str|null, "server_time": ISO8601 }`;
+`server_time` se toma **antes** de consultar. Siguiente `updated_since` = último `server_time` **− 10
+minutos** (deduplica por id): `updated_at`/`changed_at` se sellan en Python antes del commit, y una
+transacción larga (publicación masiva, recálculo al activar el módulo, un cobro esperando un lock)
+puede confirmar filas con sello anterior a tu último `server_time`. Además, una carga completa
+nocturna (sin `updated_since`). `updated_since` va en UTC con `Z` (`2026-11-14T10:00:00Z`) o con el
+`+` codificado (`%2B00:00`): un `+` sin codificar llega como espacio → 422. `limit` fuera de
+rango → 422; `cursor` inválido → 400.
+
+| Endpoint | Item |
+|---|---|
+| `GET /brands` | `{id, name, logo_url, is_premium, updated_at, deleted}` |
+| `GET /departments` | `{id, name, parent_id, updated_at, deleted}` |
+| `GET /products` | publicado: `{id, name, description, brand_id, department_id, gender, model, material, available, images:[{url, alt, position, is_primary}], variants:[{id, sku, color, size, available}], updated_at, web_published_at, deleted:false}` |
+| `GET /products/{id}` | mismo shape; 404 si no es de la org o nunca se publicó |
+| `GET /availability` | `{product_id, variant_id, available, changed_at}` (orden `changed_at, variant_id`; solo productos alguna vez publicados) |
+
+**Bajas:** sin `updated_since` (carga inicial) solo salen publicados. Con `updated_since`, un
+producto que alguna vez se publicó y ya no (despublicado, inactivo, borrado o no aprobado) llega
+como `{id, updated_at, deleted: true}`. Nunca publicados no existen para el canal.
+
+**Marcas y departamentos:** se borran en duro, así que `/brands` y `/departments` nunca devuelven
+`deleted: true`. Son catálogos chicos: en cada sincronización bájalos completos (sin
+`updated_since`) y descarta los ids que ya no vengan.
+
+```bash
+KEY=atlas_xxxxxxxx_xxxxxxxxxxxxxxxxxxxxxxxx   # placeholder: la llave real se entrega por canal seguro
+curl -H "Authorization: Bearer $KEY" "https://app.atlasone.com.mx/api/channel/v1/brands"
+curl -H "Authorization: Bearer $KEY" "https://app.atlasone.com.mx/api/channel/v1/departments"
+curl -H "Authorization: Bearer $KEY" "https://app.atlasone.com.mx/api/channel/v1/products?limit=100"
+curl -H "Authorization: Bearer $KEY" "https://app.atlasone.com.mx/api/channel/v1/products?updated_since=2026-11-14T10:00:00Z&cursor=<next_cursor>"
+curl -H "Authorization: Bearer $KEY" "https://app.atlasone.com.mx/api/channel/v1/products/<uuid>"
+curl -H "Authorization: Bearer $KEY" "https://app.atlasone.com.mx/api/channel/v1/availability?updated_since=2026-11-14T10:00:00Z"
+```
+
+```json
+{ "items": [
+    { "id": "b1f0…", "name": "Bolsa hobo", "description": null, "brand_id": "9c2e…",
+      "department_id": "41aa…", "gender": "MUJER", "model": null, "material": "Piel",
+      "available": true,
+      "images": [{ "url": "https://…/1.jpg", "alt": null, "position": 0, "is_primary": true }],
+      "variants": [{ "id": "7d3c…", "sku": "BOL-001", "color": "Negro", "size": null, "available": true }],
+      "updated_at": "2026-11-14T10:05:00Z", "web_published_at": "2026-11-13T18:00:00Z", "deleted": false },
+    { "id": "c0de…", "updated_at": "2026-11-14T10:06:00Z", "deleted": true } ],
+  "next_cursor": null, "server_time": "2026-11-14T10:07:00Z" }
+```
+
 ## Etiquetas · `/api/labels` `[module:labels]`
 `GET /candidates` (filtros `search`, `department_id`, `brand_id`, `gender`, `only_with_stock`, `product_id`, `created_after` ISO 8601 = solo tallas dadas de alta desde ese instante; la pantalla manda la medianoche local) devuelve una fila por variante visible con sus campos de etiqueta, `created_at` (alta de la talla, UTC) y `copies_default` = existencia (admin/dueño suman la organización, el resto su sucursal; tope 99). Las no imprimibles NO se esconden: llegan con `printable:false` y su `reason`. `POST /preview` (`{variant_id}` o datos sueltos) devuelve el layout en dots sobre un lienzo 408×200 —`elements` con textos y el código de barras en `bits`— más el ZPL crudo, para que la pantalla dibuje exactamente lo que va a salir. `POST /jobs` (`{items:[{variant_id, copies}]}`, copias 1..99, tope de 500 etiquetas por lote) devuelve `{content_base64, labels, skipped}`; un renglón sin código de barras cae en `skipped` sin tumbar el trabajo. `GET /test` da la etiqueta de calibración. **El server no imprime**: entrega ZPL en base64 y el navegador lo manda al agente local (`POST https://localhost:9100/print`), igual que el ticket. El layout está portado byte a byte de `atlas_labels/` del repositorio del agente (51 × 25 mm a 203 dpi, Zebra GX420t) y un test lo congela contra un literal.
 
