@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from app.core.security.channel_keys import MODULO_CANAL
 from app.models.organization import Organization, IndustryType
 from app.models.modules import Module, OrganizationModule, ModuleScope, ModuleStatus
 
@@ -30,8 +31,7 @@ MOD_TABLES = "tables"
 MOD_MENU = "menu"
 MOD_SCANNER = "scanner"
 MOD_LABELS = "labels"
-# Canal «Tienda en línea»: solo en el catálogo; ningún preset ni plan lo trae.
-MOD_TIENDA_EN_LINEA = "tienda_en_linea"
+# Canal «Tienda en línea» (MODULO_CANAL): solo en el catálogo; ningún preset ni plan lo trae.
 MOD_VARIANTS = "variants"
 
 # Presets by Industry
@@ -159,7 +159,7 @@ def seed_global_modules(db: Session):
         {"key": MOD_BRANCH_CATALOG, "name": "Branch Enablement", "scope": ModuleScope.HQ, "status": ModuleStatus.STABLE},
         {"key": MOD_INVENTORY, "name": "Inventory Control", "scope": ModuleScope.GLOBAL, "status": ModuleStatus.STABLE},
         {"key": MOD_SCANNER, "name": "Scanner de tienda", "scope": ModuleScope.BRANCH, "status": ModuleStatus.STABLE},
-        {"key": MOD_TIENDA_EN_LINEA, "name": "Tienda en línea", "scope": ModuleScope.HQ, "status": ModuleStatus.BETA},
+        {"key": MODULO_CANAL, "name": "Tienda en línea", "scope": ModuleScope.HQ, "status": ModuleStatus.BETA},
         {"key": MOD_LABELS, "name": "Etiquetas", "scope": ModuleScope.BRANCH, "status": ModuleStatus.STABLE},
         {"key": MOD_VARIANTS, "name": "Variantes color/talla", "scope": ModuleScope.GLOBAL, "status": ModuleStatus.STABLE},
         {"key": MOD_WORK_ORDERS, "name": "Work Orders & Service", "scope": ModuleScope.BRANCH, "status": ModuleStatus.STABLE},
