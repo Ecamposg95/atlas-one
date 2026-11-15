@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
-import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react'
+import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
 
 const api = vi.hoisted(() => ({
   getBrands: vi.fn(async () => [{ id: 'b-1', name: 'Nike', logo_url: null, is_premium: false }]),
@@ -110,6 +110,5 @@ describe('Configuración', () => {
     fireEvent.click(screen.getByLabelText('Todas las que venden'))
     fireEvent.click(screen.getByText('Guardar'))
     await waitFor(() => expect(canal.putConfig).toHaveBeenCalledWith(null))
-    void within
   })
 })

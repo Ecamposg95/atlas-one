@@ -583,6 +583,10 @@ function ProductsHQView() {
     const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
     toast.error(typeof detail === 'string' ? detail : respaldo)
   }
+  // La selección vale solo para lo que está en pantalla: cualquier cambio de filtro, página o vista la limpia.
+  useEffect(() => { setSeleccion(new Set()) }, [search, deptId, brandId, aprobacion, incluirArchivados, soloSinSucursal, page, viewMode])
+  // «Todo lo filtrado» solo cuando los filtros en pantalla caben exactos en el `filtro` del servidor.
+  const filtradoExacto = aprobacion === 'ALL' && !soloSinSucursal && !incluirArchivados
   const alternarSeleccion = (id: string) => setSeleccion((prev) => {
     const sig = new Set(prev)
     if (sig.has(id)) sig.delete(id); else sig.add(id)
@@ -880,6 +884,7 @@ function ProductsHQView() {
           onPublicarSeleccion={() => publicarWeb({ ids: [...seleccion], published: true }, 'Publicados en la tienda web')}
           onQuitarSeleccion={() => publicarWeb({ ids: [...seleccion], published: false }, 'Quitados de la tienda web')}
           onPublicarFiltrado={publicarFiltrado}
+          filtradoDisponible={filtradoExacto}
           onLimpiar={() => setSeleccion(new Set())}
         />
       )}

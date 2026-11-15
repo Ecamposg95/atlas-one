@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
-import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react'
 
 const prods = [1, 2, 3].map((n) => ({
   id: `p-${n}`, sku: `S${n}`, name: `Prod ${n}`, price: 10, stock: 1, is_active: true,
@@ -20,6 +20,12 @@ vi.mock('../../../api/products', () => ({ productsApi: api }))
 vi.mock('../../../api/inventory', () => ({ inventoryApi: {} }))
 vi.mock('../../../api/organization', () => ({ organizationApi: { getBranches: vi.fn(async () => []) } }))
 vi.mock('../../../components/ui/ConfirmDialog', () => ({ confirm: vi.fn(async () => true) }))
+
+vi.mock('../../../components/products/FormularioProducto', () => ({
+  FormularioProducto: ({ onDone }: { onDone: (p: unknown) => void }) => (
+    <button onClick={() => onDone({ id: 'p-nuevo', name: 'Nuevo', sku: 'N' })}>FORM-CREAR</button>
+  ),
+}))
 
 import { Products } from '../Products'
 import { confirm } from '../../../components/ui/ConfirmDialog'
@@ -69,6 +75,49 @@ describe('Productos y tienda web', () => {
       filtro: { search: 'nik', brand_id: 'b-1' }, published: true,
     }))
     const arg = (confirm as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]
-    expect(JSON.stringify(arg)).toContain('3')
+    expect(arg.message).toBe('Se publicarán 3 productos que coinciden con los filtros actuales. ¿Continuar?')
+  })
+
+  it('si se cancela la confirmación, «todo lo filtrado» no llama', async () => {
+    useEnabledModulesStore.setState({ loaded: true, perfilUi: 'completo', enabledModules: ['tienda_en_linea'] } as never)
+    ;(confirm as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(false)
+    pintar()
+    await screen.findByText('Prod 1')
+    fireEvent.click(screen.getByText('Publicar todo lo filtrado'))
+    await waitFor(() => expect(confirm).toHaveBeenCalled())
+    expect(api.webPublish).not.toHaveBeenCalled()
+  })
+
+  it('con filtro de aprobación PENDING «todo lo filtrado» está deshabilitado', async () => {
+    useEnabledModulesStore.setState({ loaded: true, perfilUi: 'completo', enabledModules: ['tienda_en_linea'] } as never)
+    pintar()
+    await screen.findByText('Prod 1')
+    fireEvent.click(within(screen.getByRole('group', { name: 'Aprobación' })).getByText('Pendientes'))
+    const b = screen.getByText('Publicar todo lo filtrado') as HTMLButtonElement
+    expect(b.disabled).toBe(true)
+    fireEvent.click(b)
+    expect(confirm).not.toHaveBeenCalled()
+    expect(api.webPublish).not.toHaveBeenCalled()
+  })
+
+  it('cambiar un filtro limpia la selección', async () => {
+    useEnabledModulesStore.setState({ loaded: true, perfilUi: 'completo', enabledModules: ['tienda_en_linea'] } as never)
+    pintar()
+    await screen.findByText('Prod 1')
+    fireEvent.click(screen.getByLabelText('Seleccionar Prod 1'))
+    expect(screen.getByText('Publicar en tienda web (1)')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Marca'), { target: { value: 'b-1' } })
+    await waitFor(() => expect(screen.queryByText('Publicar en tienda web (1)')).toBeNull())
+  })
+
+  it('alta → diálogo → «Sí, publicar» publica el producto nuevo', async () => {
+    useEnabledModulesStore.setState({ loaded: true, perfilUi: 'completo', enabledModules: ['tienda_en_linea'] } as never)
+    pintar()
+    await screen.findByText('Prod 1')
+    fireEvent.click(screen.getByLabelText('Nuevo producto'))
+    fireEvent.click(await screen.findByText('FORM-CREAR'))
+    expect(await screen.findByText('¿Lo publicamos también en la tienda web?')).toBeTruthy()
+    fireEvent.click(screen.getByText('Sí, publicar'))
+    await waitFor(() => expect(api.webPublish).toHaveBeenCalledWith({ ids: ['p-nuevo'], published: true }))
   })
 })
