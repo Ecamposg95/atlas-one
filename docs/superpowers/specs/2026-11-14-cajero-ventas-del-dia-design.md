@@ -55,3 +55,28 @@ el esperado de caja y anula el conteo ciego de `fix/pendientes-2026-11-10`.
 - Rol vía enum `Role.CAJERO`, no strings (bug recurrente enum-vs-string).
 - `create_sale` no se toca.
 - Antes de desplegar: esta rama y `fix/pendientes-2026-11-10` tocan pantallas vecinas; avisar a los dueños que la cajera deja de ver el histórico.
+
+---
+
+## Anexo 2026-11-14 — Tema full black y nuevo login (aprobado por el usuario)
+
+### Tema oscuro full black
+"Full black, el más oscuro será el nav bar, el body un poco menos." Sidebar y barra superior en negro puro; fondo `#0a0a0a`; superficies un poco más claras; todo neutro, sin tinte índigo. Modo claro del contenido sin cambios.
+
+### Login: la distribución del ejemplo del usuario + la identidad de atlasone.com.mx
+Decisión del usuario: "combina". El ejemplo (imagen) aporta la distribución: fondo negro, saludo a la izquierda, formulario siempre visible a la derecha en tarjeta. El sitio atlasone.com.mx aporta la identidad:
+- Paleta del sitio: añil `#16345F`, añil claro `#24548F`, cal `#F4F0E4`, maíz `#F0B429`, jamaica `#C42B33`, jade `#0F7B5F`, papel `#FBFAF6`, tinta `#14120F`.
+- Letras: títulos en **Archivo Black** (Google Fonts, cargada solo en el login), cejilla en IBM Plex Mono mayúsculas con raya maíz, texto en IBM Plex Sans.
+- Botón fuerte: fondo maíz, texto añil hondo `#0D2140`, radio 2px, sombra sólida `5px 5px 0` jamaica; hover se desplaza `-2px` y la sombra crece a `7px`.
+- Firma visual: el ticket térmico en CSS (papel, borde de sierra con `mask`, Plex Mono, código de barras con `repeating-linear-gradient`), girado ~-1.4°, asomándose detrás de la tarjeta. Sustituye al listón 3D del ejemplo (no se copia).
+
+Contenido:
+- Fondo negro `#000` con brillos radiales tenues añil y jade (como `.heroe::before` del sitio, sobre negro).
+- Arriba: marca "ATLAS·ONE" (el punto en maíz) con `AtlasMark`.
+- Izquierda: cejilla `Software de operación`; titular `Un punto de venta por` + `<em>cada giro.</em>` (em en maíz con raya jamaica); entrada `Atlas ONE llega configurado para tu negocio.`; enlace `Conoce Atlas ONE →` a `https://atlasone.com.mx`.
+- Derecha: tarjeta negra semitransparente (borde fino cal al 14 %, radio 2px), título `Entra a tu tienda`, Usuario, Contraseña con ojo, error, botón `Entrar`.
+- Pie: `Atlas ONE — Atlas Tech`.
+- Sin redes sociales (el sitio no tiene).
+- Se van: auroras, arco giratorio, mensajes rotativos, el botón que revela el formulario. El formulario se ve desde el inicio.
+- Teléfono (< 768 px): marca + titular corto + formulario; sin ticket.
+- Se conserva toda la lógica de `handleSubmit` (login, `setAuth`, `setBranch`, redirección por rol, errores).

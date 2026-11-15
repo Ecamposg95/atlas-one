@@ -159,3 +159,25 @@ El usuario: "quiero que sea full black, el más oscuro será el nav bar, el body
 - [ ] **Step 2:** `cd frontend && npm run build && npx vitest run` → verde.
 - [ ] **Step 3:** Actualizar `docs/RBAC.md` (fila CAJERO: "Ventas: solo hoy de su sucursal; sin totales; devoluciones solo de hoy") y `docs/API_REFERENCE.md` (`/sales/`, `/sales/stats`, `/returns/`).
 - [ ] **Step 4: Commit** `git commit -m "docs: cajera con ventas del día"`
+
+### Task 8: Login nuevo — distribución del ejemplo + identidad de atlasone.com.mx
+
+Spec: anexo "Login" de `docs/superpowers/specs/2026-11-14-cajero-ventas-del-dia-design.md` (valores exactos de paleta, copys, botón y ticket ahí).
+
+**Files:**
+- Modify: `frontend/src/pages/Login.tsx` (quitar `HERO_MESSAGES`, rotación, `HairlineArc`, `isRevealed`/`handleReveal`/`handleSceneClick`; conservar `handleSubmit` y su redirección por rol tal cual)
+- Rewrite: `frontend/src/pages/login.css` (solo lo usa `Login.tsx`)
+- Modify: `frontend/index.html` — no cargar Archivo Black globalmente; cargarla desde `login.css` con `@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&display=swap')` o un `<link>` inyectado por la página, para no tocar la ruta crítica del POS.
+- Test: `frontend/src/pages/__tests__/Login.test.tsx` (crear)
+
+- [ ] **Step 1: Write the failing tests** (mockear `authApi.login` y `useNavigate`)
+  - `formulario visible sin interacción`: `getByLabelText('Usuario')` y `getByLabelText('Contraseña')` presentes al montar, sin clics.
+  - `copys`: `getByText('Software de operación')`, `getByRole('heading', { level: 1 })` contiene `Un punto de venta por` y `cada giro.`; `getByRole('heading', { name: 'Entra a tu tienda' })`; enlace `Conoce Atlas ONE` con `href="https://atlasone.com.mx"`.
+  - `CAJERO entra al POS`: login OK con `role: 'CAJERO'` → `navigate('/atlas-pos')`.
+  - `error visible`: login rechaza con `detail` → `getByRole('alert')` muestra el texto.
+  - `ojo de contraseña`: alterna `type` entre `password` y `text`.
+- [ ] **Step 2: Run** `cd frontend && npx vitest run src/pages/__tests__/Login.test.tsx` → FAIL.
+- [ ] **Step 3: Implement** según el anexo. Colores del sitio como variables CSS locales del contenedor `.login` (p. ej. `--maiz`), no hex sueltos en el TSX. Ticket térmico en CSS puro con contenido de ejemplo genérico (folio, 2–3 partidas, total), `aria-hidden="true"`, oculto en < 768 px con render condicional (`useEsTelefono`). Botones con clases propias de `login.css` (el login no está bajo las guardias del admin; verificar que `botonesDelKit`/`overlaysFueraDelKit` sigan verdes). Accesibilidad: labels asociados, foco visible (`outline 3px maíz`), `autocomplete="username"`/`"current-password"`.
+- [ ] **Step 4: Run** vitest completo + `npx tsc --noEmit` + `npm run build` (presupuesto de la ruta crítica debe pasar) → PASS.
+- [ ] **Step 5: Capturas** a 390 y 1440 con Playwright (ver memoria/`docs`: paquete de la caché npx; el login ya no esconde los campos) guardadas en `.superpowers/sdd/2026-11-14-cajero-ventas-del-dia/login-390.png` y `login-1440.png`. Si Playwright no arranca, reportarlo (no bloquea).
+- [ ] **Step 6: Commit** `git commit -m "feat(login): nuevo login con la identidad de atlasone.com.mx"`
