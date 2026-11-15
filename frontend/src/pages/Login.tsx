@@ -30,12 +30,12 @@ function TicketDeEjemplo() {
         <div className="login-ticket__renglon"><span>FOLIO</span><span>A-1024</span></div>
         <div className="login-ticket__renglon"><span>CAJA</span><span>Abierta</span></div>
         <hr className="login-ticket__regla" />
-        <div className="login-ticket__partida"><b>2</b><span>Playera básica</span><span>$398.00</span></div>
+        <div className="login-ticket__partida"><b>2</b><span>Playera</span><span>$398.00</span></div>
         <div className="login-ticket__partida"><b>1</b><span>Gorra</span><span>$249.00</span></div>
-        <div className="login-ticket__partida"><b>1</b><span>Calcetines</span><span>$89.00</span></div>
+        <div className="login-ticket__partida"><b>1</b><span>Calcetas</span><span>$89.00</span></div>
         <hr className="login-ticket__regla" />
         <div className="login-ticket__total"><span>TOTAL</span><span>$736.00</span></div>
-        <p className="login-ticket__gracias">Gracias por su compra</p>
+        <p className="login-ticket__gracias">¡Gracias!</p>
         <div className="login-ticket__codigo" />
         <p className="login-ticket__gracias">atlasone.com.mx</p>
       </div>

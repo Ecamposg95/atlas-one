@@ -171,16 +171,28 @@
   .login-lado { justify-self: end; }
 }
 
-/* Ticket térmico: asoma por arriba y a la izquierda de la tarjeta */
+/* Ticket térmico: asoma a la izquierda de la tarjeta. La franja visible (10rem)
+   es la columna izquierda del ticket, todo alineado a la izquierda, para que
+   se lean palabras enteras; importes y valores quedan detrás de la tarjeta. */
 .login-ticket {
   position: absolute;
-  top: -2.6rem;
-  left: -4.2rem;
+  top: -1.4rem;
+  left: -10rem;
   width: 15.5rem;
   z-index: 0;
   pointer-events: none;
   transform: rotate(-1.4deg);
   filter: drop-shadow(0 22px 44px rgba(0, 0, 0, .6));
+}
+/* 900–1199: dos columnas sin hueco a la izquierda de la tarjeta (el titular llena
+   la suya); el ticket asoma por arriba y se leen su marca y su primer renglón. */
+@media (min-width: 900px) and (max-width: 1199px) {
+  .login-ticket {
+    top: -4.4rem;
+    left: 1.25rem;
+    transform: rotate(-2deg);
+  }
+  .login-lado { margin-top: 2.5rem; }   /* aire para lo que asoma, aun en pantallas bajas */
 }
 .login-ticket__papel {
   --sierra: 13px;
@@ -197,11 +209,11 @@
   font-family: var(--display);
   font-size: 1rem;
   letter-spacing: .16em;
-  text-align: center;
+  text-align: left;
   margin: 0 0 .1rem;
 }
 .login-ticket__sub {
-  text-align: center;
+  text-align: left;
   font-size: .64rem;
   letter-spacing: .1em;
   margin: 0 0 .9rem;
@@ -237,7 +249,7 @@
 }
 .login-ticket__total span:last-child { color: var(--jamaica); }
 .login-ticket__gracias {
-  text-align: center;
+  text-align: left;
   font-size: .66rem;
   color: var(--gris-ticket);
   margin: .75rem 0 0;
