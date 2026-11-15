@@ -224,6 +224,35 @@ describe('Cargar mercancía: plan', () => {
     await waitFor(() => expect(avisos().some((a) => a.includes('no se pudo actualizar'))).toBe(true))
   })
 
+  it('si autorizar falla (preguntas nuevas) recarga el detalle para enseñarlas', async () => {
+    api.autorizar.mockRejectedValue({ response: { status: 409, data: { detail: 'Ahora hay preguntas nuevas' } } })
+    api.obtener.mockResolvedValueOnce(D()).mockResolvedValue(D({ dudas: [duda(9, { texto: 'Pregunta nueva' })], puede_autorizar: false }))
+    pintar()
+    fireEvent.click(await screen.findByRole('button', { name: 'Autorizar' }))
+    await screen.findByText('Pregunta nueva')
+    expect(api.obtener).toHaveBeenCalledTimes(2)
+    expect(avisos().some((a) => a.includes('Ahora hay preguntas nuevas'))).toBe(true)
+  })
+
+  it('si autorizar falla y la recarga también, avisa', async () => {
+    api.autorizar.mockRejectedValue({ response: { status: 422, data: { detail: 'No se aplicó nada' } } })
+    api.obtener.mockResolvedValueOnce(D()).mockRejectedValue(new Error('red'))
+    pintar()
+    fireEvent.click(await screen.findByRole('button', { name: 'Autorizar' }))
+    await waitFor(() => expect(avisos().some((a) => a.includes('No se aplicó nada'))).toBe(true))
+    expect(avisos().some((a) => a.includes('no se pudo actualizar'))).toBe(true)
+  })
+
+  it('si reintentar falla recarga el detalle', async () => {
+    api.obtener.mockResolvedValueOnce(D({ carga: { estado: 'error', error: 'Falló' } }))
+      .mockResolvedValue(D({ carga: { estado: 'error', error: 'Ya se aplicó' } }))
+    api.reintentar.mockRejectedValue({ response: { status: 409, data: { detail: 'Esta carga ya se aplicó' } } })
+    pintar()
+    fireEvent.click(await screen.findByRole('button', { name: /Volver a intentar/ }))
+    await screen.findByText('Ya se aplicó')
+    expect(api.obtener).toHaveBeenCalledTimes(2)
+  })
+
   it('dos toques seguidos en Autorizar abren un solo diálogo', async () => {
     confirmar.mockReturnValue(new Promise(() => {}))
     pintar()

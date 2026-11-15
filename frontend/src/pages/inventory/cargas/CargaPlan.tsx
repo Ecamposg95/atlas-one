@@ -114,8 +114,19 @@ export default function CargaPlan() {
       setRechazos([])
     }, 'No se pudo deshacer')
 
+  /** Tras un fallo (409 con preguntas nuevas, 422, carga ya aplicada…) el
+   * detalle cambió en el servidor: se vuelve a pedir para que se vea. */
+  const recargarTrasFallo = async () => {
+    if (!(await cargar())) toast.error('La carga cambió, pero no se pudo actualizar el plan. Recarga la página.')
+  }
+
+  /** Corre `fn`; si falla, recarga el detalle y deja que `correr` avise del error. */
+  const conRecarga = (fn: () => Promise<void>) => async () => {
+    try { await fn() } catch (e) { await recargarTrasFallo(); throw e }
+  }
+
   const reintentar = () =>
-    correr(async () => { await cargasApi.reintentar(id); await cargar() }, 'No se pudo reintentar')
+    correr(conRecarga(async () => { await cargasApi.reintentar(id); await cargar() }), 'No se pudo reintentar')
 
   const autorizar = async () => {
     if (!det || enVuelo.current) return
@@ -133,7 +144,7 @@ export default function CargaPlan() {
       confirmText: 'Autorizar', variant: 'warning',
     }) } finally { enVuelo.current = false; setOcupado(false) }
     if (!ok) return
-    await correr(async () => { setResumen(await cargasApi.autorizar(id)); await cargar() }, 'No se pudo autorizar')
+    await correr(conRecarga(async () => { setResumen(await cargasApi.autorizar(id)); await cargar() }), 'No se pudo autorizar')
   }
 
   const descartar = async () => {
