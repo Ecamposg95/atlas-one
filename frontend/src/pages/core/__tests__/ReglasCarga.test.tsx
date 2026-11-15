@@ -56,6 +56,17 @@ describe('Empresa: reglas de carga', () => {
     expect(enviado.reglas_carga.escala_ropa).toEqual(['CH', 'M'])
   })
 
+  it('la escala de tallas se edita como lista separada por comas, en orden', async () => {
+    render(<Organization />)
+    const escala = (await screen.findByLabelText('Escala de tallas')) as HTMLInputElement
+    expect(escala.value).toBe('CH, M')
+    expect(screen.getByText(/en orden, de la más chica a la más grande/)).toBeTruthy()
+    fireEvent.change(escala, { target: { value: ' XS, CH ,M,, G ' } })
+    fireEvent.click(screen.getByText('Guardar reglas de carga'))
+    await waitFor(() => expect(api.updateOrg).toHaveBeenCalled())
+    expect(api.updateOrg.mock.calls[0][0].reglas_carga.escala_ropa).toEqual(['XS', 'CH', 'M', 'G'])
+  })
+
   it('fracción y días tienen sus límites en el formulario', async () => {
     render(<Organization />)
     const ventana = (await screen.findByLabelText('Días para avisar "ya cargado"')) as HTMLInputElement

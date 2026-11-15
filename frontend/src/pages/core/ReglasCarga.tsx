@@ -41,6 +41,7 @@ export function ReglasCarga({ org, branches, onGuardado }: Props) {
   const [generos, setGeneros] = useState<FilaPar[]>(() => filasPares(inicial.genero_por_marca))
   const [precios, setPrecios] = useState<FilaPrecio[]>(() => filasPrecios(inicial))
   const [aparte, setAparte] = useState(inicial.materiales_aparte.join(', '))
+  const [escala, setEscala] = useState(inicial.escala_ropa.join(', '))
   const [marcas, setMarcas] = useState<Brand[]>([])
   const [deptos, setDeptos] = useState<Department[]>([])
   const [guardando, setGuardando] = useState(false)
@@ -71,6 +72,7 @@ export function ReglasCarga({ org, branches, onGuardado }: Props) {
         tipos.filter((t) => t.tipo.trim()).map((t) => [t.tipo.trim(), { codigo_sku: t.codigo_sku.trim(), departamento: t.departamento }]),
       ),
       materiales_aparte: aLista(aparte),
+      escala_ropa: aLista(escala),
       genero_por_marca: paresAMapa(generos),
       precios_familia: precios.filter((p) => p.tipo.trim()).map((p) => ({
         tipo: p.tipo.trim(), marca: p.marca.trim() || null, precios: aLista(p.precios),
@@ -159,7 +161,18 @@ export function ReglasCarga({ org, branches, onGuardado }: Props) {
         </section>
 
         <section>
-          <p className={titulo}>Mapa de tallas</p>
+          <p className={titulo}>Tallas</p>
+          <div className="mb-4">
+            <label htmlFor="rc-escala" className="dax-label">Escala de tallas</label>
+            <input id="rc-escala" value={escala} onChange={(e) => setEscala(e.target.value)}
+              className="dax-input w-full" placeholder="XCh, Ch, M, G, XG" />
+            <p className="text-[10px] mt-1 text-dax-faint">
+              Separadas por coma, en orden, de la más chica a la más grande. La primera que traiga un producto
+              es su talla principal (su SKU va sin talla) y las tallas del archivo se escriben como aquí.
+            </p>
+            <Err campo="escala_ropa" />
+          </div>
+          <p className="dax-label">Mapa de tallas</p>
           <p className="text-[10px] mb-2 text-dax-faint">Cómo viene escrita la talla → como se guarda.</p>
           <div className="space-y-2">
             {tallas.map((t, i) => (
