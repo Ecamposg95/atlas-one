@@ -10,13 +10,15 @@ en esa lista y las dudas/operaciones hablan de renglones por `orden`.
 """
 from __future__ import annotations
 
-from decimal import Decimal, InvalidOperation
+import re
+from decimal import Decimal
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.modules.cargas.cruce import Coincidencia
+from app.modules.cargas.lectura_excel import normalizar_numero
 from app.modules.cargas.models import CargaDuda, CargaMercancia, CargaRenglon
 from app.modules.cargas.normalizar import _llave, _material_efectivo
 from app.modules.cargas.reglas import ReglasCarga
@@ -35,6 +37,7 @@ _CON_TEXTO = {
     "precio_fuera_familia", "departamento", "sin_costo",
 }
 _INACTIVAS = ("YA_CARGADO", "IGNORADO")
+_SOLO_DIGITOS = re.compile(r"\d+(\.\d+)?")
 _GENEROS = (("HOMBRE", "Hombre"), ("MUJER", "Mujer"), ("UNISEX", "Unisex"), ("NINO", "Niño"))
 
 
@@ -108,20 +111,15 @@ def _que(n: RenglonNormalizado, tallas: list[str]) -> str:
 
 def _monto(texto: Optional[str]) -> str:
     """Texto del usuario → monto en texto decimal ("$1,234.50" → "1234.50",
-    "18,40" → "18.40"). ValueError si no es un número positivo."""
-    limpio = (texto or "").strip().replace("$", "").replace(" ", "")
-    if "," in limpio and "." in limpio:
-        limpio = limpio.replace(",", "")
-    elif "," in limpio:
-        entero, _, dec = limpio.rpartition(",")
-        limpio = f"{entero.replace(',', '')}.{dec}" if len(dec) in (1, 2) else limpio.replace(",", "")
-    try:
-        valor = Decimal(limpio)
-    except InvalidOperation:
-        raise ValueError(f'"{texto}" no es una cantidad') from None
-    if not valor.is_finite() or valor <= 0:
+    "1.234,50" → "1234.50", "18,40" → "18.40"). ValueError si no es un número
+    positivo escrito con dígitos (sin exponentes ni infinitos)."""
+    limpio = normalizar_numero(texto or "")
+    if not _SOLO_DIGITOS.fullmatch(limpio):
         raise ValueError(f'"{texto}" no es una cantidad')
-    return limpio
+    valor = Decimal(limpio)
+    if valor <= 0:
+        raise ValueError(f'"{texto}" no es una cantidad')
+    return str(valor)
 
 
 # ── generación ────────────────────────────────────────────────────────────
@@ -365,14 +363,18 @@ def _precio_distinto(db: Session, org_id: int, plan: _Plan, grupos: list[Grupo],
                 distintos.append((i, hoy, Decimal(n.precio)))
         if not distintos:
             continue
-        hoy = sorted({Decimal(h) for _, h, _ in distintos if h is not None}) or [c.precio_actual]
+        hoy = sorted({Decimal(h) for _, h, _ in distintos if h is not None})
+        if not hoy and c.precio_actual is not None:
+            hoy = [Decimal(c.precio_actual)]
         nuevo = sorted({p for _, _, p in distintos})
         afectados = [i for i, _, _ in distintos]
-        txt_hoy, txt_nuevo = _lista([_pesos(p) for p in hoy]), _lista([_pesos(p) for p in nuevo])
+        txt_hoy = _lista([_pesos(p) for p in hoy]) if hoy else "sin precio"
+        en_catalogo = f"a {txt_hoy}" if hoy else "sin precio"
+        txt_nuevo = _lista([_pesos(p) for p in nuevo])
         dudas.append(DudaNueva(
             tipo="precio_distinto_existente",
             texto=(f"{_que(plan.norm[afectados[0]], plan.tallas(afectados))} ya está en tu "
-                   f"catálogo a {txt_hoy}; aquí viene a {txt_nuevo}. ¿Qué hago con el precio?"),
+                   f"catálogo {en_catalogo}; aquí viene a {txt_nuevo}. ¿Qué hago con el precio?"),
             opciones=[
                 {"clave": "mantener", "etiqueta": f"Dejar el precio de hoy ({txt_hoy})"},
                 {"clave": "actualizar", "etiqueta": f"Cambiarlo a {txt_nuevo}"},
@@ -403,9 +405,9 @@ def _departamento(db: Session, org_id: int, carga: CargaMercancia, plan: _Plan) 
         tipo = plan.norm[idxs[0]].tipo
         # La etiqueta es el nombre exacto del departamento: de ahí sale el valor.
         opciones = [{"clave": f"depto:{d.id}", "etiqueta": d.name} for d in deptos]
-        if carga.proposito == "migracion":
-            opciones.append({"clave": "crear", "etiqueta": f'Crear el departamento "{tipo}"'
-                             if tipo else "Crear un departamento nuevo"})
+        if carga.proposito == "migracion" and tipo:
+            # Sin tipo de prenda no hay nombre para el departamento nuevo: se contesta con texto.
+            opciones.append({"clave": "crear", "etiqueta": f'Crear el departamento "{tipo}"'})
         parecidos = sorted(((p, d) for d in deptos if tipo and (p := _parecido(tipo, d.name))),
                            key=lambda x: x[0])
         if parecidos:

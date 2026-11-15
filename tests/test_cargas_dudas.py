@@ -377,3 +377,45 @@ def test_opcion_desconocida_da_error(db, org):
     d = next(d for d in _dudas(db, org, [_crudo(duda="?")]) if d.tipo == "extraccion")
     with pytest.raises(ValueError):
         opcion_a_operaciones(_guardada(d), "otra", None)
+
+
+@pytest.mark.parametrize("texto,esperado", [
+    ("1.234,50", "1234.50"), ("1,234.50", "1234.50"), ("18,40", "18.40"),
+    ("$2,500", "2500"), ("$350", "350"),
+])
+def test_montos_con_separadores(db, org, texto, esperado):
+    _marca(db, org)
+    d = next(d for d in _dudas(db, org, [_crudo(precio=None)]) if d.tipo == "precio_faltante")
+    assert opcion_a_operaciones(_guardada(d), "", texto)[0]["valor"] == esperado
+
+
+@pytest.mark.parametrize("texto", ["1e3", "Infinity", "NaN", "abc", "0", "-5"])
+def test_montos_invalidos_se_rechazan(db, org, texto):
+    _marca(db, org)
+    d = next(d for d in _dudas(db, org, [_crudo(precio=None)]) if d.tipo == "precio_faltante")
+    with pytest.raises(ValueError):
+        opcion_a_operaciones(_guardada(d), "", texto)
+
+
+def test_precio_distinto_con_existente_sin_precio_no_truena(db, org):
+    p, v = _existente(db, org)
+    v.price = None
+    db.flush()
+    filas, grupos = _plan([_crudo(precio=Decimal("120"))])
+    g = grupos[0]
+    coinc = {g.llave: Coincidencia.model_construct(
+        product_id=p.id, variante_por_talla={"M": v.id}, precio_actual=None, exacta=False)}
+    d = next(d for d in generar_dudas(db, org.id, _carga(), filas, grupos, coinc, REGLAS)
+             if d.tipo == "precio_distinto_existente")
+    assert "sin precio" in d.texto and "$120.00" in d.texto
+
+
+def test_departamento_sin_tipo_no_ofrece_crear(db, org):
+    _marca(db, org)
+    db.add(Department(name="Varios", organization_id=org.id))
+    db.flush()
+    d = next(d for d in _dudas(db, org, [_crudo(tipo=None)], carga=_carga("migracion"))
+             if d.tipo == "departamento")
+    assert "crear" not in _claves(d) and d.recomendada is None
+    with pytest.raises(ValueError):
+        opcion_a_operaciones(_guardada(d), "crear", None)
