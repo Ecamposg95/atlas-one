@@ -91,6 +91,10 @@ No pongas en las instrucciones datos que no quieras que vea el proveedor (ver §
   pregunta por carga ("N renglones traen costo pero no dicen en qué moneda está") con cada moneda declarada
   y MXN. Mientras no se conteste, ese costo no se calcula: nunca se asume pesos. En un Excel/CSV, un
   costo sin moneda es en pesos.
+- Precio: solo se pregunta (`precio_faltante`, `precio_fuera_familia`) para lo que se da de alta
+  (producto o talla nueva). Lo que ya existe suma piezas y conserva su precio; solo si el renglón trae un
+  precio distinto sale `precio_distinto_existente`. Un pedimento (sin precio de venta) no pregunta precio
+  de lo que ya está en el catálogo.
 - `ya_cargado`: ver `ventana_ya_cargado_dias` arriba.
 
 ## 4. Qué ve el proveedor (Anthropic)

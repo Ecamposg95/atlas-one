@@ -145,6 +145,11 @@ class _Plan:
         idxs = range(len(self.filas)) if idxs is None else idxs
         return [i for i in idxs if self.activo(i)]
 
+    def nuevos(self, idxs=None) -> list[int]:
+        """Activos que darán de alta un producto o una talla: los únicos que usan
+        el precio que traen (lo que ya existe conserva el suyo)."""
+        return [i for i in self.activos(idxs) if self.filas[i].clase == "NUEVO"]
+
     def tallas(self, idxs: list[int]) -> list[str]:
         vistas: list[str] = []
         for i in idxs:
@@ -338,7 +343,7 @@ def _casi_igual(db: Session, org_id: int, plan: _Plan, grupos: list[Grupo],
 def _precio_faltante(plan: _Plan, grupos: list[Grupo]) -> list[DudaNueva]:
     dudas: list[DudaNueva] = []
     for g in grupos:
-        idxs = [i for i in plan.activos(g.renglones) if plan.norm[i].precio is None]
+        idxs = [i for i in plan.nuevos(g.renglones) if plan.norm[i].precio is None]
         if not idxs:
             continue
         dudas.append(DudaNueva(
@@ -368,7 +373,7 @@ def _precio_fuera_familia(plan: _Plan, grupos: list[Grupo], reglas: ReglasCarga)
         familia = _precios_de_familia(g, reglas)
         if not familia:
             continue
-        idxs = [i for i in plan.activos(g.renglones)
+        idxs = [i for i in plan.nuevos(g.renglones)
                 if plan.norm[i].precio is not None and Decimal(plan.norm[i].precio) not in familia]
         if not idxs:
             continue

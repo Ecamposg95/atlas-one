@@ -715,3 +715,29 @@ def test_sku_en_uso_por_otra_marca_se_resuelve_con_sufijo(db, org, branch_a, adm
     aplicar_carga(db, carga, admin_a)
     assert carga.estado == "aplicada"
     assert _variante(db, org, "PLAY").product_id == catalogo["producto"].id  # el de Marca Uno, intacto
+
+
+def test_lo_que_ya_existe_no_pregunta_precio(db, org, branch_a, admin_a, catalogo):
+    """Pedimento sin precio de venta (M5): la talla que ya existe suma sin preguntar
+    precio; solo la talla nueva lo pide."""
+    sin_precio = {"precio": None, "costo_unitario": "100", "moneda": "MXN"}
+    carga = _carga(db, org, [{**_crudo(talla="M", cantidad="3"), **sin_precio},
+                             {**_crudo(talla="G", cantidad="1"), **sin_precio}])
+    rs = _renglones(db, carga)
+    assert (rs[1].clase, rs[2].clase) == ("SUMA", "NUEVO")
+    precio = [d for d in _abiertas(db, carga) if d.tipo.startswith("precio")]
+    assert [(d.tipo, d.renglones) for d in precio] == [("precio_faltante", [2])]
+    _, rechazos = aplicar_operaciones(db, carga, admin_a, [
+        {"op": "resolver_duda", "numero": precio[0].numero, "opcion": "", "valor": "350"}], None)
+    assert rechazos == []
+    _contestar(db, carga, admin_a)
+    aplicar_carga(db, carga, admin_a)
+    assert _stock(db, catalogo["variante"].id, branch_a) == D("5")
+    assert catalogo["variante"].price == D("350")  # el existente conserva el suyo
+
+
+def test_existente_con_precio_fuera_de_familia_no_pregunta(db, org, branch_a, admin_a, catalogo):
+    org.reglas_carga = _reglas(branch_a, precios_familia=[{"tipo": "Playera", "precios": ["299"]}])
+    carga = _carga(db, org, [_crudo(talla="M", cantidad="1", precio="350")])
+    assert _renglones(db, carga)[1].clase == "SUMA"
+    assert "precio_fuera_familia" not in [d.tipo for d in _abiertas(db, carga)]
