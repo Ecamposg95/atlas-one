@@ -128,6 +128,22 @@ def test_lista_blanca(client, db, org, branch_a, h):
     assert item["name"] == p.name and item["deleted"] is False
 
 
+def test_image_url_sin_galeria_sale_como_principal(client, db, org, branch_a, h):
+    p, _ = _producto(db, org, branch_a, image_url="http://x/suelta.jpg")
+    item = client.get(f"{BASE}/products/{p.id}", headers=h).json()
+    assert item["images"] == [{"url": "http://x/suelta.jpg", "alt": None, "position": 0,
+                               "is_primary": True}]
+    # Con galería manda la galería.
+    db.add(ProductImage(organization_id=org.id, product_id=p.id, url="http://x/g.jpg",
+                        position=0, is_primary=True))
+    db.flush()
+    item = client.get(f"{BASE}/products/{p.id}", headers=h).json()
+    assert [i["url"] for i in item["images"]] == ["http://x/g.jpg"]
+    # Sin ninguna: lista vacía.
+    p2, _ = _producto(db, org, branch_a)
+    assert client.get(f"{BASE}/products/{p2.id}", headers=h).json()["images"] == []
+
+
 # ── Aislamiento ──────────────────────────────────────────────────────────────
 def test_dos_orgs(client, db, org, branch_a, h):
     p, _ = _producto(db, org, branch_a)

@@ -16,6 +16,9 @@ from app.modules.customers.models import Customer
 from app.modules.platform.api_keys import generate_api_key
 
 URL = "/api/channel/v1/leads"
+# occurred_at solo se acepta en los últimos 7 días: las fechas van relativas a hoy.
+_DIA = (datetime.now(timezone.utc) - timedelta(days=2)).date()
+_EN_DIA = f"{_DIA}T18:00:00Z"  # mediodía en México
 
 
 @pytest.fixture(autouse=True)
@@ -72,12 +75,12 @@ def test_sin_telefono_solo_metrica(client, db, org, ctx):
     p = _prod(db, org)
     r = client.post(URL, headers=_h(ctx), json={
         "source": "web_whatsapp_click", "product_ids": [p.id], "line": "boutique",
-        "occurred_at": "2026-11-10T03:00:00Z"})  # 9 pm del 9 en México
+        "occurred_at": f"{_DIA}T03:00:00Z"})  # 9 pm del día anterior en México
     assert r.status_code == 202 and r.json() == {"recorded": "metric"}
     assert db.query(ChannelLead).count() == 0
     m = db.query(ChannelProductMetric).one()
     assert (m.product_id, m.source, m.count) == (p.id, "web_whatsapp_click", 1)
-    assert str(m.day) == "2026-11-09"
+    assert m.day == _DIA - timedelta(days=1)
 
 
 def test_con_telefono_crea_lead_y_metrica(client, db, org, ctx):
@@ -157,7 +160,7 @@ def test_metrica_acumula(client, db, org, ctx):
     for _ in range(3):
         client.post(URL, headers=_h(ctx), json={
             "source": "web_whatsapp_click", "product_ids": [p.id],
-            "occurred_at": "2026-11-10T18:00:00Z"})
+            "occurred_at": _EN_DIA})
     assert db.query(ChannelProductMetric).one().count == 3
 
 
@@ -168,26 +171,26 @@ def test_reporte_top_y_prospectos(client, db, org, ctx, auth_admin):
         for _ in range(n):
             client.post(URL, headers=_h(ctx), json={
                 "source": "web_whatsapp_click", "product_ids": [pid],
-                "occurred_at": "2026-11-10T18:00:00Z"})
+                "occurred_at": _EN_DIA})
     client.post(URL, headers=_h(ctx), json={
-        "source": "web_form", "phone": "5512345678", "occurred_at": "2026-11-10T18:00:00Z"})
-    r = client.get("/api/reports/tienda-en-linea?desde=2026-11-10&hasta=2026-11-10", headers=auth_admin)
+        "source": "web_form", "phone": "5512345678", "occurred_at": _EN_DIA})
+    r = client.get(f"/api/reports/tienda-en-linea?desde={_DIA}&hasta={_DIA}", headers=auth_admin)
     assert r.status_code == 200
     j = r.json()
     assert j["prospectos"] == 1
     assert [(x["name"], x["consultas"]) for x in j["piezas"]] == [("B", 3), ("A", 1)]
-    r = client.get("/api/reports/tienda-en-linea?desde=2026-11-11&hasta=2026-11-12", headers=auth_admin)
+    r = client.get(f"/api/reports/tienda-en-linea?desde={_DIA + timedelta(days=1)}&hasta={_DIA + timedelta(days=2)}", headers=auth_admin)
     assert r.json() == {"piezas": [], "prospectos": 0}
 
 
 def test_reporte_solo_admin(client, db, org, auth_cajero_a):
     _encender(db, org)
-    r = client.get("/api/reports/tienda-en-linea?desde=2026-11-10&hasta=2026-11-10", headers=auth_cajero_a)
+    r = client.get(f"/api/reports/tienda-en-linea?desde={_DIA}&hasta={_DIA}", headers=auth_cajero_a)
     assert r.status_code == 403
 
 
 def test_reporte_404_sin_canal(client, db, org, auth_admin):
-    r = client.get("/api/reports/tienda-en-linea?desde=2026-11-10&hasta=2026-11-10", headers=auth_admin)
+    r = client.get(f"/api/reports/tienda-en-linea?desde={_DIA}&hasta={_DIA}", headers=auth_admin)
     assert r.status_code == 404
 
 
@@ -197,7 +200,39 @@ def test_metrica_nueva_usa_upsert_atomico(client, db, org, ctx):
     from app.modules.canal import leads_router
     assert "with_for_update" not in inspect.getsource(leads_router)
     p = _prod(db, org)
-    body = {"source": "web_selection", "product_ids": [p.id], "occurred_at": "2026-11-10T18:00:00Z"}
+    body = {"source": "web_selection", "product_ids": [p.id], "occurred_at": _EN_DIA}
     assert client.post(URL, headers=_h(ctx), json=body).status_code == 202
     assert client.post(URL, headers=_h(ctx), json=body).status_code == 202
     assert db.query(ChannelProductMetric).one().count == 2
+
+
+# ── Validación de entrada ────────────────────────────────────────────────────
+def test_utm_solo_claves_conocidas_y_acotadas(client, db, org, ctx):
+    base = {"source": "web_form", "phone": "5512345678"}
+    r = client.post(URL, headers=_h(ctx), json={**base, "utm": {"otra": "x"}})
+    assert r.status_code == 422
+    r = client.post(URL, headers=_h(ctx), json={**base, "utm": {"source": "x" * 101}})
+    assert r.status_code == 422
+    r = client.post(URL, headers=_h(ctx), json={
+        **base, "utm": {"source": "ig", "medium": "social", "campaign": "buen-fin"}})
+    assert r.status_code == 201, r.text
+    assert db.query(ChannelLead).one().utm == {"source": "ig", "medium": "social",
+                                                "campaign": "buen-fin"}
+
+
+@pytest.mark.parametrize("campo,valor", [
+    ("name", "a" * 121), ("email", "a" * 201), ("phone", "5" * 31),
+])
+def test_largos_maximos(client, ctx, campo, valor):
+    r = client.post(URL, headers=_h(ctx), json={"source": "web_form", campo: valor})
+    assert r.status_code == 422, (campo, r.text)
+
+
+@pytest.mark.parametrize("delta,esperado", [
+    (timedelta(days=-8), 422), (timedelta(days=2), 422),
+    (timedelta(days=-6), 202), (timedelta(hours=12), 202),
+])
+def test_occurred_at_en_ventana(client, ctx, delta, esperado):
+    cuando = (datetime.now(timezone.utc) + delta).strftime("%Y-%m-%dT%H:%M:%SZ")
+    r = client.post(URL, headers=_h(ctx), json={"source": "web_selection", "occurred_at": cuando})
+    assert r.status_code == esperado, (delta, r.text)

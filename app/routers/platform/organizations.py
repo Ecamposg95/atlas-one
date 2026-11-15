@@ -408,6 +408,19 @@ def delete_organization(
         # users y organization; van antes de borrar usuarios y la org.
         deleted.update(borrar_datos_ai_de_org(db, org_id))
 
+        # Canal «Tienda en línea»: prospectos (datos personales), métricas,
+        # idempotencia y disponibilidad no tienen FK a la org (quedarían
+        # huérfanos); api_key sí la tiene (y apunta a users), así que va antes
+        # de borrar usuarios y la org.
+        from sqlalchemy import text as _sql
+        for tabla in ("channel_leads", "channel_product_metrics", "channel_idempotency",
+                      "channel_availability", "api_key"):
+            if tabla in existing_tables:
+                deleted[tabla] = db.execute(
+                    _sql(f"DELETE FROM {tabla} WHERE organization_id = :org"), {"org": org_id}
+                ).rowcount
+        db.flush()
+
         deleted["print_jobs"] = db.query(PrintJob).filter(
             PrintJob.organization_id == org_id
         ).delete(synchronize_session=False)

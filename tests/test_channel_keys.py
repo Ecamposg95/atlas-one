@@ -3,7 +3,7 @@ import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from fastapi import Depends
+from fastapi import APIRouter, Depends
 
 from app.core.security import channel_keys
 from app.core.security.channel_keys import (
@@ -25,13 +25,20 @@ def _limpiar_estado():
 
 @pytest.fixture()
 def ruta(app):
-    if not any(getattr(r, "path", "") == "/_t/canal" for r in app.routes):
-        @app.get("/_t/canal")
-        def _canal(ctx: ChannelContext = Depends(require_channel_key("catalog:read"))):
-            return {"org": ctx.organization_id, "key": ctx.key_id}
-        # El catch-all de la SPA ya está montado: la ruta de prueba va primero.
-        app.router.routes.insert(0, app.router.routes.pop())
-    return "/_t/canal"
+    """Ruta de prueba protegida por la llave. Va en el índice 0 para ganarle al
+    catch-all de la SPA y se retira al terminar; vive bajo /api/ porque, con
+    frontend/dist presente, los manejadores de 403/404 devuelven el index.html
+    a cualquier ruta fuera de /api/."""
+    router = APIRouter(dependency_overrides_provider=app)  # usa la BD de prueba
+
+    @router.get("/api/_t/canal")
+    def _canal(ctx: ChannelContext = Depends(require_channel_key("catalog:read"))):
+        return {"org": ctx.organization_id, "key": ctx.key_id}
+
+    nueva = router.routes[0]
+    app.router.routes.insert(0, nueva)
+    yield "/api/_t/canal"
+    app.router.routes.remove(nueva)
 
 
 def _emitir(db, org, scopes):

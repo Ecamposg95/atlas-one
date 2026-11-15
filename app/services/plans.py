@@ -213,7 +213,14 @@ def verificar_alta_sucursal(db: Session, org: Organization) -> None:
         )
 
 
+# Módulos que la plataforma enciende por org fuera de los planes (contrato
+# aparte). Debe coincidir con MODULO_CANAL de app/core/security/channel_keys.py.
+MODULOS_FUERA_DE_PLAN: FrozenSet[str] = frozenset({"tienda_en_linea"})
+
+
 def verificar_activar_modulo(db: Session, org: Organization, modulo: str, nombre_modulo: Optional[str] = None) -> None:
+    if modulo in MODULOS_FUERA_DE_PLAN:
+        return
     if modulo in modulos_permitidos(db, org):
         return
     plan = obtener_plan(org.plan)

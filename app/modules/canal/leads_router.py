@@ -112,7 +112,8 @@ def registrar(
         lead = ChannelLead(
             id=str(uuid.uuid4()), organization_id=org_id, source=payload.source,
             line=payload.line, name=payload.name, phone=phone, email=payload.email,
-            utm=payload.utm, product_ids=validos,
+            utm=payload.utm.model_dump(exclude_none=True) if payload.utm else None,
+            product_ids=validos,
             customer_id=_cliente_por_telefono(db, org_id, phone),
             status="nuevo", occurred_at=ocurrio, created_at=ahora,
         )

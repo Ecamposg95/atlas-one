@@ -180,8 +180,13 @@ barras ni proveedores.
 
 Paginación común: `?updated_since=<ISO8601>&cursor=<opaco>&limit=<1..200, def 100>`. Orden
 `(updated_at, id)`. Respuesta `{ "items": [...], "next_cursor": str|null, "server_time": ISO8601 }`;
-`server_time` se toma **antes** de consultar: guárdalo como siguiente `updated_since` (con 1 s de
-traslape; deduplica por id). `limit` fuera de rango → 422; `cursor` inválido → 400.
+`server_time` se toma **antes** de consultar. Siguiente `updated_since` = último `server_time` **− 10
+minutos** (deduplica por id): `updated_at`/`changed_at` se sellan en Python antes del commit, y una
+transacción larga (publicación masiva, recálculo al activar el módulo, un cobro esperando un lock)
+puede confirmar filas con sello anterior a tu último `server_time`. Además, una carga completa
+nocturna (sin `updated_since`). `updated_since` va en UTC con `Z` (`2026-11-14T10:00:00Z`) o con el
+`+` codificado (`%2B00:00`): un `+` sin codificar llega como espacio → 422. `limit` fuera de
+rango → 422; `cursor` inválido → 400.
 
 | Endpoint | Item |
 |---|---|
@@ -193,8 +198,11 @@ traslape; deduplica por id). `limit` fuera de rango → 422; `cursor` inválido 
 
 **Bajas:** sin `updated_since` (carga inicial) solo salen publicados. Con `updated_since`, un
 producto que alguna vez se publicó y ya no (despublicado, inactivo, borrado o no aprobado) llega
-como `{id, updated_at, deleted: true}`; igual una marca o departamento borrado. Nunca publicados no
-existen para el canal.
+como `{id, updated_at, deleted: true}`. Nunca publicados no existen para el canal.
+
+**Marcas y departamentos:** se borran en duro, así que `/brands` y `/departments` nunca devuelven
+`deleted: true`. Son catálogos chicos: en cada sincronización bájalos completos (sin
+`updated_since`) y descarta los ids que ya no vengan.
 
 ```bash
 KEY=atlas_xxxxxxxx_xxxxxxxxxxxxxxxxxxxxxxxx   # placeholder: la llave real se entrega por canal seguro

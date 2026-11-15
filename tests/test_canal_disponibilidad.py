@@ -451,3 +451,56 @@ def test_stock_sin_org_en_org_sin_modulo_sin_escrituras(db, org, branch_a):
     db.flush()
     assert cd._org_por_sucursal.get(branch_a.id) == org.id
     assert _filas(db, org) == 0
+
+
+_SCRIPT_SIN_APP = r'''
+import sys
+from decimal import Decimal
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.compiler import compiles
+compiles(JSONB, "sqlite")(lambda *a, **k: "JSON")  # igual que conftest
+from app.core.database import Base, SessionLocal, engine
+import app.models  # noqa: F401  (lo único que importa un script de mantenimiento)
+from app.models import Product, ProductVariant
+from app.models.inventory import StockOnHand
+from app.models.modules import Module, OrganizationModule
+from app.models.organization import Branch, BranchType, Organization
+from app.modules.canal.models import ChannelAvailability
+
+assert "app.main" not in sys.modules
+Base.metadata.create_all(bind=engine)
+db = SessionLocal()
+org = Organization(name="Script", status="ACTIVE"); db.add(org); db.flush()
+b = Branch(name="S", branch_type=BranchType.STORE, can_sell=True, is_active=True,
+           organization_id=org.id); db.add(b); db.flush()
+db.add(Module(key="tienda_en_linea", name="tienda_en_linea")); db.flush()
+db.add(OrganizationModule(organization_id=org.id, module_key="tienda_en_linea",
+                          is_enabled=True, config_json={"sucursales_web": [b.id]}))
+p = Product(name="Bolsa", organization_id=org.id, is_active=True, approval_status="APPROVED")
+db.add(p); db.flush()
+v = ProductVariant(product_id=p.id, sku="SCR-1", price=Decimal("1"), cost=Decimal("1"),
+                   organization_id=org.id)
+db.add(v); db.flush()
+db.add(StockOnHand(variant_id=v.id, branch_id=b.id, organization_id=org.id,
+                   qty_on_hand=Decimal("3"), is_active=True))
+db.commit()
+fila = db.query(ChannelAvailability).filter_by(organization_id=org.id, variant_id=v.id).first()
+print("DISPONIBLE", fila is not None and fila.available)
+'''
+
+
+def test_listener_activo_en_scripts_sin_la_app(tmp_path):
+    """Un script que solo importa los modelos y abre SessionLocal() (sin pasar
+    por el startup de FastAPI) también mantiene channel_availability."""
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    raiz = Path(__file__).resolve().parents[1]
+    env = {**os.environ, "DATABASE_URL": f"sqlite:///{tmp_path / 'script.db'}",
+           "PYTHONPATH": str(raiz)}
+    r = subprocess.run([sys.executable, "-W", "ignore", "-c", _SCRIPT_SIN_APP],
+                       cwd=tmp_path, env=env, capture_output=True, text=True, timeout=120)
+    assert r.returncode == 0, r.stderr[-2000:]
+    assert "DISPONIBLE True" in r.stdout, r.stdout + r.stderr[-2000:]

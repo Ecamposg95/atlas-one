@@ -180,6 +180,9 @@ def _escribir(session: Session, filas: list[dict]) -> None:
     else:
         from sqlalchemy.dialects.sqlite import insert
     tabla = ChannelAvailability.__table__
+    # Orden fijo (org, variante): dos transacciones que tocan las mismas filas
+    # toman los locks en el mismo orden y no se bloquean en cruz.
+    filas = sorted(filas, key=lambda f: (f["organization_id"], f["variant_id"]))
     for lote in _lotes(filas):
         stmt = insert(tabla).values(lote)
         stmt = stmt.on_conflict_do_update(
@@ -306,7 +309,7 @@ def _procesar_org(session: Session, org_id: int, stock: set, variantes: set, pro
     _escribir(session, _cambios(org_id, calculado, _filas_actuales(session, org_id, tocadas)))
 
 
-def _antes_del_flush(session: Session, flush_context, instances) -> None:
+def _procesar_flush(session: Session, flush_context, instances) -> None:
     try:
         with session.no_autoflush:
             t = _recolectar(session)  # solo Python
@@ -331,16 +334,13 @@ def _antes_del_flush(session: Session, flush_context, instances) -> None:
         logger.exception("CANAL_DISPONIBILIDAD_FALLO")
 
 
-def registrar_listener() -> None:
-    """Registra el listener global (idempotente)."""
-    if not event.contains(Session, "before_flush", _antes_del_flush):
-        event.listen(Session, "before_flush", _antes_del_flush)
-
-
-def quitar_listener() -> None:
-    """Solo para pruebas: medir el costo del listener."""
-    if event.contains(Session, "before_flush", _antes_del_flush):
-        event.remove(Session, "before_flush", _antes_del_flush)
+# El registro (registrar_listener/quitar_listener/_antes_del_flush) vive en
+# app/services/canal_listener.py; se re-exporta aquí.
+from app.services.canal_listener import (  # noqa: E402,F401
+    _antes_del_flush,
+    quitar_listener,
+    registrar_listener,
+)
 
 
 # ── Red de seguridad ─────────────────────────────────────────────────────────

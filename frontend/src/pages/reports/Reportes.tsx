@@ -7,7 +7,7 @@ import {
 } from '../../components/graficas'
 import { SalesHeatmap } from '../../components/reports/Heatmap'
 import { TarjetaTiendaEnLinea } from '../../components/reports/TarjetaTiendaEnLinea'
-import { useEnabledModulesStore } from '../../store/enabledModulesStore'
+import { useCanalTienda } from '../../hooks/useCanalTienda'
 import { BarraFiltros, ParFechas } from '../../components/ui/BarraFiltros'
 import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
 import { DaxCard } from '../../components/ui/DaxCard'
@@ -57,7 +57,8 @@ const Vacio = ({ children }: { children: ReactNode }) => <p className="text-sm t
 
 export function Reportes({ conSucursales = false }: { conSucursales?: boolean }) {
   const esTelefono = useEsTelefono()
-  const conTienda = useEnabledModulesStore((s) => s.enabledModules.includes('tienda_en_linea'))
+  // La tarjeta pega a un endpoint de admin/dueño: el gerente no la ve.
+  const conTienda = useCanalTienda().puedePublicar
   const tema = useTemaGrafica()
   // Los presets usan la fecha local del navegador (no UTC), como el resto de filtros de fecha.
   const [rango, setRango] = useState<Rango>(() => rangoPreset('7d'))

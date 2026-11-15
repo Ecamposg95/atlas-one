@@ -79,6 +79,7 @@ app = FastAPI(
 async def startup_event():
     setup_abasto_subscribers()
     # Disponibilidad web (canal tienda_en_linea): listener before_flush global.
+    # Ya lo registra app/models/__init__.py (cubre scripts); esto es idempotente.
     # Sale sin consultar nada en orgs sin el módulo.
     from app.services.canal_disponibilidad import registrar_listener
     registrar_listener()

@@ -140,11 +140,20 @@ def _armar(db: Session, ctx: ChannelContext, productos: list[Product]) -> list:
             id=p.id, name=p.name, description=p.description, brand_id=p.brand_id,
             department_id=p.department_id, gender=p.gender, model=p.model,
             material=p.material, available=any(v.available for v in variantes),
-            images=[CanalImagen(url=i.url, alt=i.alt, position=i.position or 0,
-                                is_primary=bool(i.is_primary)) for i in imagenes.get(p.id, [])],
+            images=_imagenes(p, imagenes.get(p.id, [])),
             variants=variantes, updated_at=_utc(p.updated_at),
             web_published_at=_utc(p.web_published_at)))
     return salida
+
+
+def _imagenes(p: Product, galeria: list) -> list[CanalImagen]:
+    """Galería del producto; sin galería, la foto suelta `image_url` como principal."""
+    if galeria:
+        return [CanalImagen(url=i.url, alt=i.alt, position=i.position or 0,
+                            is_primary=bool(i.is_primary)) for i in galeria]
+    if p.image_url:
+        return [CanalImagen(url=p.image_url, alt=None, position=0, is_primary=True)]
+    return []
 
 
 def _consulta_productos(db: Session, ctx: ChannelContext):
