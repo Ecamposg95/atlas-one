@@ -33,7 +33,7 @@ from typing import Iterable, Optional
 from sqlalchemy import event, func, inspect, select
 from sqlalchemy.orm import Session
 
-from app.core.security.channel_keys import MODULO_CANAL, canal_activo
+from app.core.security.channel_keys import MODULO_CANAL, canal_activo, canal_activo_en_cache
 from app.models.inventory import StockOnHand
 from app.models.modules import OrganizationModule
 from app.models.organization import Branch
@@ -192,11 +192,14 @@ def _escribir(session: Session, filas: list[dict]) -> None:
 
 
 # ── Listener before_flush ────────────────────────────────────────────────────
-def _org_de_sucursal(session: Session, branch_id: Optional[int]) -> Optional[int]:
-    if branch_id is None:
-        return None
+def _org_de_sucursal_en_cache(branch_id: Optional[int]) -> Optional[int]:
     with _org_lock:
-        org = _org_por_sucursal.get(branch_id)
+        return _org_por_sucursal.get(branch_id)
+
+
+def _org_de_sucursal(session: Session, branch_id: int) -> Optional[int]:
+    """Consulta la sucursal (solo dentro del SAVEPOINT) y la recuerda."""
+    org = _org_de_sucursal_en_cache(branch_id)
     if org is not None:
         return org
     b = session.get(Branch, branch_id)
@@ -211,43 +214,75 @@ def _cambio(obj, campo: str) -> bool:
     return inspect(obj).attrs[campo].history.has_changes()
 
 
-def _recolectar(session: Session):
-    """Lo que tocó este flush, por org. Solo Python, sin SQL (salvo deducir la
-    org de una sucursal la primera vez que se ve sin organization_id)."""
-    stock = defaultdict(set)      # org → {(branch_id, variant_id)}
-    variantes = defaultdict(set)  # org → {variant_id} (estado de venta cambió)
-    productos = defaultdict(set)  # org → {product_id}
+class _Toques:
+    """Lo que tocó un flush. `_recolectar` lo llena SIN SQL; lo que necesita
+    la base para saber su org queda en `sin_org` y se resuelve ya dentro del
+    SAVEPOINT."""
+
+    def __init__(self):
+        self.stock = defaultdict(set)      # org → {(branch_id, variant_id)}
+        self.variantes = defaultdict(set)  # org → {variant_id}
+        self.productos = defaultdict(set)  # org → {product_id}
+        self.stock_sin_org: list[tuple[int, str]] = []        # (branch_id, variant_id)
+        self.variantes_sin_org: list[ProductVariant] = []
+
+    def orgs(self) -> set:
+        return set(self.stock) | set(self.variantes) | set(self.productos)
+
+    def resolver(self, session: Session) -> None:
+        for bid, vid in self.stock_sin_org:
+            org = _org_de_sucursal(session, bid)
+            if org is not None:
+                self.stock[org].add((bid, vid))
+        for v in self.variantes_sin_org:
+            p = v.product  # carga perezosa: solo aquí, dentro del SAVEPOINT
+            if p is not None and p.organization_id is not None:
+                self.variantes[p.organization_id].add(v.id)
+        self.stock_sin_org, self.variantes_sin_org = [], []
+
+
+def _recolectar(session: Session) -> _Toques:
+    t = _Toques()
+
+    def _stock(obj):
+        if obj.variant_id is None or obj.branch_id is None:
+            return
+        org = obj.organization_id or _org_de_sucursal_en_cache(obj.branch_id)
+        if org is not None:
+            t.stock[org].add((obj.branch_id, obj.variant_id))
+        else:
+            t.stock_sin_org.append((obj.branch_id, obj.variant_id))
+
+    def _variante(obj):
+        org = obj.organization_id
+        if org is None and "product" in obj.__dict__ and obj.product is not None:
+            org = obj.product.organization_id
+        if org is not None:
+            t.variantes[org].add(obj.id)
+        else:
+            t.variantes_sin_org.append(obj)
+
     for obj in session.new:
         if isinstance(obj, StockOnHand) and obj.qty_on_hand:
-            org = obj.organization_id or _org_de_sucursal(session, obj.branch_id)
-            if org is not None and obj.variant_id:
-                stock[org].add((obj.branch_id, obj.variant_id))
+            _stock(obj)
     for obj in session.dirty:
         if isinstance(obj, StockOnHand):
             if _cambio(obj, "qty_on_hand"):
-                org = obj.organization_id or _org_de_sucursal(session, obj.branch_id)
-                if org is not None:
-                    stock[org].add((obj.branch_id, obj.variant_id))
+                _stock(obj)
         elif isinstance(obj, ProductVariant):
             if _cambio(obj, "deleted_at"):
-                org = obj.organization_id or (obj.product.organization_id if obj.product else None)
-                if org is not None:
-                    variantes[org].add(obj.id)
+                _variante(obj)
         elif isinstance(obj, Product):
             if any(_cambio(obj, c) for c in _CAMPOS_PRODUCTO) and obj.organization_id is not None:
-                productos[obj.organization_id].add(obj.id)
+                t.productos[obj.organization_id].add(obj.id)
     for obj in session.deleted:
         if isinstance(obj, StockOnHand):
-            org = obj.organization_id or _org_de_sucursal(session, obj.branch_id)
-            if org is not None:
-                stock[org].add((obj.branch_id, obj.variant_id))
+            _stock(obj)
         elif isinstance(obj, ProductVariant):
-            org = obj.organization_id or (obj.product.organization_id if obj.product else None)
-            if org is not None:
-                variantes[org].add(obj.id)
+            _variante(obj)
         elif isinstance(obj, Product) and obj.organization_id is not None:
-            productos[obj.organization_id].add(obj.id)
-    return stock, variantes, productos
+            t.productos[obj.organization_id].add(obj.id)
+    return t
 
 
 def _procesar_org(session: Session, org_id: int, stock: set, variantes: set, productos: set) -> None:
@@ -274,21 +309,25 @@ def _procesar_org(session: Session, org_id: int, stock: set, variantes: set, pro
 def _antes_del_flush(session: Session, flush_context, instances) -> None:
     try:
         with session.no_autoflush:
-            stock, variantes, productos = _recolectar(session)
-            orgs = set(stock) | set(variantes) | set(productos)
-            for org_id in orgs:
-                # Atajo: sin módulo no hay ni una consulta más (cache 60 s).
-                if not canal_activo(session, org_id):
-                    continue
-                try:
-                    # SAVEPOINT propio: si una consulta revienta en Postgres,
-                    # solo se pierde esto y el cobro sigue con su transacción sana.
-                    with session.connection().begin_nested():
-                        _procesar_org(session, org_id, stock.get(org_id, set()),
-                                      variantes.get(org_id, set()), productos.get(org_id, set()))
-                except Exception:  # noqa: BLE001 — jamás tumbar el negocio
-                    logger.exception("CANAL_DISPONIBILIDAD_FALLO org=%s", org_id)
-    except Exception:  # noqa: BLE001
+            t = _recolectar(session)  # solo Python
+            if not t.orgs() and not t.stock_sin_org and not t.variantes_sin_org:
+                return
+            # Atajo: si todo lo tocado es de orgs que el cache ya sabe sin el
+            # módulo, se sale sin una sola consulta (ni SAVEPOINT).
+            if (not t.stock_sin_org and not t.variantes_sin_org
+                    and all(canal_activo_en_cache(o) is False for o in t.orgs())):
+                return
+            # Todo lo que toca la base va en un SAVEPOINT propio: si algo
+            # revienta en Postgres, solo se pierde esto y el cobro sigue con
+            # su transacción sana.
+            with session.connection().begin_nested():
+                t.resolver(session)
+                for org_id in t.orgs():
+                    if not canal_activo(session, org_id):
+                        continue
+                    _procesar_org(session, org_id, t.stock.get(org_id, set()),
+                                  t.variantes.get(org_id, set()), t.productos.get(org_id, set()))
+    except Exception:  # noqa: BLE001 — jamás tumbar el negocio
         logger.exception("CANAL_DISPONIBILIDAD_FALLO")
 
 
@@ -305,27 +344,31 @@ def quitar_listener() -> None:
 
 
 # ── Red de seguridad ─────────────────────────────────────────────────────────
-def recalcular_disponibilidad(db: Session, org_id: int) -> int:
-    """Recorre la org y corrige diferencias contra la base (ve SQL crudo).
-    Devuelve las filas que cambiaron. Sin commit."""
-    db.flush()  # lo pendiente de la sesión a la base: aquí se lee solo SQL
-    web = sucursales_web(db, org_id)
+def _corregir_sql(db: Session, org_id: int, web: list[int],
+                  product_ids: Optional[list] = None) -> int:
+    """Recalcula contra la base (SQL puro) las variantes de la org, o solo las
+    de `product_ids`, y escribe lo que cambió."""
+    filtro_p = [Product.organization_id == org_id]
+    filtro_ca = [ChannelAvailability.organization_id == org_id]
+    if product_ids is not None:
+        filtro_p.append(Product.id.in_(product_ids))
+        filtro_ca.append(ChannelAvailability.product_id.in_(product_ids))
     estado = {
         vid: (pid, vb, pa, ap, pb)
         for vid, pid, vb, pa, ap, pb in db.execute(
             select(ProductVariant.id, ProductVariant.product_id, ProductVariant.deleted_at,
                    Product.is_active, Product.approval_status, Product.deleted_at)
             .join(Product, Product.id == ProductVariant.product_id)
-            .where(Product.organization_id == org_id)
+            .where(*filtro_p)
         )
     }
     sumas = {}
-    if web:
+    if web and estado:
         sumas = dict(db.execute(
             select(StockOnHand.variant_id, func.sum(StockOnHand.qty_on_hand))
             .join(ProductVariant, ProductVariant.id == StockOnHand.variant_id)
             .join(Product, Product.id == ProductVariant.product_id)
-            .where(Product.organization_id == org_id, StockOnHand.branch_id.in_(web))
+            .where(*filtro_p, StockOnHand.branch_id.in_(web))
             .group_by(StockOnHand.variant_id)
         ).all())
     actuales = {
@@ -333,7 +376,7 @@ def recalcular_disponibilidad(db: Session, org_id: int) -> int:
         for vid, pid, disp in db.execute(
             select(ChannelAvailability.variant_id, ChannelAvailability.product_id,
                    ChannelAvailability.available)
-            .where(ChannelAvailability.organization_id == org_id)
+            .where(*filtro_ca)
         )
     }
     calculado = {
@@ -345,3 +388,18 @@ def recalcular_disponibilidad(db: Session, org_id: int) -> int:
     filas = _cambios(org_id, calculado, actuales)
     _escribir(db, filas)
     return len(filas)
+
+
+def recalcular_productos(db: Session, org_id: int, product_ids) -> int:
+    """Recalcula solo las variantes de esos productos (p. ej. tras un UPDATE en
+    bloque que el listener no ve). Devuelve filas cambiadas. Sin commit."""
+    db.flush()  # lo pendiente de la sesión a la base: aquí se lee solo SQL
+    web = sucursales_web(db, org_id)
+    return sum(_corregir_sql(db, org_id, web, lote) for lote in _lotes(set(product_ids)))
+
+
+def recalcular_disponibilidad(db: Session, org_id: int) -> int:
+    """Recorre toda la org y corrige diferencias contra la base (ve SQL crudo).
+    Devuelve las filas que cambiaron. Sin commit."""
+    db.flush()
+    return _corregir_sql(db, org_id, sucursales_web(db, org_id))

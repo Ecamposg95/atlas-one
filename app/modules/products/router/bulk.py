@@ -63,6 +63,12 @@ def batch_products_action(
     else:
         raise HTTPException(status_code=400, detail="Acción no válida")
 
+    # El UPDATE en bloque no pasa por el listener de disponibilidad web:
+    # se recalculan aquí esos productos, en la misma transacción.
+    if processed and canal_activo(db, org_id):
+        from app.services.canal_disponibilidad import recalcular_productos
+        recalcular_productos(db, org_id, req.ids)
+
     db.commit()
     if processed == 0:
         return {"status": "ok", "processed": 0, "message": "Ningún producto fue modificado (ya tenían ese estado)."}

@@ -368,3 +368,86 @@ def test_registrar_listener_es_idempotente():
     cd.quitar_listener()
     assert not event.contains(Session, "before_flush", cd._antes_del_flush)
     cd.registrar_listener()
+
+
+# ── Acciones en bloque (UPDATE que el listener no ve) ────────────────────────
+def _lote(client, org, auth, accion, ids):
+    r = client.post("/api/products/batch-action", json={"action": accion, "ids": ids},
+                    headers={**auth, "X-Organization-ID": str(org.id)})
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+@pytest.mark.parametrize("accion", ["deactivate", "delete"])
+def test_lote_desactivar_y_reactivar(client, db, org, branch_a, auth_admin, accion):
+    _encender(db, org, [branch_a.id])
+    p, v = _producto(db, org, {branch_a: 3})
+    otro_p, otro_v = _producto(db, org, {branch_a: 3})
+    assert _fila(db, org, v).available is True
+
+    assert _lote(client, org, auth_admin, accion, [p.id])["processed"] == 1
+    assert _fila(db, org, v).available is False
+    assert _fila(db, org, otro_v).available is True
+
+    assert _lote(client, org, auth_admin, "activate", [p.id])["processed"] == 1
+    assert _fila(db, org, v).available is True
+
+
+def test_lote_aprobar_pendiente_con_existencias(client, db, org, branch_a, auth_admin):
+    _encender(db, org, [branch_a.id])
+    p, v = _producto(db, org, {})
+    p.approval_status = "PENDING"
+    db.flush()
+    db.add(StockOnHand(variant_id=v.id, branch_id=branch_a.id, organization_id=org.id,
+                       qty_on_hand=Decimal("2")))
+    db.flush()
+    assert _fila(db, org, v) is None  # pendiente: no se publica
+
+    assert _lote(client, org, auth_admin, "approve", [p.id])["processed"] == 1
+    assert _fila(db, org, v).available is True
+
+
+def test_lote_org_sin_modulo_no_escribe(client, db, org, branch_a, auth_admin):
+    p, v = _producto(db, org, {branch_a: 3})
+    _lote(client, org, auth_admin, "deactivate", [p.id])
+    _lote(client, org, auth_admin, "activate", [p.id])
+    assert _filas(db, org) == 0
+
+
+# ── Nunca tumba el cobro ─────────────────────────────────────────────────────
+def test_fallo_del_listener_no_tumba_la_venta(client, db, org, branch_a, cajero_a, monkeypatch):
+    _encender(db, org, [branch_a.id])
+    _, v = _producto(db, org, {branch_a: 1})
+    assert _fila(db, org, v).available is True
+
+    def _revienta(*a, **k):
+        raise RuntimeError("falla simulada del canal")
+
+    monkeypatch.setattr(cd, "_procesar_org", _revienta)
+    r = _vender(client, db, org, branch_a, cajero_a, v)
+    assert r.status_code in (200, 201)
+    assert db.query(StockOnHand.qty_on_hand).filter_by(variant_id=v.id).scalar() == 0
+    assert _fila(db, org, v).available is True  # se perdió solo el recálculo
+
+
+def test_fallo_sql_dentro_del_savepoint_no_tumba_la_venta(client, db, org, branch_a, cajero_a, monkeypatch):
+    """Un error de base dentro del listener se deshace en su SAVEPOINT."""
+    _encender(db, org, [branch_a.id])
+    _, v = _producto(db, org, {branch_a: 2})
+
+    def _sql_roto(session, *a, **k):
+        session.execute(text("SELECT * FROM tabla_que_no_existe"))
+
+    monkeypatch.setattr(cd, "_procesar_org", _sql_roto)
+    _vender(client, db, org, branch_a, cajero_a, v)
+    assert db.query(StockOnHand.qty_on_hand).filter_by(variant_id=v.id).scalar() == 1
+
+
+def test_stock_sin_org_en_org_sin_modulo_sin_escrituras(db, org, branch_a):
+    """La sucursal se resuelve dentro del SAVEPOINT y, sin módulo, no escribe."""
+    cd._org_por_sucursal.pop(branch_a.id, None)
+    _, v = _producto(db, org, {})
+    db.add(StockOnHand(variant_id=v.id, branch_id=branch_a.id, qty_on_hand=Decimal("2")))
+    db.flush()
+    assert cd._org_por_sucursal.get(branch_a.id) == org.id
+    assert _filas(db, org) == 0

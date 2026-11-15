@@ -70,6 +70,15 @@ def canal_activo(db: Session, org_id: int) -> bool:
     return activo
 
 
+def canal_activo_en_cache(org_id: int) -> Optional[bool]:
+    """Lo que dice el cache sin consultar la base; None si no hay dato vigente."""
+    with _cache_lock:
+        hit = _cache_canal.get(org_id)
+    if hit and time.monotonic() - hit[0] < _CACHE_CANAL_SEG:
+        return hit[1]
+    return None
+
+
 def invalidar_cache_canal(org_id: Optional[int] = None) -> None:
     """Olvida el estado del módulo de una org (o de todas si `org_id` es None)."""
     with _cache_lock:
