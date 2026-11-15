@@ -388,41 +388,54 @@ def _precio_distinto(db: Session, org_id: int, plan: _Plan, grupos: list[Grupo],
 
 
 def _departamento(db: Session, org_id: int, carga: CargaMercancia, plan: _Plan) -> list[DudaNueva]:
-    """Una duda por tipo de prenda sin departamento (no una por producto)."""
-    por_tipo: dict[str, list[int]] = {}
-    for i in plan.activos():
-        if not plan.norm[i].departamento:
-            por_tipo.setdefault(_llave(plan.norm[i].tipo), []).append(i)
-    if not por_tipo:
-        return []
+    """Una duda por tipo de prenda sin departamento, o cuyo departamento (de las
+    reglas o escrito por el dueño) no existe en la org. Opciones: los existentes;
+    en migración, además, crearlo."""
     deptos = sorted(
         db.query(Department).filter(Department.organization_id == org_id,
                                     Department.deleted_at == None).all(),  # noqa: E711
         key=lambda d: (_llave(d.name), d.id),
     )
+    existentes = {_llave(d.name) for d in deptos}
+    # Una duda por tipo de prenda (llave estable "departamento|<tipo>", sea que
+    # falte el departamento o que no exista): contestar "crear" fija el nombre
+    # y la misma clave ya contestada no se reabre.
+    por_tipo: dict[str, list[int]] = {}
+    for i in plan.activos():
+        nombre = plan.norm[i].departamento
+        if not nombre or _llave(nombre) not in existentes:
+            por_tipo.setdefault(_llave(plan.norm[i].tipo), []).append(i)
+    if not por_tipo:
+        return []
     dudas: list[DudaNueva] = []
     for llave, idxs in por_tipo.items():
         tipo = plan.norm[idxs[0]].tipo
+        faltante = next((plan.norm[i].departamento for i in idxs if plan.norm[i].departamento), None)
+        # Nombre del departamento a crear: el que dictan las reglas o el tipo de prenda.
+        nombre = faltante or tipo
         # La etiqueta es el nombre exacto del departamento: de ahí sale el valor.
         opciones = [{"clave": f"depto:{d.id}", "etiqueta": d.name} for d in deptos]
-        if carga.proposito == "migracion" and tipo:
-            # Sin tipo de prenda no hay nombre para el departamento nuevo: se contesta con texto.
-            opciones.append({"clave": "crear", "etiqueta": f'Crear el departamento "{tipo}"'})
-        parecidos = sorted(((p, d) for d in deptos if tipo and (p := _parecido(tipo, d.name))),
+        if carga.proposito == "migracion" and nombre:
+            # Sin nombre no hay departamento nuevo que crear: se contesta con texto.
+            opciones.append({"clave": "crear", "etiqueta": f'Crear el departamento "{nombre}"'})
+        parecidos = sorted(((p, d) for d in deptos if nombre and (p := _parecido(nombre, d.name))),
                            key=lambda x: x[0])
         if parecidos:
             recomendada = f"depto:{parecidos[0][1].id}"
-        elif carga.proposito == "migracion" and tipo:
+        elif carga.proposito == "migracion" and nombre:
             recomendada = "crear"
         else:
             recomendada = None
         cual = f'"{tipo}"' if tipo else "los productos sin tipo de prenda"
+        if faltante:
+            texto = (f'El departamento "{faltante}" de {cual} no existe en tu catálogo. '
+                     "¿Dónde lo pongo?")
+        else:
+            texto = f"No sé en qué departamento va {cual}. ¿Dónde lo pongo?"
         dudas.append(DudaNueva(
-            tipo="departamento",
-            texto=f"No sé en qué departamento va {cual}. ¿Dónde lo pongo?",
-            opciones=opciones, recomendada=recomendada,
-            renglones=[plan.orden(i) for i in idxs],
-            clave=f"departamento|{llave}", contexto={"tipo": tipo},
+            tipo="departamento", texto=texto, opciones=opciones, recomendada=recomendada,
+            renglones=[plan.orden(i) for i in idxs], clave=f"departamento|{llave}",
+            contexto={"tipo": tipo, "nombre": nombre},
         ))
     return dudas
 
@@ -553,7 +566,7 @@ def opcion_a_operaciones(duda: CargaDuda, clave: str, valor_texto: Optional[str]
         return [{"op": "fijar_campo", "grupo": ctx["grupo"], "campo": "accion_precio", "valor": clave}]
     if tipo == "departamento":
         if clave == "crear":
-            return _fijar(duda, "departamento", ctx.get("tipo") or "")
+            return _fijar(duda, "departamento", ctx.get("nombre") or ctx.get("tipo") or "")
         return _fijar(duda, "departamento", opciones[clave]["etiqueta"])
     if tipo == "genero":
         return _fijar(duda, "genero", clave)

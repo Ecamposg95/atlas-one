@@ -419,3 +419,23 @@ def test_departamento_sin_tipo_no_ofrece_crear(db, org):
     assert "crear" not in _claves(d) and d.recomendada is None
     with pytest.raises(ValueError):
         opcion_a_operaciones(_guardada(d), "crear", None)
+
+
+def test_departamento_de_las_reglas_que_no_existe(db, org):
+    """`reglas.tipos` dice "Playeras", pero la org no tiene ese departamento."""
+    _marca(db, org)
+    otro = Department(name="Accesorios", organization_id=org.id)
+    db.add(otro)
+    db.flush()
+    for proposito in ("entrada", "migracion"):
+        [d] = [d for d in _dudas(db, org, [_crudo(), _crudo(talla="G")], carga=_carga(proposito))
+               if d.tipo == "departamento"]
+        assert d.clave == "departamento|playera" and d.renglones == [1, 2]
+        assert '"Playeras"' in d.texto
+        if proposito == "entrada":
+            assert _claves(d) == [f"depto:{otro.id}"] and d.recomendada is None
+        else:
+            assert _claves(d) == [f"depto:{otro.id}", "crear"] and d.recomendada == "crear"
+            assert opcion_a_operaciones(_guardada(d), "crear", None) == [
+                {"op": "fijar_campo", "renglones": [1, 2], "campo": "departamento",
+                 "valor": "Playeras"}]

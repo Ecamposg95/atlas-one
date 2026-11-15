@@ -120,7 +120,7 @@ def cruzar_con_catalogo(
             prefijos[marca.id] = prefijo_de_marca(_skus_de_marca(db, org_id, marca.id))
         prefijo = prefijos[marca.id]
 
-        # 1) Por SKU calculado, en cualquier departamento.
+        # 1) Por SKU calculado, en cualquier departamento y solo de la misma marca.
         por_sku: dict[str, str] = {}
         producto_id: Optional[str] = None
         for talla in g.tallas or {"": None}:
@@ -133,7 +133,10 @@ def cruzar_con_catalogo(
             )
             if v is None:
                 continue
-            if _producto_vivo(db, org_id, v.product_id) is None:
+            dueno = _producto_vivo(db, org_id, v.product_id)
+            # Un SKU de la prenda de otra marca no es coincidencia (un SKU sin
+            # prefijo de marca, "PLAY", puede repetirse entre marcas).
+            if dueno is None or dueno.brand_id != marca.id:
                 continue
             if producto_id is None:
                 producto_id = v.product_id

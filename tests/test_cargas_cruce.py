@@ -196,3 +196,12 @@ def test_ultimo_conteo_por_departamento(db, org, branch_a):
     r = ultimo_conteo_por_departamento(db, org.id, [d.id, "otro"])
     assert list(r) == [d.id]
     assert r[d.id]["conteo_id"] == nuevo.id and r[d.id]["cerrado_at"] is not None
+
+
+def test_sku_de_otra_marca_no_coincide(db, org):
+    """El SKU calculado ("PLAY") es de una Playera de otra marca: no es la misma."""
+    _catalogo(db, org, marca="Casa Dos", nombre="Camisa", skus=(("PLAY", "M", "100.00"),))
+    db.add(Brand(name="Marca Uno", organization_id=org.id))
+    db.flush()
+    g = _grupo({"M": Decimal("100.00")})
+    assert cruzar_con_catalogo(db, org.id, [g], [_renglon("M")], REGLAS)["g"] is None

@@ -33,6 +33,7 @@ from app.modules.cargas.models import CargaCambio, CargaDuda, CargaMercancia, Ca
 from app.modules.cargas.normalizar import agrupar, normalizar_renglon, prefijo_de_marca, sku_para
 from app.modules.cargas.reglas import reglas_de_la_org
 from app.modules.cargas.tipos import RenglonCrudo, RenglonNormalizado
+from app.modules.products.services.codigos import sku_en_uso
 from app.modules.products.models import ProductVariant
 from app.modules.tenants.models import Organization
 
@@ -378,13 +379,36 @@ def _crudo_corregido(fila: CargaRenglon, usuario: dict) -> RenglonCrudo:
 
 
 def _contestada_por_el_usuario(d: DudaNueva, por_orden: dict[int, CargaRenglon]) -> bool:
-    """Dudas cuya respuesta ya está en las correcciones de sus renglones."""
+    """Dudas cuya respuesta ya está en las correcciones de sus renglones.
+
+    "Darlo de alta aparte" también contesta `casi_igual`: el dueño ya dijo que
+    es un producto nuevo, aunque se parezca al que tiene."""
     llaves = {"casi_igual": ("nuevo", "usar_product_id"),
               "precio_distinto_existente": ("accion_precio",)}.get(d.tipo)
     if not llaves or not d.renglones:
         return False
-    return all(any(_usuario(por_orden[n]).get(k) for k in llaves)
-               for n in d.renglones if n in por_orden)
+
+    def contestada(u: dict) -> bool:
+        if d.tipo == "casi_igual" and u.get("accion_precio") == "aparte":
+            return True
+        return any(u.get(k) for k in llaves)
+    return all(contestada(_usuario(por_orden[n])) for n in d.renglones if n in por_orden)
+
+
+def _sufijo_aparte(db: Session, org_id: int, g, reglas, prefijo: Optional[str],
+                   tomados: set[str]) -> str:
+    """Primer "-N" (N ≥ 2) cuyos SKU no existen en la org (archivados incluidos)
+    ni en otro grupo de esta carga."""
+    original = g.sufijo
+    try:
+        for n in range(2, 100):
+            g.sufijo = f"{original}-{n}"
+            skus = [sku_para(g, t or None, reglas, prefijo) for t in (g.tallas or {"": None})]
+            if not any(s.lower() in tomados or sku_en_uso(db, org_id, s) for s in skus):
+                return g.sufijo
+    finally:
+        g.sufijo = original
+    raise ValueError(f'no hay SKU libre para dar de alta aparte "{g.llave}"')
 
 
 def _conciliar_dudas(db: Session, carga: CargaMercancia, nuevas: list[DudaNueva],
@@ -447,11 +471,16 @@ def recalcular_plan(db: Session, carga: CargaMercancia) -> None:
     grupos = agrupar(norm)
     coincidencias = cruzar_con_catalogo(db, org_id, grupos, norm, reglas)
     prefijos: dict[str, Optional[str]] = {}
+    # SKU que los grupos de esta carga ya calculan: un grupo "aparte" no los toma.
+    tomados = {(f.sku or "").lower() for f in activos if f.sku}
     reabrir: set[str] = set()
     for g in grupos:
         correcciones = [_usuario(activos[i]) for i in g.renglones]
         usar = next((u["usar_product_id"] for u in correcciones if u.get("usar_product_id")), None)
-        if any(u.get("nuevo") for u in correcciones):
+        # "Darlo de alta aparte" (precio distinto a la prenda que ya existe):
+        # producto nuevo con sufijo "-N" en el SKU, sin tocar al existente.
+        aparte = any(u.get("accion_precio") == "aparte" for u in correcciones)
+        if any(u.get("nuevo") for u in correcciones) or aparte:
             coincidencias[g.llave] = None
         elif usar:
             producto = _producto_vivo(db, org_id, usar)
@@ -468,6 +497,9 @@ def recalcular_plan(db: Session, carga: CargaMercancia) -> None:
         if marca is not None and marca.id not in prefijos:
             prefijos[marca.id] = prefijo_de_marca(_skus_de_marca(db, org_id, marca.id))
         prefijo = prefijos.get(marca.id) if marca is not None else None
+        if aparte:
+            propios = {(activos[i].sku or "").lower() for i in g.renglones}
+            g.sufijo = _sufijo_aparte(db, org_id, g, reglas, prefijo, tomados - propios)
         ids = list(c.variante_por_talla.values()) if c else []
         sku_variante = {v.id: v.sku for v in db.query(ProductVariant).filter(
             ProductVariant.organization_id == org_id, ProductVariant.id.in_(ids))} if ids else {}
@@ -485,6 +517,10 @@ def recalcular_plan(db: Session, carga: CargaMercancia) -> None:
     marcar_ya_cargado(db, org_id, carga, activos, reglas.ventana_ya_cargado_dias)
     nuevas = generar_dudas(db, org_id, carga, activos, grupos, coincidencias, reglas)
     por_orden = {f.orden: f for f in activos}
+    if carga.proposito == "entrada":
+        # En entrada no se crean departamentos: si la respuesta nombró uno que no
+        # existe (o dejó de existir), la pregunta vuelve a abrirse.
+        reabrir |= {d.clave for d in nuevas if d.tipo == "departamento"}
     _conciliar_dudas(db, carga, [d for d in nuevas if not _contestada_por_el_usuario(d, por_orden)],
                      reabrir)
 

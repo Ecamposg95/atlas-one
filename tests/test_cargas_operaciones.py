@@ -111,6 +111,7 @@ def test_fijar_precio_a_grupo_recalcula_y_cierra_duda(db, org, admin_a):
 
 
 def test_override_sobrevive_al_recalculo(db, org, admin_a):
+    db.add(Department(name="Pantalones", organization_id=org.id))  # en entrada debe existir
     carga = _armar(db, org)
     aplicar_operaciones(db, carga, admin_a, [
         {"op": "fijar_campo", "renglones": [3], "campo": "departamento", "valor": "Pantalones"},
@@ -138,6 +139,7 @@ def test_resolver_duda_sin_operaciones_queda_resuelta(db, org, admin_a):
 
 
 def test_resolver_duda_con_texto(db, org, admin_a):
+    db.add(Department(name="Pantalones", organization_id=org.id))  # en entrada debe existir
     carga = _armar(db, org)
     _, rechazos = aplicar_operaciones(db, carga, admin_a, [
         {"op": "resolver_duda", "numero": 2, "opcion": "", "valor": "1,250.50"},
@@ -150,6 +152,17 @@ def test_resolver_duda_con_texto(db, org, admin_a):
     dudas = _dudas(db, carga)
     assert dudas[2].estado == dudas[3].estado == "resuelta"
     assert dudas[2].respuesta == "1,250.50"
+
+
+def test_departamento_inexistente_en_entrada_reabre_la_duda(db, org, admin_a):
+    carga = _armar(db, org)
+    _, rechazos = aplicar_operaciones(db, carga, admin_a, [
+        {"op": "resolver_duda", "numero": 3, "opcion": "", "valor": "No Existe"}], None)
+    assert rechazos == []
+    d = _dudas(db, carga)[3]
+    assert d.tipo == "departamento" and d.estado == "abierta" and d.respuesta is None
+    assert '"No Existe"' in d.texto
+    assert all(o["clave"] != "crear" for o in d.opciones)
 
 
 def test_dudas_nuevas_toman_numeros_siguientes(db, org, admin_a):
