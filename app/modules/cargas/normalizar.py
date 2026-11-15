@@ -49,7 +49,13 @@ def _talla_normalizada(talla: Optional[str], reglas: ReglasCarga) -> Optional[st
     if talla is None or not talla.strip():
         return None
     mapeada = _buscar(reglas.mapa_tallas, talla)
-    return mapeada if mapeada is not None else talla.strip()
+    if mapeada is None:
+        mapeada = talla.strip()
+    # Canoniza contra la escala (insensible a mayúsculas y espacios).
+    for t in reglas.escala_ropa:
+        if _llave(t) == _llave(mapeada):
+            return t
+    return mapeada
 
 
 def _costo(r: RenglonCrudo, reglas: ReglasCarga, monedas: dict[str, Optional[Decimal]]) -> Optional[Decimal]:
@@ -184,6 +190,10 @@ def sku_para(grupo: Grupo, talla: Optional[str], reglas: ReglasCarga, prefijo: O
         material = _material_efectivo(grupo.material, reglas)
         if material:
             partes.append(_limpia_sku(material)[:3])
+        if grupo.genero == "MUJER" and reglas.sufijo_dama:
+            dama = _limpia_sku(reglas.sufijo_dama)
+            if dama:
+                partes.append(dama)
         base = "-".join(partes)
     base += grupo.sufijo
     return f"{base}-{sufijo_talla}" if sufijo_talla else base

@@ -116,3 +116,41 @@ def test_tipo_desconocido_cae_en_sku_sugerido():
     g = agrupar([norm(crudo(tipo="Bufanda", talla="M"))])[0]
     s = sku_para(g, "M", reglas(), "MU")
     assert s == "MU-BUFA"
+
+
+def test_talla_se_canoniza_a_la_escala():
+    assert norm(crudo(talla="m ")).talla == "M"
+    assert norm(crudo(talla="xl")).talla == "XL"
+    assert norm(crudo(talla=" 7 ")).talla == "7"
+
+
+def test_tercer_sufijo_con_tres_precios_misma_talla():
+    rs = [norm(crudo(talla="M", precio=D(p))) for p in (100, 120, 140)]
+    assert [x.sufijo for x in agrupar(rs)] == ["", "-2", "-3"]
+
+
+def test_sin_precio_misma_talla_que_con_precio_grupo_aparte():
+    g = agrupar([norm(crudo(talla="M", precio=D(100))), norm(crudo(talla="M"))])
+    assert [x.sufijo for x in g] == ["", "-2"]
+    assert g[1].tallas == {"M": None}
+
+
+def _pant(**kw):
+    rg = reglas(tipos={"Pantalon": TipoPrenda(codigo_sku="PANT", departamento="Pantalones")}, **kw)
+    return rg, lambda marca: agrupar([
+        normalizar_renglon(crudo(tipo="Pantalon", marca=marca, talla=t), rg, {}) for t in ("Ch", "M")
+    ])[0]
+
+
+def test_sufijo_dama_en_mujer():
+    for sufijo in ("MUJ", "-MUJ"):
+        rg, g = _pant(sufijo_dama=sufijo, genero_por_marca={"Marca Uno": "MUJER"})
+        assert sku_para(g("Marca Uno"), "Ch", rg, "MU") == "MU-PANT-MUJ"
+        assert sku_para(g("Marca Uno"), "M", rg, "MU") == "MU-PANT-MUJ-M"
+
+
+def test_sufijo_dama_no_afecta_hombre_ni_sin_regla():
+    rg, g = _pant(sufijo_dama="MUJ")
+    assert sku_para(g("Marca Uno"), "M", rg, "MU") == "MU-PANT-M"
+    rg, g = _pant(sufijo_dama=None, genero_por_marca={"Marca Uno": "MUJER"})
+    assert sku_para(g("Marca Uno"), "M", rg, "MU") == "MU-PANT-M"
