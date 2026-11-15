@@ -790,7 +790,15 @@ def toggle_org_module(
         entity_id=str(org_id),
         payload=json.dumps({"module": module_key, "enabled": enable})
     ))
+    from app.core.security.channel_keys import MODULO_CANAL, invalidar_cache_canal
+    if module_key == MODULO_CANAL and enable:
+        # Al encender la tienda en línea se materializa la disponibilidad
+        # de toda la org en la misma transacción.
+        from app.services.canal_disponibilidad import recalcular_disponibilidad
+        recalcular_disponibilidad(db, org_id)
     db.commit()
+    if module_key == MODULO_CANAL:
+        invalidar_cache_canal(org_id)
     return {"message": f"Module {module_key} set to {enable}"}
 
 

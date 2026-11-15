@@ -78,6 +78,10 @@ app = FastAPI(
 @app.on_event("startup")
 async def startup_event():
     setup_abasto_subscribers()
+    # Disponibilidad web (canal tienda_en_linea): listener before_flush global.
+    # Sale sin consultar nada en orgs sin el módulo.
+    from app.services.canal_disponibilidad import registrar_listener
+    registrar_listener()
     from app.core.database import SessionLocal
     from app.services.capabilities_service import seed_global_modules
     db = SessionLocal()
