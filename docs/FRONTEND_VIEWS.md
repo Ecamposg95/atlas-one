@@ -200,7 +200,7 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Propósito:** ventas por periodo (`Hoy · Ayer · 7 días · 30 días · Este mes` + rango, `pages/reports/presetsReportes.ts`; arranca en **Hoy**) con cifras (`KpiCard`), buscador de folio/cliente, detalle en `ui/Modal`, reimprimir (PIN de supervisor si el backend lo pide) y devolver.
 - **Quién la ve:** todos. Cajera y gerente ven su sucursal (el backend la impone); admin y dueño toda la organización y, con más de una sucursal que vende (`useSucursalesVendibles`), un selector y la columna «Sucursal». `branch_id` solo viaja cuando eligen una.
 - **Datos/API:** `salesApi.list/getStats`, `printerApi.getTicketBase64/printViaAgent`, `organizationApi.getBranches` (solo HQ).
-- **Versión cajera:** título «Ventas de hoy», sin KPIs, filtros ni selector de periodo (el backend solo le entrega las de hoy de su sucursal); `ReturnModal` le avisa que solo devuelve ventas de hoy y que lo anterior lo hace el gerente.
+- **Versión cajera:** título «Ventas de hoy», sin KPIs, filtros ni selector de periodo (el backend solo le entrega las de hoy de su sucursal); lista vacía = «Sin ventas hoy»; `ReturnModal` le avisa que solo devuelve ventas de hoy y que lo anterior lo hace el gerente.
 - **Notas:** la casilla «Incluir abiertas/borradores» arranca **encendida para admin y dueño** (como la bitácora HQ que sustituye) y apagada para cajera y gerente: sin ella solo PAID/REFUNDED_*/CANCELLED. Paginación de 100. Solo tokens `dax-*`.
 
 ### `/quotes` — Cotizaciones 📱
@@ -220,7 +220,7 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 
 ### `/returns` — Devoluciones 📱
 - **Archivo:** `pages/sales/Returns.tsx`. Sustituye también a `hq/HQReturns.tsx` (borrada 2026-10-25; `/hq/returns` redirige).
-- **Propósito:** cajera → `ReturnsBranchView` (asistente). Gerente, admin y dueño → bandeja: Pendientes (siempre completos) e Historial acotado por periodo (`presetsReportes`, arranca en 30 días; ambas listas con `limit` 200); detalle en `ui/Modal` con Aprobar/Rechazar (motivo opcional); reembolso en efectivo alto confirmado con `confirm()` y `force=true` (R-3).
+- **Propósito:** cajera → `ReturnsBranchView` (asistente; busca por folio con `GET /sales/by-folio/...`, que a la cajera solo le encuentra tickets de hoy: ante un 404 lee «Ticket no encontrado. Solo aparecen ventas de hoy; para días anteriores pide al gerente.»). Gerente, admin y dueño → bandeja: Pendientes (siempre completos) e Historial acotado por periodo (`presetsReportes`, arranca en 30 días; ambas listas con `limit` 200); detalle en `ui/Modal` con Aprobar/Rechazar (motivo opcional); reembolso en efectivo alto confirmado con `confirm()` y `force=true` (R-3).
 - **Quién la ve:** todos — módulo `returns`. `CAN_APPROVE` = Admin/Dueño/Gerente. Admin y dueño con más de una sucursal que vende ven el selector y la columna «Sucursal». El gerente no tiene selector pero sí la columna: `GET /returns/` lo trata como rol de oficina (`HQ_ROLES` de `metricas_ventas.py`) y le devuelve toda la organización, como antes de la fusión. El ítem de menú no lleva `module:` a propósito: un solo ítem para todos los roles.
 - **Datos/API:** `returnsApi.list/approve/reject`, `organizationApi.getBranches` (solo HQ).
 - **Notas:** estados con `estadoDevolucion` («Por aprobar», «Aprobada», «Rechazada»). **Gotcha:** hooks tras early-return (`Returns` → `ReturnsAdminView`).
