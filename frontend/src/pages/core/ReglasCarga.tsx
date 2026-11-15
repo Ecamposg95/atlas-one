@@ -121,10 +121,10 @@ export function ReglasCarga({ org, branches, onGuardado }: Props) {
             </fieldset>
             <div>
               <label htmlFor="rc-fraccion" className="dax-label">Fracción del precio</label>
-              <input id="rc-fraccion" type="number" step="0.01" min="0" value={r.fraccion}
+              <input id="rc-fraccion" type="number" step="0.01" min="0.01" max="1" value={r.fraccion}
                 onChange={(e) => set('fraccion', e.target.value)} disabled={r.costo_si_falta !== 'fraccion_precio'}
                 className="dax-input w-full tabular-nums disabled:opacity-40" />
-              <p className="text-[10px] mt-1 text-dax-faint">0.5 = el costo es la mitad del precio.</p>
+              <p className="text-[10px] mt-1 text-dax-faint">Entre 0.01 y 1. 0.5 = el costo es la mitad del precio.</p>
               <Err campo="fraccion" />
             </div>
             <label className="flex items-center gap-2 text-sm text-dax-text min-h-[44px] sm:min-h-0 sm:col-span-2">
@@ -300,8 +300,9 @@ export function ReglasCarga({ org, branches, onGuardado }: Props) {
 
         <section>
           <label htmlFor="rc-ventana" className="dax-label">Días para avisar "ya cargado"</label>
-          <input id="rc-ventana" type="number" min="0" value={r.ventana_ya_cargado_dias} className="dax-input w-full sm:w-40 tabular-nums"
+          <input id="rc-ventana" type="number" min="0" max="90" value={r.ventana_ya_cargado_dias} className="dax-input w-full sm:w-40 tabular-nums"
             onChange={(e) => set('ventana_ya_cargado_dias', e.target.value === '' ? 0 : Number(e.target.value))} />
+          <p className="text-[10px] mt-1 text-dax-faint">De 0 a 90 días.</p>
           <Err campo="ventana_ya_cargado_dias" />
         </section>
       </div>

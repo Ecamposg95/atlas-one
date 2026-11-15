@@ -56,6 +56,14 @@ describe('Empresa: reglas de carga', () => {
     expect(enviado.reglas_carga.escala_ropa).toEqual(['CH', 'M'])
   })
 
+  it('fracción y días tienen sus límites en el formulario', async () => {
+    render(<Organization />)
+    const ventana = (await screen.findByLabelText('Días para avisar "ya cargado"')) as HTMLInputElement
+    expect([ventana.min, ventana.max]).toEqual(['0', '90'])
+    const fraccion = screen.getByLabelText('Fracción del precio') as HTMLInputElement
+    expect([fraccion.min, fraccion.max]).toEqual(['0.01', '1'])
+  })
+
   it('agregar una fila de tipo de prenda la envía en reglas_carga.tipos', async () => {
     render(<Organization />)
     fireEvent.click(await screen.findByText('Agregar tipo de prenda'))

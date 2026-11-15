@@ -20,7 +20,8 @@ class RangoPrecio(BaseModel):
 
 class ReglasCarga(BaseModel):
     costo_si_falta: Literal["preguntar", "fraccion_precio"] = "preguntar"
-    fraccion: Decimal = Decimal("0.5")
+    # Costo = precio × fracción: más de 0 y a lo más el precio completo.
+    fraccion: Decimal = Field(Decimal("0.5"), gt=0, le=1)
     iva: bool = False
     sucursal_recibe: Optional[int] = None
     activar_en: Literal["todas_las_que_venden", "sucursal_recibe"] = "todas_las_que_venden"
@@ -34,7 +35,7 @@ class ReglasCarga(BaseModel):
     sufijo_dama: Optional[str] = None
     matriz_por_omision: Literal["completa", "solo_lo_que_hay"] = "solo_lo_que_hay"
     precios_familia: list[RangoPrecio] = Field(default_factory=list)
-    ventana_ya_cargado_dias: int = 14
+    ventana_ya_cargado_dias: int = Field(14, ge=0, le=90)
 
 
 def reglas_de_la_org(org) -> ReglasCarga:

@@ -42,6 +42,24 @@ def test_reglas_invalidas_dan_422(client, auth_admin_a):
     assert r.status_code == 422
 
 
+@pytest.mark.parametrize("campo, valor", [
+    ("fraccion", "0"), ("fraccion", "-0.1"), ("fraccion", "1.5"),
+    ("ventana_ya_cargado_dias", -1), ("ventana_ya_cargado_dias", 91),
+])
+def test_reglas_fuera_de_rango_dan_422_con_el_campo(client, auth_admin_a, campo, valor):
+    r = client.put("/api/organization/", json={"reglas_carga": {campo: valor}}, headers=auth_admin_a)
+    assert r.status_code == 422
+    assert r.json()["detail"][0]["loc"][-1] == campo
+
+
+@pytest.mark.parametrize("campo, valor", [("fraccion", "1"), ("fraccion", "0.01"),
+                                          ("ventana_ya_cargado_dias", 0),
+                                          ("ventana_ya_cargado_dias", 90)])
+def test_reglas_en_los_bordes_se_aceptan(client, auth_admin_a, campo, valor):
+    r = client.put("/api/organization/", json={"reglas_carga": {campo: valor}}, headers=auth_admin_a)
+    assert r.status_code == 200, r.text
+
+
 def test_reglas_validas_se_guardan_y_se_leen(client, auth_admin_a, db, org):
     r = client.put(
         "/api/organization/",

@@ -56,7 +56,7 @@ Hay dos lugares, con funciones distintas:
 - **Reglas de carga** (`organization.reglas_carga`, JSON): las aplica el **código** de forma determinista,
   la IA no las decide. Se editan en Empresa → "Reglas de carga". Campos:
   - `costo_si_falta`: `preguntar` o `fraccion_precio` (con `fraccion`, por omisión 0.5 = costo es esa
-    fracción del precio);
+    fracción del precio; más de 0 y a lo más 1);
   - `iva` (por omisión no);
   - `sucursal_recibe`: sucursal que recibe la mercancía por omisión;
   - `activar_en`: `todas_las_que_venden` o `sucursal_recibe`;
