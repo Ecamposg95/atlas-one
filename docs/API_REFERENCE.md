@@ -44,9 +44,9 @@ Catálogo de endpoints por dominio. Todos bajo `/api`. Swagger vivo en `/docs`. 
 ## Ventas / POS · `/api/sales` `[module:pos]` — motor ATS-crítico
 | Método | Ruta | Qué hace |
 |---|---|---|
-| GET | /stats | KPIs de ventas: neto de devoluciones aprobadas, sin pendientes ni borradores; trae `gross_sales` (`app/services/metricas_ventas.py`). Una sola fecha = ese día; rango invertido = 422. Ámbito: ADMINISTRADOR/DUEÑO sin `branch_id` = toda la org; GERENTE: siempre su sucursal (ignora `branch_id`, como la lista `GET /`); los demás roles, la suya |
-| GET · POST | / | Lista paginada · **create_sale** (checkout) |
-| GET | /by-folio/{series}/{folio} · /my-last · /{id} · /{id}/print-view | Detalle / última / ticket HTML |
+| GET | /stats | **CAJERO → 403** («Los totales del día no están disponibles para la cajera.»). KPIs de ventas: neto de devoluciones aprobadas, sin pendientes ni borradores; trae `gross_sales` (`app/services/metricas_ventas.py`). Una sola fecha = ese día; rango invertido = 422. Ámbito: ADMINISTRADOR/DUEÑO sin `branch_id` = toda la org; GERENTE: siempre su sucursal (ignora `branch_id`, como la lista `GET /`); los demás roles, la suya |
+| GET · POST | / | Lista paginada (**CAJERO**: solo las ventas de hoy, día de México, de su sucursal; ignora `start_date`/`end_date`/`branch_id`) · **create_sale** (checkout) |
+| GET | /by-folio/{series}/{folio} · /my-last · /{id} · /{id}/print-view | Detalle / última / ticket HTML (**CAJERO**: `/{id}` y `/{id}/print-view` dan 404 si la venta no es de hoy y de su sucursal; regla en `app/services/ventas_cajero.py`) |
 | DELETE | /{id} | **cancel_sale** (revierte stock + deuda) |
 | POST | /{id}/refund | Stub (no-op) |
 | GET | /export/csv | Export CSV — columnas 2026-09-17 **«Comisión tarjeta»** y **«Total cobrado»** después de «Total» |
@@ -135,7 +135,7 @@ Auditoría del crédito (2026-10-28, `docs/AUDITORIA-CRM-CREDITO-2026-10-28.md`)
 `POST / · GET / · GET/PUT/DELETE /{id}` · `GET /{id}/pdf` · **`POST /{id}/convert-to-sale`** (crea venta PAID; ⚠️ **no** emite el evento outbox → no dispara consumo de insumos/mesa) · `GET /stats/kpi`.
 
 ## Devoluciones · `/api/returns`
-`GET /stats` (⚠️ sin user) · `POST /` crear PENDING · `GET /sale/{id} · / · /{id}` (`/` acepta `start_date`/`end_date` `YYYY-MM-DD` en día de México, una sola fecha = ese día, rango invertido = 422, `branch_id` para roles de oficina y `status`; sin fechas, todo el historial: la pantalla pondrá el rango en la Fase 3) · `POST /{id}/approve` (force p/ refunds >$10k; 409 si caja cerrada) · `POST /{id}/reject`. Approve/reject `[ADMIN/DUEÑO/GERENTE]`.
+`GET /stats` (⚠️ sin user) · `POST /` crear PENDING (usuarios de sucursal solo sobre ventas de su sucursal, si no 404; **CAJERO** solo sobre ventas de hoy, si no 403 «Solo puedes devolver ventas de hoy. Para días anteriores pide al gerente.»; el GERENTE devuelve días anteriores) · `GET /sale/{id} · / · /{id}` (`/` acepta `start_date`/`end_date` `YYYY-MM-DD` en día de México, una sola fecha = ese día, rango invertido = 422, `branch_id` para roles de oficina y `status`; sin fechas, todo el historial: la pantalla pondrá el rango en la Fase 3) · `POST /{id}/approve` (force p/ refunds >$10k; 409 si caja cerrada) · `POST /{id}/reject`. Approve/reject `[ADMIN/DUEÑO/GERENTE]`.
 
 ## Compras · `/api/purchases`
 `GET /stats · / · /{id}` (⚠️ sin user) · `POST /` crear PO · `PATCH /{id}/status` · `POST /{id}/receive` (stock + costo promedio + Movement) · `DELETE /{id}`.
