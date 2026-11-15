@@ -137,12 +137,12 @@ def _numeros_del_texto(texto: str) -> set[Decimal]:
 
 
 def _monto_inventado(op, escritos: set[Decimal]) -> Optional[str]:
-    """Un precio, costo o tipo de cambio que el usuario no escribió: el modelo
-    no puede sacar dinero por su cuenta. Devuelve el monto o None."""
+    """Un precio, costo, cantidad o tipo de cambio que el usuario no escribió: el
+    modelo no puede sacar dinero ni existencias por su cuenta. Devuelve el monto o None."""
     if not isinstance(op, dict):
         return None
     tipo = op.get("op")
-    if tipo == "fijar_campo" and op.get("campo") in ("precio", "costo"):
+    if tipo == "fijar_campo" and op.get("campo") in ("precio", "costo", "cantidad"):
         valor = op.get("valor")
     elif tipo in ("tipo_cambio", "resolver_duda"):
         valor = op.get("valor")
@@ -197,7 +197,8 @@ def interpretar_respuesta(
             propuestas.append(op)
             continue
         numero = op.get("numero") if op.get("op") == "resolver_duda" else None
-        motivo = f"el monto {monto} no aparece en tu respuesta"
+        que = "la cantidad" if op.get("campo") == "cantidad" else "el monto"
+        motivo = f"{que} {monto} no aparece en tu respuesta"
         inventados.append(f"No entendí el punto {numero}: {motivo}" if numero is not None
                           else f"No entendí: {motivo}")
     operaciones, rechazos = validar_operaciones(db, carga, propuestas)

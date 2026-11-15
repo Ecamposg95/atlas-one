@@ -205,6 +205,18 @@ def test_carga_fuera_de_plan_no_gasta_tokens(db, carga):
     assert falso.llamadas == []
 
 
+@pytest.mark.parametrize("texto, aceptado", [("el 1 es otra talla", False), ("del 1 son 5 piezas", True)])
+def test_cantidad_que_no_escribio_el_usuario_se_rechaza(db, carga, texto, aceptado):
+    """La cantidad es existencia: el modelo tampoco la saca por su cuenta (M2)."""
+    falso = ClienteEstructuradoFalso([_respuesta([
+        {"op": "fijar_campo", "renglones": [1], "grupo": None, "campo": "cantidad", "valor": "5"}])])
+    ops, rechazos, _, _ = interpretar_respuesta(db, carga, texto, falso, "")
+    if aceptado:
+        assert [o["campo"] for o in ops] == ["cantidad"] and rechazos == []
+    else:
+        assert ops == [] and rechazos == ["No entendí: la cantidad 5 no aparece en tu respuesta"]
+
+
 def test_respuesta_con_tope_de_16000_tokens(db, carga):
     from app.modules.cargas import respuestas
     assert respuestas.MAX_TOKENS == 16000
