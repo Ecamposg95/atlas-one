@@ -148,7 +148,7 @@ def mapear_columnas(tabla: TablaCruda, cliente: ClienteEstructurado,
             resp.tokens_entrada, resp.tokens_salida)
 
 
-def _normalizar_numero(v: str) -> str:
+def normalizar_numero(v: str) -> str:
     """Quita $ y espacios y decide qué separador es el decimal.
 
     "10,5" -> 10.5 · "1,500" -> 1500 · "1,500.50" -> 1500.50 · "1.500,50" -> 1500.50.
@@ -171,7 +171,7 @@ def _importe(v: Any) -> Optional[Decimal]:
     if celda_vacia(v):
         return None
     if isinstance(v, str):
-        v = _normalizar_numero(v)
+        v = normalizar_numero(v)
         if v == "":
             return None
     d = celda_decimal(v, default=None)

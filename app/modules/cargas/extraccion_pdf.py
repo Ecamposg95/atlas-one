@@ -8,9 +8,10 @@ from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from typing import Optional
 
-from pypdf import PdfReader, PdfWriter
+from pypdf import PasswordType, PdfReader, PdfWriter
 
 from app.modules.ai.cliente_anthropic import ClienteEstructurado
+from app.modules.cargas.lectura_excel import normalizar_numero
 from app.modules.cargas.tipos import RenglonCrudo
 
 PAGINAS_POR_BLOQUE = 15
@@ -78,7 +79,7 @@ def _decimal(valor) -> Optional[Decimal]:
         return None
     if isinstance(valor, (int, float)):
         valor = str(valor)
-    s = re.sub(r"[\s$€¥]", "", str(valor)).replace(",", "")
+    s = normalizar_numero(re.sub(r"[€¥]", "", str(valor)))
     if not s:
         return None
     try:
@@ -96,7 +97,9 @@ def _bloques(contenido: bytes) -> tuple[list[tuple[int, int, bytes]], int]:
     try:
         lector = PdfReader(io.BytesIO(contenido))
         if lector.is_encrypted:
-            raise ValueError("El PDF está protegido con contraseña. Quítale la protección y vuelve a subirlo.")
+            # Muchos PDFs solo traen contraseña de propietario y abren con la de usuario vacía.
+            if lector.decrypt("") == PasswordType.NOT_DECRYPTED:
+                raise ValueError("El PDF está protegido con contraseña. Quítale la protección y vuelve a subirlo.")
         total = len(lector.pages)
         if total == 0:
             raise ValueError("El PDF no tiene páginas.")
@@ -187,8 +190,7 @@ def extraer_pdf(contenido: bytes, cliente: ClienteEstructurado, instrucciones: s
                 and _norm(nuevos[0].descripcion_original) == _norm(res.renglones[-1].descripcion_original)):
             _unir(res.renglones[-1], nuevos.pop(0))
         res.renglones.extend(nuevos)
-        if res.renglones:
-            ultimo = res.renglones[-1]
+        ultimo = res.renglones[-1] if r.datos.get("renglones") else None
         anterior_continua = bool(r.datos.get("continua_en_siguiente"))
 
         for m in r.datos.get("monedas", []):

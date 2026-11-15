@@ -117,3 +117,30 @@ def test_esquema_estricto():
             for v in n:
                 rec(v)
     rec(ESQUEMA_PDF)
+
+
+def test_pdf_con_clave_de_propietario_se_acepta():
+    w = PdfWriter()
+    w.add_blank_page(width=10, height=10)
+    w.encrypt("", owner_password="x")
+    b = io.BytesIO()
+    w.write(b)
+    c = ClienteEstructuradoFalso([_resp([_r()])])
+    assert len(extraer_pdf(b.getvalue(), c, "").renglones) == 1
+    import base64
+    from pypdf import PdfReader
+    enviado = base64.b64decode(c.llamadas[0]["contenido"][0]["source"]["data"])
+    assert not PdfReader(io.BytesIO(enviado)).is_encrypted
+
+
+def test_coma_decimal_en_importes():
+    c = ClienteEstructuradoFalso([_resp([_r(cantidad="1,5", costo_unitario="1.234,50")])])
+    r = extraer_pdf(_pdf(1), c, "").renglones[0]
+    assert r.cantidad == Decimal("1.5") and r.costo_unitario == Decimal("1234.50")
+
+
+def test_bloque_vacio_no_arrastra_ultimo_renglon():
+    c = ClienteEstructuradoFalso([_resp([_r("Vieja")]), _resp([]), _resp([])])
+    extraer_pdf(_pdf(31), c, "")
+    assert "Vieja" in c.llamadas[1]["contenido"][1]["text"]
+    assert "Vieja" not in c.llamadas[2]["contenido"][1]["text"]
