@@ -19,9 +19,20 @@ from datetime import datetime, time, timezone
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from app.models.sales import (
     DocumentStatus, Payment, PaymentMethod, SalesDocument, SalesLineItem,
 )
+
+
+@pytest.fixture()
+def auth_vendedor_a(db, org, branch_a):
+    """VENDEDOR de la Sucursal A: el rol de sucursal que abre `MobileDashboard`
+    (su Inicio). La cajera ya no recibe este resumen (403, spec 2026-11-14)."""
+    from conftest import _auth_header, _make_user
+    from app.models.users import Role
+    return _auth_header(_make_user(db, org, branch_a, "vendedor_a", Role.VENDEDOR))
 
 
 def _v(products_setup):
@@ -69,24 +80,24 @@ def _venta(db, org, branch, user, variant, folio, total, status, costo_unitario=
     return doc
 
 
-def test_daily_summary_responde_200(client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup):
+def test_daily_summary_responde_200(client, db, org, branch_a, cajero_a, auth_vendedor_a, products_setup):
     """Regresion del AttributeError: el endpoint debe responder, no reventar."""
     _venta(db, org, branch_a, cajero_a, _v(products_setup), "R-1", "100", DocumentStatus.PAID)
 
-    resp = client.get("/api/reports/daily-summary", headers=auth_cajero_a)
+    resp = client.get("/api/reports/daily-summary", headers=auth_vendedor_a)
 
     assert resp.status_code == 200, resp.text
     assert resp.json()["transactions_count"] == 1
 
 
 def test_daily_summary_excluye_ventas_canceladas(
-    client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup
+    client, db, org, branch_a, cajero_a, auth_vendedor_a, products_setup
 ):
     """Una venta cancelada no es ingreso: no cuenta en total, pagos, top ni utilidad."""
     _venta(db, org, branch_a, cajero_a, _v(products_setup), "R-1", "100", DocumentStatus.PAID)
     _venta(db, org, branch_a, cajero_a, _v(products_setup), "R-2", "500", DocumentStatus.CANCELLED)
 
-    data = client.get("/api/reports/daily-summary", headers=auth_cajero_a).json()
+    data = client.get("/api/reports/daily-summary", headers=auth_vendedor_a).json()
 
     assert data["transactions_count"] == 1
     assert data["total_revenue"] == 100.0
@@ -96,13 +107,13 @@ def test_daily_summary_excluye_ventas_canceladas(
 
 
 def test_daily_summary_no_mezcla_sucursales(
-    client, db, org, branch_a, branch_b, cajero_a, auth_cajero_a, products_setup
+    client, db, org, branch_a, branch_b, cajero_a, auth_vendedor_a, products_setup
 ):
     """Productos y utilidad se limitan a la sucursal del usuario, como el total."""
     _venta(db, org, branch_a, cajero_a, _v(products_setup), "R-1", "100", DocumentStatus.PAID)
     _venta(db, org, branch_b, cajero_a, _v(products_setup), "R-9", "700", DocumentStatus.PAID)
 
-    data = client.get("/api/reports/daily-summary", headers=auth_cajero_a).json()
+    data = client.get("/api/reports/daily-summary", headers=auth_vendedor_a).json()
 
     assert data["total_revenue"] == 100.0
     assert [p["name"] for p in data["top_selling_items"]] == ["Producto R-1"]
@@ -110,7 +121,7 @@ def test_daily_summary_no_mezcla_sucursales(
 
 
 def test_daily_summary_descuenta_el_vuelto_del_efectivo(
-    client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup
+    client, db, org, branch_a, cajero_a, auth_vendedor_a, products_setup
 ):
     """El vuelto no es ingreso.
 
@@ -124,7 +135,7 @@ def test_daily_summary_descuenta_el_vuelto_del_efectivo(
     _venta(db, org, branch_a, cajero_a, _v(products_setup), "R-1", "100",
            DocumentStatus.PAID, entregado="150")
 
-    data = client.get("/api/reports/daily-summary", headers=auth_cajero_a).json()
+    data = client.get("/api/reports/daily-summary", headers=auth_vendedor_a).json()
 
     assert data["total_revenue"] == 100.0
     assert data["payments"]["CASH"] == 100.0
@@ -156,27 +167,27 @@ def test_rol_de_oficina_puede_pedir_otra_sucursal(
     assert data["total_revenue"] == 700.0
 
 
-def test_un_cajero_no_puede_mirar_otra_sucursal(
-    client, db, org, branch_a, branch_b, cajero_a, auth_cajero_a, products_setup
+def test_un_rol_de_sucursal_no_puede_mirar_otra_sucursal(
+    client, db, org, branch_a, branch_b, cajero_a, auth_vendedor_a, products_setup
 ):
     """Aunque mande el branch_id de otra sucursal, sigue viendo la suya."""
     _venta(db, org, branch_a, cajero_a, _v(products_setup), "R-1", "100", DocumentStatus.PAID)
     _venta(db, org, branch_b, cajero_a, _v(products_setup), "R-9", "700", DocumentStatus.PAID)
 
     data = client.get(
-        f"/api/reports/daily-summary?branch_id={branch_b.id}", headers=auth_cajero_a
+        f"/api/reports/daily-summary?branch_id={branch_b.id}", headers=auth_vendedor_a
     ).json()
 
     assert data["total_revenue"] == 100.0
 
 
 def test_sin_parametro_el_comportamiento_no_cambia(
-    client, db, org, branch_a, branch_b, cajero_a, auth_cajero_a, products_setup
+    client, db, org, branch_a, branch_b, cajero_a, auth_vendedor_a, products_setup
 ):
     _venta(db, org, branch_a, cajero_a, _v(products_setup), "R-1", "100", DocumentStatus.PAID)
     _venta(db, org, branch_b, cajero_a, _v(products_setup), "R-9", "700", DocumentStatus.PAID)
 
-    data = client.get("/api/reports/daily-summary", headers=auth_cajero_a).json()
+    data = client.get("/api/reports/daily-summary", headers=auth_vendedor_a).json()
 
     assert data["total_revenue"] == 100.0
 
@@ -242,7 +253,7 @@ def test_un_rol_sin_sucursal_no_puede_pedir_toda_la_organizacion(
 from app.models.returns import SaleReturn  # noqa: E402
 
 
-def test_daily_summary_resta_devoluciones_aprobadas(client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup):
+def test_daily_summary_resta_devoluciones_aprobadas(client, db, org, branch_a, cajero_a, auth_vendedor_a, products_setup):
     v = _venta(db, org, branch_a, cajero_a, _v(products_setup), "R-10", "100", DocumentStatus.PAID)
     db.add(SaleReturn(organization_id=org.id, sale_id=v.id, user_id=cajero_a.id, branch_id=branch_a.id,
                       total_refunded=Decimal("30"), refund_method=PaymentMethod.CASH, reason="Prueba",
@@ -250,7 +261,7 @@ def test_daily_summary_resta_devoluciones_aprobadas(client, db, org, branch_a, c
     # Como approve_return: aprobar rebaja el total del ticket.
     v.subtotal = v.total_amount = Decimal("70")
     db.commit()
-    d = client.get("/api/reports/daily-summary", headers=auth_cajero_a).json()
+    d = client.get("/api/reports/daily-summary", headers=auth_vendedor_a).json()
     assert d["gross_revenue"] == 100.0
     assert d["returns_total"] == 30.0 and d["returns_count"] == 1
     assert d["total_revenue"] == 70.0

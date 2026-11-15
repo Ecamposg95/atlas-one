@@ -1,7 +1,7 @@
 #app/routers/reports.py
 import csv
 import io
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
@@ -31,6 +31,7 @@ from app.schemas.reports import AgingReportResponse
 from app.core.tenant_context import get_current_active_organization
 from app.crud.products import _is_admin
 from app.services.existencias import umbral_poca_existencia
+from app.services.ventas_cajero import es_cajero
 
 
 def _describe_name(name: str, variant_name: Optional[str]) -> str:
@@ -40,6 +41,13 @@ def _describe_name(name: str, variant_name: Optional[str]) -> str:
 
 
 router = APIRouter()
+
+
+def _sin_totales_para_cajero(user: User) -> None:
+    """La cajera no ve ni suma el total del día por ninguna ruta (spec 2026-11-14)."""
+    if es_cajero(user):
+        raise HTTPException(status_code=403, detail="Los totales del día no están disponibles para la cajera.")
+
 
 @router.get("/daily-summary")
 def get_daily_summary(
@@ -52,6 +60,7 @@ def get_daily_summary(
     """Resumen del día: venta neta (cobradas menos devoluciones aprobadas),
     cobros por método (sin vuelto, netos de devoluciones), utilidad bruta y lo
     más vendido. Criterio único en `app/services/metricas_ventas.py`."""
+    _sin_totales_para_cajero(current_user)
     periodo = mv.Periodo(target_date, target_date) if target_date else mv.periodo_preset("hoy")
     ambito = mv.resolver_ambito(current_user, org_id, branch_id)
     r = mv.resumen(db, ambito, periodo)
@@ -196,6 +205,7 @@ def get_dashboard_stats(
     org_id: int = Depends(get_current_active_organization)
 ):
     """KPIs, tendencias y alertas del periodo. Venta neta y día de México por `app/services/metricas_ventas.py`; roles de oficina sin `branch_id` ven toda la organización, salvo GERENTE (siempre su sucursal)."""
+    _sin_totales_para_cajero(current_user)
     periodo = mv.periodo_de_query(start_date, end_date)      # una sola fecha = ese día; invertido = 422
     ambito = mv.resolver_ambito(current_user, org_id, branch_id)
     if current_user.role == Role.GERENTE:   # branch-scoped como read_sales: la lista de abajo es de su sucursal
@@ -374,6 +384,7 @@ def get_sales_by_hour(
         "hourly": [{"hour": 0, "amount": 0.0, "tickets": 0}, ...]  # 0-23 hrs
     }
     """
+    _sin_totales_para_cajero(current_user)
     dia = date or mv.hoy_mx()
     ambito = mv.resolver_ambito(current_user, org_id, branch_id)
     horas = mv.por_hora(db, ambito, mv.Periodo(dia, dia))
@@ -475,6 +486,7 @@ def get_command_center_stats(
     Mission Control Data Aggregation.
     Provides deep insights for multi-branch management.
     """
+    _sin_totales_para_cajero(current_user)
     periodo = mv.periodo_de_query(start_date, end_date)      # una sola fecha = ese día; invertido = 422
     ambito = mv.Ambito(org_id, None, True)          # el centro de mando siempre es de toda la org
     sales_filters = mv.filtros_documentos(ambito, periodo)
@@ -710,6 +722,7 @@ def export_dashboard_csv(
     Sections: KPIs, Top Products, Hourly Distribution, Low Stock Alerts.
     Filename: reports_{start_date}_{end_date}.csv
     """
+    _sin_totales_para_cajero(current_user)
     if not start_date:
         start_date = _today_mx()
     if not end_date:

@@ -4,6 +4,8 @@ from decimal import Decimal
 from itertools import count
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from app.models.modules import OrganizationModule
 from app.models.sales import DocumentStatus, Payment, PaymentMethod, SalesDocument, SalesLineItem
 from app.services import metricas_ventas as mv
@@ -173,3 +175,54 @@ def test_gerente_no_devuelve_otra_sucursal(client, db, org, branch_a, branch_b, 
     _pos(db, org)
     v = _venta(db, org, branch_b, cajero_a, _v(products_setup))
     assert _devolver(client, auth_gerente_a, v, _v(products_setup)).status_code == 404
+
+
+def test_admin_devuelve_venta_de_otra_sucursal(client, db, org, branch_a, branch_b, cajero_a, auth_admin_a, products_setup):
+    # El administrador es de oficina: devuelve ventas de cualquier sucursal de la org.
+    _pos(db, org)
+    v = _venta(db, org, branch_b, cajero_a, _v(products_setup))
+    r = _devolver(client, auth_admin_a, v, _v(products_setup))
+    assert r.status_code == 200, r.text
+
+
+# --- Búsqueda por folio (pantalla Devoluciones de la cajera) ---------------
+
+def test_por_folio_cajero_solo_hoy(client, db, org, branch_a, cajero_a, auth_cajero_a, auth_gerente_a, products_setup):
+    _pos(db, org)
+    ayer = _venta(db, org, branch_a, cajero_a, _v(products_setup), dia=_ayer())
+    hoy = _venta(db, org, branch_a, cajero_a, _v(products_setup))
+    r = client.get(f"/api/sales/by-folio/A/{ayer.folio}", headers=auth_cajero_a)
+    assert r.status_code == 404
+    assert r.json()["detail"] == "Venta no encontrada"
+    assert client.get(f"/api/sales/by-folio/A/{ayer.folio}", headers=auth_gerente_a).status_code == 200
+    assert client.get(f"/api/sales/by-folio/A/{hoy.folio}", headers=auth_cajero_a).status_code == 200
+
+
+# --- Exportaciones y reportes con totales del día ---------------------------
+
+def test_cajero_no_exporta_ventas(client, db, org, branch_a, cajero_a, auth_cajero_a, auth_gerente_a, products_setup):
+    _pos(db, org)
+    _venta(db, org, branch_a, cajero_a, _v(products_setup))
+    r = client.get("/api/sales/export/csv", headers=auth_cajero_a)
+    assert r.status_code == 403
+    assert r.json()["detail"] == "La exportación de ventas no está disponible para la cajera."
+    assert client.get("/api/sales/export/csv", headers=auth_gerente_a).status_code == 200
+
+
+_REPORTES_CON_TOTALES = [
+    "/api/reports/daily-summary",
+    "/api/reports/dashboard",
+    "/api/reports/sales-by-hour",
+    "/api/reports/export/csv",
+    "/api/reports/command-center/stats",
+]
+
+
+@pytest.mark.parametrize("url", _REPORTES_CON_TOTALES)
+def test_cajero_no_ve_totales_en_reportes(url, client, db, org, branch_a, cajero_a, auth_cajero_a, auth_gerente_a, products_setup):
+    _pos(db, org)
+    _venta(db, org, branch_a, cajero_a, _v(products_setup))
+    r = client.get(url, headers=auth_cajero_a)
+    assert r.status_code == 403
+    assert r.json()["detail"] == "Los totales del día no están disponibles para la cajera."
+    assert client.get(url, headers=auth_gerente_a).status_code == 200

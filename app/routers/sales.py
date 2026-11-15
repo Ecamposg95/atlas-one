@@ -1179,6 +1179,8 @@ def get_sale_by_folio(
     if not sale:
         raise HTTPException(status_code=404, detail=f"Ticket {series}-{folio} no encontrado")
     _assert_sale_branch_access(sale, current_user)
+    if es_cajero(current_user) and not venta_visible_para_cajero(sale, current_user):
+        raise HTTPException(status_code=404, detail="Venta no encontrada")   # la cajera solo encuentra tickets de hoy
     return sale
 
 
@@ -1638,6 +1640,9 @@ def export_sales_csv(
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization)
 ):
+    # La cajera no exporta: el CSV trae el historial y los totales del día.
+    if es_cajero(current_user):
+        raise HTTPException(status_code=403, detail="La exportación de ventas no está disponible para la cajera.")
     # 0. Debug Check
     print(f"DEBUG_CSV_EXPORT: org_id={org_id}, user={current_user.username}")
     """
