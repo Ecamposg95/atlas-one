@@ -6,7 +6,7 @@ re-exporta para que `create_all` la vea al importar este paquete.
 """
 from app.modules.products.imagenes import ProductImage  # noqa: F401
 
-from sqlalchemy import Boolean, Column, DateTime, Index, Integer, String
+from sqlalchemy import JSON, Boolean, Column, Date, DateTime, Index, Integer, String, Text
 
 from app.core.database import Base
 
@@ -33,3 +33,50 @@ class ChannelAvailability(Base):
     product_id = Column(String(36), nullable=False)
     available = Column(Boolean, nullable=False)
     changed_at = Column(DateTime(timezone=True), nullable=False)
+
+
+class ChannelProductMetric(Base):
+    """Consultas anónimas por pieza y día (clics de WhatsApp, selecciones).
+    No guarda datos personales. Sin FK (igual que `ChannelAvailability`)."""
+    __tablename__ = "channel_product_metrics"
+    __table_args__ = {'extend_existing': True}
+
+    organization_id = Column(Integer, primary_key=True)
+    product_id = Column(String(36), primary_key=True)
+    day = Column(Date, primary_key=True)          # día de México de occurred_at
+    source = Column(String(30), primary_key=True)
+    count = Column(Integer, nullable=False, default=0)
+
+
+class ChannelLead(Base):
+    """Prospecto de la tienda web: solo existe si dejó teléfono."""
+    __tablename__ = "channel_leads"
+    __table_args__ = (
+        Index("ix_channel_leads_org_occurred", "organization_id", "occurred_at"),
+        {'extend_existing': True},
+    )
+
+    id = Column(String(36), primary_key=True)
+    organization_id = Column(Integer, nullable=False)
+    source = Column(String(30), nullable=False)
+    line = Column(String(20), nullable=True)
+    name = Column(String, nullable=True)
+    phone = Column(String(10), nullable=False)    # normalizado a 10 dígitos
+    email = Column(String, nullable=True)
+    utm = Column(JSON, nullable=True)
+    product_ids = Column(JSON, nullable=True)
+    customer_id = Column(Integer, nullable=True)  # customers.id (Integer)
+    status = Column(String(20), nullable=False, default="nuevo")
+    occurred_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+
+
+class ChannelIdempotency(Base):
+    """Respuesta guardada por `Idempotency-Key` (se purga a los 7 días)."""
+    __tablename__ = "channel_idempotency"
+    __table_args__ = {'extend_existing': True}
+
+    organization_id = Column(Integer, primary_key=True)
+    key = Column(String(200), primary_key=True)
+    response_json = Column(Text, nullable=False)  # {"status": int, "body": {...}}
+    created_at = Column(DateTime(timezone=True), nullable=False)
