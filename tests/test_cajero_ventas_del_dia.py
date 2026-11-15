@@ -125,3 +125,51 @@ def test_gerente_stats_sigue_200(client, db, org, branch_a, branch_b, cajero_a, 
     r = client.get("/api/sales/stats", headers=auth_gerente_a)
     assert r.status_code == 200
     assert r.json()["total_sales"] == 100.0
+
+
+# --- Devoluciones ---------------------------------------------------------
+
+def _devolver(client, headers, venta, variante):
+    return client.post("/api/returns/", json={
+        "sale_id": venta.id,
+        "reason": "Prueba",
+        "total_refunded": "1.00",
+        "refund_method": "CASH",
+        "items": [{"variant_id": variante.id, "quantity": "1",
+                   "refund_amount": "1.00", "is_inventory_reentry": True}],
+    }, headers=headers)
+
+
+def test_cajero_devuelve_venta_de_hoy(client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup):
+    _pos(db, org)
+    v = _venta(db, org, branch_a, cajero_a, _v(products_setup))
+    r = _devolver(client, auth_cajero_a, v, _v(products_setup))
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "PENDING"
+
+
+def test_cajero_no_devuelve_venta_de_ayer(client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup):
+    _pos(db, org)
+    v = _venta(db, org, branch_a, cajero_a, _v(products_setup), dia=_ayer())
+    r = _devolver(client, auth_cajero_a, v, _v(products_setup))
+    assert r.status_code == 403
+    assert r.json()["detail"] == "Solo puedes devolver ventas de hoy. Para días anteriores pide al gerente."
+
+
+def test_cajero_no_devuelve_otra_sucursal(client, db, org, branch_a, branch_b, cajero_a, auth_cajero_a, products_setup):
+    _pos(db, org)
+    v = _venta(db, org, branch_b, cajero_a, _v(products_setup))
+    assert _devolver(client, auth_cajero_a, v, _v(products_setup)).status_code == 404
+
+
+def test_gerente_devuelve_venta_de_ayer(client, db, org, branch_a, cajero_a, auth_gerente_a, products_setup):
+    _pos(db, org)
+    v = _venta(db, org, branch_a, cajero_a, _v(products_setup), dia=_ayer())
+    r = _devolver(client, auth_gerente_a, v, _v(products_setup))
+    assert r.status_code == 200, r.text
+
+
+def test_gerente_no_devuelve_otra_sucursal(client, db, org, branch_a, branch_b, cajero_a, auth_gerente_a, products_setup):
+    _pos(db, org)
+    v = _venta(db, org, branch_b, cajero_a, _v(products_setup))
+    assert _devolver(client, auth_gerente_a, v, _v(products_setup)).status_code == 404
