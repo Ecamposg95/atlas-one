@@ -417,9 +417,10 @@ def recuperar_cargas_colgadas(db: Session, minutos: int = MINUTOS_COLGADA,
     `minutos=0` (en un proceso nuevo ninguna lectura sigue viva); las consultas
     de la pantalla la llaman con el tope normal y su `org_id`. Devuelve cuántas marcó."""
     limite = datetime.now(timezone.utc) - timedelta(minutes=minutos)
-    # Candado sin espera: una carga cuyo hilo está guardando su resultado
-    # (fila bloqueada) no es una carga colgada.
-    q = (db.query(CargaMercancia).filter(CargaMercancia.estado.in_(tuple(_INTERRUMPIDA)))
+    # Solo se bloquean las que llevan `minutos` sin moverse, y sin esperar: una
+    # carga cuyo hilo está guardando su resultado (fila bloqueada) no está colgada.
+    q = (db.query(CargaMercancia)
+         .filter(CargaMercancia.estado.in_(tuple(_INTERRUMPIDA)), CargaMercancia.updated_at <= limite)
          .with_for_update(skip_locked=True))
     if org_id is not None:
         q = q.filter(CargaMercancia.organization_id == org_id)
