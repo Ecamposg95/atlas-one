@@ -149,7 +149,7 @@ valida y escribe, el humano confirma.**
 |---|---|---|---|---|
 | Crear organización | nombre, giro, plan | Sugerir giro por la descripción del negocio | `onboard_org` | Sí (crea cuenta) |
 | Crear usuario | nombre, rol | — | `POST /api/users/` con topes del plan | Sí |
-| Leer exportación de otro POS | xlsx/csv | Mapear columnas, detectar relleno, inferir departamentos, corregir nombres, marcar dudas | Validar tipos, SKU únicos, precios > 0 | Revisar el resumen |
+| Leer exportación de otro POS | xlsx/csv | Mapear columnas, detectar relleno, inferir departamentos, corregir nombres, marcar dudas. **Ya existe en la app: Cargar mercancía** (`/inventory/cargas`, propósito migración; ver [`../ai/cargar-mercancia.md`](../ai/cargar-mercancia.md)) | Validar tipos, SKU únicos, precios > 0 | Revisar el resumen |
 | Transcribir foto de libreta | imagen | Visión: modelo/piezas/precio, marcar ilegibles | Mismo CSV que `import_products` | Revisar la transcripción |
 | Cargar catálogo | CSV normalizado | — | Ensayo → resumen → carga en una transacción | Sí, tras el ensayo |
 | Ajustar existencias / conteo | conteo | Señalar diferencias raras | Movimientos de inventario con referencia | Sí |

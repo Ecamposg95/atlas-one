@@ -285,6 +285,18 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Datos/API:** `productsApi.search`, `inventoryApi.getKardex/createAdjustment`, `organizationApi.getBranches`.
 - **Notas:** **Gotcha:** la API espera variant UUID (`expandVariantRows`). Solo tokens `dax-*`.
 
+### `/inventory/cargas` — Cargar mercancía 📱
+- **Archivo:** `pages/inventory/cargas/Cargas.tsx` (+ `componentes/`, `formato.ts`)
+- **Propósito:** Lista de cargas (folio, archivo, estado, piezas, quién y cuándo) y subida de un PDF/xlsx/csv con propósito (entrada o migración) y sucursal que recibe. Una carga en `leyendo` se consulta cada pocos segundos.
+- **Quién la ve:** roles de oficina — módulo `ai` (gate estricto). Menú "Cargar mercancía" (grupo Inventario); **oculto en modo básico**.
+- **Datos/API:** `POST/GET /api/cargas`. Guía: `docs/ai/cargar-mercancia.md`.
+
+### `/inventory/cargas/:id` — Plan de la carga 📱
+- **Archivo:** `pages/inventory/cargas/CargaPlan.tsx` (chunk propio, `lazy`)
+- **Propósito:** Contadores por clase (EXISTE/SUMA/NUEVO/YA CARGADO/IGNORADO), dudas numeradas (botones con la recomendada primero; las `acepta_texto` también por escrito), caja de respuesta en texto libre, antes/después de cada tanda con "Deshacer esta tanda", plan agrupado por producto (tabla en PC, `ListaTarjetas` en teléfono), "Volver a intentar" si está en `error`, y "Autorizar" (solo ADMINISTRADOR/DUEÑO, sin dudas abiertas, con resumen y confirmación). Aplicada: tabla de etiquetas y botón a `/labels?carga=<id>`.
+- **Datos/API:** `GET /api/cargas/{id}`, `/respuestas`, `/dudas/{n}`, `/cambios/{id}/deshacer`, `/reintentar`, `/autorizar`, `/descartar`, `/etiquetas`.
+- **Notas:** `/labels` acepta `?carga=<id>` (y `?folio=N`) y filtra por esa carga. Las reglas de la org se editan en `/organization` → "Reglas de carga" (`pages/core/ReglasCarga.tsx`, solo con el módulo `ai`).
+
 ### `/inventory/conteos` — Conteos de inventario 📱
 - **Archivo:** `pages/inventory/conteos/Conteos.tsx`
 - **Propósito:** Lista de conteos físicos de la organización (abiertos, cerrados y cancelados) con su avance; un conteo "Cancelado" (gris, sin avance: "—") no abre nada al tocarlo; botón para iniciar uno (sucursal, recordada en el teléfono, + departamento opcional; vacío = toda la tienda). Un 409 del servidor avisa que ya hay uno abierto de esa sucursal y departamento.
