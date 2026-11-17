@@ -636,8 +636,9 @@ def print_cash_cut_endpoint(
     org_id: int = Depends(get_current_active_organization)
 ):
     """Track 4: corte de caja siempre en base64."""
-    from app.routers.cash import get_session_audit_data, _verify_session_access
+    from app.routers.cash import get_session_audit_data, _verify_session_access, _corte_impreso_solo_al_cerrar
     session = _verify_session_access(db, req.session_id, current_user)
+    _corte_impreso_solo_al_cerrar(session, current_user)
     audit_data = get_session_audit_data(db, req.session_id)
     if not audit_data:
         raise HTTPException(404, "Sesión no encontrada")

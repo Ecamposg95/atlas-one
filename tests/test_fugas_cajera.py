@@ -211,3 +211,55 @@ def test_command_center_vendedor_403(client, db, org, branch_a, products_setup):
     _habilitar(db, org, "pos")
     vendedor = _make_user(db, org, branch_a, "vendedor_a", Role.VENDEDOR); db.commit()
     assert _cc(client, _auth_header(vendedor)).status_code == 403
+
+
+# --- 6. Corte por session_id: audit-log, pdf, ticket, print-cash-cut ------
+# La cajera solo abre sus propios turnos de hoy (si no, 404, como `summary`);
+# con el turno abierto el corte trae el esperado, así que tampoco se imprime.
+
+# audit-log ya era solo de oficina/gerente (403 a la cajera por rol).
+_RUTAS_CORTE = ("/api/cash/{id}/pdf", "/api/cash/{id}/ticket")
+
+
+def _print_cut(client, h, sid):
+    return client.post("/api/printer/print-cash-cut", json={"session_id": sid}, headers=h)
+
+
+def test_corte_cajera_sesion_ajena_o_vieja_404(client, db, org, branch_a, branch_b, cajero_a, auth_cajero_a, products_setup):
+    _habilitar(db, org, "pos")
+    otra = _otra_cajera(db, org, branch_a)
+    ajena = _abrir_caja(db, org, branch_a, otra); _cerrar(db, ajena)
+    vieja = _sesion_vieja(db, org, branch_a, cajero_a)
+    de_b = _make_user(db, org, branch_b, "cajero_b2", Role.CAJERO); db.commit()
+    otra_sucursal = _abrir_caja(db, org, branch_b, de_b); _cerrar(db, otra_sucursal)
+    for s in (ajena, vieja, otra_sucursal):
+        for ruta in _RUTAS_CORTE:
+            r = client.get(ruta.format(id=s.id), headers=auth_cajero_a)
+            assert r.status_code == 404, (ruta, s.id, r.status_code)
+        assert _print_cut(client, auth_cajero_a, s.id).status_code == 404
+
+
+def test_corte_cajera_su_turno_cerrado_de_hoy_se_imprime(client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup):
+    _habilitar(db, org, "pos")
+    propia = _abrir_caja(db, org, branch_a, cajero_a); _cerrar(db, propia)
+    for ruta in _RUTAS_CORTE:
+        r = client.get(ruta.format(id=propia.id), headers=auth_cajero_a)
+        assert r.status_code == 200, (ruta, r.status_code, r.text[:200])
+    r = _print_cut(client, auth_cajero_a, propia.id)
+    assert r.status_code == 200, r.text
+    assert client.get(f"/api/cash/{propia.id}/audit-log", headers=auth_cajero_a).status_code == 403
+
+
+def test_corte_cajera_turno_abierto_no_se_imprime(client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup):
+    _habilitar(db, org, "pos")
+    abierta = _abrir_caja(db, org, branch_a, cajero_a)
+    for ruta in ("/api/cash/{id}/pdf", "/api/cash/{id}/ticket"):
+        assert client.get(ruta.format(id=abierta.id), headers=auth_cajero_a).status_code == 409
+    assert _print_cut(client, auth_cajero_a, abierta.id).status_code == 409
+
+
+def test_corte_gerente_ve_turnos_viejos_y_ajenos(client, db, org, branch_a, cajero_a, auth_gerente_a, products_setup):
+    _habilitar(db, org, "pos")
+    vieja = _sesion_vieja(db, org, branch_a, cajero_a)
+    for ruta in _RUTAS_CORTE + ("/api/cash/{id}/audit-log",):
+        assert client.get(ruta.format(id=vieja.id), headers=auth_gerente_a).status_code == 200

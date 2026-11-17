@@ -1181,6 +1181,14 @@ def _verify_session_access(db: Session, session_id: int, current_user: User) -> 
     session = db.query(CashSession).filter(CashSession.id == session_id).first()
     if not session:
         raise HTTPException(404, "Sesión no encontrada")
+    if es_cajero(current_user):
+        # Misma regla que `/summary?session_id=`: la cajera solo abre sus
+        # propios turnos de hoy; de los demás ni confirma que existen.
+        propia = _turnos_propios_de_hoy(
+            db.query(CashSession.id).filter(CashSession.id == session.id), current_user
+        ).first()
+        if propia is None:
+            raise HTTPException(404, "Sesión no encontrada")
     # Verificar organizacion via membership (User no tiene organization_id directo)
     user_org = db.query(UserOrganization.organization_id).filter(
         UserOrganization.user_id == current_user.id,
@@ -1191,6 +1199,13 @@ def _verify_session_access(db: Session, session_id: int, current_user: User) -> 
     if current_user.branch_id and session.branch_id != current_user.branch_id:
         raise HTTPException(403, "No tienes acceso a esta sesión")
     return session
+
+
+def _corte_impreso_solo_al_cerrar(session: CashSession, current_user: User) -> None:
+    """El corte (PDF/ticket) trae el esperado y la diferencia: con el turno
+    abierto la cajera no lo recibe (conteo ciego). Se imprime al cerrar."""
+    if es_cajero(current_user) and session.closed_at is None:
+        raise HTTPException(409, "El corte se imprime al cerrar el turno.")
 
 @router.get("/{session_id}/audit-log")
 def get_session_audit_log(
@@ -1240,7 +1255,7 @@ def get_cash_cut_pdf(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    _verify_session_access(db, session_id, current_user)
+    _corte_impreso_solo_al_cerrar(_verify_session_access(db, session_id, current_user), current_user)
     audit_data = get_session_audit_data(db, session_id)
     if not audit_data:
         raise HTTPException(404, "Sesión no encontrada")
@@ -1263,7 +1278,7 @@ def get_cash_cut_ticket(
     Retorna un JSON estructurado para que el Frontend (JS) lo formatee
     y lo mande a la impresora térmica (ESC/POS).
     """
-    _verify_session_access(db, session_id, current_user)
+    _corte_impreso_solo_al_cerrar(_verify_session_access(db, session_id, current_user), current_user)
     audit_data = get_session_audit_data(db, session_id)
     if not audit_data:
         raise HTTPException(404, "Sesión no encontrada")
