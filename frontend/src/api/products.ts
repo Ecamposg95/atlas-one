@@ -1,4 +1,5 @@
 import client from './client'
+import { comprimirImagen } from '../utils/comprimirImagen'
 import type {
   Product,
   Brand,
@@ -416,7 +417,8 @@ export const productsApi = {
   /** POST /api/products/{id}/image — upload image file (JPEG/PNG/WEBP, ≤2 MB). */
   uploadImage: async (id: string, file: File): Promise<Product> => {
     const form = new FormData()
-    form.append('file', file)
+    // Fotos del teléfono: se reducen a ≤1600 px JPEG antes de subir (límite 2 MB).
+    form.append('file', await comprimirImagen(file))
     const { data } = await client.post<Product>(`/products/${id}/image`, form, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
@@ -450,7 +452,7 @@ export const productsApi = {
 
   addImage: async (id: string, file: File, alt?: string): Promise<ImagenProducto> => {
     const form = new FormData()
-    form.append('file', file)
+    form.append('file', await comprimirImagen(file))
     if (alt) form.append('alt', alt)
     const { data } = await client.post<ImagenProducto>(`/products/${id}/images`, form, {
       headers: { 'Content-Type': 'multipart/form-data' },

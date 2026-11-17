@@ -82,7 +82,7 @@ describe('los grupos del menú', () => {
     const grupo = (h: string) => HQ_NAV_GROUPS.find((g) => g.header === h)?.urls
     expect(grupo('Operación')).toEqual(['/hq/operations', '/hq/reports-hub', '/hq/valor-inventario'])
     expect(grupo('Ventas')).toEqual(['/sales', '/returns', '/cash-history', '/quotes', '/quotes/new', '/seguimiento'])
-    expect(grupo('Catálogo')).toEqual(['/products', '/departments', '/brands', '/labels'])
+    expect(grupo('Catálogo')).toEqual(['/products', '/fotos', '/departments', '/brands', '/labels'])
     expect(grupo('Inventario')).toEqual(['/inventory', '/inventory/conteos', '/scanner', '/logistics', '/boxes'])
     expect(grupo('Compras')).toEqual(['/purchases', '/expenses', '/purchasing'])
     expect(grupo('Clientes')).toEqual(['/customers', '/appointments', '/commissions', '/memberships'])

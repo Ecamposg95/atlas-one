@@ -61,6 +61,7 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 | `/hq/valor-inventario` | `hq/HQValorInventario` | Admin, Dueño, Gerente | reports |
 | `/hq/branches`, `/:branchId` | `hq/HQBranches` (la ruta hija abre esa sucursal en la misma pantalla) | Admin | inventory |
 | `/labels` | `labels/Labels` | Admin, Dueño, Gerente, Cajero | labels |
+| `/fotos` | `products/FotosProductos` | Admin, Dueño, Gerente, Cajero | tienda_en_linea (menú) — buscar producto, tomar foto con la cámara del teléfono (`capture="environment"`), subir a la galería (`POST /products/{id}/images`, filtro `sin_foto`) y publicar/quitar de la tienda (admin/dueño). Las fotos se reducen en el teléfono a ≤1600 px JPEG (`utils/comprimirImagen.ts`) antes de subir. |
 | `/products`, `/new`, `/:id/edit` | `inventory/Products` (Productos; para admin y dueño en perfil completo trae las cifras, aprobación y archivado del Catálogo viejo), `products/ProductForm` | Admin, Dueño, Gerente, Cajero | catalog |
 | `/inventory` | `inventory/Inventory` (Inventario: kardex y ajuste para todos; costo e importes solo admin y dueño) | Admin, Dueño (menú); gerente y cajera llegan desde «Ajustar» del editor de variantes | inventory |
 | `/inventory/conteos`, `/:id`, `/:id/reporte` | `inventory/conteos/Conteos`, `ConteoSesion`, `ConteoReporte` | Admin, Dueño | inventory |
