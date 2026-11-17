@@ -44,6 +44,12 @@ efectivo por corte, existencias y movimientos, y folio maximo por sucursal.
 `--sucursales 12,13` muda solo esas sucursales de rmazh (catalogo completo; los
 usuarios de las otras llegan inactivos y sin sucursal).
 
+`--org-destino 21 --sucursales 18` agrega despues una sucursal que se habia
+quedado en rmazh a la org ya mudada (`agregar_sucursales`): catalogo que falte
+por UUID, sucursal nueva con cajas, ventas (folios propios de la sucursal),
+existencias y movimientos; sus usuarios, que ya existen inactivos, se ligan a
+ella con su contrasena y PIN de rmazh (la reactivacion es aparte).
+
 Uso (dentro del contenedor de Atlas ONE):
     python scripts/import_rmazh_org.py org5.txt --nombre "Novedades America" \
         --plan PRO --giro ATLAS_POS                 # ensayo: escribe y deshace
@@ -545,13 +551,316 @@ def verificar(db, datos: Dict[str, Any], org: int, mapas: Dict[str, Dict[Any, in
         raise Bloqueo("la verificacion no cuadra:\n" + "\n".join(fallas))
 
 
+# ── Agregar una sucursal a una org ya mudada ─────────────────────────────────
+# Catalogo: se agrega lo que falte por UUID; lo que ya existe en la org no se toca.
+CATALOGO = ["departments", "brands", "products", "product_variants", "packaging_units", "product_prices"]
+# De la sucursal: todo es nuevo (repetir la mudanza bloquea).
+DE_SUCURSAL = ["branches", "employees", "product_branch_status", "stock_on_hand", "cash_sessions",
+               "cash_movements", "cash_audit_log", "sales_documents", "sales_lines", "payments",
+               "sale_returns", "sale_return_items", "inventory_movements"]
+
+
+def agregar_sucursales(
+    db,
+    datos: Dict[str, Any],
+    *,
+    org_destino: int,
+    sucursales: set,
+    permitir_cajas_abiertas: bool = False,
+) -> Dict[str, Any]:
+    """Agrega a `org_destino` (ya mudada) las `sucursales` de rmazh con su historial.
+
+    Para una org que se mudo con `--sucursales` y dejo otras en rmazh (Novedades
+    America sin la Taza). Reconoce lo ya mudado: usuarios por `username` dentro
+    de la org (sus cuentas existen inactivas y sin sucursal: se ligan a la nueva
+    y toman la contrasena y el PIN de la exportacion), catalogo por UUID. La
+    sucursal, sus cajas, ventas, existencias y movimientos son nuevos; si una
+    sucursal con el mismo nombre ya existe en la org, BLOQUEO (no se repite).
+    Inserta SIN confirmar; quien llama decide commit o rollback.
+    """
+    datos = filtrar_sucursales(datos, set(sucursales))
+    t = datos["tablas"]
+    bloqueos: List[str] = []
+    avisos: List[str] = []
+
+    if not db.execute(text("select count(*) from organization where id = :o"), {"o": org_destino}).scalar():
+        raise Bloqueo(f"no existe la organizacion {org_destino} en Atlas ONE")
+    faltan_suc = set(sucursales) - {b["id"] for b in t.get("branches", [])}
+    if faltan_suc:
+        raise Bloqueo(f"sucursales {sorted(faltan_suc)} no estan en la exportacion")
+    # La matriz de rmazh no viaja otra vez: la org ya tiene la suya.
+    t["branches"] = [dict(b, is_headquarters=False) for b in t["branches"]]
+    t["employees"] = [e for e in t.get("employees", []) if e.get("base_branch_id") in sucursales]
+
+    destino: Dict[str, Table] = {}
+    for nombre in CATALOGO + DE_SUCURSAL:
+        filas = t.get(nombre, [])
+        tabla = _reflejar(db, nombre)
+        if tabla is None:
+            (bloqueos if filas else avisos).append(f"Atlas ONE no tiene la tabla {nombre} ({len(filas)} filas)")
+            continue
+        destino[nombre] = tabla
+        if filas:
+            sobran = sorted(set(filas[0]) - set(tabla.c.keys()))
+            if sobran:
+                avisos.append(f"{nombre}: columnas que solo tiene rmazh, no viajan: {', '.join(sobran)}")
+
+    abiertas = [c["id"] for c in t.get("cash_sessions", []) if c.get("status") == "OPEN"]
+    if abiertas:
+        msg = f"cajas abiertas en rmazh: {abiertas} (cortarlas antes de mudar)"
+        (avisos if permitir_cajas_abiertas else bloqueos).append(msg)
+
+    ya = {n for (n,) in db.execute(text("select name from branches where organization_id = :o"),
+                                   {"o": org_destino})}
+    for b in t["branches"]:
+        if b["name"] in ya:
+            bloqueos.append(f"la sucursal {b['name']!r} ya existe en la org {org_destino}")
+
+    # Usuarios: ya mudados con la org (por username dentro de la org destino).
+    m_usr: Dict[int, int] = {}
+    for u in t.get("users", []):
+        fila = db.execute(text("select u.id from users u join user_organizations uo on uo.user_id = u.id "
+                               "where u.username = :u and uo.organization_id = :o"),
+                          {"u": u["username"], "o": org_destino}).first()
+        if fila:
+            m_usr[u["id"]] = fila[0]
+        elif u.get("branch_id") in sucursales:
+            bloqueos.append(f"el usuario {u['username']!r} de la sucursal no existe en la org {org_destino}")
+
+    # Catalogo: un UUID que ya existe tiene que ser de esta org.
+    nuevos: Dict[str, List[dict]] = {}
+    for nombre in CATALOGO:
+        if nombre not in destino:
+            continue
+        filas = t.get(nombre, [])
+        existen: Dict[Any, Any] = {}
+        tabla = destino[nombre]
+        tiene_org = "organization_id" in tabla.c
+        cols = [tabla.c.id] + ([tabla.c.organization_id] if tiene_org else [])
+        ids = [f["id"] for f in filas]
+        for i in range(0, len(ids), 500):
+            for fila in db.execute(tabla.select().with_only_columns(*cols).where(tabla.c.id.in_(ids[i:i + 500]))):
+                existen[fila[0]] = fila[1] if tiene_org else org_destino
+        ajenos = [i for i, o in existen.items() if o is not None and o != org_destino]
+        if ajenos:
+            bloqueos.append(f"{nombre}: {len(ajenos)} ids ya existen en otra organizacion (p. ej. {ajenos[0]})")
+        nuevos[nombre] = [f for f in filas if f["id"] not in existen]
+
+    # rmazh recrea escalones y empaques al editarlos (UUID nuevo). De una variante
+    # que ya vive en Atlas ONE manda Atlas: solo viajan los de variantes nuevas.
+    variantes_nuevas = {v["id"] for v in nuevos.get("product_variants", [])}
+    for nombre in ("product_prices", "packaging_units"):
+        antes = nuevos.get(nombre, [])
+        nuevos[nombre] = [f for f in antes if f.get("variant_id") in variantes_nuevas]
+        omitidos = len(antes) - len(nuevos[nombre])
+        if omitidos:
+            avisos.append(f"{nombre}: {omitidos} filas nuevas en rmazh de variantes ya mudadas no viajan "
+                          "(en Atlas ONE manda Atlas)")
+
+    # Lo de la sucursal con UUID no puede existir ya.
+    for nombre in DE_SUCURSAL:
+        if nombre in PK_ENTERA or nombre not in destino or "id" not in destino[nombre].c:
+            continue
+        ids = [f["id"] for f in t.get(nombre, []) if f.get("id") is not None]
+        for i in range(0, len(ids), 500):
+            n = db.execute(destino[nombre].select().with_only_columns(destino[nombre].c.id)
+                           .where(destino[nombre].c.id.in_(ids[i:i + 500]))).fetchall()
+            if n:
+                bloqueos.append(f"{nombre}: {len(n)} ids ya existen en Atlas ONE (p. ej. {n[0][0]})")
+                break
+
+    for nombre, tabla in destino.items():
+        filas = t.get(nombre, []) if nombre in DE_SUCURSAL else nuevos.get(nombre, [])
+        if not filas:
+            continue
+        for col in tabla.c:
+            if col.name not in filas[0]:
+                continue
+            valores_enum = getattr(col.type, "enums", None)
+            if valores_enum:
+                raros = {f[col.name] for f in filas if f.get(col.name) is not None} - set(valores_enum)
+                if raros:
+                    bloqueos.append(f"{nombre}.{col.name}: valores que Atlas ONE no conoce: {sorted(raros)}")
+            if (col.name.endswith("_id") and col.name not in REFERENCIAS
+                    and col.name not in CONSERVADAS and col.name != "id"
+                    and any(f.get(col.name) is not None for f in filas)):
+                bloqueos.append(f"{nombre}.{col.name}: columna de referencia sin traduccion")
+
+    if bloqueos:
+        raise Bloqueo("\n".join(bloqueos))
+
+    mapas: Dict[str, Dict[Any, int]] = {"organization": {datos["org_id"]: org_destino}, "users": m_usr}
+    for nombre in DE_SUCURSAL:
+        if nombre in PK_ENTERA and nombre in destino:
+            origen = [f["id"] for f in t.get(nombre, [])]
+            mapas[nombre] = dict(zip(origen, _reservar_ids(db, nombre, len(origen))))
+    huerfanas: Dict[str, int] = defaultdict(int)
+
+    def traducir(nombre: str, fila: dict) -> dict:
+        nueva = dict(fila)
+        if nombre in PK_ENTERA:
+            nueva["id"] = mapas[nombre][fila["id"]]
+        for col, ref in REFERENCIAS.items():
+            if col not in nueva or nueva[col] is None:
+                continue
+            if ref == "organization":
+                nueva[col] = org_destino
+                continue
+            valor = mapas.get(ref, {}).get(nueva[col])
+            if valor is None:
+                if (nombre, col) in ANULABLES:
+                    huerfanas[f"{nombre}.{col}"] += 1
+                    nueva[col] = None
+                    continue
+                raise Bloqueo(f"{nombre}.{col}={fila[col]} apunta fuera de la organizacion (fila {fila.get('id')})")
+            nueva[col] = valor
+        return nueva
+
+    caja_de_venta = {d["id"]: d.get("cash_session_id") for d in t.get("sales_documents", [])}
+    insertadas: Dict[str, int] = {}
+    for nombre in CATALOGO + DE_SUCURSAL:
+        if nombre not in destino:
+            continue
+        tabla = destino[nombre]
+        columnas = set(tabla.c.keys())
+        por_omision = {k: v for k, v in _defaults_del_modelo(nombre).items() if k in columnas}
+        filas = []
+        for fila in (nuevos.get(nombre, []) if nombre in CATALOGO else t.get(nombre, [])):
+            if nombre == "payments" and fila.get("cash_session_id") is None:
+                fila = dict(fila, cash_session_id=caja_de_venta.get(fila.get("sales_document_id")))
+            if nombre == "cash_audit_log" and fila.get("related_table") in mapas and fila.get("related_id") is not None:
+                nuevo = mapas[fila["related_table"]].get(int(fila["related_id"]))
+                fila = dict(fila, related_id=str(nuevo) if nuevo is not None else fila["related_id"])
+            nueva = traducir(nombre, fila)
+            if "organization_id" in columnas:
+                nueva["organization_id"] = org_destino
+            for k, v in por_omision.items():
+                nueva.setdefault(k, v)
+            filas.append({k: _convertir(v, tabla.c[k]) for k, v in nueva.items() if k in columnas})
+        llaves = set().union(*filas) if filas else set()
+        filas = [{k: f.get(k) for k in llaves} for f in filas]
+        for i in range(0, len(filas), 1000):
+            db.execute(tabla.insert(), filas[i:i + 1000])
+        insertadas[nombre] = len(filas)
+
+    # Usuarios de la sucursal: se ligan a la nueva con su contrasena y PIN de rmazh.
+    # `is_active` no se toca: se reactivan a mano al cortar (se exporta con ellas apagadas).
+    ligados: Dict[str, int] = {}
+    for u in t.get("users", []):
+        if u.get("branch_id") in sucursales and u["id"] in m_usr:
+            db.execute(text("update users set branch_id = :b, password_hash = :h, reprint_pin_hash = :p "
+                            "where id = :u"),
+                       {"b": mapas["branches"][u["branch_id"]], "h": u["password_hash"],
+                        "p": u.get("reprint_pin_hash"), "u": m_usr[u["id"]]})
+            ligados[u["username"]] = m_usr[u["id"]]
+
+    for nombre_col, n in huerfanas.items():
+        avisos.append(f"{nombre_col}: {n} filas apuntaban fuera de la org y quedaron en NULL")
+
+    verificar_sucursales(db, datos, org_destino, mapas)
+    return {
+        "organization_id": org_destino,
+        "insertadas": insertadas,
+        "sucursales": dict(mapas["branches"]),
+        "usuarios_ligados": ligados,
+        "avisos": avisos,
+    }
+
+
+def verificar_sucursales(db, datos: Dict[str, Any], org: int, mapas: Dict[str, Dict[Any, int]]) -> None:
+    """Como `verificar`, pero contando solo lo de las sucursales nuevas."""
+    t = datos["tablas"]
+    fallas: List[str] = []
+    nuevas = list(mapas["branches"].values())
+    cajas = list(mapas.get("cash_sessions", {}).values()) or [-1]
+
+    def uno(sql: str, **kw):
+        from sqlalchemy import bindparam
+        q = text(sql)
+        for k in ("b", "c"):
+            if f":{k}" in sql:
+                q = q.bindparams(bindparam(k, expanding=True))
+        return db.execute(q, dict(kw, o=org, b=nuevas, c=cajas)).scalar()
+
+    def igual(etiqueta, esperado, real):
+        a = round(Decimal(str(esperado or 0)), 2)
+        b = round(Decimal(str(real or 0)), 2)
+        if a != b:
+            fallas.append(f"{etiqueta}: rmazh {a} / Atlas ONE {b}")
+
+    docs = "select id from sales_documents where organization_id = :o and branch_id in :b"
+    for tabla, sql in (
+        ("sales_documents", f"select count(*) from ({docs}) x"),
+        ("sales_lines", f"select count(*) from sales_lines where document_id in ({docs})"),
+        ("payments", f"select count(*) from payments where sales_document_id in ({docs})"),
+        ("cash_sessions", "select count(*) from cash_sessions where organization_id = :o and branch_id in :b"),
+        ("cash_movements", "select count(*) from cash_movements where session_id in :c"),
+        ("stock_on_hand", "select count(*) from stock_on_hand where organization_id = :o and branch_id in :b"),
+        ("product_branch_status",
+         "select count(*) from product_branch_status where organization_id = :o and branch_id in :b"),
+        ("inventory_movements",
+         "select count(*) from inventory_movements where organization_id = :o and branch_id in :b"),
+    ):
+        igual(f"filas de {tabla}", len(t.get(tabla, [])), uno(sql))
+
+    igual("suma de ventas", _sumar(t.get("sales_documents", []), "total_amount"),
+          uno(f"select coalesce(sum(total_amount), 0) from sales_documents where id in ({docs})"))
+    igual("suma de partidas", _sumar(t.get("sales_lines", []), "total_line"),
+          uno(f"select coalesce(sum(total_line), 0) from sales_lines where document_id in ({docs})"))
+    igual("suma de pagos", _sumar(t.get("payments", []), "amount"),
+          uno(f"select coalesce(sum(amount), 0) from payments where sales_document_id in ({docs})"))
+    igual("existencias", _sumar(t.get("stock_on_hand", []), "qty_on_hand"),
+          uno("select coalesce(sum(qty_on_hand), 0) from stock_on_hand where organization_id = :o "
+              "and branch_id in :b"))
+    igual("movimientos de inventario", _sumar(t.get("inventory_movements", []), "qty_change"),
+          uno("select coalesce(sum(qty_change), 0) from inventory_movements where organization_id = :o "
+              "and branch_id in :b"))
+    igual("pagos sin caja", 0, uno(
+        "select count(*) from payments p join sales_documents s on s.id = p.sales_document_id "
+        "where s.organization_id = :o and s.branch_id in :b and p.cash_session_id is null "
+        "and s.cash_session_id is not null"))
+
+    maximos: Dict[tuple, int] = {}
+    for d in t.get("sales_documents", []):
+        if d.get("folio") is None:
+            continue
+        clave = (mapas["branches"][d["branch_id"]], d.get("series"))
+        maximos[clave] = max(maximos.get(clave, 0), int(d["folio"]))
+    for (sucursal, serie), folio in maximos.items():
+        igual(f"folio maximo sucursal {sucursal} serie {serie}", folio, db.execute(text(
+            "select max(folio) from sales_documents where branch_id = :b and series = :s"),
+            {"b": sucursal, "s": serie}).scalar())
+
+    venta_caja = {d["id"]: d.get("cash_session_id") for d in t.get("sales_documents", [])}
+    efectivo: Dict[int, Decimal] = defaultdict(Decimal)
+    for p in t.get("payments", []):
+        caja = p.get("cash_session_id") or venta_caja.get(p.get("sales_document_id"))
+        if caja is not None and p.get("method") == "CASH":
+            efectivo[mapas["cash_sessions"][caja]] += Decimal(str(p["amount"]))
+    reales: Dict[int, Any] = {}
+    for c in cajas:
+        v = db.execute(text("select sum(amount) from payments where cash_session_id = :c and method = 'CASH'"),
+                       {"c": c}).scalar()
+        if v is not None:
+            reales[c] = v
+    distintas = [c for c in set(efectivo) | set(reales)
+                 if round(Decimal(str(efectivo.get(c, 0))), 2) != round(Decimal(str(reales.get(c) or 0)), 2)]
+    if distintas:
+        fallas.append(f"efectivo distinto en {len(distintas)} cortes (p. ej. caja {distintas[0]})")
+
+    if fallas:
+        raise Bloqueo("la verificacion no cuadra:\n" + "\n".join(fallas))
+
+
 # ── CLI ──────────────────────────────────────────────────────────────────────
 def main() -> int:
     p = argparse.ArgumentParser(description="Muda una organizacion de rmazh a Atlas ONE")
     p.add_argument("exportacion")
-    p.add_argument("--nombre", required=True)
-    p.add_argument("--plan", required=True)
-    p.add_argument("--giro", required=True)
+    p.add_argument("--nombre")
+    p.add_argument("--plan")
+    p.add_argument("--giro")
+    p.add_argument("--org-destino", type=int, default=None,
+                   help="agrega --sucursales a esta org de Atlas ONE, ya mudada (no crea org)")
     p.add_argument("--ejecutar", action="store_true", help="confirma; sin esto escribe y deshace")
     p.add_argument("--permitir-cajas-abiertas", action="store_true",
                    help="las cajas abiertas llegan abiertas y la cajera corta en Atlas ONE; "
@@ -561,6 +870,10 @@ def main() -> int:
     p.add_argument("--sucursales", default=None,
                    help="ids de rmazh separados por coma; solo esas viajan (el resto se queda en rmazh)")
     args = p.parse_args()
+    if args.org_destino is None and not (args.nombre and args.plan and args.giro):
+        p.error("--nombre, --plan y --giro son obligatorios (salvo con --org-destino)")
+    if args.org_destino is not None and not args.sucursales:
+        p.error("--org-destino exige --sucursales")
     import app.models  # noqa: F401
     from app.core.database import SessionLocal, engine
 
@@ -581,12 +894,17 @@ def main() -> int:
         if not elegidas <= conocidas:
             print(f"BLOQUEO: sucursales {sorted(elegidas - conocidas)} no son de la org")
             return 1
-        datos = filtrar_sucursales(datos, elegidas)
+        if args.org_destino is None:
+            datos = filtrar_sucursales(datos, elegidas)
         print(f"Solo sucursales {sorted(elegidas)}; se quedan en rmazh {sorted(conocidas - elegidas)}")
     db = SessionLocal()
     try:
-        r = importar(db, datos, nombre=args.nombre, plan=args.plan, giro=args.giro,
-                     permitir_cajas_abiertas=args.permitir_cajas_abiertas)
+        if args.org_destino is not None:
+            r = agregar_sucursales(db, datos, org_destino=args.org_destino, sucursales=elegidas,
+                                   permitir_cajas_abiertas=args.permitir_cajas_abiertas)
+        else:
+            r = importar(db, datos, nombre=args.nombre, plan=args.plan, giro=args.giro,
+                         permitir_cajas_abiertas=args.permitir_cajas_abiertas)
     except Bloqueo as e:
         db.rollback()
         print("BLOQUEO:\n" + str(e))
@@ -596,9 +914,13 @@ def main() -> int:
         raise
     for t, n in r["insertadas"].items():
         print(f"  {t:<24}{n:>8,}")
-    print("Organizacion nueva:", r["organization_id"], "· sucursales", r["sucursales"])
-    print("Usuarios:", r["usuarios"])
-    print("Modulos:", ", ".join(r["modulos"]))
+    if args.org_destino is not None:
+        print("Organizacion:", r["organization_id"], "· sucursales nuevas", r["sucursales"])
+        print("Usuarios ligados (siguen INACTIVOS hasta reactivarlos):", r["usuarios_ligados"])
+    else:
+        print("Organizacion nueva:", r["organization_id"], "· sucursales", r["sucursales"])
+        print("Usuarios:", r["usuarios"])
+        print("Modulos:", ", ".join(r["modulos"]))
     for a in r["avisos"]:
         print("AVISO:", a)
     if args.ejecutar:
