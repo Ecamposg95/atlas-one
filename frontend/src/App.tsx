@@ -37,6 +37,7 @@ const StoreScanner    = lazy(() => import('./pages/scanner/StoreScanner').then(m
 const Conteos       = lazy(() => import('./pages/inventory/conteos/Conteos').then(m => ({ default: m.Conteos })))
 const ConteoSesion  = lazy(() => import('./pages/inventory/conteos/ConteoSesion').then(m => ({ default: m.ConteoSesion })))
 const ConteoReporte = lazy(() => import('./pages/inventory/conteos/ConteoReporte').then(m => ({ default: m.ConteoReporte })))
+const FotosProductos  = lazy(() => import('./pages/products/FotosProductos').then(m => ({ default: m.FotosProductos })))
 const Labels          = lazy(() => import('./pages/labels/Labels').then(m => ({ default: m.Labels })))
 const Departments     = lazy(() => import('./pages/core/Departments').then(m => ({ default: m.Departments })))
 const Brands          = lazy(() => import('./pages/core/Brands').then(m => ({ default: m.Brands })))
@@ -337,6 +338,7 @@ export default function App() {
           <Route path="inventory" element={<Suspense fallback={<PageLoader />}><Inventory /></Suspense>} />
           <Route path="logistics" element={<RutaPorRol url="/logistics"><Suspense fallback={<PageLoader />}><Logistics /></Suspense></RutaPorRol>} />
           <Route path="boxes"     element={<RutaPorRol url="/boxes"><Suspense fallback={<PageLoader />}><Boxes /></Suspense></RutaPorRol>} />
+          <Route path="fotos" element={<RutaPorRol url="/fotos"><Suspense fallback={<PageLoader />}><FotosProductos /></Suspense></RutaPorRol>} />
           <Route path="products"  element={<RutaPorRol url="/products"><Suspense fallback={<PageLoader />}><Products /></Suspense></RutaPorRol>} />
           <Route path="products/new" element={
             <RequireRole roles={['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO']}>

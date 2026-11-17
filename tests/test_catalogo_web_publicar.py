@@ -388,3 +388,15 @@ def test_republicar_tras_despublicar_renueva_fecha(client, db, org, auth_admin):
     client.post("/api/products/web-publish", json={"ids": [p.id], "published": True}, headers=auth_admin)
     db.refresh(p)
     assert p.web_published is True and p.web_published_at != primera
+
+
+# ── Pantalla Fotos: filtro de productos sin foto ─────────────────────────────
+def test_listado_sin_foto(client, db, org, auth_admin):
+    con = _producto(db, org, nombre="ConFoto")
+    sin = _producto(db, org, nombre="SinFoto")
+    db.commit()
+    assert _subir(client, con, auth_admin).status_code == 200
+    r = client.get("/api/products/", params={"sin_foto": True, "limit": 500}, headers=auth_admin)
+    assert r.status_code == 200, r.text
+    ids = {x["id"] for x in r.json()["items"]}
+    assert sin.id in ids and con.id not in ids
