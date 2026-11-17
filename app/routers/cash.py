@@ -21,6 +21,7 @@ from app.core.security import get_current_user
 from app.models import User
 from app.models.users import Role
 from app.core.tenant_context import get_current_active_organization
+from app.services.ventas_cajero import es_cajero, rango_hoy_mx
 
 router = APIRouter()
 
@@ -175,9 +176,39 @@ def read_cash_history(
     if not current_user.branch_id:
         # Usuarios HQ no operan caja; redirigir a reportes por sucursal
         raise HTTPException(403, "Los usuarios HQ no tienen historial de caja. Consulte los reportes por sucursal.")
-    return db.query(CashSession).filter(
-        CashSession.branch_id == current_user.branch_id
-    ).order_by(CashSession.opened_at.desc()).offset(skip).limit(limit).all()
+    q = db.query(CashSession).filter(CashSession.branch_id == current_user.branch_id)
+    if es_cajero(current_user):
+        # Sin histórico: la cajera solo ve sus propios turnos de hoy (o el que
+        # siga abierto), nunca los cortes de otras ni de días anteriores.
+        q = _turnos_propios_de_hoy(q, current_user)
+    return q.order_by(CashSession.opened_at.desc()).offset(skip).limit(limit).all()
+
+
+def _turnos_propios_de_hoy(q, user):
+    inicio = rango_hoy_mx()[0].astimezone(timezone.utc)   # UTC: compara bien también en SQLite
+    return q.filter(
+        CashSession.user_id == user.id,
+        (CashSession.status == CashSessionStatus.OPEN) | (CashSession.opened_at >= inicio)
+        | (CashSession.closed_at >= inicio),
+    )
+
+
+def _ciego_para_cajera(data: dict) -> dict:
+    """Arqueo de un turno abierto visto por la cajera: fuera todo lo que
+    permite despejar el efectivo esperado (esperado, ventas totales, efectivo,
+    reembolsos en efectivo, diferencia). Tarjeta, transferencia, la lista de
+    entradas y salidas y los conteos se quedan."""
+    data["expected"] = {"cash_physical": None, "total_system": None}
+    data["reconciliation"] = {"reported": None, "difference": None, "diff_percent": None}
+    for k in ("total_sales", "avg_ticket", "total_taxes", "subtotal"):
+        data["kpis"][k] = None
+    data["payments"]["cash"] = {**data["payments"]["cash"], "total": None}
+    data["movements"]["inflows"] = None
+    data["movements"]["outflows"] = None
+    data["returns"]["cash_refunds"] = None
+    data["returns"]["total"] = None
+    data["returns"]["by_method"] = None
+    return data
 
 @router.post("/open", response_model=CashSessionRead)
 def open_session(
@@ -1020,10 +1051,13 @@ def get_cash_summary(
     del turno cerrado del día sin reabrirlo.
     """
     if session_id is not None:
-        session = db.query(CashSession).filter(
+        q = db.query(CashSession).filter(
             CashSession.id == session_id,
             CashSession.branch_id == current_user.branch_id,
-        ).first()
+        )
+        if es_cajero(current_user):
+            q = _turnos_propios_de_hoy(q, current_user)
+        session = q.first()
         if not session:
             raise HTTPException(404, "Sesión no encontrada en esta sucursal.")
     else:
@@ -1035,7 +1069,10 @@ def get_cash_summary(
         if not session:
             raise HTTPException(400, "No hay sesión abierta.")
 
-    return get_session_audit_data(db, session.id)
+    data = get_session_audit_data(db, session.id)
+    if es_cajero(current_user) and session.closed_at is None:
+        data = _ciego_para_cajera(data)
+    return data
 
 @router.post("/inflow")
 def register_inflow(

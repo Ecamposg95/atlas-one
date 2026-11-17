@@ -124,6 +124,8 @@ const FIXED_METHODS = [
 
 function PaymentMethods({ today, shiftOpen = false }: TodayProps) {
   const payMethods = today.payment_methods ?? {}
+  // A la cajera con el turno abierto el servidor ya no le manda el desglose.
+  const sinDesglose = today.payment_methods == null
 
   return (
     <div className={`${ui.card} p-5`}>
@@ -133,7 +135,7 @@ function PaymentMethods({ today, shiftOpen = false }: TodayProps) {
         {FIXED_METHODS.map(({ key, icon, iconBg, iconColor }) => {
           const amount = Number(payMethods[key] ?? 0)
           // Solo el efectivo es conteo físico; tarjeta y transferencia se ven.
-          const enmascarar = shiftOpen && key === 'CASH'
+          const enmascarar = shiftOpen && (key === 'CASH' || sinDesglose)
           return (
             <div
               key={key}
