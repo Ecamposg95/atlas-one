@@ -229,6 +229,8 @@ export interface OrgModule {
   is_enabled: boolean
   plan_minimo: string | null
   permitido_por_plan: boolean
+  /** Se contrata aparte del plan (IA, tienda en línea); la plataforma lo enciende en cualquier plan. */
+  complemento?: boolean
 }
 
 export interface Plan {

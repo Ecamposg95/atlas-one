@@ -747,7 +747,10 @@ def get_org_module_status(org_id: int, db: Session = Depends(get_db)):
             "status": mod.status,
             "is_enabled": is_enabled,
             "plan_minimo": minimo.clave if minimo else None,
-            "permitido_por_plan": mod.key in permitidos,
+            # Complemento (IA, tienda en línea): se contrata aparte y la
+            # plataforma lo enciende en cualquier plan.
+            "complemento": mod.key in plans.MODULOS_FUERA_DE_PLAN,
+            "permitido_por_plan": mod.key in permitidos or mod.key in plans.MODULOS_FUERA_DE_PLAN,
         })
     return result
 

@@ -173,5 +173,5 @@ valida y escribe, el humano confirma.**
 - Las herramientas que escriben devuelven el resumen del ensayo y piden confirmación antes de la
   corrida real; la corrida real es la misma llamada con `confirmar=true`.
 - Las respuestas al dueño son cortas: conteos, tabla de dudas y qué falta.
-- El módulo `ai` existe en el catálogo de planes (`plans.py`, desde SCALE): ahí se encienden estas
-  funciones.
+- El módulo `ai` es un complemento aparte del plan (`MODULOS_FUERA_DE_PLAN` en `plans.py`): la
+  plataforma lo enciende por tienda en cualquier plan; ahí se encienden estas funciones.

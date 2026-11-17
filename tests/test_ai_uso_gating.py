@@ -46,7 +46,7 @@ def ruta_de_prueba(app):
 def test_gate_403_admin_sin_modulo(client, auth_admin_a, ruta_de_prueba):
     r = client.get("/api/_t1_gate_ai", headers=auth_admin_a)
     assert r.status_code == 403
-    assert "SCALE" in r.json()["detail"]
+    assert "complemento" in r.json()["detail"] and "SCALE" not in r.json()["detail"]
 
 
 def test_gate_pasa_con_modulo_habilitado(client, db, org, auth_admin_a, ruta_de_prueba):
