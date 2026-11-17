@@ -6,6 +6,8 @@ import {
   GraficaBarras, GraficaDona, GraficaLinea, colorMetodo, etiquetaHora, recortarHoras, useTemaGrafica,
 } from '../../components/graficas'
 import { SalesHeatmap } from '../../components/reports/Heatmap'
+import { TarjetaTiendaEnLinea } from '../../components/reports/TarjetaTiendaEnLinea'
+import { useCanalTienda } from '../../hooks/useCanalTienda'
 import { BarraFiltros, ParFechas } from '../../components/ui/BarraFiltros'
 import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
 import { DaxCard } from '../../components/ui/DaxCard'
@@ -55,6 +57,8 @@ const Vacio = ({ children }: { children: ReactNode }) => <p className="text-sm t
 
 export function Reportes({ conSucursales = false }: { conSucursales?: boolean }) {
   const esTelefono = useEsTelefono()
+  // La tarjeta pega a un endpoint de admin/dueño: el gerente no la ve.
+  const conTienda = useCanalTienda().puedePublicar
   const tema = useTemaGrafica()
   // Los presets usan la fecha local del navegador (no UTC), como el resto de filtros de fecha.
   const [rango, setRango] = useState<Rango>(() => rangoPreset('7d'))
@@ -345,6 +349,8 @@ export function Reportes({ conSucursales = false }: { conSucursales?: boolean })
               </div>
             </DaxCard>
           )}
+
+          {conTienda && <TarjetaTiendaEnLinea desde={rango.inicio} hasta={rango.fin} />}
 
           {/* Lo más vendido */}
           <DaxCard>

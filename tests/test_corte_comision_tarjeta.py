@@ -94,7 +94,7 @@ class TestAuditData:
 
 
 class TestExportCsv:
-    def test_columnas_nuevas(self, client, db, org, branch_a, cajero_a, auth_cajero_a):
+    def test_columnas_nuevas(self, client, db, org, branch_a, cajero_a, auth_cajero_a, auth_gerente_a):
         _habilitar_pos(db, org)
         _make_product(db, org, "Mercancia", "CSV-01", Decimal("1000.00"), [(branch_a.id, True)])
         _abrir_caja(db, org, branch_a, cajero_a)
@@ -106,8 +106,9 @@ class TestExportCsv:
             "payments": [{"method": "CARD", "amount": "1035.00"}],
         }, headers={**auth_cajero_a, "X-Organization-ID": str(org.id)})
 
+        # Exporta el gerente: la cajera ya no exporta ventas (403, spec 2026-11-14).
         r = client.get("/api/sales/export/csv",
-                       headers={**auth_cajero_a, "X-Organization-ID": str(org.id)})
+                       headers={**auth_gerente_a, "X-Organization-ID": str(org.id)})
         assert r.status_code == 200, r.text
         texto = r.content.decode("utf-8-sig")
         encabezado, renglon = texto.strip().split("\r\n")[:2]

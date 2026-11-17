@@ -67,13 +67,14 @@ def test_sales_stats_neto_sin_pendientes_y_con_hora_pico(client, db, org, branch
     assert s["peak_hour"] == "17:00"
 
 
-def test_sales_stats_cajera_solo_su_sucursal(client, db, org, branch_a, branch_b, cajero_a, auth_cajero_a, products_setup):
+def test_sales_stats_cajera_403(client, db, org, branch_a, branch_b, cajero_a, auth_cajero_a, products_setup):
     db.add(OrganizationModule(organization_id=org.id, module_key="pos", is_enabled=True))  # la cajera pasa por el candado del módulo
     db.commit()
     _venta(db, org, branch_a, cajero_a, _v(products_setup), "100")
     _venta(db, org, branch_b, cajero_a, _v(products_setup), "200")
-    s = client.get("/api/sales/stats", headers=auth_cajero_a).json()
-    assert s["total_sales"] == 100.0
+    r = client.get("/api/sales/stats", headers=auth_cajero_a)
+    assert r.status_code == 403
+    assert r.json()["detail"] == "Los totales del día no están disponibles para la cajera."
 
 
 def test_returns_lista_por_dia_de_mexico_y_sin_fechas_todo_el_historial(client, db, org, branch_a, cajero_a, auth_admin_a, products_setup):

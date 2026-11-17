@@ -337,4 +337,14 @@ export const reportsApi = {
     const { data } = await client.get<Inicio>('/reports/inicio', { params })
     return data
   },
+
+  tiendaEnLinea: async (params: { desde: string; hasta: string }): Promise<TiendaEnLinea> => {
+    const { data } = await client.get<TiendaEnLinea>('/reports/tienda-en-linea', { params })
+    return data
+  },
+}
+
+export interface TiendaEnLinea {
+  piezas: { product_id: string; name: string; consultas: number }[]
+  prospectos: number
 }

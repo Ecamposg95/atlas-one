@@ -79,6 +79,18 @@ def create_new_return(
     if not sale:
         raise HTTPException(status_code=404, detail="Venta no encontrada")
 
+    # Roles de sucursal: solo devuelven ventas de la suya. La cajera, además,
+    # solo las de hoy. Se lanza antes del try (su except lo volvería 500).
+    from app.routers.sales import _is_hq_role
+    from app.services.ventas_cajero import es_cajero, venta_visible_para_cajero
+    if not _is_hq_role(current_user) and sale.branch_id != current_user.branch_id:
+        raise HTTPException(status_code=404, detail="Venta no encontrada")
+    if es_cajero(current_user) and not venta_visible_para_cajero(sale, current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="Solo puedes devolver ventas de hoy. Para días anteriores pide al gerente.",
+        )
+
     try:
         return crud_returns.create_return(
             db=db,

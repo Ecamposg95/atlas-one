@@ -106,10 +106,10 @@
     --r-lg: 14px;
     --r-xl: 18px;
 
-    /* ── SIDEBAR (tinta índigo — invariante; activo sigue el accent) ── */
-    --sb-bg:          #101022;
-    --sb-border:      rgba(237, 237, 248, 0.10);
-    --sb-text:        rgba(237, 237, 248, 0.85);
+    /* ── SIDEBAR (negro puro — invariante; activo sigue el accent) ── */
+    --sb-bg:          #000000;
+    --sb-border:      rgba(255, 255, 255, 0.10);
+    --sb-text:        rgba(255, 255, 255, 0.85);
     --sb-text-hover:  #ffffff;
     --sb-hover-bg:    rgba(255, 255, 255, 0.06);
     --sb-active-bg:   color-mix(in srgb, var(--p-accent) 20%, transparent);
@@ -261,16 +261,16 @@
     --p-cyan:          #52525b;
   }
 
-  /* ── MODO OSCURO (override) — void índigo (login v2) ── */
+  /* ── MODO OSCURO (override) — full black ── */
   .dark {
-    --dax-bg:          #0b0b22;
-    --dax-surface:     #10102a;
+    --dax-bg:          #0a0a0a;
+    --dax-surface:     #111111;
     --dax-card:        rgba(255, 255, 255, 0.05);
-    --dax-card-solid:  #14142e;
+    --dax-card-solid:  #161616;
     /* Acento aclarado sobre fondo oscuro, siguiendo el vertical */
     --dax-accent:      color-mix(in srgb, var(--p-accent) 62%, #ffffff);
     --dax-accent-glow: color-mix(in srgb, var(--p-accent) 35%, transparent);
-    /* Semánticos aclarados para leer sobre el void índigo. */
+    /* Semánticos aclarados para leer sobre el negro. */
     --dax-success:     #34D399;
     --dax-warning:     #FBBF24;
     --dax-danger:      #F87171;
@@ -280,24 +280,24 @@
     --dax-success-ink: var(--dax-success);
     --dax-warning-ink: var(--dax-warning);
     --dax-accent-soft: color-mix(in srgb, var(--dax-accent) 14%, transparent);
-    /* Sobre el void índigo la tinta del acento es la versión aclarada. */
+    /* Sobre el negro la tinta del acento es la versión aclarada. */
     --dax-accent-text: color-mix(in srgb, var(--p-accent) 55%, #ffffff);
-    --dax-on-accent:   #0b0b22;   /* el acento se aclara aquí: encima va tinta */
+    --dax-on-accent:   #000000;   /* el acento se aclara aquí: encima va tinta */
     --dax-violet-glow: rgba(108, 108, 255, 0.22);
-    --dax-border:      rgba(237, 237, 248, 0.14);
-    --dax-border-dim:  rgba(237, 237, 248, 0.08);
-    --dax-text:        #ededf8;
-    --dax-text-muted:  #b9b9d0;
-    --dax-text-faint:  #8c8cab;
-    --dax-shadow:      0 4px 24px rgba(4,4,14,0.4);
-    --dax-shadow-lg:   0 8px 32px rgba(4,4,14,0.55);
-    --dax-modal-backdrop:  rgba(4, 4, 14, 0.72);
-    --dax-row-border:      rgba(237, 237, 248, 0.10);
+    --dax-border:      rgba(255, 255, 255, 0.14);
+    --dax-border-dim:  rgba(255, 255, 255, 0.08);
+    --dax-text:        #ededed;
+    --dax-text-muted:  #b5b5b5;
+    --dax-text-faint:  #8a8a8a;
+    --dax-shadow:      0 4px 24px rgba(0,0,0,0.4);
+    --dax-shadow-lg:   0 8px 32px rgba(0,0,0,0.55);
+    --dax-modal-backdrop:  rgba(0, 0, 0, 0.72);
+    --dax-row-border:      rgba(255, 255, 255, 0.10);
     --dax-elevated:        rgba(255, 255, 255, 0.05);
 
-    --sb-bg:          #0e0e28;
-    --sb-border:      rgba(237, 237, 248, 0.10);
-    --sb-text:        rgba(237, 237, 248, 0.85);
+    --sb-bg:          #000000;
+    --sb-border:      rgba(255, 255, 255, 0.10);
+    --sb-text:        rgba(255, 255, 255, 0.85);
     --sb-text-hover:  #ffffff;
     --sb-hover-bg:    rgba(255, 255, 255, 0.06);
     --sb-active-bg:   color-mix(in srgb, var(--p-accent) 20%, transparent);

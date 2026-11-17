@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import client from '../../api/client'
 import { BRANCH_COPY } from '../../copy/branchCopy'
+import { useAuthStore } from '../../store/authStore'
 import { ui } from './branchUI'
 
 type Step = 'find' | 'mark' | 'confirm' | 'done'
@@ -57,6 +58,7 @@ function StepPills({ current }: { current: Step }) {
 }
 
 export function ReturnsBranchView() {
+  const esCajera = useAuthStore((s) => s.user?.role) === 'CAJERO'
   const [step, setStep] = useState<Step>('find')
   const [query, setQuery] = useState('')
   const [sale, setSale] = useState<Sale | null>(null)
@@ -77,7 +79,12 @@ export function ReturnsBranchView() {
       const { data } = await client.get(`/sales/by-folio/${series}/${folio}`)
       setSale(data); setStep('mark')
     } catch (e: any) {
-      if (e?.response?.status === 404) setError('No encontré esa venta.')
+      if (e?.response?.status === 404) {
+        // La cajera solo encuentra ventas de hoy: un folio viejo responde 404, no "inexistente".
+        setError(esCajera
+          ? 'Ticket no encontrado. Solo aparecen ventas de hoy; para días anteriores pide al gerente.'
+          : 'No encontré esa venta.')
+      }
       else setError(e?.message ?? 'Error')
     }
   }

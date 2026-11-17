@@ -63,6 +63,7 @@ from app.services.tax import compute_line_tax, quantize_amount, quantize_totals,
 from app.services.card_surcharge import calcular_comision, pct_de_organizacion
 from app.models.users import Role
 from app.services import metricas_ventas as mv
+from app.services.ventas_cajero import es_cajero, rango_hoy_mx, venta_visible_para_cajero
 from app.crud.products import get_variant_if_visible
 try:
     from zoneinfo import ZoneInfo
@@ -160,6 +161,8 @@ def get_sales_stats(
     devoluciones y hora pico. Criterio único en `app/services/metricas_ventas.py`
     (antes aquí sumaban pendientes y borradores). ADMINISTRADOR/DUEÑO sin
     `branch_id` ven toda la organización; GERENTE siempre su sucursal."""
+    if es_cajero(current_user):   # la cajera solo ve sus tickets de hoy, sin totales del día
+        raise HTTPException(403, "Los totales del día no están disponibles para la cajera.")
     periodo = mv.periodo_de_query(start_date, end_date)      # una sola fecha = ese día; invertido = 422
     ambito = mv.resolver_ambito(current_user, org_id, branch_id)
     if current_user.role == Role.GERENTE:   # branch-scoped como read_sales: la lista de abajo es de su sucursal
@@ -224,6 +227,13 @@ def read_sales(
     if doc_type:
         query = query.filter(SalesDocument.doc_type.in_(doc_type))
 
+    if es_cajero(current_user):
+        # La cajera solo ve las ventas de hoy (México) de su sucursal: se descartan las
+        # fechas del query. Los límites van en UTC para que también comparen bien en SQLite.
+        start_date = end_date = None
+        ini, fin = rango_hoy_mx()
+        query = query.filter(SalesDocument.created_at >= ini.astimezone(timezone.utc),
+                             SalesDocument.created_at <= fin.astimezone(timezone.utc))
     if start_date:
         if start_date.tzinfo is None:
             start_date = start_date.replace(tzinfo=MX_TZ)
@@ -1169,6 +1179,8 @@ def get_sale_by_folio(
     if not sale:
         raise HTTPException(status_code=404, detail=f"Ticket {series}-{folio} no encontrado")
     _assert_sale_branch_access(sale, current_user)
+    if es_cajero(current_user) and not venta_visible_para_cajero(sale, current_user):
+        raise HTTPException(status_code=404, detail="Venta no encontrada")   # la cajera solo encuentra tickets de hoy
     return sale
 
 
@@ -1396,6 +1408,8 @@ def get_sale_detail(
     if not sale:
         raise HTTPException(status_code=404, detail="Venta no encontrada")
     _assert_sale_branch_access(sale, current_user)
+    if es_cajero(current_user) and not venta_visible_para_cajero(sale, current_user):
+        raise HTTPException(status_code=404, detail="Venta no encontrada")
     return sale
 
 @router.get("/{sale_id}/print-view", response_class=HTMLResponse)
@@ -1421,6 +1435,8 @@ def get_sale_print_view(
     if not sale:
         raise HTTPException(status_code=404, detail="Venta no encontrada")
     _assert_sale_branch_access(sale, current_user)
+    if es_cajero(current_user) and not venta_visible_para_cajero(sale, current_user):
+        raise HTTPException(status_code=404, detail="Venta no encontrada")
 
     organization = db.query(Organization).filter(Organization.id == org_id).first()
     branch = db.query(Branch).filter(Branch.id == sale.branch_id).first()
@@ -1624,6 +1640,9 @@ def export_sales_csv(
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization)
 ):
+    # La cajera no exporta: el CSV trae el historial y los totales del día.
+    if es_cajero(current_user):
+        raise HTTPException(status_code=403, detail="La exportación de ventas no está disponible para la cajera.")
     # 0. Debug Check
     print(f"DEBUG_CSV_EXPORT: org_id={org_id}, user={current_user.username}")
     """

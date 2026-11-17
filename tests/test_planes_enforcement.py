@@ -135,6 +135,17 @@ class TestToggleModulo:
         r = client.patch(f"/api/platform/organizations/{org.id}/modules/tables?enable=true", headers=auth_superadmin)
         assert r.status_code == 200, r.text
 
+    def test_plataforma_enciende_tienda_en_linea_en_free(self, client, auth_superadmin, db, org):
+        """El canal «Tienda en línea» va fuera de planes: la plataforma lo enciende en cualquier org."""
+        org.industry_type = IndustryType.ATLAS_POS; org.plan = "FREE"
+        if db.query(Module).filter(Module.key == "tienda_en_linea").first() is None:
+            db.add(Module(key="tienda_en_linea", name="Tienda en línea"))
+        db.commit()
+        r = client.patch(f"/api/platform/organizations/{org.id}/modules/tienda_en_linea?enable=true", headers=auth_superadmin)
+        assert r.status_code == 200, r.text
+        om = db.query(OrganizationModule).filter_by(organization_id=org.id, module_key="tienda_en_linea").first()
+        assert om is not None and om.is_enabled
+
     def test_encender_modulo_desconocido_es_404(self, client, auth_superadmin, db, org):
         org.industry_type = IndustryType.ATLAS_POS; org.plan = "ULTRA_PLUS"; db.commit()
         r = client.patch(f"/api/platform/organizations/{org.id}/modules/no_existe?enable=true", headers=auth_superadmin)

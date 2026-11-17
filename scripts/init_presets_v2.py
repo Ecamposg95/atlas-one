@@ -31,6 +31,7 @@ MODULES_CATALOG = [
     ("inventory", "Inventario", "Stock, movimientos, kardex", ModuleScope.GLOBAL, ModuleStatus.STABLE),
     ("scanner", "Scanner de tienda", "Lectura con la cámara para cajeros: consulta, precio y conteo en piso", ModuleScope.BRANCH, ModuleStatus.STABLE),
     ("labels", "Etiquetas", "Etiquetas de mostrador para impresora Zebra: selección, copias, vista previa y envío al agente", ModuleScope.BRANCH, ModuleStatus.STABLE),
+    ("tienda_en_linea", "Tienda en línea", "Catálogo web para una tienda externa: publicación de productos, galería y llaves de acceso", ModuleScope.HQ, ModuleStatus.BETA),
     ("variants", "Variantes color/talla", "Prendas con varias tallas y colores: matriz de variantes, selector en el POS y existencia por variante", ModuleScope.GLOBAL, ModuleStatus.STABLE),
     ("tips", "Propina", "Propina en el cobro: botones de porcentaje y su reporte por mesero", ModuleScope.GLOBAL, ModuleStatus.STABLE),
     ("catalog", "Catálogo", "Productos, servicios, listas de precio", ModuleScope.GLOBAL, ModuleStatus.STABLE),
@@ -404,7 +405,8 @@ PRESETS = [
         "id": "ATLAS_ONE_ENTERPRISE",
         "name": "Atlas One Enterprise",
         "desc": "Implementación completa: multi-sucursal avanzado, IA, integraciones y todos los módulos.",
-        "mods": [k for k, *_ in MODULES_CATALOG],
+        # `tienda_en_linea` es de contratación aparte: no entra ni en Enterprise.
+        "mods": [k for k, *_ in MODULES_CATALOG if k != "tienda_en_linea"],
     },
     {
         "id": "CUSTOM",

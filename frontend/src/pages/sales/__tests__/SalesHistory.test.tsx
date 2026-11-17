@@ -45,8 +45,8 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('Ventas (/sales, fusión de HQSalesLog)', () => {
-  it('la cajera arranca en Hoy, solo estados cerrados, sin pedir sucursales ni mandar branch_id; el título es Ventas', async () => {
-    usuario('CAJERO', 1)
+  it('la gerente arranca en Hoy, solo estados cerrados, sin pedir sucursales ni mandar branch_id; el título es Ventas', async () => {
+    usuario('GERENTE', 1)
     pintar()
     await screen.findByText('A-0041')
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Ventas')
@@ -187,7 +187,7 @@ describe('Ventas (/sales, fusión de HQSalesLog)', () => {
   })
 
   it('cambiar de preset pide el rango nuevo (en lista y estadísticas), vuelve a la página 0 y marca el preset', async () => {
-    usuario('CAJERO', 1)
+    usuario('GERENTE', 1)
     list.mockResolvedValue({ items: [VENTA], total: 250, page: 0, pages: 3 })
     pintar()
     await screen.findByText('A-0041')
@@ -202,7 +202,7 @@ describe('Ventas (/sales, fusión de HQSalesLog)', () => {
   })
 
   it('Filtrar con una fecha vacía avisa y no llama al servidor; con rango invertido también avisa', async () => {
-    usuario('CAJERO', 1)
+    usuario('GERENTE', 1)
     pintar()
     await screen.findByText('A-0041')
     const llamadas = list.mock.calls.length
@@ -215,5 +215,66 @@ describe('Ventas (/sales, fusión de HQSalesLog)', () => {
     fireEvent.click(screen.getByRole('button', { name: /Filtrar/ }))
     expect(useToastStore.getState().toasts.map((t) => t.message)).toContain('La fecha inicial no puede ser mayor que la final.')
     expect(list).toHaveBeenCalledTimes(llamadas)
+  })
+})
+
+describe('Ventas de hoy (cajera)', () => {
+  it('cajera: no pide totales ni enseña KPIs', async () => {
+    usuario('CAJERO', 1)
+    pintar()
+    await screen.findByText('A-0041')
+    expect(getStats).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('kpi-total')).toBeNull()
+  })
+
+  it('cajera: sin filtros de periodo ni fechas ni sucursal ni abiertas', async () => {
+    usuario('CAJERO', 1)
+    pintar()
+    await screen.findByText('A-0041')
+    expect(screen.queryByRole('group', { name: 'Periodo' })).toBeNull()
+    expect(screen.queryByLabelText('Desde')).toBeNull()
+    expect(screen.queryByLabelText('Sucursal')).toBeNull()
+    expect(screen.queryByLabelText('Incluir abiertas/borradores')).toBeNull()
+  })
+
+  it('cajera: título "Ventas de hoy" y conserva el buscador', async () => {
+    usuario('CAJERO', 1)
+    pintar()
+    await screen.findByText('A-0041')
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toMatch(/^Ventas de hoy · /)
+    expect(screen.getByLabelText('Buscar folio o cliente')).toBeTruthy()
+  })
+
+  it('cajera: list se llama sin fechas ni branch_id, solo estados cerrados', async () => {
+    usuario('CAJERO', 1)
+    pintar()
+    await screen.findByText('A-0041')
+    expect(list).toHaveBeenCalledWith({ limit: 100, skip: 0, statuses: 'PAID,REFUNDED_PARTIAL,REFUNDED_TOTAL,CANCELLED' })
+  })
+
+  it('cajera sin ventas: "Sin ventas hoy" en escritorio y en teléfono', async () => {
+    usuario('CAJERO', 1)
+    list.mockResolvedValue({ items: [], total: 0, page: 0, pages: 0 })
+    pintar()
+    expect(await screen.findByText('Sin ventas hoy')).toBeTruthy()
+    cleanup()
+    telefono.valor = true
+    pintar()
+    expect(await screen.findByText('Sin ventas hoy')).toBeTruthy()
+  })
+
+  it('gerente sin ventas: conserva "Sin ventas en este periodo"', async () => {
+    usuario('GERENTE', 1)
+    list.mockResolvedValue({ items: [], total: 0, page: 0, pages: 0 })
+    pintar()
+    expect(await screen.findByText('Sin ventas en este periodo')).toBeTruthy()
+  })
+
+  it('gerente: conserva KPIs y periodo', async () => {
+    usuario('GERENTE', 1)
+    pintar()
+    await screen.findByText('A-0041')
+    expect(screen.getByTestId('kpi-total')).toBeTruthy()
+    expect(screen.getByRole('group', { name: 'Periodo' })).toBeTruthy()
   })
 })

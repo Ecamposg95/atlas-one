@@ -26,11 +26,9 @@ const ACTIVE_FILTERS: { key: ActiveFilter; label: string }[] = [
   { key: 'all',     label: 'Todas' },
 ]
 
-const SCOPE_LABEL: Record<ApiKeyScope, string> = {
-  'read:all':         'Lectura total',
-  'write:sales':      'Escribir ventas',
-  'write:inventory':  'Escribir inventario',
-  'admin:all':        'Admin total',
+const SCOPE_LABEL: Record<string, string> = {
+  'catalog:read': 'Leer catálogo (tienda en línea)',
+  'leads:write':  'Registrar contactos (tienda en línea)',
 }
 
 // ── Utilities ────────────────────────────────────────────────────────────────
@@ -552,7 +550,7 @@ export function PlatformApiKeys() {
               })}
             </div>
             <div style={{ fontSize: 11, color: 'var(--p-hint)', marginTop: 6 }}>
-              Los scopes documentan el nivel de acceso. Por ahora son informativos.
+              Catálogo y contactos son los permisos de la tienda en línea; la llave solo funciona si la org tiene ese módulo encendido.
             </div>
           </div>
 

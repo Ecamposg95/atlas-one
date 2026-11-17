@@ -32,6 +32,7 @@ from .validaciones import (
     validar_escalones, validar_precio, validar_sucursales_de_la_org,
 )
 from .variantes import crear_variantes, pareja_repetida
+from .web import tocar_producto
 
 _AMBIGUO = "Indica en qué sucursal entra la existencia inicial: no se reparte sola entre varias sucursales."
 
@@ -288,6 +289,7 @@ def actualizar_producto(db: Session, org_id: int, user: User, product_id: str, d
                 destinos = sorted(validar_sucursales_de_la_org(db, org_id, datos.target_branch_ids))
                 for variante in vivas:
                     armar_estado_por_sucursal(db, org_id, variante, destinos, reemplazar=True)
+    tocar_producto(db, producto.id)
     db.flush()
     return producto
 

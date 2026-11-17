@@ -844,10 +844,8 @@ export interface ApiKeyListParams {
 }
 
 export const API_KEY_SCOPES = [
-  'read:all',
-  'write:sales',
-  'write:inventory',
-  'admin:all',
+  'catalog:read',
+  'leads:write',
 ] as const
 
 export type ApiKeyScope = typeof API_KEY_SCOPES[number]

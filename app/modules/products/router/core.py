@@ -15,9 +15,11 @@ Sprint 5b split — extracted verbatim from the original ``products.py``.
 """
 from __future__ import annotations
 import logging
+import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from pydantic import BaseModel, ConfigDict
 from app.utils import image_storage
 from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy.exc import IntegrityError
@@ -38,6 +40,7 @@ from app.modules.products.schemas import (
 )
 from app.modules.products.sale_name import sku_sugerido
 from app.modules.products.services import actualizar_producto, crear_producto, duplicar_producto
+from app.modules.products.services import web as web_svc
 
 from ._shared import _PRODUCT_ADVANCED_ROLES, _compute_product_read
 
@@ -111,6 +114,13 @@ def read_products(
     # active_in_branch ya está cubierto para no-admins por el helper (INNER JOIN a PBS is_active_pos=True).
     # Para admin con override, el helper también hace INNER JOIN. Sin override queda como antes
     # (admin ve todo incluyendo sin PBS).
+
+    # Orden determinista: sin ORDER BY, cada página del SELECT DISTINCT sale en
+    # el orden que Postgres quiera y entre páginas se repiten y se saltan
+    # productos (visto en prod: total=620, recorrido=607). Desempate por id para
+    # nombres repetidos. Solo columnas de Product: con DISTINCT, Postgres exige
+    # que el ORDER BY esté en el SELECT.
+    query = query.order_by(Product.name, Product.id)
 
     total_count = query.count()
     products_db = query.offset(skip).limit(limit).all()
@@ -578,12 +588,14 @@ async def upload_product_image(
     if len(contents) > _MAX_IMAGE_BYTES:
         raise HTTPException(status_code=400, detail="La imagen supera el límite de 2 MB")
 
-    product.image_url = image_storage.upload_image(
+    url = image_storage.upload_image(
         contents,
         public_id=product_id,
         folder=image_storage.PRODUCTS_FOLDER,
         content_type=file.content_type,
     )
+    # Una sola fuente: la galería. Crea/reemplaza la primaria y copia a image_url.
+    web_svc.fijar_imagen_primaria(db, product, url)
     db.commit()
     db.refresh(product)
 
@@ -610,8 +622,118 @@ def delete_product_image(
         raise HTTPException(status_code=404, detail="Producto no encontrado")
 
     image_storage.delete_image(product_id, folder=image_storage.PRODUCTS_FOLDER)
-    product.image_url = None
+    # Quita la primaria de la galería (si la hay); image_url sigue a la galería.
+    primaria = next((i for i in web_svc.imagenes_vivas(db, org_id, product_id) if i.is_primary), None)
+    if primaria is not None:
+        web_svc.borrar_imagen(db, product, primaria.id)
+    else:
+        product.image_url = None
     db.commit()
     db.refresh(product)
 
     return _compute_product_read(product, db, current_user)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Galería de imágenes (tienda en línea)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class ImagenRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    url: str
+    alt: Optional[str] = None
+    position: int
+    is_primary: bool
+
+
+class OrdenImagenes(BaseModel):
+    ids: List[str]
+    primary_id: str
+
+
+def _producto_para_galeria(db: Session, product_id: str, org_id: int, current_user: User, escribe: bool) -> Product:
+    if escribe and current_user.role not in _PRODUCT_ADVANCED_ROLES:
+        raise HTTPException(status_code=403, detail="Sin permiso para administrar imágenes")
+    product = (
+        db.query(Product)
+        .filter(Product.id == product_id, Product.organization_id == org_id)
+        .first()
+    )
+    if not product:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+    return product
+
+
+@router.get("/{product_id}/images", response_model=List[ImagenRead])
+def list_product_images(
+    product_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    org_id: int = Depends(get_current_active_organization),
+):
+    _producto_para_galeria(db, product_id, org_id, current_user, escribe=False)
+    return web_svc.imagenes_vivas(db, org_id, product_id)
+
+
+@router.post("/{product_id}/images", response_model=ImagenRead)
+async def add_product_image(
+    product_id: str,
+    file: UploadFile = File(...),
+    alt: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    org_id: int = Depends(get_current_active_organization),
+):
+    """Agrega una imagen a la galería (JPEG / PNG / WEBP, máx. 2 MB). La primera
+    queda como primaria y se copia a `products.image_url`."""
+    product = _producto_para_galeria(db, product_id, org_id, current_user, escribe=True)
+    if file.content_type not in _ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Tipo no permitido ({file.content_type}). Usa JPEG, PNG o WEBP.",
+        )
+    contents = await file.read()
+    if len(contents) > _MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=400, detail="La imagen supera el límite de 2 MB")
+
+    # public_id propio por imagen: no pisa a las demás de la galería.
+    url = image_storage.upload_image(
+        contents,
+        public_id=f"{product_id}-{uuid.uuid4().hex[:8]}",
+        folder=image_storage.PRODUCTS_FOLDER,
+        content_type=file.content_type,
+    )
+    img = web_svc.agregar_imagen(db, product, url, (alt or "").strip() or None)
+    db.commit()
+    db.refresh(img)
+    return img
+
+
+@router.put("/{product_id}/images/order", response_model=List[ImagenRead])
+def order_product_images(
+    product_id: str,
+    body: OrdenImagenes,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    org_id: int = Depends(get_current_active_organization),
+):
+    product = _producto_para_galeria(db, product_id, org_id, current_user, escribe=True)
+    web_svc.ordenar_imagenes(db, product, body.ids, body.primary_id)
+    db.commit()
+    return web_svc.imagenes_vivas(db, org_id, product_id)
+
+
+@router.delete("/{product_id}/images/{image_id}", response_model=List[ImagenRead])
+def delete_product_gallery_image(
+    product_id: str,
+    image_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    org_id: int = Depends(get_current_active_organization),
+):
+    """Soft delete. Si era la primaria, la siguiente pasa a serlo."""
+    product = _producto_para_galeria(db, product_id, org_id, current_user, escribe=True)
+    web_svc.borrar_imagen(db, product, image_id)
+    db.commit()
+    return web_svc.imagenes_vivas(db, org_id, product_id)

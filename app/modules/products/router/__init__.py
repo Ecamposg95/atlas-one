@@ -27,6 +27,7 @@ from app.core.security import get_current_user
 from app.schemas.departments import (
     DepartmentCreate, DepartmentUpdate, DepartmentResponse,
 )
+from app.modules.products.services.web import validar_padre
 from app.schemas.brands import BrandCreate, BrandUpdate, BrandResponse
 
 from . import (
@@ -91,9 +92,11 @@ def create_department(
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization),
 ):
+    validar_padre(db, org_id, None, dept.parent_id)
     new_dept = Department(
         name=dept.name,
         description=dept.description,
+        parent_id=dept.parent_id or None,
         organization_id=org_id,
     )
     db.add(new_dept)
@@ -120,6 +123,10 @@ def update_department(
         dept.name = dept_in.name
     if dept_in.description is not None:
         dept.description = dept_in.description
+    # `parent_id` explicito (incluido null para volverlo raiz) solo si se manda.
+    if "parent_id" in dept_in.model_fields_set:
+        validar_padre(db, org_id, dept.id, dept_in.parent_id)
+        dept.parent_id = dept_in.parent_id or None
     db.commit()
     db.refresh(dept)
     return dept
@@ -138,6 +145,12 @@ def delete_department(
     ).first()
     if not dept:
         raise HTTPException(status_code=404, detail="Departamento no encontrado")
+    # Los hijos pasan a raiz (parent_id no tiene FK). ORM, no UPDATE masivo,
+    # para que `updated_at` se mueva y la tienda web los resincronice.
+    for hijo in db.query(Department).filter(
+        Department.parent_id == dept.id, Department.organization_id == org_id,
+    ).all():
+        hijo.parent_id = None
     db.delete(dept)
     db.commit()
     return {"status": "ok"}
@@ -178,6 +191,7 @@ def list_brands(
             id=str(b.id),
             name=b.name,
             logo_url=b.logo_url,
+            is_premium=bool(b.is_premium),
             product_count=counts.get(str(b.id), 0),
         )
         for b in brands
@@ -191,7 +205,7 @@ def create_brand(
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization),
 ):
-    new_brand = Brand(name=brand.name, logo_url=brand.logo_url, organization_id=org_id)
+    new_brand = Brand(name=brand.name, logo_url=brand.logo_url, is_premium=brand.is_premium, organization_id=org_id)
     db.add(new_brand)
     db.commit()
     db.refresh(new_brand)
@@ -199,6 +213,7 @@ def create_brand(
         id=str(new_brand.id),
         name=new_brand.name,
         logo_url=new_brand.logo_url,
+        is_premium=bool(new_brand.is_premium),
         product_count=0,
     )
 
@@ -221,6 +236,8 @@ def update_brand(
     brand.name = brand_in.name
     if brand_in.logo_url is not None:
         brand.logo_url = brand_in.logo_url
+    if brand_in.is_premium is not None:
+        brand.is_premium = brand_in.is_premium
 
     db.commit()
     db.refresh(brand)
@@ -234,6 +251,7 @@ def update_brand(
         id=str(brand.id),
         name=brand.name,
         logo_url=brand.logo_url,
+        is_premium=bool(brand.is_premium),
         product_count=count,
     )
 

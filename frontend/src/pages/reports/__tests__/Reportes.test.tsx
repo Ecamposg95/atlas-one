@@ -23,7 +23,13 @@ vi.mock('../../../components/graficas', async (importOriginal) => ({
   ),
 }))
 
+vi.mock('../../../components/reports/TarjetaTiendaEnLinea', () => ({
+  TarjetaTiendaEnLinea: () => <div data-testid="tarjeta-tienda" />,
+}))
+
 import { Reportes } from '../Reportes'
+import { useAuthStore } from '../../../store/authStore'
+import { useEnabledModulesStore } from '../../../store/enabledModulesStore'
 import { rangoPreset } from '../presetsReportes'
 
 const r7 = rangoPreset('7d')
@@ -60,9 +66,32 @@ beforeEach(() => {
   exportCsv.mockReset().mockResolvedValue(undefined)
   getBranches.mockReset().mockResolvedValue([SUC(1, 'Roma'), SUC(2, 'Condesa')])
 })
-afterEach(() => { cleanup(); vi.useRealTimers() })
+afterEach(() => {
+  cleanup(); vi.useRealTimers()
+  useEnabledModulesStore.setState({ enabledModules: [] })
+  useAuthStore.setState({ user: null })
+})
+
+const conTiendaYRol = (role: string) => {
+  useEnabledModulesStore.setState({ enabledModules: ['tienda_en_linea'] })
+  useAuthStore.setState({ user: { role } as never })
+}
 
 describe('Reportes', () => {
+  it('tarjeta «Tienda en línea»: el admin la ve con el módulo', async () => {
+    conTiendaYRol('ADMINISTRADOR')
+    render(<Reportes />)
+    await screen.findByTestId('kpi-venta')
+    expect(screen.getByTestId('tarjeta-tienda')).toBeTruthy()
+  })
+
+  it('tarjeta «Tienda en línea»: el gerente no la ve (el endpoint es de admin/dueño)', async () => {
+    conTiendaYRol('GERENTE')
+    render(<Reportes />)
+    await screen.findByTestId('kpi-venta')
+    expect(screen.queryByTestId('tarjeta-tienda')).toBeNull()
+  })
+
   it('arranca en 7 días y pide ese rango al dashboard sin sucursal', async () => {
     render(<Reportes />)
     await screen.findByTestId('kpi-venta')

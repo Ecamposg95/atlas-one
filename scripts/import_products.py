@@ -165,6 +165,9 @@ def import_products(
 
         precio = _num(f.get("precio"), "precio", nfila)
         costo = _num(f.get("costo"), "costo unitario", nfila)
+        if costo is None:
+            # Costo en blanco = 0, no NULL: margenes y ficha tratan NULL aparte.
+            costo = Decimal("0")
 
         sku = (f.get("codigo") or "").strip()
         generado = False
