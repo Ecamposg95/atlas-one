@@ -40,7 +40,7 @@ class _ClienteQueEstorba:
         self.db, self.carga_id, self.cambios = db, carga_id, cambios
         self.respuesta, self.error = respuesta, error
 
-    def generar(self, *, sistema, contenido, esquema, max_tokens=64000):
+    def generar(self, *, sistema, contenido, esquema, max_tokens=64000, latido=None):
         self.db.query(CargaMercancia).filter_by(id=self.carga_id).update(self.cambios)
         self.db.flush()
         if self.error:

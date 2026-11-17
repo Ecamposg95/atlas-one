@@ -44,7 +44,7 @@ def test_modelo_por_omision_y_por_variable(monkeypatch):
     assert cliente_estructurado_por_defecto().modelo == "otro-modelo"
 
 
-def _sdk_falso(monkeypatch, mensaje=None, error=None, capturar=None, constructor=None):
+def _sdk_falso(monkeypatch, mensaje=None, error=None, capturar=None, constructor=None, eventos=()):
     class Flujo:
         def __init__(self, kw):
             self.kw = kw
@@ -56,6 +56,9 @@ def _sdk_falso(monkeypatch, mensaje=None, error=None, capturar=None, constructor
 
         def __exit__(self, *a):
             return False
+
+        def __iter__(self):
+            return iter(eventos)
 
         def get_final_message(self):
             return mensaje
@@ -142,3 +145,38 @@ def test_corte_por_max_tokens_es_respuesta_incompleta(monkeypatch):
     _sdk_falso(monkeypatch, mensaje=_mensaje(stop="max_tokens"))
     with pytest.raises(RespuestaIncompleta):
         ClienteAnthropic("k", "m").generar(sistema="s", contenido=[], esquema=ESQUEMA)
+
+
+def test_latido_durante_el_streaming_espaciado(monkeypatch):
+    """Un solo bloque largo no debe dejar la carga sin latir 10 min: el cliente
+    late mientras llegan eventos, como mucho uno por intervalo."""
+    import app.modules.ai.cliente_anthropic as mod
+    reloj = iter([0, 10, 70, 80, 140, 200])
+    monkeypatch.setattr(mod, "_ahora", lambda: next(reloj))
+    _sdk_falso(monkeypatch, mensaje=_mensaje(), eventos=["e"] * 5)
+    latidos = []
+    r = ClienteAnthropic("k", "m").generar(sistema="s", contenido=[], esquema=ESQUEMA,
+                                            latido=lambda: latidos.append(1))
+    assert r.datos == {"a": 2}
+    # inicio t=0; eventos en 10 (no), 70 (sí), 80 (no), 140 (sí), 200 (sí)
+    assert len(latidos) == 3
+
+
+def test_latido_que_falla_no_corta_la_lectura(monkeypatch):
+    import app.modules.ai.cliente_anthropic as mod
+    reloj = iter([0, 100])
+    monkeypatch.setattr(mod, "_ahora", lambda: next(reloj))
+    _sdk_falso(monkeypatch, mensaje=_mensaje(), eventos=["e"])
+
+    def roto():
+        raise RuntimeError("base caída")
+    assert ClienteAnthropic("k", "m").generar(sistema="s", contenido=[], esquema=ESQUEMA,
+                                              latido=roto).datos == {"a": 2}
+
+
+def test_falso_acepta_y_registra_latido():
+    def latido():
+        pass
+    falso = ClienteEstructuradoFalso([{"a": 1}])
+    falso.generar(sistema="s", contenido=[], esquema=ESQUEMA, latido=latido)
+    assert falso.llamadas[0]["latido"] is latido

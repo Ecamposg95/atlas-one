@@ -12,8 +12,9 @@ import json
 import logging
 import math
 import os
+import time
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Callable, Optional, Protocol
 
 from fastapi import HTTPException
 
@@ -27,6 +28,13 @@ NO_CONFIGURADO = "IA no configurada: falta ANTHROPIC_API_KEY en el servidor."
 # Tope por llamada (spec §7): sin él el SDK espera 10 min y reintenta 2 veces.
 TIMEOUT_POR_DEFECTO = 300.0
 REINTENTOS = 1
+# Cada cuánto, como mucho, se late mientras llegan eventos del streaming. Muy por
+# debajo de MINUTOS_COLGADA (10) de cargas: un bloque largo de PDF sigue vivo.
+SEGUNDOS_ENTRE_LATIDOS = 60.0
+
+
+def _ahora() -> float:
+    return time.monotonic()
 
 __all__ = [
     "ProveedorNoDisponible", "RespuestaIncompleta", "RespuestaEstructurada", "ClienteEstructurado",
@@ -47,7 +55,8 @@ class RespuestaEstructurada:
 
 class ClienteEstructurado(Protocol):
     def generar(self, *, sistema: str, contenido: list[dict], esquema: dict,
-                max_tokens: int = 64000) -> RespuestaEstructurada: ...
+                max_tokens: int = 64000,
+                latido: Optional[Callable[[], None]] = None) -> RespuestaEstructurada: ...
 
 
 class ClienteAnthropic:
@@ -57,7 +66,11 @@ class ClienteAnthropic:
         self.timeout = timeout
 
     def generar(self, *, sistema: str, contenido: list[dict], esquema: dict,
-                max_tokens: int = 64000) -> RespuestaEstructurada:
+                max_tokens: int = 64000,
+                latido: Optional[Callable[[], None]] = None) -> RespuestaEstructurada:
+        """`latido`, si viene, se llama mientras llegan eventos del streaming (como
+        mucho uno cada SEGUNDOS_ENTRE_LATIDOS): una respuesta larga no deja a la
+        carga sin señal de vida. Un latido que falla no corta la lectura."""
         import anthropic
 
         try:
@@ -72,6 +85,16 @@ class ClienteAnthropic:
                 betas=[BETA_FALLBACK],
                 fallbacks="default",
             ) as flujo:
+                if latido is not None:
+                    ultimo = _ahora()
+                    for _evento in flujo:
+                        t = _ahora()
+                        if t - ultimo >= SEGUNDOS_ENTRE_LATIDOS:
+                            ultimo = t
+                            try:
+                                latido()
+                            except Exception:  # noqa: BLE001 - el latido nunca corta la lectura
+                                logger.warning("Falló el latido durante el streaming", exc_info=True)
                 mensaje = flujo.get_final_message()
         except anthropic.APIError as e:
             logger.warning("Error de la API de Anthropic: %s", e)
@@ -107,9 +130,10 @@ class ClienteEstructuradoFalso:
     llamadas: list = field(default_factory=list)
 
     def generar(self, *, sistema: str, contenido: list[dict], esquema: dict,
-                max_tokens: int = 64000) -> RespuestaEstructurada:
+                max_tokens: int = 64000,
+                latido: Optional[Callable[[], None]] = None) -> RespuestaEstructurada:
         self.llamadas.append({"sistema": sistema, "contenido": contenido,
-                              "esquema": esquema, "max_tokens": max_tokens})
+                              "esquema": esquema, "max_tokens": max_tokens, "latido": latido})
         if not self.guion:
             raise AssertionError("ClienteEstructuradoFalso: guion agotado")
         paso = self.guion.pop(0)

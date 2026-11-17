@@ -160,7 +160,8 @@ def _unir(previo: RenglonCrudo, nuevo: RenglonCrudo) -> None:
 
 def extraer_pdf(contenido: bytes, cliente: ClienteEstructurado, instrucciones: str,
                 al_terminar_bloque: Optional[Callable[[], None]] = None) -> ExtraccionPdf:
-    """`al_terminar_bloque` se llama tras leer cada bloque (el latido de la carga)."""
+    """`al_terminar_bloque` es el latido de la carga: se llama durante el streaming
+    de cada bloque (espaciado por el cliente) y al terminarlo."""
     bloques, _ = _bloques(contenido)
     sistema = (
         "Eres un asistente que lee documentos de importación y facturas de mercancía para una tienda. "
@@ -185,7 +186,8 @@ def extraer_pdf(contenido: bytes, cliente: ClienteEstructurado, instrucciones: s
                                              "data": base64.b64encode(datos).decode("ascii")}},
             {"type": "text", "text": texto},
         ]
-        r = cliente.generar(sistema=sistema, contenido=contenido_msg, esquema=ESQUEMA_PDF)
+        r = cliente.generar(sistema=sistema, contenido=contenido_msg, esquema=ESQUEMA_PDF,
+                            latido=al_terminar_bloque)
         res.tokens_entrada += r.tokens_entrada
         res.tokens_salida += r.tokens_salida
 

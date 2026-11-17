@@ -151,3 +151,13 @@ def test_instrucciones_piden_la_moneda_de_cada_renglon():
     extraer_pdf(_pdf(1), c, "")
     texto = c.llamadas[0]["contenido"][1]["text"]
     assert "`moneda`" in texto and "cada renglón" in texto
+
+
+def test_cada_llamada_del_pdf_recibe_el_latido():
+    """El latido debe llegar al streaming de cada bloque, no solo al terminarlo."""
+    def latido():
+        pass
+    c = ClienteEstructuradoFalso([_resp([_r("A")]), _resp([_r("B")])])
+    extraer_pdf(_pdf(16), c, "", al_terminar_bloque=latido)
+    assert len(c.llamadas) == 2
+    assert all(ll["latido"] is latido for ll in c.llamadas)
