@@ -1,5 +1,14 @@
 # Runbook — Cajero Pack Stable (2026-04-30)
 
+> **HISTÓRICO — no ejecutar los rollbacks de este archivo.** Describe el esquema de abril
+> de 2026: ramas `release/qa`, `release/beta`, `release/production` con autodeploy de
+> Railway. Nada de eso existe ya (comprobado el 2026-11-18: ni esas ramas ni los tags
+> `v2026.04.30-cajero-stable` / `milestone-2026.04.30` están en el remoto). Producción es
+> `main` → VPS IONOS y el rollback vigente está en [`docs/DEPLOY.md §4`](../../DEPLOY.md).
+> El **catálogo de síntomas** (422 en ventas, 409 de caja, 410 de tickets en espera, logo
+> del ticket) sigue siendo útil como guía de diagnóstico; las consultas SQL se corren
+> contra `atlas_one_prod` en el VPS.
+
 **Tags**:
 - `v2026.04.30-cajero-stable` → `a79d9393` (feature anchor)
 - `milestone-2026.04.30` → `a79d9393` (multi-branch alignment hito)

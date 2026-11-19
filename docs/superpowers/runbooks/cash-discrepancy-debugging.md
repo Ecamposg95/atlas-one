@@ -78,7 +78,7 @@ If `opening_balance = 0` but the cashier reports having a starting fund: either 
 | Finding | Action |
 |---|---|
 | Legitimate cross-day refund | Document in audit notes. Recommend org policy: refunds cross-day require manager pre-approval. |
-| Inflated refund (fat-finger) | Use `scripts/repair_inflated_refund.py` (F6 — TODO) OR manually: reject SaleReturn, delete CashMovement OUT, recompute difference. |
+| Inflated refund (fat-finger) | Use `scripts/repair_inflated_refund.py` (see `cash-session-repair.md`, scenario A). Manual fallback: reject SaleReturn, delete CashMovement OUT, recompute difference. |
 | Duplicate refund movement | Delete the duplicate `cash_movements` row, recompute. |
 | Cashier counted wrong | No code change. Rerun `scripts/recompute_session_differences.py --session-id X --apply` after manual recount + closing_balance update. |
 | Pre-fix sessions (before commit `640fbe9`) | Bulk run `scripts/recompute_session_differences.py --since 2026-04-01 --apply` to recompute all `difference` values with current formula. |

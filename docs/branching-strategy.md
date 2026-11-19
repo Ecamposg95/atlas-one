@@ -1,6 +1,6 @@
 # Branching Strategy
 
-> Actualizado: 2026-09-22
+> Actualizado: 2026-11-18
 > Rama por defecto: `main`
 
 > **Nota histórica:** hasta el 2026-07-28 este archivo describía el esquema
@@ -22,9 +22,8 @@
 └──────────────────────────────────────────────────────────────┘
 ```
 
-`staging` (`origin/staging`) queda como rama muerta en el remoto — es ancestro de
-`main`, no diverge, y no alimenta ningún destino. No se borra por ahora (referencia
-histórica), pero **no trabajes sobre ella**: cualquier PR nuevo va contra `main`.
+`origin/staging` ya no existe en el remoto (comprobado el 2026-11-18): era ancestro de
+`main`, así que todo su historial vive en `main`. Cualquier PR nuevo va contra `main`.
 
 ## Reglas
 
@@ -70,6 +69,7 @@ dominio del VPS en [`infra/deployment-map.md`](./infra/deployment-map.md).
 - [x] **`SECRET_KEY` en producción** — verificado el 2026-09-22 dentro del contenedor del
       VPS: definida, 64 caracteres, distinta del default público de
       `app/core/security/config.py` (el histórico de Railway nunca la definió).
-- [ ] Decidir el destino final de `origin/staging` (borrarla o dejarla como referencia).
-- [ ] Decidir el destino final del proyecto de Railway (`rmazh` sigue ahí, fuera de
-      alcance de este repo — ver `docs/infra/deployment-map.md`).
+- [x] Destino de `origin/staging` — borrada del remoto; su historial está en `main`.
+- [x] Proyecto de Railway de Atlas One (`atlas-bos`) — ya no existe en la cuenta al
+      2026-11-18. `Rmazh POS` sigue ahí, fuera de alcance de este repo — ver
+      `docs/infra/deployment-map.md`.
