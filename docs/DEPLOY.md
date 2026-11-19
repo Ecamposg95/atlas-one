@@ -83,11 +83,24 @@ No hay un botón "Rollback" (a diferencia del dashboard de Railway). Para volver
 commit anterior:
 
 ```bash
-git checkout <commit-bueno>
-git tar --exclude=.git --exclude=node_modules -cf - . | \
-  ssh ionos 'tar -x -C /srv/apps/atlas-one-prod/src'
+# 1. Vaciar el código fuente del servidor (app/static se respeta), igual que el job de CI:
+#    tar -x no borra lo que ese commit no tenía y un huérfano puede tirar el build de tsc.
+ssh ionos 'cd /srv/apps/atlas-one-prod/src && rm -rf frontend/src frontend/public scripts && find app -mindepth 1 -maxdepth 1 ! -name static -exec rm -rf {} +'
+# 2. Enviar el commit bueno (git archive lee del commit, no del working tree: no hace
+#    falta `git checkout` ni se cuelan node_modules o cambios sin confirmar).
+git archive --format=tar <commit-bueno> | ssh ionos 'tar -x -C /srv/apps/atlas-one-prod/src'
+ssh ionos 'echo <commit-bueno-sha-completo> > /srv/apps/atlas-one-prod/src/.commit_desplegado'
+# 3. Construir y levantar, juntos.
 ssh ionos 'cd /srv/apps/atlas-one-prod && docker compose build && docker compose up -d'
+# 4. Verificar contra el contenedor.
+ssh ionos 'docker exec atlas-one-prod cat /app/.commit_desplegado'
+curl -s https://app.atlasone.com.mx/health
 ```
+
+El paso de `.commit_desplegado` importa: en un despliegue normal lo escribe el job de CI;
+sin él, el contenedor seguiría anunciando el commit anterior. Las migraciones de
+`railway_init.py` son aditivas y no se deshacen con el rollback: el código viejo convive
+con las columnas nuevas.
 
 O revertir el commit malo en `main` y dejar que el pipeline vuelva a correr — es la vía
 preferida porque deja rastro en el historial y corre las pruebas antes de reconstruir.
