@@ -86,7 +86,7 @@ del servidor, de `caddy` o de `postgres` los tumba a todos a la vez.**
 | `/srv/caddy/` | `Caddyfile` + compose del proxy |
 | `/srv/apps/postgres/` | Postgres compartido (Atlas One, rmazh, hrflow), volumen `pgdata_v18` |
 | `/srv/apps/atlas-one-prod/` | **Producción.** `src/` recibe el código por push de CI/CD (ver abajo); `docker-compose.yml` con `context: ./src` |
-| `/srv/landing/` | Landing estática de `atlasone.com.mx` |
+| `/srv/landing/` | Landing estática de `atlasone.com.mx`: un solo `index.html`, cuya fuente es `landing/index.html` de este repo (ver "Landing") |
 | `/srv/apps/{rmazh,hrflow,cortex-agent}/` | Otros proyectos (repositorios propios) |
 | `/srv/backups/` | Dumps + `pg_backup.sh` (cron diario 03:30 en `/etc/cron.d/pg-backup`, retención 14 días) |
 
@@ -143,6 +143,31 @@ ssh ionos 'docker exec atlas-one-prod grep -c "<algo del cambio>" /app/app/route
 
 El `.env` **no** entra en la imagen: lo aporta `env_file:` del `docker-compose.yml` del
 servidor en tiempo de ejecución.
+
+## Landing (`atlasone.com.mx`)
+
+Caddy sirve `/srv/landing` tal cual (`file_server`). Es **un solo archivo**,
+`index.html`, sin imágenes ni build: la fuente vive en `landing/index.html` de este
+repo desde el 2026-11-18 (identidad Atlas Horizon; antes no tenía fuente versionada).
+
+**El pipeline no la publica.** `deploy-ionos` solo reconstruye `atlas-one-prod`; el
+archivo viaja en el repo pero nadie lo copia a `/srv/landing`. Publicar es manual, con
+respaldo antes y por archivo temporal + `mv` para que nadie reciba medio archivo:
+
+```bash
+ssh ionos 'cp -p /srv/landing/index.html /srv/backups/landing_index_antes_de_<qué>_<fecha>.html'
+git show main:landing/index.html | ssh ionos 'cat > /srv/landing/index.html.nuevo \
+  && chown 1000:1000 /srv/landing/index.html.nuevo && chmod 644 /srv/landing/index.html.nuevo \
+  && mv /srv/landing/index.html.nuevo /srv/landing/index.html'
+# Verificar que el dominio sirve exactamente lo del repo (las dos huellas deben coincidir):
+git show main:landing/index.html | sha256sum; curl -s https://atlasone.com.mx/ | sha256sum
+```
+
+Se publica desde `main` (`git show main:…`), no desde el árbol de trabajo, para que lo
+servido siempre corresponda a un commit. Volver atrás = copiar el respaldo de regreso.
+El respaldo de la landing anterior (añil y ticket térmico) es
+`/srv/backups/landing_index_antes_de_horizon_20261118.html`; como no termina en `.dump`,
+la retención de 14 días no lo borra.
 
 ## TLS
 

@@ -14,7 +14,7 @@ Dónde vive cada cosa y qué rama la alimenta. Léelo antes de tocar `main`.
 | Destino | Rama | Base de datos | Quién lo usa |
 |---|---|---|---|
 | `app.atlasone.com.mx` | `main` | Postgres 18 en el VPS (`atlas_one_prod`) | **Producción — Novedades Kaory, Ginebra, Imaltzin, Eleven Fashion, Novedades America y las demás tiendas, todos los días** |
-| `atlasone.com.mx` | — | — | Landing estática |
+| `atlasone.com.mx` | `main` (`landing/index.html`), **publicación manual** | — | Landing estática. Un push a `main` NO la actualiza: se copia a mano al VPS (ver [`ionos-vps.md`](ionos-vps.md), "Landing") |
 | `rmazh.atlasone.com.mx` | otro repositorio | `rmazh_prod`, mismo Postgres | rmazh (Data X POS) — contenedor `rmazh` en el VPS; su operación se documenta en su repositorio |
 | `hrflow.atlasone.com.mx` | otro repositorio | `hrflow_*`, mismo Postgres | hrflow — ajeno a este repo, comparte servidor |
 
