@@ -69,9 +69,9 @@ function KpiCard({ icon, label, value, valueClass, sub, iconBg, iconColor }: Kpi
       <div className="flex items-center gap-2">
         <div
           className="flex items-center justify-center w-7 h-7 rounded-lg flex-shrink-0"
-          style={{ background: iconBg ?? 'rgba(139,92,246,0.12)' }}
+          style={{ background: iconBg ?? 'rgba(255, 161, 74,0.12)' }}
         >
-          <i className={`fa-solid ${icon} text-sm`} style={{ color: iconColor ?? '#a78bfa' }} />
+          <i className={`fa-solid ${icon} text-sm`} style={{ color: iconColor ?? '#FFA14A' }} />
         </div>
         <span className={ui.kpiLabel}>{label}</span>
       </div>
@@ -771,8 +771,8 @@ export function CashBranchView() {
                   ? `Inicial: ${fmtMoney(todayClosedSession.opening_balance)}`
                   : undefined
             }
-            iconBg="rgba(139,92,246,0.12)"
-            iconColor="#a78bfa"
+            iconBg="rgba(255, 161, 74,0.12)"
+            iconColor="#FFA14A"
           />
           <KpiCard
             icon="fa-arrow-down"
@@ -816,8 +816,8 @@ export function CashBranchView() {
               {(
                 [
                   { key: 'CASH',     icon: 'fa-money-bill-wave',  iconBg: 'rgba(16,185,129,0.1)',  iconColor: '#10b981' },
-                  { key: 'CARD',     icon: 'fa-credit-card',      iconBg: 'rgba(139,92,246,0.1)', iconColor: '#a78bfa' },
-                  { key: 'TRANSFER', icon: 'fa-building-columns', iconBg: 'rgba(59,130,246,0.1)', iconColor: '#60a5fa' },
+                  { key: 'CARD',     icon: 'fa-credit-card',      iconBg: 'rgba(255, 161, 74,0.1)', iconColor: '#FFA14A' },
+                  { key: 'TRANSFER', icon: 'fa-building-columns', iconBg: 'rgba(246, 121, 59,0.1)', iconColor: '#FA9360' },
                 ] as const
               ).map(({ key, icon, iconBg, iconColor }) => {
                 const amount = (methodTotals as Record<string, number | undefined>)[key] ?? 0

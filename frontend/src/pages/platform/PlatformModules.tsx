@@ -88,7 +88,7 @@ const buttonPrimary: React.CSSProperties = {
 }
 
 const chipStyle = (active: boolean): React.CSSProperties => ({
-  background: active ? 'rgba(0,201,177,0.12)' : 'var(--p-surface-2)',
+  background: active ? 'rgba(196, 69, 5,0.12)' : 'var(--p-surface-2)',
   color: active ? 'var(--p-teal)' : 'var(--p-muted)',
   border: `1px solid ${active ? 'var(--p-teal)' : 'var(--p-border)'}`,
   padding: '4px 10px',
@@ -102,9 +102,9 @@ const chipStyle = (active: boolean): React.CSSProperties => ({
 
 // ── Scope pill (HQ/BRANCH/WAREHOUSE/GLOBAL) ────────────────────────────────
 const SCOPE_COLOR: Record<string, { bg: string; color: string }> = {
-  GLOBAL:    { bg: 'rgba(0,229,255,0.10)',  color: 'var(--p-cyan)' },
-  HQ:        { bg: 'rgba(192,38,211,0.12)', color: 'var(--p-magenta)' },
-  BRANCH:    { bg: 'rgba(0,201,177,0.12)',  color: 'var(--p-teal)' },
+  GLOBAL:    { bg: 'rgba(249, 87, 6,0.10)',  color: 'var(--p-cyan)' },
+  HQ:        { bg: 'rgba(211, 96, 38,0.12)', color: 'var(--p-magenta)' },
+  BRANCH:    { bg: 'rgba(196, 69, 5,0.12)',  color: 'var(--p-teal)' },
   WAREHOUSE: { bg: 'rgba(245,158,11,0.12)', color: 'var(--p-warning)' },
 }
 
@@ -430,7 +430,7 @@ export function PlatformModules() {
     }
     if (value === 0) return <span style={{ color: 'var(--p-muted)' }}>0</span>
     const color = accent === 'warning' ? 'var(--p-warning)' : 'var(--p-teal)'
-    const bg = accent === 'warning' ? 'rgba(245,158,11,0.12)' : 'rgba(0,201,177,0.12)'
+    const bg = accent === 'warning' ? 'rgba(245,158,11,0.12)' : 'rgba(196, 69, 5,0.12)'
     return (
       <span style={{
         background: bg,

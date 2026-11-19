@@ -101,9 +101,9 @@ describe('alias --p-* → --dax-* (spec §3.1)', () => {
 })
 
 // ── Contraste del texto sobre el acento (--dax-on-accent) ─────────────────
-// El acento es el del vertical y en oscuro se aclara con color-mix hacia
-// blanco, así que el color que va encima no puede ser un fijo: #fff se cae a
-// ~2.9:1 en oscuro y #000 a ~2.4:1 en claro. Los valores salen de index.css
+// El acento es uno solo (Atlas Horizon): naranja quemado en claro, ámbar en
+// oscuro. Lo que va encima no puede ser un fijo: sobre el ámbar el blanco se
+// cae a ~2.9:1, por eso en oscuro va tinta. Los valores salen de index.css
 // para que la prueba no sea una segunda copia que se desalinee.
 
 function relLuminance(hex: string): number {
@@ -118,15 +118,6 @@ function contrast(a: string, b: string): number {
   return (hi + 0.05) / (lo + 0.05)
 }
 
-/** color-mix(in srgb, <a> <pct>%, <b>) con ambos colores opacos. */
-function mixSrgb(a: string, b: string, pct: number): string {
-  const chan = (h: string, i: number) => parseInt(h.slice(i, i + 2), 16)
-  return '#' + [1, 3, 5]
-    .map((i) => Math.round((pct * chan(a, i) + (100 - pct) * chan(b, i)) / 100))
-    .map((v) => v.toString(16).padStart(2, '0'))
-    .join('')
-}
-
 function daxToken(theme: 'light' | 'dark', name: string): string {
   const value = extractDaxTokens(theme)[name]
   expect(value, `falta ${name} en el tema ${theme}`).toBeTruthy()
@@ -136,24 +127,12 @@ function daxToken(theme: 'light' | 'dark', name: string): string {
 }
 
 describe('contraste del texto sobre el acento (spec §3.1)', () => {
-  // El acento por default de :root; los verticales lo sobreescriben.
-  const accentLight = root.match(/^\s*--p-accent:\s*(#[0-9a-fA-F]{6})/m)?.[1] ?? ''
-
-  it('index.css define el acento por default como hex', () => {
-    expect(accentLight).toMatch(/^#[0-9a-fA-F]{6}$/)
-  })
-
   it('en claro, --dax-on-accent sobre el acento da ≥ 4.5:1', () => {
-    expect(contrast(daxToken('light', '--dax-on-accent'), accentLight)).toBeGreaterThanOrEqual(4.5)
+    expect(contrast(daxToken('light', '--dax-on-accent'), daxToken('light', '--dax-accent'))).toBeGreaterThanOrEqual(4.5)
   })
 
-  it('en oscuro, --dax-on-accent sobre el acento aclarado da ≥ 4.5:1', () => {
-    // .dark aclara el acento: color-mix(in srgb, var(--p-accent) N%, #ffffff)
-    const mix = extractDaxTokens('dark')['--dax-accent']
-    const m = mix?.match(/color-mix\(in srgb,\s*var\(--p-accent\)\s*(\d+)%,\s*(#[0-9a-fA-F]{6})\)/)
-    expect(m, `--dax-accent en oscuro no es el color-mix esperado: ${mix}`).toBeTruthy()
-    const accentDark = mixSrgb(accentLight, m![2], Number(m![1]))
-    expect(contrast(daxToken('dark', '--dax-on-accent'), accentDark)).toBeGreaterThanOrEqual(4.5)
+  it('en oscuro, --dax-on-accent sobre el acento da ≥ 4.5:1', () => {
+    expect(contrast(daxToken('dark', '--dax-on-accent'), daxToken('dark', '--dax-accent'))).toBeGreaterThanOrEqual(4.5)
   })
 
   it('platform-v2.css ya no pinta texto blanco fijo sobre el acento', () => {

@@ -157,7 +157,7 @@ export function GastroHomeDay({ greeting, orgName, title, subtitle, accent, topL
             {topProducts.length ? (
               <div className="overflow-x-auto">
                 <BarChart
-                  width={620} height={200} color={accent} soft="rgba(148,163,184,0.22)"
+                  width={620} height={200} color={accent} soft="rgba(168, 162, 154,0.22)"
                   data={topProducts.map((p, i) => ({
                     label: p.name.length > 10 ? p.name.slice(0, 9) + '…' : p.name,
                     value: p.qty,

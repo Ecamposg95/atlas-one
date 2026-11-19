@@ -142,7 +142,7 @@ export function PlatformHealth() {
       accessor: r => (
         <span
           style={{
-            background: 'rgba(59, 130, 246, 0.12)',
+            background: 'rgba(246, 121, 59, 0.12)',
             color: 'var(--p-accent)',
             padding: '2px 8px',
             borderRadius: 4,

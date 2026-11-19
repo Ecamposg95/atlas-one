@@ -75,10 +75,10 @@ export function BranchSwitcher() {
           alignItems: 'center',
           gap: '0.5rem',
           padding: '0.4rem 0.875rem',
-          background: 'rgba(30,41,59,0.8)',
-          border: '1px solid rgba(51,65,85,0.7)',
-          borderRadius: '10px',
-          color: '#cbd5e1',
+          background: 'var(--dax-card)',
+          border: '1px solid var(--dax-border)',
+          borderRadius: '999px',
+          color: 'var(--dax-text)',
           fontSize: '0.7rem',
           fontWeight: 700,
           textTransform: 'uppercase',
@@ -87,17 +87,17 @@ export function BranchSwitcher() {
           transition: 'all 0.2s',
         }}
         onMouseEnter={e => {
-          ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(52,211,153,0.4)'
-          ;(e.currentTarget as HTMLElement).style.color = '#34d399'
+          ;(e.currentTarget as HTMLElement).style.borderColor = 'var(--dax-accent)'
+          ;(e.currentTarget as HTMLElement).style.color = 'var(--dax-accent-text)'
         }}
         onMouseLeave={e => {
-          ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(51,65,85,0.7)'
-          ;(e.currentTarget as HTMLElement).style.color = '#cbd5e1'
+          ;(e.currentTarget as HTMLElement).style.borderColor = 'var(--dax-border)'
+          ;(e.currentTarget as HTMLElement).style.color = 'var(--dax-text)'
         }}
       >
-        <i className="fa-solid fa-shuffle" style={{ fontSize: '0.65rem', color: '#34d399' }} />
+        <i className="fa-solid fa-shuffle" style={{ fontSize: '0.65rem', color: 'var(--dax-accent-text)' }} />
         Sucursal
-        <i className="fa-solid fa-chevron-down" style={{ fontSize: '0.55rem', color: 'rgba(148,163,184,0.5)' }} />
+        <i className="fa-solid fa-chevron-down" style={{ fontSize: '0.55rem', color: 'var(--dax-text-faint)' }} />
       </button>
 
       {open && (
@@ -107,8 +107,8 @@ export function BranchSwitcher() {
             right: 0,
             top: 'calc(100% + 8px)',
             width: '260px',
-            background: 'rgba(15,23,42,0.98)',
-            border: '1px solid rgba(51,65,85,0.7)',
+            background: 'var(--dax-card-solid)',
+            border: '1px solid var(--dax-border)',
             borderRadius: '14px',
             boxShadow: '0 16px 48px rgba(0,0,0,0.5)',
             backdropFilter: 'blur(16px)',
@@ -116,14 +116,14 @@ export function BranchSwitcher() {
             overflow: 'hidden',
           }}
         >
-          <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid rgba(51,65,85,0.4)' }}>
-            <p style={{ fontSize: '0.6rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'rgba(100,116,139,0.8)', margin: 0 }}>
+          <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid var(--dax-border-dim)' }}>
+            <p style={{ fontSize: '0.6rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--dax-text-faint)', margin: 0 }}>
               Nodos disponibles
             </p>
           </div>
           <div style={{ maxHeight: '240px', overflowY: 'auto', padding: '0.5rem' }}>
             {loading ? (
-              <div style={{ padding: '1rem', textAlign: 'center', color: 'rgba(148,163,184,0.5)', fontSize: '0.75rem' }}>
+              <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--dax-text-faint)', fontSize: '0.75rem' }}>
                 Cargando...
               </div>
             ) : branches.length === 0 ? (
@@ -147,22 +147,22 @@ export function BranchSwitcher() {
                   textAlign: 'left',
                   transition: 'background 0.15s',
                 }}
-                onMouseEnter={e => ((e.currentTarget as HTMLElement).style.background = 'rgba(52,211,153,0.07)')}
+                onMouseEnter={e => ((e.currentTarget as HTMLElement).style.background = 'var(--dax-accent-soft)')}
                 onMouseLeave={e => ((e.currentTarget as HTMLElement).style.background = 'transparent')}
               >
                 <div style={{
                   width: '32px', height: '32px', borderRadius: '8px',
-                  background: 'rgba(30,41,59,0.8)',
+                  background: 'var(--dax-elevated)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   flexShrink: 0,
                 }}>
-                  <i className="fa-solid fa-store" style={{ fontSize: '0.75rem', color: 'rgba(148,163,184,0.6)' }} />
+                  <i className="fa-solid fa-store" style={{ fontSize: '0.75rem', color: 'var(--dax-text-muted)' }} />
                 </div>
                 <div style={{ overflow: 'hidden' }}>
-                  <p style={{ fontSize: '0.8rem', fontWeight: 600, color: '#e2e8f0', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--dax-text)', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {b.name}
                   </p>
-                  <p style={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(100,116,139,0.8)', margin: 0 }}>
+                  <p style={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--dax-text-faint)', margin: 0 }}>
                     {b.branch_type}
                   </p>
                 </div>

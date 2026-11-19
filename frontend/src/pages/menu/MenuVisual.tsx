@@ -75,7 +75,7 @@ export function MenuVisual() {
               className="px-3.5 py-1.5 rounded-full text-[13px] font-semibold border transition-colors"
               style={on
                 ? { background: accent, borderColor: accent, color: '#fff' }
-                : { background: 'transparent', borderColor: 'rgba(148,163,184,0.25)', color: '#cbd5e1' }}>
+                : { background: 'transparent', borderColor: 'rgba(168, 162, 154,0.25)', color: '#C9C1B8' }}>
               {c === '__all__' ? 'Todo' : c}
             </button>
           )

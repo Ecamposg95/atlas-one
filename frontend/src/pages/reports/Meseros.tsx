@@ -24,8 +24,8 @@ const RANGES = [
 
 /** Accent del preset actual (violeta bar, naranja restaurant…), leído del CSS. */
 function presetAccent(): string {
-  if (typeof document === 'undefined') return '#7c3aed'
-  return getComputedStyle(document.documentElement).getPropertyValue('--p-accent').trim() || '#7c3aed'
+  if (typeof document === 'undefined') return '#EA580C'
+  return getComputedStyle(document.documentElement).getPropertyValue('--p-accent').trim() || '#EA580C'
 }
 
 export function Meseros() {
@@ -77,7 +77,7 @@ export function Meseros() {
             return (
               <button key={r.key} onClick={() => setRange(r.key)}
                 className="px-3.5 py-1.5 rounded-full text-xs font-semibold transition-colors"
-                style={on ? { background: accent, color: '#fff' } : { color: '#94a3b8' }}>
+                style={on ? { background: accent, color: '#fff' } : { color: '#A8A29A' }}>
                 {r.label}
               </button>
             )
@@ -117,7 +117,7 @@ export function Meseros() {
           <DaxCard>
             <p className="text-[11px] uppercase tracking-wide text-slate-500 mb-3">Ventas por mesero</p>
             <div className="overflow-x-auto">
-              <BarChart width={640} height={200} color={accent} soft="rgba(148,163,184,0.22)"
+              <BarChart width={640} height={200} color={accent} soft="rgba(168, 162, 154,0.22)"
                 data={waiters.slice(0, 8).map((w, i) => ({
                   label: w.name.split(' ')[0].slice(0, 8),
                   value: Math.round(w.revenue),

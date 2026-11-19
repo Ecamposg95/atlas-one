@@ -136,7 +136,7 @@ export function PrinterSettingsCajera() {
             <div className="space-y-1.5">
               {opciones.map((p) => (
                 <label key={p} className="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer"
-                       style={{ background: p === printerName ? 'rgba(99,102,241,0.15)' : 'var(--dax-elevated)' }}>
+                       style={{ background: p === printerName ? 'rgba(255, 106, 31,0.15)' : 'var(--dax-elevated)' }}>
                   <input type="radio" name="impresora" checked={p === printerName} onChange={() => setPrinterName(p)} />
                   <span className="text-sm" style={{ color: 'var(--dax-text)' }}>{p}</span>
                   {p === printerName && !impresoras.includes(p) && (

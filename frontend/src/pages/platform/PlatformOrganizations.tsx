@@ -97,7 +97,7 @@ const buttonSecondary: React.CSSProperties = {
 }
 
 const chipStyle = (active: boolean): React.CSSProperties => ({
-  background: active ? 'rgba(0,201,177,0.12)' : 'var(--p-surface-2)',
+  background: active ? 'rgba(196, 69, 5,0.12)' : 'var(--p-surface-2)',
   color: active ? 'var(--p-teal)' : 'var(--p-muted)',
   border: `1px solid ${active ? 'var(--p-teal)' : 'var(--p-border)'}`,
   padding: '4px 10px',
@@ -498,7 +498,7 @@ export function PlatformOrganizations() {
       sortValue: o => o.industry_type || '',
       accessor: o => (
         <span style={{
-          background: 'rgba(123,47,190,0.12)',
+          background: 'rgba(190, 95, 47,0.12)',
           color: 'var(--p-purple)',
           padding: '2px 8px',
           borderRadius: 4,
@@ -516,7 +516,7 @@ export function PlatformOrganizations() {
       sortable: true,
       sortValue: o => PLAN_ORDEN.indexOf(o.plan ?? 'FREE'),
       accessor: o => (
-        <span style={{ background: 'rgba(20,184,166,0.12)', color: 'var(--p-teal)', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>
+        <span style={{ background: 'rgba(184, 75, 20,0.12)', color: 'var(--p-teal)', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>
           {nombrePlan(o.plan)}
         </span>
       ),
@@ -768,8 +768,8 @@ export function PlatformOrganizations() {
             padding: 12,
             marginBottom: 16,
             borderRadius: 4,
-            background: 'rgba(123,47,190,0.08)',
-            border: '1px solid rgba(123,47,190,0.3)',
+            background: 'rgba(190, 95, 47,0.08)',
+            border: '1px solid rgba(190, 95, 47,0.3)',
           }}>
             <label style={{ ...labelStyle, color: 'var(--p-purple)' }}>
               Preset de industria

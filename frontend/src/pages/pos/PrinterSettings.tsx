@@ -541,7 +541,7 @@ export function PrinterSettings() {
               <DaxCard>
                 <div className="flex items-start gap-3">
                   <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                       style={{ background: 'rgba(99,102,241,0.15)' }}>
+                       style={{ background: 'rgba(255, 106, 31,0.15)' }}>
                     <i className="fa-brands fa-windows text-indigo-400 text-lg" />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -554,7 +554,7 @@ export function PrinterSettings() {
                     <a
                       href={printerApi.downloadAgentUrl('windows')}
                       className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg transition-colors"
-                      style={{ background: 'rgba(99,102,241,0.2)', color: '#a5b4fc' }}
+                      style={{ background: 'rgba(255, 106, 31,0.2)', color: '#FFC08A' }}
                     >
                       <i className="fa-solid fa-download" /> Instalador (.exe)
                     </a>
@@ -637,7 +637,7 @@ export function PrinterSettings() {
                 <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: 'var(--dax-text-faint)' }}>
                   Modo de impresión
                 </p>
-                <div className="flex items-center gap-2 p-2 rounded-lg" style={{ background: 'rgba(99,102,241,0.1)' }}>
+                <div className="flex items-center gap-2 p-2 rounded-lg" style={{ background: 'rgba(255, 106, 31,0.1)' }}>
                   <i className="fa-solid fa-laptop text-indigo-400 text-base" />
                   <div className="flex-1">
                     <p className="text-xs font-bold text-white">Agente Local (esta PC)</p>
@@ -753,7 +753,7 @@ export function PrinterSettings() {
               <DaxCard>
                 <div className="flex items-start gap-3">
                   <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                       style={{ background: 'rgba(148,163,184,0.15)' }}>
+                       style={{ background: 'rgba(168, 162, 154,0.15)' }}>
                     <i className="fa-brands fa-apple text-slate-300 text-lg" />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -766,7 +766,7 @@ export function PrinterSettings() {
                     <a
                       href={printerApi.downloadAgentUrl('mac')}
                       className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg transition-colors"
-                      style={{ background: 'rgba(148,163,184,0.15)', color: '#cbd5e1' }}
+                      style={{ background: 'rgba(168, 162, 154,0.15)', color: '#C9C1B8' }}
                     >
                       <i className="fa-solid fa-download" /> Instalador M1+ (.pkg)
                     </a>
@@ -902,7 +902,7 @@ export function PrinterSettings() {
                 <button
                   onClick={connectBluetooth}
                   className="w-full py-3 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2"
-                  style={{ background: 'rgba(59,130,246,0.2)', color: '#93c5fd', border: '1px solid rgba(59,130,246,0.3)' }}
+                  style={{ background: 'rgba(246, 121, 59,0.2)', color: '#FCB794', border: '1px solid rgba(246, 121, 59,0.3)' }}
                 >
                   <i className="fa-solid fa-bluetooth" />
                   Buscar e conectar impresora
@@ -946,7 +946,7 @@ export function PrinterSettings() {
                   <button
                     onClick={connectBluetooth}
                     className="w-full py-2.5 rounded-xl text-xs font-bold transition-colors"
-                    style={{ background: 'rgba(59,130,246,0.15)', color: '#93c5fd', border: '1px solid rgba(59,130,246,0.2)' }}
+                    style={{ background: 'rgba(246, 121, 59,0.15)', color: '#FCB794', border: '1px solid rgba(246, 121, 59,0.2)' }}
                   >
                     <i className="fa-solid fa-rotate-right mr-1" /> Reintentar
                   </button>
@@ -1333,13 +1333,13 @@ function AutostartCard({
     <DaxCard>
       <div className="flex items-start gap-3 mb-3">
         <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-             style={{ background: 'rgba(99,102,241,0.12)' }}>
+             style={{ background: 'rgba(255, 106, 31,0.12)' }}>
           <i className="fa-solid fa-bolt text-indigo-400 text-lg" />
         </div>
         <div className="flex-1">
           <p className="text-sm font-bold" style={{ color: 'var(--dax-text)' }}>
             Instalación automática <span className="text-[10px] font-bold px-1.5 py-0.5 rounded ml-1"
-              style={{ background: 'rgba(99,102,241,0.2)', color: '#a5b4fc' }}>solo admin</span>
+              style={{ background: 'rgba(255, 106, 31,0.2)', color: '#FFC08A' }}>solo admin</span>
           </p>
           <p className="text-xs mt-0.5" style={{ color: 'var(--dax-text-muted)' }}>
             El agente arranca solo. La cajera ya no abre nada.
@@ -1351,7 +1351,7 @@ function AutostartCard({
       </p>
       <div className="flex items-center gap-2 p-2.5 rounded-xl mb-3"
            style={{ background: 'var(--dax-elevated)', border: '1px solid var(--dax-border-dim)' }}>
-        <code className="flex-1 text-[11px] font-mono break-all" style={{ color: '#a5b4fc' }}>
+        <code className="flex-1 text-[11px] font-mono break-all" style={{ color: '#FFC08A' }}>
           {cmd}
         </code>
         <button
@@ -1361,7 +1361,7 @@ function AutostartCard({
               .catch(() => onToast('No se pudo copiar', 'error'))
           }}
           className="flex-shrink-0 text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-colors"
-          style={{ background: 'rgba(99,102,241,0.15)', color: '#a5b4fc' }}
+          style={{ background: 'rgba(255, 106, 31,0.15)', color: '#FFC08A' }}
         >
           <i className="fa-solid fa-copy" /> Copiar
         </button>

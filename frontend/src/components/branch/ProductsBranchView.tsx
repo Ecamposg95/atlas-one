@@ -75,9 +75,9 @@ function KpiCard({ icon, label, value, valueClass, iconBg, iconColor }: KpiCardP
       <div className="flex items-center gap-2">
         <div
           className="flex items-center justify-center w-7 h-7 rounded-lg flex-shrink-0"
-          style={{ background: iconBg ?? 'rgba(139,92,246,0.12)' }}
+          style={{ background: iconBg ?? 'rgba(255, 161, 74,0.12)' }}
         >
-          <i className={`fa-solid ${icon} text-sm`} style={{ color: iconColor ?? '#a78bfa' }} />
+          <i className={`fa-solid ${icon} text-sm`} style={{ color: iconColor ?? '#FFA14A' }} />
         </div>
         <span className={ui.kpiLabel}>{label}</span>
       </div>
@@ -229,8 +229,8 @@ export function ProductsBranchView() {
             icon="fa-cubes"
             label="Total productos"
             value={kpis ? String(kpis.total_skus) : '—'}
-            iconBg="rgba(148,163,184,0.15)"
-            iconColor="#94a3b8"
+            iconBg="rgba(168, 162, 154,0.15)"
+            iconColor="#A8A29A"
           />
           <KpiCard
             icon="fa-store"

@@ -18,9 +18,9 @@ interface ToneStyle { fg: string; bg: string; dot: string; border: string }
 export const TONE: Record<Tone, ToneStyle> = {
   green:  { fg: '#0e8a4e', bg: 'rgba(16,185,129,0.14)',  dot: '#22c55e', border: 'rgba(16,185,129,0.55)' },
   amber:  { fg: '#b7791f', bg: 'rgba(245,158,11,0.16)',  dot: '#f59e0b', border: 'rgba(245,158,11,0.6)' },
-  sky:    { fg: '#0369a1', bg: 'rgba(14,165,233,0.15)',  dot: '#0ea5e9', border: 'rgba(14,165,233,0.55)' },
-  slate:  { fg: '#64748b', bg: 'rgba(100,116,139,0.16)', dot: '#94a3b8', border: 'rgba(100,116,139,0.5)' },
-  violet: { fg: '#6d28d9', bg: 'rgba(139,92,246,0.15)',  dot: '#8b5cf6', border: 'rgba(139,92,246,0.5)' },
+  sky:    { fg: '#58524C', bg: 'rgba(132, 124, 115,0.15)',  dot: '#847C73', border: 'rgba(132, 124, 115,0.55)' },
+  slate:  { fg: '#7A726B', bg: 'rgba(100,116,139,0.16)', dot: '#A8A29A', border: 'rgba(100,116,139,0.5)' },
+  violet: { fg: '#898078', bg: 'rgba(255, 161, 74,0.15)',  dot: '#FFA14A', border: 'rgba(255, 161, 74,0.5)' },
   red:    { fg: '#c2410c', bg: 'rgba(239,68,68,0.14)',   dot: '#ef4444', border: 'rgba(239,68,68,0.5)' },
 }
 

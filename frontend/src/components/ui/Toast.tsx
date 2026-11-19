@@ -5,7 +5,7 @@ const STYLES: Record<string, { bg: string; border: string; icon: string; color: 
   success: { bg: 'rgba(5,46,22,0.95)',  border: 'rgba(52,211,153,0.3)',  icon: 'fa-circle-check',         color: '#34d399' },
   error:   { bg: 'rgba(69,10,10,0.95)', border: 'rgba(251,113,133,0.3)', icon: 'fa-circle-xmark',         color: '#fb7185' },
   warning: { bg: 'rgba(69,46,0,0.95)',  border: 'rgba(251,191,36,0.3)',  icon: 'fa-triangle-exclamation', color: '#fbbf24' },
-  info:    { bg: 'rgba(15,23,42,0.95)', border: 'rgba(99,102,241,0.3)',  icon: 'fa-circle-info',          color: '#a5b4fc' },
+  info:    { bg: 'rgba(14, 13, 12,0.95)', border: 'rgba(255, 106, 31,0.3)',  icon: 'fa-circle-info',          color: '#FFC08A' },
 }
 
 function ToastItemView({ toast }: { toast: ToastItem }) {

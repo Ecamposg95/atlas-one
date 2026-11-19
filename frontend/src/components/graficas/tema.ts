@@ -26,7 +26,7 @@ export interface TemaGrafica {
 /** Respaldos = tema oscuro de index.css; solo se usan sin DOM o sin la variable. */
 const RESPALDO: TemaGrafica = {
   texto: '#ededed', muted: '#b5b5b5', faint: '#8a8a8a', borde: 'rgba(255, 255, 255, 0.08)', cardSolid: '#161616',
-  acento: '#6366f1', success: '#34D399', warning: '#FBBF24', danger: '#F87171',
+  acento: '#FF6A1F', success: '#34D399', warning: '#FBBF24', danger: '#F87171',
 }
 
 const VARIABLES: Record<keyof TemaGrafica, string> = {

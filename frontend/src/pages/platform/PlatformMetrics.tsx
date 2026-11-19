@@ -171,15 +171,15 @@ const METHOD_COLORS = [
   'var(--p-accent)',
   '#4ade80',
   '#fbbf24',
-  '#60a5fa',
-  '#c084fc',
+  '#FA9360',
+  '#FCAC84',
   '#f87171',
 ]
 
 /** `var(--p-accent)` sirve como CSS en la leyenda, pero no en canvas: aquí se resuelve. */
 function colorMetodo(i: number): string {
   const c = METHOD_COLORS[i % METHOD_COLORS.length]
-  return c.startsWith('var(') ? token(c.slice(4, -1), '#6366f1') : c
+  return c.startsWith('var(') ? token(c.slice(4, -1), '#FF6A1F') : c
 }
 
 // ── component ────────────────────────────────────────────────────────────────
@@ -515,7 +515,7 @@ export function PlatformMetrics() {
                     datasets: [{
                       data: paymentMethods.items.map((m) => m.revenue),
                       backgroundColor: paymentMethods.items.map((_, i) => colorMetodo(i)),
-                      borderColor: token('--p-bg', '#0b0f14'),
+                      borderColor: token('--p-bg', '#140E0B'),
                       borderWidth: 2,
                     }],
                   }}
@@ -527,9 +527,9 @@ export function PlatformMetrics() {
                     plugins: {
                       legend: { display: false },
                       tooltip: {
-                        backgroundColor: token('--p-sidebar', '#0f172a'),
-                        borderColor: token('--p-border', '#1f2937'), borderWidth: 1,
-                        titleColor: token('--p-text', '#e2e8f0'), bodyColor: token('--p-text', '#e2e8f0'),
+                        backgroundColor: token('--p-sidebar', '#0E0D0C'),
+                        borderColor: token('--p-border', '#37271F'), borderWidth: 1,
+                        titleColor: token('--p-text', '#DDD6CE'), bodyColor: token('--p-text', '#DDD6CE'),
                         callbacks: { label: (ctx) => `${ctx.label}: ${formatCurrency(typeof ctx.parsed === 'number' ? ctx.parsed : 0)}` },
                       },
                     },
