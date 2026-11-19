@@ -171,8 +171,8 @@ const METHOD_COLORS = [
   'var(--p-accent)',
   '#4ade80',
   '#fbbf24',
-  '#60a5fa',
-  '#c084fc',
+  '#FA9360',
+  '#FCAC84',
   '#f87171',
 ]
 
@@ -515,7 +515,7 @@ export function PlatformMetrics() {
                     datasets: [{
                       data: paymentMethods.items.map((m) => m.revenue),
                       backgroundColor: paymentMethods.items.map((_, i) => colorMetodo(i)),
-                      borderColor: token('--p-bg', '#0b0f14'),
+                      borderColor: token('--p-bg', '#140E0B'),
                       borderWidth: 2,
                     }],
                   }}
@@ -528,7 +528,7 @@ export function PlatformMetrics() {
                       legend: { display: false },
                       tooltip: {
                         backgroundColor: token('--p-sidebar', '#0E0D0C'),
-                        borderColor: token('--p-border', '#1f2937'), borderWidth: 1,
+                        borderColor: token('--p-border', '#37271F'), borderWidth: 1,
                         titleColor: token('--p-text', '#DDD6CE'), bodyColor: token('--p-text', '#DDD6CE'),
                         callbacks: { label: (ctx) => `${ctx.label}: ${formatCurrency(typeof ctx.parsed === 'number' ? ctx.parsed : 0)}` },
                       },

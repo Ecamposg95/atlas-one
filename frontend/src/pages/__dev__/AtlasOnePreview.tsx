@@ -158,7 +158,7 @@ export default function AtlasOnePreview() {
               <Badge color="#0E8A4E" soft="#E3F4EA" dot>Caja abierta</Badge>
               <Badge color="#B43E2E" soft="#FBE7E1" dot>Stock crítico</Badge>
               <Badge color="#9A6610" soft="#FBEFD7" dot>Pendiente</Badge>
-              <Badge color="#1F4FC8" soft="#E5ECFB" dot>En cocina</Badge>
+              <Badge color="#C8571F" soft="#E5ECFB" dot>En cocina</Badge>
               <Badge color="#6B6B66" soft={N.chip}>SKU-7821</Badge>
             </div>
           </Card>

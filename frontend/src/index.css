@@ -92,11 +92,11 @@
     --p-success:   #22C55E;
     --p-warning:   #F59E0B;
     --p-danger:    #EF4444;
-    --p-info:      #3B82F6;
+    --p-info:      #A8A29A;   /* neutro cálido: Horizon no usa azul */
 
     /* Reservados para uso muy puntual (badge SUPERADMIN, etc.) */
-    --p-magenta:   #C026D3;
-    --p-purple:    #7B2FBE;
+    --p-magenta:   #FF6A1F;
+    --p-purple:    #C2410C;
 
     /* DEPRECATED v1 — mantenidos para no romper builds existentes.
        NO usar en código nuevo. Migrar a --p-accent o quitar. */

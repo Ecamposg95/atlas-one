@@ -31,7 +31,7 @@ export function ComingSoon({ meta }: { meta: ComingSoonMeta }) {
           width: 48,
           height: 48,
           borderRadius: '50%',
-          background: 'rgba(0,201,177,0.15)',
+          background: 'rgba(196, 69, 5,0.15)',
           color: 'var(--p-teal)',
           display: 'inline-flex',
           alignItems: 'center',

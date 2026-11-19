@@ -631,8 +631,8 @@ export function PlatformAdmins() {
           </div>
           <div style={{
             padding: 10,
-            background: 'rgba(0,229,255,0.06)',
-            border: '1px solid rgba(0,229,255,0.2)',
+            background: 'rgba(249, 87, 6,0.06)',
+            border: '1px solid rgba(249, 87, 6,0.2)',
             borderRadius: 4,
             fontSize: 11,
             color: 'var(--p-cyan)',

@@ -94,13 +94,13 @@ interface CardProps {
 }
 
 const COLOR_CLASSES: Record<CardProps['color'], { border: string; from: string; text: string }> = {
-  indigo:   { border: 'border-indigo-500/20',   from: 'from-indigo-500/10',   text: 'text-indigo-300' },
-  emerald:  { border: 'border-emerald-500/20',  from: 'from-emerald-500/10',  text: 'text-emerald-300' },
-  amber:    { border: 'border-amber-500/30',    from: 'from-amber-500/15',    text: 'text-amber-300' },
-  fuchsia:  { border: 'border-fuchsia-500/25',  from: 'from-fuchsia-500/12',  text: 'text-fuchsia-300' },
-  orange:   { border: 'border-orange-500/25',   from: 'from-orange-500/12',   text: 'text-orange-300' },
-  rose:     { border: 'border-rose-500/25',     from: 'from-rose-500/12',     text: 'text-rose-300' },
-  slate:    { border: 'border-slate-700/50',    from: 'from-slate-800/40',    text: 'text-slate-300' },
+  indigo:   { border: 'border-indigo-500/20',   from: 'from-indigo-500/10',   text: 'text-indigo-700 dark:text-indigo-300' },
+  emerald:  { border: 'border-emerald-500/20',  from: 'from-emerald-500/10',  text: 'text-emerald-700 dark:text-emerald-300' },
+  amber:    { border: 'border-amber-500/30',    from: 'from-amber-500/15',    text: 'text-amber-700 dark:text-amber-300' },
+  fuchsia:  { border: 'border-fuchsia-500/25',  from: 'from-fuchsia-500/12',  text: 'text-fuchsia-700 dark:text-fuchsia-300' },
+  orange:   { border: 'border-orange-500/25',   from: 'from-orange-500/12',   text: 'text-orange-700 dark:text-orange-300' },
+  rose:     { border: 'border-rose-500/25',     from: 'from-rose-500/12',     text: 'text-rose-700 dark:text-rose-300' },
+  slate:    { border: 'border-dax-border-dim',   from: 'from-dax-elevated',    text: 'text-dax-text' },
 }
 
 function Card({ label, value, color, icon, skeleton, sub, interactive, onClick }: CardProps) {

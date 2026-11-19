@@ -108,7 +108,7 @@ export function TrendChart({
 
   const options = useMemo<ChartOptions<'line'>>(() => {
     const hint = token('--p-hint', '#7A726B')
-    const borde = token('--p-border', '#1f2937')
+    const borde = token('--p-border', '#2E2B28')
     const mono = token('--font-mono', 'ui-monospace, monospace')
     return {
       responsive: true,

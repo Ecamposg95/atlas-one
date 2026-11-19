@@ -118,7 +118,7 @@ const buttonSecondary: React.CSSProperties = {
 }
 
 const chipStyle = (active: boolean): React.CSSProperties => ({
-  background: active ? 'rgba(0,201,177,0.12)' : 'var(--p-surface-2)',
+  background: active ? 'rgba(196, 69, 5,0.12)' : 'var(--p-surface-2)',
   color: active ? 'var(--p-teal)' : 'var(--p-muted)',
   border: `1px solid ${active ? 'var(--p-teal)' : 'var(--p-border)'}`,
   padding: '4px 10px',
@@ -132,10 +132,10 @@ const chipStyle = (active: boolean): React.CSSProperties => ({
 
 // ── Type pill (HQ/STORE/...) ────────────────────────────────────────────────
 const TYPE_COLOR: Record<string, { bg: string; color: string }> = {
-  HQ:        { bg: 'rgba(192,38,211,0.12)', color: 'var(--p-magenta)' },
-  STORE:     { bg: 'rgba(0,201,177,0.12)',  color: 'var(--p-teal)' },
+  HQ:        { bg: 'rgba(211, 96, 38,0.12)', color: 'var(--p-magenta)' },
+  STORE:     { bg: 'rgba(196, 69, 5,0.12)',  color: 'var(--p-teal)' },
   WAREHOUSE: { bg: 'rgba(245,158,11,0.12)', color: 'var(--p-warning)' },
-  OFFICE:    { bg: 'rgba(0,229,255,0.12)',  color: 'var(--p-cyan)' },
+  OFFICE:    { bg: 'rgba(249, 87, 6,0.12)',  color: 'var(--p-cyan)' },
 }
 
 function TypePill({ value }: { value: string }) {

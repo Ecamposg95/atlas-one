@@ -3,6 +3,11 @@ const EMBER = {
   500: '#FF6A1F', 600: '#EA580C', 700: '#C2410C', 800: '#9A3412', 900: '#7A240A', 950: '#2A0E05',
 }
 
+const NEUTRO = {
+  50: '#F6F3EF', 100: '#EFEAE4', 200: '#DDD6CE', 300: '#C9C1B8', 400: '#A8A29A',
+  500: '#7A726B', 600: '#4A4541', 700: '#2B2724', 800: '#171514', 900: '#0E0D0C', 950: '#050505',
+}
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
@@ -43,13 +48,16 @@ export default {
            reasignan aquí para no editar cientos de clases. `slate` pasa a un
            neutro cálido (sin tinte azul) e `indigo`/`violet`/`purple` a la
            escala ámbar de la marca. Código nuevo: usa los tokens `dax-*`. */
-        slate: {
-          50: '#F6F3EF', 100: '#EFEAE4', 200: '#DDD6CE', 300: '#C9C1B8', 400: '#A8A29A',
-          500: '#7A726B', 600: '#4A4541', 700: '#2B2724', 800: '#171514', 900: '#0E0D0C', 950: '#050505',
-        },
+        slate: NEUTRO,
         indigo: EMBER,
         violet: EMBER,
         purple: EMBER,
+        fuchsia: EMBER,
+        /* Horizon no usa azul ni cian: lo que el código viejo marcaba como
+           "informativo" pasa al neutro cálido. */
+        blue: NEUTRO,
+        sky: NEUTRO,
+        cyan: NEUTRO,
         atlas: {
           violet:  '#FFA14A',
           indigo:  '#FF6A1F',

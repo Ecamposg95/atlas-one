@@ -902,7 +902,7 @@ export function PrinterSettings() {
                 <button
                   onClick={connectBluetooth}
                   className="w-full py-3 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2"
-                  style={{ background: 'rgba(59,130,246,0.2)', color: '#93c5fd', border: '1px solid rgba(59,130,246,0.3)' }}
+                  style={{ background: 'rgba(246, 121, 59,0.2)', color: '#FCB794', border: '1px solid rgba(246, 121, 59,0.3)' }}
                 >
                   <i className="fa-solid fa-bluetooth" />
                   Buscar e conectar impresora
@@ -946,7 +946,7 @@ export function PrinterSettings() {
                   <button
                     onClick={connectBluetooth}
                     className="w-full py-2.5 rounded-xl text-xs font-bold transition-colors"
-                    style={{ background: 'rgba(59,130,246,0.15)', color: '#93c5fd', border: '1px solid rgba(59,130,246,0.2)' }}
+                    style={{ background: 'rgba(246, 121, 59,0.15)', color: '#FCB794', border: '1px solid rgba(246, 121, 59,0.2)' }}
                   >
                     <i className="fa-solid fa-rotate-right mr-1" /> Reintentar
                   </button>

@@ -652,7 +652,7 @@ export function PlatformOrgDetail() {
       <div style={{ ...card, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <span style={{
-            background: 'rgba(123,47,190,0.12)',
+            background: 'rgba(190, 95, 47,0.12)',
             color: 'var(--p-purple)',
             padding: '4px 10px',
             borderRadius: 4,
@@ -663,7 +663,7 @@ export function PlatformOrgDetail() {
             {org.industry_type || 'SIN INDUSTRIA'}
           </span>
           <span style={{
-            background: 'rgba(20,184,166,0.12)',
+            background: 'rgba(184, 75, 20,0.12)',
             color: 'var(--p-teal)',
             padding: '4px 10px',
             borderRadius: 4,
@@ -1004,9 +1004,9 @@ export function PlatformOrgDetail() {
                   <span
                     key={k}
                     style={{
-                      background: 'rgba(0,201,177,0.10)',
+                      background: 'rgba(196, 69, 5,0.10)',
                       color: 'var(--p-teal)',
-                      border: '1px solid rgba(0,201,177,0.3)',
+                      border: '1px solid rgba(196, 69, 5,0.3)',
                       padding: '3px 8px',
                       borderRadius: 999,
                       fontSize: 11,

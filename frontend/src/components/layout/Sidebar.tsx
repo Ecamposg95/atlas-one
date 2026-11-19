@@ -46,7 +46,7 @@ function usePendingReturnsCount(role: Role): number {
 }
 
 const ROLE_COLOR: Record<Role, string> = {
-  ADMINISTRADOR: '#FF8A4C', DUEÑO: '#FFA14A', GERENTE: '#60a5fa',
+  ADMINISTRADOR: '#FF8A4C', DUEÑO: '#FFA14A', GERENTE: '#FA9360',
   CAJERO: '#34d399', VENDEDOR: '#fbbf24', SOPORTE_OPERATIVO: '#A8A29A', CLIENTE: '#A8A29A',
 }
 

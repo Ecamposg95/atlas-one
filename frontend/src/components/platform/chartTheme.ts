@@ -1,4 +1,4 @@
-export const CHART_COLORS = ['#00C9B1', '#00E5FF', '#7B2FBE', '#C026D3', '#F59E0B', '#3B82F6']
+export const CHART_COLORS = ['#6C645D', '#888077', '#7F766E', '#857C74', '#F59E0B', '#A09891']
 
 export const chartAxisProps = {
   tick: { fill: '#6B6B78', fontSize: 11 },

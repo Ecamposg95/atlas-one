@@ -119,7 +119,7 @@ function TopProducts({ today }: TodayProps) {
 const FIXED_METHODS = [
   { key: 'CASH',     icon: 'fa-money-bill-wave',  iconBg: 'rgba(16,185,129,0.1)',  iconColor: '#10b981' },
   { key: 'CARD',     icon: 'fa-credit-card',      iconBg: 'rgba(255, 161, 74,0.1)', iconColor: '#FFA14A' },
-  { key: 'TRANSFER', icon: 'fa-building-columns', iconBg: 'rgba(59,130,246,0.1)', iconColor: '#60a5fa' },
+  { key: 'TRANSFER', icon: 'fa-building-columns', iconBg: 'rgba(246, 121, 59,0.1)', iconColor: '#FA9360' },
 ] as const
 
 function PaymentMethods({ today, shiftOpen = false }: TodayProps) {

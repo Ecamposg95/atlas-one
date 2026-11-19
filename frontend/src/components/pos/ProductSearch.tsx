@@ -32,8 +32,8 @@ type TierView = {
 const TIER_PALETTE: Array<Omit<TierView, 'label' | 'name' | 'value'>> = [
   { color: '#047857', bg: 'rgba(16,185,129,0.10)', border: 'rgba(16,185,129,0.35)' },   // emerald
   { color: '#b45309', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.40)' },   // amber
-  { color: '#6d28d9', bg: 'rgba(255, 161, 74,0.10)', border: 'rgba(255, 161, 74,0.40)' },   // violet
-  { color: '#0e7490', bg: 'rgba(6,182,212,0.10)',  border: 'rgba(6,182,212,0.40)'  },   // cyan
+  { color: '#D96328', bg: 'rgba(255, 161, 74,0.10)', border: 'rgba(255, 161, 74,0.40)' },   // violet
+  { color: '#90390E', bg: 'rgba(212, 75, 6,0.10)',  border: 'rgba(212, 75, 6,0.40)'  },   // cyan
   { color: '#be185d', bg: 'rgba(236,72,153,0.10)', border: 'rgba(236,72,153,0.40)' },   // pink
   { color: '#C2410C', bg: 'rgba(255, 106, 31,0.10)', border: 'rgba(255, 106, 31,0.40)' },   // indigo
 ]

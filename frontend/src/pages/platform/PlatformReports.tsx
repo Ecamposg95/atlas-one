@@ -573,8 +573,8 @@ function TopChart({
               legend: { display: false },
               tooltip: {
                 backgroundColor: token('--p-sidebar', 'rgb(14, 13, 12)'),
-                borderColor: token('--p-border', 'rgb(31, 41, 55)'), borderWidth: 1,
-                titleColor: token('--p-text', 'rgb(226, 232, 240)'), bodyColor: token('--p-text', 'rgb(226, 232, 240)'),
+                borderColor: token('--p-border', 'rgb(55, 39, 31)'), borderWidth: 1,
+                titleColor: token('--p-text', 'rgb(240, 231, 226)'), bodyColor: token('--p-text', 'rgb(240, 231, 226)'),
                 callbacks: { label: (ctx) => fmt(typeof ctx.parsed.y === 'number' ? ctx.parsed.y : 0) },
               },
             },
@@ -584,7 +584,7 @@ function TopChart({
                 ticks: { color: hint, font: { size: 10 }, autoSkip: false, maxRotation: 25, minRotation: 25 },
               },
               y: {
-                grid: { color: token('--p-border', 'rgb(31, 41, 55)'), tickBorderDash: [2, 4] },
+                grid: { color: token('--p-border', 'rgb(55, 39, 31)'), tickBorderDash: [2, 4] },
                 border: { display: false },
                 ticks: { color: hint, font: { size: 10 }, callback: (v) => fmt(Number(v)) },
               },
