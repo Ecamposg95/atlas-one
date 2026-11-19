@@ -609,7 +609,7 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 ## Anexo — Entrada, dev & stubs
 
 ### `/login` — Login (Atlas One)
-- **Archivo:** `pages/Login.tsx` + `login.css` — público. Identidad de atlasone.com.mx (ticket térmico de ejemplo, Archivo Black inyectada solo aquí); el formulario está siempre visible, sin cortina ni animación previa.
+- **Archivo:** `pages/Login.tsx` + `login.css` — público. Identidad Atlas Horizon (atardecer ámbar en CSS, panel de vidrio con el formulario a la izquierda y una terminal encendida a la derecha; Inter inyectada solo aquí; sin imágenes descargadas); el formulario está siempre visible, sin cortina ni animación previa.
 - **Datos/API:** `authApi.login` → `authStore.setAuth/setBranch`. Ruteo por rol/preset tras login (ver §1). Botones sociales aún no cableados (TODO OAuth).
 
 ### `*` — NotFound

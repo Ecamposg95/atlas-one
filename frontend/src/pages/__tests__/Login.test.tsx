@@ -57,13 +57,15 @@ describe('LoginPage', () => {
     expect(screen.getByText('Atlas ONE — Atlas Tech')).toBeTruthy()
   })
 
-  it('pinta el ticket en escritorio y lo omite en teléfono', () => {
+  it('pinta la terminal decorativa sin estorbar al lector de pantalla, también en teléfono', () => {
     const { container, unmount } = pintar()
-    expect(container.querySelector('.login-ticket')).not.toBeNull()
+    const terminal = container.querySelector('.login-terminal')
+    expect(terminal).not.toBeNull()
+    expect(terminal!.closest('[aria-hidden="true"]')).not.toBeNull()
     unmount()
     anchoDePantalla(true)
     const r = pintar()
-    expect(r.container.querySelector('.login-ticket')).toBeNull()
+    expect(r.container.querySelector('.login-terminal')).not.toBeNull()
     expect(screen.getByLabelText('Usuario')).toBeTruthy()
   })
 
