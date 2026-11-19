@@ -118,7 +118,7 @@ function TopProducts({ today }: TodayProps) {
 
 const FIXED_METHODS = [
   { key: 'CASH',     icon: 'fa-money-bill-wave',  iconBg: 'rgba(16,185,129,0.1)',  iconColor: '#10b981' },
-  { key: 'CARD',     icon: 'fa-credit-card',      iconBg: 'rgba(139,92,246,0.1)', iconColor: '#a78bfa' },
+  { key: 'CARD',     icon: 'fa-credit-card',      iconBg: 'rgba(255, 161, 74,0.1)', iconColor: '#FFA14A' },
   { key: 'TRANSFER', icon: 'fa-building-columns', iconBg: 'rgba(59,130,246,0.1)', iconColor: '#60a5fa' },
 ] as const
 

@@ -75,10 +75,10 @@ export function BranchSwitcher() {
           alignItems: 'center',
           gap: '0.5rem',
           padding: '0.4rem 0.875rem',
-          background: 'rgba(30,41,59,0.8)',
-          border: '1px solid rgba(51,65,85,0.7)',
+          background: 'rgba(23, 21, 20,0.8)',
+          border: '1px solid rgba(43, 39, 36,0.7)',
           borderRadius: '10px',
-          color: '#cbd5e1',
+          color: '#C9C1B8',
           fontSize: '0.7rem',
           fontWeight: 700,
           textTransform: 'uppercase',
@@ -91,13 +91,13 @@ export function BranchSwitcher() {
           ;(e.currentTarget as HTMLElement).style.color = '#34d399'
         }}
         onMouseLeave={e => {
-          ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(51,65,85,0.7)'
-          ;(e.currentTarget as HTMLElement).style.color = '#cbd5e1'
+          ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(43, 39, 36,0.7)'
+          ;(e.currentTarget as HTMLElement).style.color = '#C9C1B8'
         }}
       >
         <i className="fa-solid fa-shuffle" style={{ fontSize: '0.65rem', color: '#34d399' }} />
         Sucursal
-        <i className="fa-solid fa-chevron-down" style={{ fontSize: '0.55rem', color: 'rgba(148,163,184,0.5)' }} />
+        <i className="fa-solid fa-chevron-down" style={{ fontSize: '0.55rem', color: 'rgba(168, 162, 154,0.5)' }} />
       </button>
 
       {open && (
@@ -107,8 +107,8 @@ export function BranchSwitcher() {
             right: 0,
             top: 'calc(100% + 8px)',
             width: '260px',
-            background: 'rgba(15,23,42,0.98)',
-            border: '1px solid rgba(51,65,85,0.7)',
+            background: 'rgba(14, 13, 12,0.98)',
+            border: '1px solid rgba(43, 39, 36,0.7)',
             borderRadius: '14px',
             boxShadow: '0 16px 48px rgba(0,0,0,0.5)',
             backdropFilter: 'blur(16px)',
@@ -116,14 +116,14 @@ export function BranchSwitcher() {
             overflow: 'hidden',
           }}
         >
-          <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid rgba(51,65,85,0.4)' }}>
+          <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid rgba(43, 39, 36,0.4)' }}>
             <p style={{ fontSize: '0.6rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'rgba(100,116,139,0.8)', margin: 0 }}>
               Nodos disponibles
             </p>
           </div>
           <div style={{ maxHeight: '240px', overflowY: 'auto', padding: '0.5rem' }}>
             {loading ? (
-              <div style={{ padding: '1rem', textAlign: 'center', color: 'rgba(148,163,184,0.5)', fontSize: '0.75rem' }}>
+              <div style={{ padding: '1rem', textAlign: 'center', color: 'rgba(168, 162, 154,0.5)', fontSize: '0.75rem' }}>
                 Cargando...
               </div>
             ) : branches.length === 0 ? (
@@ -152,14 +152,14 @@ export function BranchSwitcher() {
               >
                 <div style={{
                   width: '32px', height: '32px', borderRadius: '8px',
-                  background: 'rgba(30,41,59,0.8)',
+                  background: 'rgba(23, 21, 20,0.8)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   flexShrink: 0,
                 }}>
-                  <i className="fa-solid fa-store" style={{ fontSize: '0.75rem', color: 'rgba(148,163,184,0.6)' }} />
+                  <i className="fa-solid fa-store" style={{ fontSize: '0.75rem', color: 'rgba(168, 162, 154,0.6)' }} />
                 </div>
                 <div style={{ overflow: 'hidden' }}>
-                  <p style={{ fontSize: '0.8rem', fontWeight: 600, color: '#e2e8f0', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <p style={{ fontSize: '0.8rem', fontWeight: 600, color: '#DDD6CE', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {b.name}
                   </p>
                   <p style={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(100,116,139,0.8)', margin: 0 }}>

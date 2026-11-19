@@ -6,6 +6,7 @@ import { useBranchCountStore, esTiendaUnica } from '../../store/branchCountStore
 import { returnsApi } from '../../api/returns'
 import { confirm } from '../ui/ConfirmDialog'
 import { useTheme } from '../../context/ThemeContext'
+import { AtlasMark } from '../atlas-one'
 import type { Role } from '../../types/auth'
 import { BRANCH_ROLES, urlActiva, visibleNavItems, type NavItem } from './navVisibility'
 import {
@@ -45,8 +46,8 @@ function usePendingReturnsCount(role: Role): number {
 }
 
 const ROLE_COLOR: Record<Role, string> = {
-  ADMINISTRADOR: '#818cf8', DUEÑO: '#a78bfa', GERENTE: '#60a5fa',
-  CAJERO: '#34d399', VENDEDOR: '#fbbf24', SOPORTE_OPERATIVO: '#94a3b8', CLIENTE: '#94a3b8',
+  ADMINISTRADOR: '#FF8A4C', DUEÑO: '#FFA14A', GERENTE: '#60a5fa',
+  CAJERO: '#34d399', VENDEDOR: '#fbbf24', SOPORTE_OPERATIVO: '#A8A29A', CLIENTE: '#A8A29A',
 }
 
 // ── Encabezado de sección ───────────────────────────────────────
@@ -55,7 +56,7 @@ function SectionHeader({ children }: { children: ReactNode }) {
     <p style={{
       textAlign: 'left', margin: '12px 8px 6px',
       fontSize: '10px', fontWeight: 800, textTransform: 'uppercase',
-      letterSpacing: '0.14em', color: 'rgba(148,163,184,0.55)',
+      letterSpacing: '0.14em', color: 'rgba(168, 162, 154,0.55)',
     }}>
       {children}
     </p>
@@ -131,7 +132,7 @@ function NavPill({ item, active, color, pendingReturns }: {
       ) : (
         <i
           className="fa-solid fa-chevron-right"
-          style={{ fontSize: '10px', color: 'rgba(148,163,184,0.45)' }}
+          style={{ fontSize: '10px', color: 'rgba(168, 162, 154,0.45)' }}
           aria-hidden="true"
         />
       )}
@@ -261,19 +262,14 @@ function MatrixSidebar({ items, logout, isBranchRole }: { items: NavItem[]; logo
       }}>
         {/* Logo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-          <div style={{
-            width: '34px', height: '34px', borderRadius: '10px', flexShrink: 0,
-            background: 'var(--sb-logo-grad)',
-            boxShadow: '0 0 16px var(--sb-glow)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <i className="fa fa-bolt" style={{ color: 'white', fontSize: '13px' }} />
-          </div>
+          <span style={{ color: 'var(--p-accent)', display: 'flex', filter: 'drop-shadow(0 0 10px var(--sb-glow))' }}>
+            <AtlasMark size={30} />
+          </span>
           <div>
-            <p style={{ color: 'white', fontWeight: 900, fontSize: '14px', letterSpacing: '-0.02em', lineHeight: 1 }}>
-              Atlas <span style={{ color: 'var(--p-accent)' }}>One</span>
+            <p style={{ color: 'white', fontWeight: 500, fontSize: '16px', letterSpacing: '-0.01em', lineHeight: 1 }}>
+              Atlas <span style={{ fontWeight: 300, color: 'rgba(255,255,255,0.62)' }}>ONE</span>
             </p>
-            <p style={{ fontSize: '8px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(148,163,184,0.35)', marginTop: '2px' }}>
+            <p style={{ fontSize: '8px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(168, 162, 154,0.35)', marginTop: '2px' }}>
               v2.0 · Suite Comercial
             </p>
           </div>
@@ -293,10 +289,10 @@ function MatrixSidebar({ items, logout, isBranchRole }: { items: NavItem[]; logo
           }}>
             <div style={{
               width: '22px', height: '22px', borderRadius: '6px', flexShrink: 0,
-              background: 'rgba(99,102,241,0.15)',
+              background: 'rgba(255, 106, 31,0.15)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <i className="fa-solid fa-building" style={{ fontSize: '9px', color: '#818cf8' }} />
+              <i className="fa-solid fa-building" style={{ fontSize: '9px', color: '#FF8A4C' }} />
             </div>
             <div style={{ overflow: 'hidden', minWidth: 0 }}>
               <p style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.35)', lineHeight: 1, marginBottom: '2px' }}>
@@ -479,14 +475,9 @@ function IconRail({ items, logout }: { items: NavItem[]; logout: () => void }) {
         height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center',
         borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0,
       }}>
-        <div style={{
-          width: '34px', height: '34px', borderRadius: '10px',
-          background: 'var(--sb-logo-grad)',
-          boxShadow: '0 0 12px var(--sb-glow)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <i className="fa fa-bolt" style={{ color: 'white', fontSize: '12px' }} />
-        </div>
+        <span style={{ color: 'var(--p-accent)', display: 'flex', filter: 'drop-shadow(0 0 10px var(--sb-glow))' }}>
+          <AtlasMark size={28} />
+        </span>
       </div>
 
       {/* Org/branch dots */}
@@ -496,9 +487,9 @@ function IconRail({ items, logout }: { items: NavItem[]; logout: () => void }) {
       }}>
         <div title={org?.name ?? 'Organización'} style={{
           width: '28px', height: '28px', borderRadius: '7px',
-          background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.2)',
+          background: 'rgba(255, 106, 31,0.15)', border: '1px solid rgba(255, 106, 31,0.2)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: '10px', fontWeight: 800, color: '#818cf8',
+          fontSize: '10px', fontWeight: 800, color: '#FF8A4C',
         }}>
           {orgInitial}
         </div>

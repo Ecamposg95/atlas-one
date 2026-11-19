@@ -133,7 +133,7 @@ export function PricePickerPopover({
         // Solid background — `--dax-elevated` is only ~4% opacity and lets
         // cart text bleed through the popover.
         background: 'var(--dax-card-solid)',
-        border: '1px solid rgba(139,92,246,0.45)',
+        border: '1px solid rgba(255, 161, 74,0.45)',
         borderRadius: 12,
         boxShadow: '0 24px 64px rgba(0,0,0,0.7), 0 0 0 1px rgba(0,0,0,0.4)',
         opacity: pos ? 1 : 0,
@@ -143,7 +143,7 @@ export function PricePickerPopover({
     >
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2"
-           style={{ borderBottom: '1px solid rgba(139,92,246,0.15)' }}>
+           style={{ borderBottom: '1px solid rgba(255, 161, 74,0.15)' }}>
         <p className="text-xs font-bold uppercase tracking-widest"
            style={{ color: 'var(--dax-text-muted)' }}>Elegir precio</p>
         <button onClick={onClose}
@@ -173,7 +173,7 @@ export function PricePickerPopover({
       </div>
 
       {/* Divider */}
-      <div style={{ borderTop: '1px dashed rgba(139,92,246,0.18)' }} />
+      <div style={{ borderTop: '1px dashed rgba(255, 161, 74,0.18)' }} />
 
       {/* Libre */}
       <div className="p-2 flex items-center gap-2">
@@ -191,7 +191,7 @@ export function PricePickerPopover({
           className="flex-1 min-w-0 text-center text-base rounded px-2 outline-none tabular-nums"
           style={{
             background: 'var(--dax-card)',
-            border: '1px solid rgba(139,92,246,0.5)',
+            border: '1px solid rgba(255, 161, 74,0.5)',
             color: 'var(--dax-text)',
             height: 44,
           }}
@@ -213,7 +213,7 @@ export function PricePickerPopover({
 
       {/* Reset */}
       {isForced && (
-        <div style={{ borderTop: '1px solid rgba(139,92,246,0.15)' }}>
+        <div style={{ borderTop: '1px solid rgba(255, 161, 74,0.15)' }}>
           <button
             onClick={onResetToAuto}
             className="w-full flex items-center justify-center gap-2 min-h-[44px] text-sm font-semibold transition-colors hover:bg-dax-elevated"
@@ -245,7 +245,7 @@ function TierButton({
       style={{
         height: 48,
         background: active ? 'var(--dax-accent-soft)' : 'transparent',
-        border: active ? '1px solid var(--dax-accent)' : '1px solid rgba(148,163,184,0.12)',
+        border: active ? '1px solid var(--dax-accent)' : '1px solid rgba(168, 162, 154,0.12)',
         color: 'var(--dax-text)',
       }}
     >

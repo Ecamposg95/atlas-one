@@ -371,7 +371,7 @@ function BarHome({ greeting, orgName, puedeCobrar }: HomeProps) {
       orgName={orgName}
       title="Atlas One Bar"
       subtitle="Barra, mesas, turnos e inventario líquido — control de la noche."
-      accent="#7c3aed"
+      accent="#EA580C"
       topLabel="Bebidas top"
       actions={[
         { icon: 'fa-martini-glass', label: 'Barra · comandas', to: '/tables' },

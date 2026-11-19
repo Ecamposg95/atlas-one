@@ -72,8 +72,8 @@ export function TrendChart({
   const ejeDerecho = (hasSales && salesOn) || (hasSignups && signupsOn)
 
   const chartData = useMemo<ChartData<'line'>>(() => {
-    const acento = token('--p-accent', '#6366f1')
-    const muted = token('--p-muted', '#94a3b8')
+    const acento = token('--p-accent', '#FF6A1F')
+    const muted = token('--p-muted', '#A8A29A')
     const datasets: ChartData<'line'>['datasets'] = []
     if (revOn) {
       datasets.push({
@@ -107,7 +107,7 @@ export function TrendChart({
   }, [merged, revOn, salesOn, signupsOn, hasSales, hasSignups, tema])
 
   const options = useMemo<ChartOptions<'line'>>(() => {
-    const hint = token('--p-hint', '#64748b')
+    const hint = token('--p-hint', '#7A726B')
     const borde = token('--p-border', '#1f2937')
     const mono = token('--font-mono', 'ui-monospace, monospace')
     return {
@@ -118,9 +118,9 @@ export function TrendChart({
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: token('--p-sidebar', '#0f172a'),
+          backgroundColor: token('--p-sidebar', '#0E0D0C'),
           borderColor: borde, borderWidth: 1,
-          titleColor: token('--p-text', '#e2e8f0'), bodyColor: token('--p-text', '#e2e8f0'),
+          titleColor: token('--p-text', '#DDD6CE'), bodyColor: token('--p-text', '#DDD6CE'),
           callbacks: {
             title: (items) => `Día ${items[0]?.label ?? ''}`,
             label: (ctx) => {

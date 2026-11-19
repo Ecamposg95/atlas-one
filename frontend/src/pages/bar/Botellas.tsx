@@ -5,13 +5,13 @@ import { toast } from '../../store/toastStore'
 import { DaxCard } from '../../components/ui/DaxCard'
 import { Spinner } from '../../components/ui/Spinner'
 
-const ACCENT = '#7c3aed' // Bar (violeta)
+const ACCENT = '#EA580C' // Bar (violeta)
 const LOW = 15 // % bajo → resaltar reposición
 
 function volColor(pct: number): string {
   if (pct <= LOW) return '#f87171'   // rojo
   if (pct <= 40) return '#fbbf24'    // ámbar
-  return '#a78bfa'                   // violeta claro (legible en oscuro)
+  return '#FFA14A'                   // violeta claro (legible en oscuro)
 }
 
 export function Botellas() {

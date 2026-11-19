@@ -179,7 +179,7 @@ const METHOD_COLORS = [
 /** `var(--p-accent)` sirve como CSS en la leyenda, pero no en canvas: aquí se resuelve. */
 function colorMetodo(i: number): string {
   const c = METHOD_COLORS[i % METHOD_COLORS.length]
-  return c.startsWith('var(') ? token(c.slice(4, -1), '#6366f1') : c
+  return c.startsWith('var(') ? token(c.slice(4, -1), '#FF6A1F') : c
 }
 
 // ── component ────────────────────────────────────────────────────────────────
@@ -527,9 +527,9 @@ export function PlatformMetrics() {
                     plugins: {
                       legend: { display: false },
                       tooltip: {
-                        backgroundColor: token('--p-sidebar', '#0f172a'),
+                        backgroundColor: token('--p-sidebar', '#0E0D0C'),
                         borderColor: token('--p-border', '#1f2937'), borderWidth: 1,
-                        titleColor: token('--p-text', '#e2e8f0'), bodyColor: token('--p-text', '#e2e8f0'),
+                        titleColor: token('--p-text', '#DDD6CE'), bodyColor: token('--p-text', '#DDD6CE'),
                         callbacks: { label: (ctx) => `${ctx.label}: ${formatCurrency(typeof ctx.parsed === 'number' ? ctx.parsed : 0)}` },
                       },
                     },

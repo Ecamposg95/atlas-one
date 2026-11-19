@@ -563,7 +563,7 @@ function TopChart({
         <Bar
           data={{
             labels: data.map((d) => d.label),
-            datasets: [{ data: data.map((d) => d.value), backgroundColor: token('--p-accent', 'rgb(99, 102, 241)'), borderRadius: 4 }],
+            datasets: [{ data: data.map((d) => d.value), backgroundColor: token('--p-accent', 'rgb(255, 106, 31)'), borderRadius: 4 }],
           }}
           options={{
             responsive: true,
@@ -572,7 +572,7 @@ function TopChart({
             plugins: {
               legend: { display: false },
               tooltip: {
-                backgroundColor: token('--p-sidebar', 'rgb(15, 23, 42)'),
+                backgroundColor: token('--p-sidebar', 'rgb(14, 13, 12)'),
                 borderColor: token('--p-border', 'rgb(31, 41, 55)'), borderWidth: 1,
                 titleColor: token('--p-text', 'rgb(226, 232, 240)'), bodyColor: token('--p-text', 'rgb(226, 232, 240)'),
                 callbacks: { label: (ctx) => fmt(typeof ctx.parsed.y === 'number' ? ctx.parsed.y : 0) },

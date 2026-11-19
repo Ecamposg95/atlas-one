@@ -82,7 +82,7 @@ export function Layout() {
   // visible y, con `overflow-hidden`, ese tramo (totales del POS, pie) es
   // inalcanzable. En escritorio dvh == vh: nada cambia.
   return (
-    <div className="flex h-dvh overflow-hidden" style={{ background: 'var(--dax-bg)' }}>
+    <div className="flex h-dvh overflow-hidden">
       <div
         ref={cajonRef}
         style={estiloCajon(esMovil, cajonAbierto)}
@@ -114,9 +114,9 @@ export function Layout() {
           className="flex items-center justify-between px-5 flex-shrink-0"
           style={{
             height: '60px',
-            background: theme === 'dark' ? 'rgba(0,0,0,0.9)' : 'rgba(246,245,241,0.88)',
+            background: 'var(--dax-barra)',
             borderBottom: '1px solid var(--dax-border-dim)',
-            backdropFilter: 'blur(12px)',
+            backdropFilter: 'blur(20px)',
           }}
         >
           {/* LEFT — hamburger + page context */}
@@ -126,9 +126,9 @@ export function Layout() {
               aria-expanded={esMovil ? cajonAbierto : undefined}
               aria-controls={esMovil ? 'cajon-lateral' : undefined}
               className="transition-colors p-1.5 rounded-lg flex-shrink-0 dax-btn-icon"
-              style={{ color: 'rgba(148,163,184,0.6)' }}
+              style={{ color: 'rgba(168, 162, 154,0.6)' }}
               onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = 'white')}
-              onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = 'rgba(148,163,184,0.6)')}
+              onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = 'rgba(168, 162, 154,0.6)')}
               title={
                 esMovil
                   ? (cajonAbierto ? 'Cerrar menú' : 'Abrir menú')
@@ -262,7 +262,7 @@ function Clock() {
   return (
     <span
       className="font-mono text-sm tabular-nums font-semibold flex-shrink-0"
-      style={{ color: 'rgba(148,163,184,0.7)' }}
+      style={{ color: 'rgba(168, 162, 154,0.7)' }}
     >
       {time}
     </span>
