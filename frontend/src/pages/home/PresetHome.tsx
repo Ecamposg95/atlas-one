@@ -126,7 +126,7 @@ function HomeShell({
         }}>
           {orgName} · {title}
         </p>
-        <h1 style={{ margin: '4px 0 8px', fontSize: '1.6rem', fontWeight: 700 }}>
+        <h1 style={{ margin: '4px 0 8px', fontSize: '1.6rem', fontWeight: 600 }}>
           {greeting ? `Hola, ${greeting}` : 'Bienvenido'}
         </h1>
         <p style={{ margin: 0, color: 'var(--p-muted)', fontSize: 14 }}>{subtitle}</p>
@@ -138,7 +138,7 @@ function HomeShell({
           background: `${accent}22`,
           color: accent,
           fontSize: 11,
-          fontWeight: 700,
+          fontWeight: 600,
           letterSpacing: '0.04em',
           textTransform: 'uppercase',
         }}>
@@ -231,7 +231,7 @@ function Widget({ icon, title, description, cta, ctaUrl, beta }: WidgetProps) {
             fontSize: 9,
             padding: '1px 6px',
             borderRadius: 3,
-            fontWeight: 700,
+            fontWeight: 600,
             letterSpacing: '0.04em',
             background: 'rgba(245,158,11,0.18)',
             color: 'var(--p-warning)',

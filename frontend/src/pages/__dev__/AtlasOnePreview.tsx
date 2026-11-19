@@ -248,7 +248,7 @@ export default function AtlasOnePreview() {
 
           {/* Typography */}
           <Card>
-            <SectionTitle>Tipografía · IBM Plex</SectionTitle>
+            <SectionTitle>Tipografía · Inter</SectionTitle>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
                 <div style={{ fontFamily: ATLAS_SERIF, fontSize: 36, fontWeight: 500, letterSpacing: -0.8 }}>Plex Serif · headlines</div>

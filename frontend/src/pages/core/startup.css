@@ -9,7 +9,7 @@
 
     background-color: var(--bg-dark);
     color: #f0f0f0;
-    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    font-family: var(--font-sans);
     font-weight: 500;
     position: fixed;
     inset: 0;

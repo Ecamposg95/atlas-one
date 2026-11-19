@@ -781,7 +781,7 @@ function IncidentForm({ form, setForm, industryOptions, previewCount, activeTota
 
       <div style={previewBoxStyle}>
         <span style={{ color: 'var(--p-muted)', fontSize: 12 }}>Esto suspenderá</span>
-        <span style={{ color: 'var(--p-danger)', fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em' }}>
+        <span style={{ color: 'var(--p-danger)', fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 600, letterSpacing: '-0.02em' }}>
           {previewCount}
         </span>
         <span style={{ color: 'var(--p-muted)', fontSize: 12 }}>
@@ -924,7 +924,7 @@ const chipStyle: React.CSSProperties = {
   padding: '3px 10px',
   borderRadius: 999,
   border: '1px solid transparent',
-  fontWeight: 700,
+  fontWeight: 600,
   whiteSpace: 'nowrap',
 }
 

@@ -63,7 +63,7 @@ function SummaryCard({ summary }: { summary: CashSessionSummary }) {
         <BreakdownLine label="ESPERADO en caja" amount={expected} sign="=" bold />
         <BreakdownLine label="Reportado (contado)" amount={reported} sign="=" />
         <div style={{ borderTop: '1px solid var(--p-border)', margin: '6px 0' }} />
-        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 700, color: diff < 0 ? 'var(--p-danger)' : (diff > 0 ? 'var(--p-warning, #fbbf24)' : 'var(--p-success)') }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 600, color: diff < 0 ? 'var(--p-danger)' : (diff > 0 ? 'var(--p-warning, #fbbf24)' : 'var(--p-success)') }}>
           <span>DIFERENCIA</span>
           <span>{diff < 0 ? '−' : (diff > 0 ? '+' : '')} {formatCurrency(Math.abs(diff))}</span>
         </div>

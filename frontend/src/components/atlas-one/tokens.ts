@@ -3,9 +3,9 @@
  * Source: C:\Users\ecamp\Devs\Atlas Brain\AtlasONE\ATLAS ONE\system.jsx (lines 11-155)
  */
 
-export const ATLAS_FONT = "'IBM Plex Sans', system-ui, sans-serif";
-export const ATLAS_MONO = "'IBM Plex Mono', ui-monospace, monospace";
-export const ATLAS_SERIF = "'IBM Plex Serif', Georgia, serif";
+export const ATLAS_FONT = "'Inter', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif";
+export const ATLAS_MONO = "'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace";
+export const ATLAS_SERIF = "'Inter', system-ui, sans-serif";
 
 // Neutral light-mode canvas (warm off-white)
 export const N = {

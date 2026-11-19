@@ -39,7 +39,7 @@ function ToastItemView({ toast }: { toast: ToastItem }) {
         transform: visible ? 'translateX(0)' : 'translateX(24px)',
         opacity: visible ? 1 : 0,
         transition: 'all 0.3s cubic-bezier(0.19,1,0.22,1)',
-        fontFamily: "'IBM Plex Sans', sans-serif",
+        fontFamily: 'var(--font-sans)',
       }}
     >
       <i className={`fa-solid ${s.icon} mt-0.5 flex-shrink-0`} style={{ color: s.color, fontSize: '0.875rem' }} />

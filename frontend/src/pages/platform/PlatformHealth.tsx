@@ -173,7 +173,7 @@ export function PlatformHealth() {
             color: healthColor(r.health_score),
             fontFamily: 'var(--font-mono)',
             fontSize: 12,
-            fontWeight: 700,
+            fontWeight: 600,
             fontVariantNumeric: 'tabular-nums',
           }}
           title={`Score ${r.health_score}/100`}

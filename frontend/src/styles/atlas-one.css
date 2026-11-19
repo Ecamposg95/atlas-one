@@ -18,7 +18,7 @@
   --ao-ink-soft: #19191C;
 
   /* Typography */
-  --ao-font-sans:  'IBM Plex Sans', 'Montserrat', system-ui, -apple-system, sans-serif;
-  --ao-font-mono:  'IBM Plex Mono', 'JetBrains Mono', ui-monospace, monospace;
-  --ao-font-serif: 'IBM Plex Serif', Georgia, serif;
+  --ao-font-sans:  'Inter', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
+  --ao-font-mono:  'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+  --ao-font-serif: 'Inter', system-ui, sans-serif;
 }

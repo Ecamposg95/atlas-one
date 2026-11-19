@@ -39,7 +39,7 @@ const labelStyle: React.CSSProperties = {
 const buttonPrimary: React.CSSProperties = {
   background: 'var(--p-teal)',
   color: 'var(--dax-on-accent)',
-  fontWeight: 700,
+  fontWeight: 600,
   border: 'none',
   padding: '8px 16px',
   borderRadius: 4,
@@ -176,7 +176,7 @@ const roleBadge = (role: string) => {
       padding: '2px 8px',
       borderRadius: 4,
       fontSize: '0.65rem',
-      fontWeight: 700,
+      fontWeight: 600,
       textTransform: 'uppercase',
       letterSpacing: '0.06em',
     }}>
@@ -457,7 +457,7 @@ export function PlatformAdmins() {
           <h2 style={{
             fontSize: '1.1rem',
             color: 'var(--p-text)',
-            fontWeight: 700,
+            fontWeight: 600,
             margin: '0 0 8px',
           }}>
             Acceso restringido
@@ -665,7 +665,7 @@ export function PlatformAdmins() {
               maxWidth: '90vw',
             }}
           >
-            <h3 style={{ margin: 0, color: 'var(--p-text)', fontSize: '1rem', fontWeight: 700 }}>
+            <h3 style={{ margin: 0, color: 'var(--p-text)', fontSize: '1rem', fontWeight: 600 }}>
               <i className="fa-solid fa-key" style={{ color: 'var(--p-teal)', marginRight: 8 }} />
               Password temporal generado
             </h3>
@@ -688,7 +688,7 @@ export function PlatformAdmins() {
                 color: 'var(--p-teal)',
                 fontFamily: 'monospace',
                 fontSize: 14,
-                fontWeight: 700,
+                fontWeight: 600,
                 wordBreak: 'break-all',
               }}>
                 {inviteResult.temp_password}
@@ -698,7 +698,7 @@ export function PlatformAdmins() {
                 style={{
                   background: copyOk ? 'var(--p-success)' : 'var(--p-teal)',
                   color: copyOk ? '#000' : 'var(--dax-on-accent)',
-                  fontWeight: 700,
+                  fontWeight: 600,
                   border: 'none',
                   padding: '6px 12px',
                   borderRadius: 4,
@@ -764,7 +764,7 @@ export function PlatformAdmins() {
               justifyContent: 'space-between',
               marginBottom: 14,
             }}>
-              <h3 style={{ margin: 0, color: 'var(--p-text)', fontSize: '1rem', fontWeight: 700 }}>
+              <h3 style={{ margin: 0, color: 'var(--p-text)', fontSize: '1rem', fontWeight: 600 }}>
                 <i className="fa-solid fa-user-pen" style={{ color: 'var(--p-success)', marginRight: 8 }} />
                 Crear admin manualmente
               </h3>
