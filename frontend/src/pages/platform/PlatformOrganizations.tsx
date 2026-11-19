@@ -74,7 +74,7 @@ const labelStyle: React.CSSProperties = {
 const buttonPrimary: React.CSSProperties = {
   background: 'var(--p-teal)',
   color: 'var(--dax-on-accent)',
-  fontWeight: 700,
+  fontWeight: 600,
   border: 'none',
   padding: '8px 16px',
   borderRadius: 4,
@@ -890,7 +890,7 @@ export function PlatformOrganizations() {
               maxWidth: '90vw',
             }}
           >
-            <h3 style={{ margin: 0, color: 'var(--p-text)', fontSize: '1rem', fontWeight: 700 }}>
+            <h3 style={{ margin: 0, color: 'var(--p-text)', fontSize: '1rem', fontWeight: 600 }}>
               <i className="fa-solid fa-triangle-exclamation" style={{ color: 'var(--p-warning)', marginRight: 8 }} />
               Eliminación bloqueada
             </h3>
@@ -927,7 +927,7 @@ export function PlatformOrganizations() {
                   style={{
                     background: 'var(--p-warning)',
                     color: '#000',
-                    fontWeight: 700,
+                    fontWeight: 600,
                     border: 'none',
                     padding: '6px 16px',
                     borderRadius: 4,
@@ -977,7 +977,7 @@ export function PlatformOrganizations() {
               maxWidth: '90vw',
             }}
           >
-            <h3 style={{ margin: 0, color: 'var(--p-text)', fontSize: '1rem', fontWeight: 700 }}>
+            <h3 style={{ margin: 0, color: 'var(--p-text)', fontSize: '1rem', fontWeight: 600 }}>
               <i className="fa-solid fa-wand-magic-sparkles" style={{ color: 'var(--p-purple)', marginRight: 8 }} />
               Bootstrap {bootstrapTarget.name}
             </h3>
@@ -998,7 +998,7 @@ export function PlatformOrganizations() {
                 style={{
                   background: 'var(--p-purple)',
                   color: '#fff',
-                  fontWeight: 700,
+                  fontWeight: 600,
                   border: 'none',
                   padding: '6px 16px',
                   borderRadius: 4,

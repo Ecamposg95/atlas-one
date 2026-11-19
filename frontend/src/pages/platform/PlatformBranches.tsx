@@ -95,7 +95,7 @@ const labelStyle: React.CSSProperties = {
 const buttonPrimary: React.CSSProperties = {
   background: 'var(--p-teal)',
   color: 'var(--dax-on-accent)',
-  fontWeight: 700,
+  fontWeight: 600,
   border: 'none',
   padding: '8px 16px',
   borderRadius: 4,
@@ -534,7 +534,7 @@ export function PlatformBranches() {
             padding: '2px 10px',
             borderRadius: 999,
             fontSize: 11,
-            fontWeight: 700,
+            fontWeight: 600,
           }}>
             {n}
           </span>
@@ -918,7 +918,7 @@ export function PlatformBranches() {
                 <p style={{ margin: 0, fontSize: 12, color: 'var(--p-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>
                   Alertas activas
                 </p>
-                <p style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: 'var(--p-danger)' }}>
+                <p style={{ margin: 0, fontSize: '1.5rem', fontWeight: 600, color: 'var(--p-danger)' }}>
                   {alertsTarget.alerts_count ?? 0}
                 </p>
               </div>
@@ -978,7 +978,7 @@ export function PlatformBranches() {
               maxWidth: '90vw',
             }}
           >
-            <h3 style={{ margin: 0, color: 'var(--p-text)', fontSize: '1rem', fontWeight: 700 }}>
+            <h3 style={{ margin: 0, color: 'var(--p-text)', fontSize: '1rem', fontWeight: 600 }}>
               <i className="fa-solid fa-triangle-exclamation" style={{ color: 'var(--p-warning)', marginRight: 8 }} />
               Eliminación bloqueada
             </h3>
@@ -1018,7 +1018,7 @@ export function PlatformBranches() {
                   style={{
                     background: 'var(--p-warning)',
                     color: '#000',
-                    fontWeight: 700,
+                    fontWeight: 600,
                     border: 'none',
                     padding: '6px 16px',
                     borderRadius: 4,
@@ -1035,7 +1035,7 @@ export function PlatformBranches() {
                 style={{
                   background: 'var(--p-danger)',
                   color: '#fff',
-                  fontWeight: 700,
+                  fontWeight: 600,
                   border: 'none',
                   padding: '6px 16px',
                   borderRadius: 4,

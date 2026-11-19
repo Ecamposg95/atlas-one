@@ -88,11 +88,11 @@ export function AnnouncementBanner() {
         justifyContent: 'center',
         gap: '0.75rem',
         fontSize: '0.8125rem',
-        fontFamily: "'IBM Plex Sans', sans-serif",
+        fontFamily: 'var(--font-sans)',
       }}
     >
       <i className={`fa-solid ${tono.icono}`} aria-hidden="true" />
-      <span style={{ fontWeight: 700 }}>{aviso.title}</span>
+      <span style={{ fontWeight: 600 }}>{aviso.title}</span>
       <span style={{ opacity: 0.9 }}>{aviso.body_md}</span>
       {avisos.length > 1 && (
         <button

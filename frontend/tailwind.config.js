@@ -69,6 +69,12 @@ export default {
       backdropBlur: {
         dax: '12px',
       },
+      // Atlas Horizon: nunca 700. Inter se carga hasta 600; bold/extrabold/black caen en 600.
+      fontWeight: {
+        bold: '600',
+        extrabold: '600',
+        black: '600',
+      },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'Arial', 'sans-serif'],
         serif: ['Inter', 'system-ui', 'sans-serif'],

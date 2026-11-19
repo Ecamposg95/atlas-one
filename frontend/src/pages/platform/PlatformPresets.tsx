@@ -47,7 +47,7 @@ const labelStyle: React.CSSProperties = {
 const buttonPrimary: React.CSSProperties = {
   background: 'var(--p-teal)',
   color: 'var(--dax-on-accent)',
-  fontWeight: 700,
+  fontWeight: 600,
   border: 'none',
   padding: '8px 16px',
   borderRadius: 4,
@@ -107,7 +107,7 @@ function ModulePill({ moduleKey, status }: { moduleKey: string; status?: string 
           padding: '1px 6px',
           borderRadius: 3,
           fontSize: 9,
-          fontWeight: 700,
+          fontWeight: 600,
           letterSpacing: '0.04em',
         }}>
           {s.label}
@@ -125,7 +125,7 @@ function SystemBadge() {
       padding: '2px 8px',
       borderRadius: 4,
       fontSize: '0.65rem',
-      fontWeight: 700,
+      fontWeight: 600,
       textTransform: 'uppercase',
       letterSpacing: '0.06em',
       whiteSpace: 'nowrap',
@@ -494,7 +494,7 @@ export function PlatformPresets() {
                       <h3 style={{
                         margin: 0,
                         fontSize: '0.95rem',
-                        fontWeight: 700,
+                        fontWeight: 600,
                         color: 'var(--p-text)',
                       }}>
                         {p.display_name}
@@ -757,7 +757,7 @@ export function PlatformPresets() {
                           padding: '1px 6px',
                           borderRadius: 3,
                           fontSize: 9,
-                          fontWeight: 700,
+                          fontWeight: 600,
                           letterSpacing: '0.04em',
                         }}>
                           {m.status}
@@ -831,7 +831,7 @@ export function PlatformPresets() {
               flexDirection: 'column',
             }}
           >
-            <h3 style={{ margin: 0, color: 'var(--p-text)', fontSize: '1rem', fontWeight: 700 }}>
+            <h3 style={{ margin: 0, color: 'var(--p-text)', fontSize: '1rem', fontWeight: 600 }}>
               <i className="fa-solid fa-shield-halved" style={{ color: 'var(--p-magenta)', marginRight: 8 }} />
               Editar system preset
             </h3>
@@ -925,7 +925,7 @@ function ConfirmInline({
   return (
     <div>
       <p style={{ color: 'var(--p-text)', fontSize: '0.8rem', marginBottom: 6 }}>
-        Para continuar, escribe <code style={{ color: 'var(--p-magenta)', fontWeight: 700 }}>{resourceName}</code>:
+        Para continuar, escribe <code style={{ color: 'var(--p-magenta)', fontWeight: 600 }}>{resourceName}</code>:
       </p>
       <input
         value={typed}
@@ -965,7 +965,7 @@ function ConfirmInline({
           style={{
             background: 'var(--p-magenta)',
             color: '#fff',
-            fontWeight: 700,
+            fontWeight: 600,
             border: 'none',
             padding: '6px 16px',
             borderRadius: 4,

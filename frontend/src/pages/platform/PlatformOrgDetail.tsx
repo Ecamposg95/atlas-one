@@ -66,7 +66,7 @@ const labelStyle: React.CSSProperties = {
 const buttonPrimary: React.CSSProperties = {
   background: 'var(--p-teal)',
   color: 'var(--dax-on-accent)',
-  fontWeight: 700,
+  fontWeight: 600,
   border: 'none',
   padding: '8px 14px',
   borderRadius: 4,
@@ -98,7 +98,7 @@ const buttonDanger: React.CSSProperties = {
   padding: '8px 14px',
   borderRadius: 4,
   fontSize: 12,
-  fontWeight: 700,
+  fontWeight: 600,
   cursor: 'pointer',
   display: 'inline-flex',
   alignItems: 'center',
@@ -164,7 +164,7 @@ function SimpleConfirm({
         background: 'var(--p-surface)', border: `1px solid ${accent}`,
         borderRadius: 6, padding: 20, width: 460, maxWidth: '90vw',
       }}>
-        <h3 style={{ margin: 0, color: 'var(--p-text)', fontSize: '1rem', fontWeight: 700 }}>{title}</h3>
+        <h3 style={{ margin: 0, color: 'var(--p-text)', fontSize: '1rem', fontWeight: 600 }}>{title}</h3>
         <div style={{ color: 'var(--p-muted)', fontSize: '0.85rem', margin: '10px 0 16px' }}>{message}</div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button onClick={onClose} disabled={busy} style={buttonSecondary}>Cancelar</button>
@@ -173,7 +173,7 @@ function SimpleConfirm({
             disabled={busy}
             style={{
               background: accent, color: destructive ? '#fff' : 'var(--dax-on-accent)',
-              fontWeight: 700, border: 'none', padding: '8px 16px',
+              fontWeight: 600, border: 'none', padding: '8px 16px',
               borderRadius: 4, fontSize: 12, cursor: 'pointer',
               opacity: busy ? 0.5 : 1,
             }}
@@ -203,7 +203,7 @@ function DepsBlockedModal({
         background: 'var(--p-surface)', border: '1px solid var(--p-warning)',
         borderRadius: 6, padding: 20, width: 460, maxWidth: '90vw',
       }}>
-        <h3 style={{ margin: 0, color: 'var(--p-text)', fontSize: '1rem', fontWeight: 700 }}>
+        <h3 style={{ margin: 0, color: 'var(--p-text)', fontSize: '1rem', fontWeight: 600 }}>
           <i className="fa-solid fa-triangle-exclamation" style={{ color: 'var(--p-warning)', marginRight: 8 }} />
           Eliminación bloqueada
         </h3>
@@ -229,7 +229,7 @@ function DepsBlockedModal({
           <button onClick={onClose} style={buttonSecondary}>Cerrar</button>
           {canArchive && onArchive && (
             <button onClick={onArchive} style={{
-              background: 'var(--p-warning)', color: '#000', fontWeight: 700,
+              background: 'var(--p-warning)', color: '#000', fontWeight: 600,
               border: 'none', padding: '8px 16px', borderRadius: 4, fontSize: 12, cursor: 'pointer',
             }}>
               <i className="fa-solid fa-box-archive" style={{ marginRight: 6 }} />
@@ -579,7 +579,7 @@ export function PlatformOrgDetail() {
       <div style={{
         background: 'var(--p-bg)', minHeight: '100vh',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontFamily: 'Montserrat, sans-serif',
+        fontFamily: 'var(--font-sans)',
       }}>
         <div style={{ color: 'var(--p-muted)', fontSize: 13 }}>
           <i className="fa-solid fa-spinner fa-spin" style={{ marginRight: 8 }} />
@@ -881,12 +881,12 @@ export function PlatformOrgDetail() {
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     {rec.icon && <i className={`fa-solid ${rec.icon}`} style={{ color: 'var(--p-cyan)' }} />}
-                    <span style={{ fontWeight: 700, fontSize: 13 }}>{rec.module_name}</span>
+                    <span style={{ fontWeight: 600, fontSize: 13 }}>{rec.module_name}</span>
                     <span style={{
                       fontSize: 9,
                       padding: '1px 6px',
                       borderRadius: 3,
-                      fontWeight: 700,
+                      fontWeight: 600,
                       letterSpacing: '0.04em',
                       background: rec.status === 'BETA' ? 'rgba(245,158,11,0.18)' : 'rgba(34,197,94,0.15)',
                       color: rec.status === 'BETA' ? 'var(--p-warning)' : 'var(--p-success)',
@@ -943,7 +943,7 @@ export function PlatformOrgDetail() {
                     style={{
                       background: 'var(--p-teal)',
                       color: 'var(--dax-on-accent)',
-                      fontWeight: 700,
+                      fontWeight: 600,
                       border: 'none',
                       padding: '6px 12px',
                       borderRadius: 4,
@@ -1417,7 +1417,7 @@ export function PlatformOrgDetail() {
             background: 'var(--p-surface)', border: '1px solid var(--p-cyan)',
             borderRadius: 6, padding: 20, width: 460, maxWidth: '90vw',
           }}>
-            <h3 style={{ margin: 0, color: 'var(--p-text)', fontSize: '1rem', fontWeight: 700 }}>
+            <h3 style={{ margin: 0, color: 'var(--p-text)', fontSize: '1rem', fontWeight: 600 }}>
               <i className="fa-solid fa-eye" style={{ color: 'var(--p-cyan)', marginRight: 8 }} />
               Modo auditoría — {org.name}
             </h3>

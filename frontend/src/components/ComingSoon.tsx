@@ -41,14 +41,14 @@ export function ComingSoon({ meta }: { meta: ComingSoonMeta }) {
           <i className={`fa-solid ${meta.icon}`} />
         </span>
         <div>
-          <h1 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 700 }}>{meta.title}</h1>
+          <h1 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 600 }}>{meta.title}</h1>
           <span style={{
             display: 'inline-block',
             marginTop: 6,
             padding: '2px 8px',
             borderRadius: 4,
             fontSize: 10,
-            fontWeight: 700,
+            fontWeight: 600,
             letterSpacing: '0.06em',
             background: 'rgba(245,158,11,0.18)',
             color: 'var(--p-warning)',

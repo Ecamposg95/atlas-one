@@ -690,7 +690,7 @@ const chipStyle: React.CSSProperties = {
   padding: '3px 10px',
   borderRadius: 999,
   border: '1px solid transparent',
-  fontWeight: 700,
+  fontWeight: 600,
   whiteSpace: 'nowrap',
 }
 

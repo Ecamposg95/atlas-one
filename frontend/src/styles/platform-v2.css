@@ -86,7 +86,7 @@
   width: 26px; height: 26px; border-radius: 7px;
   background: var(--p-accent);
   display: grid; place-items: center;
-  color: var(--dax-on-accent); font-weight: 700; font-size: 13px;
+  color: var(--dax-on-accent); font-weight: 600; font-size: 13px;
   font-family: var(--font-display);
   letter-spacing: -0.02em;
 }

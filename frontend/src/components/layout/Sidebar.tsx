@@ -55,7 +55,7 @@ function SectionHeader({ children }: { children: ReactNode }) {
   return (
     <p style={{
       textAlign: 'left', margin: '12px 8px 6px',
-      fontSize: '10px', fontWeight: 800, textTransform: 'uppercase',
+      fontSize: '10px', fontWeight: 600, textTransform: 'uppercase',
       letterSpacing: '0.14em', color: 'rgba(168, 162, 154,0.55)',
     }}>
       {children}
@@ -111,7 +111,7 @@ function NavPill({ item, active, color, pendingReturns }: {
       />
       <span style={{
         fontSize: '13px',
-        fontWeight: active ? 700 : 600,
+        fontWeight: active ? 600 : 500,
         color: active ? '#ffffff' : 'var(--sb-text)',
         textShadow: active ? `0 0 14px ${alpha(color, 60)}` : undefined,
         flex: 1,
@@ -124,7 +124,7 @@ function NavPill({ item, active, color, pendingReturns }: {
           minWidth: '20px', height: '20px', padding: '0 5px',
           borderRadius: '10px', flexShrink: 0,
           background: '#f59e0b', color: '#1c1917',
-          fontSize: '10px', fontWeight: 900,
+          fontSize: '10px', fontWeight: 600,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
           {pendingReturns > 99 ? '99+' : pendingReturns}
@@ -295,10 +295,10 @@ function MatrixSidebar({ items, logout, isBranchRole }: { items: NavItem[]; logo
               <i className="fa-solid fa-building" style={{ fontSize: '9px', color: '#FF8A4C' }} />
             </div>
             <div style={{ overflow: 'hidden', minWidth: 0 }}>
-              <p style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.35)', lineHeight: 1, marginBottom: '2px' }}>
+              <p style={{ fontSize: '7px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.35)', lineHeight: 1, marginBottom: '2px' }}>
                 Organización
               </p>
-              <p style={{ fontSize: '10px', fontWeight: 700, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1 }}>
+              <p style={{ fontSize: '10px', fontWeight: 600, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1 }}>
                 {org?.name ?? '—'}
               </p>
             </div>
@@ -315,10 +315,10 @@ function MatrixSidebar({ items, logout, isBranchRole }: { items: NavItem[]; logo
                 <i className="fa-solid fa-store" style={{ fontSize: '9px', color: '#34d399' }} />
               </div>
               <div style={{ overflow: 'hidden', minWidth: 0 }}>
-                <p style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.35)', lineHeight: 1, marginBottom: '2px' }}>
+                <p style={{ fontSize: '7px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.35)', lineHeight: 1, marginBottom: '2px' }}>
                   Sucursal
                 </p>
-                <p style={{ fontSize: '10px', fontWeight: 700, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1 }}>
+                <p style={{ fontSize: '10px', fontWeight: 600, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1 }}>
                   {branch.name}
                 </p>
               </div>
@@ -336,10 +336,10 @@ function MatrixSidebar({ items, logout, isBranchRole }: { items: NavItem[]; logo
                 <i className="fa-solid fa-globe" style={{ fontSize: '9px', color: '#fbbf24' }} />
               </div>
               <div style={{ overflow: 'hidden', minWidth: 0 }}>
-                <p style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.35)', lineHeight: 1, marginBottom: '2px' }}>
+                <p style={{ fontSize: '7px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.35)', lineHeight: 1, marginBottom: '2px' }}>
                   Acceso
                 </p>
-                <p style={{ fontSize: '10px', fontWeight: 700, color: '#fbbf24', lineHeight: 1 }}>
+                <p style={{ fontSize: '10px', fontWeight: 600, color: '#fbbf24', lineHeight: 1 }}>
                   {rotuloAccesoGlobal(unaSolaSucursal)}
                 </p>
               </div>
@@ -369,15 +369,15 @@ function MatrixSidebar({ items, logout, isBranchRole }: { items: NavItem[]; logo
             background: 'var(--sb-logo-grad)',
             boxShadow: `0 0 10px ${ROLE_COLOR[role]}55`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '12px', fontWeight: 900, color: 'white',
+            fontSize: '12px', fontWeight: 600, color: 'white',
           }}>
             {initial}
           </div>
           <div style={{ overflow: 'hidden', minWidth: 0 }}>
-            <p style={{ fontSize: '11px', fontWeight: 700, color: 'white', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2 }}>
+            <p style={{ fontSize: '11px', fontWeight: 600, color: 'white', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2 }}>
               {user?.full_name || user?.username}
             </p>
-            <p style={{ fontSize: '8px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: ROLE_COLOR[role], marginTop: '2px' }}>
+            <p style={{ fontSize: '8px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: ROLE_COLOR[role], marginTop: '2px' }}>
               {user?.role}
             </p>
           </div>
@@ -437,7 +437,7 @@ function MatrixSidebar({ items, logout, isBranchRole }: { items: NavItem[]; logo
           style={{
             width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
             padding: '8px', borderRadius: '9px', cursor: 'pointer', transition: 'all 0.15s',
-            fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em',
+            fontSize: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em',
             color: 'rgba(255,255,255,0.65)', background: 'transparent',
             border: '1px solid rgba(255,255,255,0.08)',
           }}
@@ -489,7 +489,7 @@ function IconRail({ items, logout }: { items: NavItem[]; logout: () => void }) {
           width: '28px', height: '28px', borderRadius: '7px',
           background: 'rgba(255, 106, 31,0.15)', border: '1px solid rgba(255, 106, 31,0.2)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: '10px', fontWeight: 800, color: '#FF8A4C',
+          fontSize: '10px', fontWeight: 600, color: '#FF8A4C',
         }}>
           {orgInitial}
         </div>
@@ -543,7 +543,7 @@ function IconRail({ items, logout }: { items: NavItem[]; logout: () => void }) {
                   minWidth: '14px', height: '14px', padding: '0 3px',
                   borderRadius: '7px',
                   background: '#f59e0b', color: '#1c1917',
-                  fontSize: '8px', fontWeight: 900,
+                  fontSize: '8px', fontWeight: 600,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>
                   {pendingReturns > 9 ? '9+' : pendingReturns}
@@ -566,7 +566,7 @@ function IconRail({ items, logout }: { items: NavItem[]; logout: () => void }) {
             background: 'var(--sb-logo-grad)',
             boxShadow: `0 0 8px ${ROLE_COLOR[role]}55`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '13px', fontWeight: 900, color: 'white',
+            fontSize: '13px', fontWeight: 600, color: 'white',
           }}
         >
           {initial}

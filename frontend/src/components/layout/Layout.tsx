@@ -149,13 +149,13 @@ export function Layout() {
                   nombre de la organización solo cabe desde sm. */}
               <span
                 className="hidden sm:block"
-                style={{ fontSize: '0.6rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--dax-text-faint)', lineHeight: 1 }}
+                style={{ fontSize: '0.6rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--dax-text-faint)', lineHeight: 1 }}
               >
                 {org?.name ?? 'Atlas One'}
               </span>
               <div className="flex items-center gap-1.5 mt-0.5">
                 <span
-                  style={{ fontSize: '0.875rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '-0.01em', color: 'var(--dax-text)', lineHeight: 1 }}
+                  style={{ fontSize: '0.875rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '-0.01em', color: 'var(--dax-text)', lineHeight: 1 }}
                   className="truncate"
                 >
                   {pageTitle}
@@ -187,7 +187,7 @@ export function Layout() {
                   <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--dax-text)', lineHeight: 1.2 }}>
                     {userName}
                   </span>
-                  <span style={{ fontSize: '0.55rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--dax-text-faint)', lineHeight: 1.2 }}>
+                  <span style={{ fontSize: '0.55rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--dax-text-faint)', lineHeight: 1.2 }}>
                     {ROLE_LABEL[role]}
                   </span>
                 </div>
@@ -239,7 +239,7 @@ export function Layout() {
         >
           <span style={{ fontSize: '0.68rem', color: 'var(--dax-text-faint)', fontWeight: 500 }}>
             Desarrollado con ❤️ por{' '}
-            <span style={{ color: 'var(--dax-accent)', fontWeight: 800 }}>Atlas Tech</span>
+            <span style={{ color: 'var(--dax-accent)', fontWeight: 600 }}>Atlas Tech</span>
           </span>
           <FooterClock />
         </footer>

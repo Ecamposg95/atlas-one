@@ -21,7 +21,7 @@
   --lg-linea: rgba(255, 255, 255, .14);
   --lg-columna: rgba(9, 8, 7, .84);
   --lg-campo: rgba(255, 255, 255, .06);
-  --lg-fuente: 'Inter', 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
+  --lg-fuente: 'Inter', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
 
   position: relative;
   isolation: isolate;

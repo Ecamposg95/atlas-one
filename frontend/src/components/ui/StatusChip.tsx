@@ -73,7 +73,7 @@ export function StatusChip({ tone, label, dotOnly, size = 'md', style, onDark }:
         padding: size === 'sm' ? '2px 8px' : '3px 10px',
         borderRadius: 999,
         fontSize: size === 'sm' ? 10 : 11,
-        fontWeight: 700, letterSpacing: 0.2,
+        fontWeight: 600, letterSpacing: 0.2,
         color: fg, background: t.bg,
         border: `1px solid ${t.border}`,
         whiteSpace: 'nowrap',

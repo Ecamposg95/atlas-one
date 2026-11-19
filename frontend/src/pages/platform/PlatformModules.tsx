@@ -76,7 +76,7 @@ const labelStyle: React.CSSProperties = {
 const buttonPrimary: React.CSSProperties = {
   background: 'var(--p-teal)',
   color: 'var(--dax-on-accent)',
-  fontWeight: 700,
+  fontWeight: 600,
   border: 'none',
   padding: '8px 16px',
   borderRadius: 4,
@@ -438,7 +438,7 @@ export function PlatformModules() {
         padding: '2px 10px',
         borderRadius: 999,
         fontSize: 11,
-        fontWeight: 700,
+        fontWeight: 600,
       }}>
         {value}
       </span>
@@ -454,7 +454,7 @@ export function PlatformModules() {
       sortValue: m => m.key.toLowerCase(),
       accessor: m => (
         <div>
-          <div style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--p-text)', fontSize: 13 }}>
+          <div style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--p-text)', fontSize: 13 }}>
             {m.key}
           </div>
           {m.description && (
@@ -748,7 +748,7 @@ export function PlatformModules() {
                 marginBottom: 16,
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                  <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--p-text)', fontSize: 13 }}>
+                  <span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--p-text)', fontSize: 13 }}>
                     {depsTarget.key}
                   </span>
                   <ScopePill value={depsTarget.scope} />

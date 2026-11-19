@@ -80,7 +80,7 @@ export function BranchSwitcher() {
           borderRadius: '999px',
           color: 'var(--dax-text)',
           fontSize: '0.7rem',
-          fontWeight: 700,
+          fontWeight: 600,
           textTransform: 'uppercase',
           letterSpacing: '0.08em',
           cursor: 'pointer',
@@ -117,7 +117,7 @@ export function BranchSwitcher() {
           }}
         >
           <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid var(--dax-border-dim)' }}>
-            <p style={{ fontSize: '0.6rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--dax-text-faint)', margin: 0 }}>
+            <p style={{ fontSize: '0.6rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--dax-text-faint)', margin: 0 }}>
               Nodos disponibles
             </p>
           </div>
@@ -162,7 +162,7 @@ export function BranchSwitcher() {
                   <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--dax-text)', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {b.name}
                   </p>
-                  <p style={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--dax-text-faint)', margin: 0 }}>
+                  <p style={{ fontSize: '0.6rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--dax-text-faint)', margin: 0 }}>
                     {b.branch_type}
                   </p>
                 </div>

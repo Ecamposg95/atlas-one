@@ -638,7 +638,7 @@ const actionChipStyle: React.CSSProperties = {
   textTransform: 'uppercase',
   padding: '3px 10px',
   borderRadius: 999,
-  fontWeight: 700,
+  fontWeight: 600,
   whiteSpace: 'nowrap',
 }
 
