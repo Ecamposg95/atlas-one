@@ -19,6 +19,7 @@ import { tipoMovimiento } from '../../utils/enumsEspanol'
 import { esRolHq } from '../../utils/rolesHq'
 import type { Product } from '../../types/products'
 import { formatCurrency } from '../../utils/currency'
+import { KpiCard } from '../../components/ui/KpiCard'
 import { expandVariantRows, initialInventoryQuery, type InventoryRow } from './variantRows'
 
 /**
@@ -111,6 +112,8 @@ export function Inventory() {
   const rows = veCosto && soloSinCosto ? todas.filter(sinCosto) : todas
   const importeVenta = (r: InventoryRow) => r.qty * Number(r.variant.price ?? 0)
   const importeCosto = (r: InventoryRow) => r.qty * Number(r.variant.cost ?? 0)
+  // Mismo bloque de tarjetas en escritorio y teléfono; solo cambia el id que buscan las pruebas.
+  const idTotales = ['totales', 'totales-telefono'][Number(esTelefono)]
   const totales = rows.reduce(
     (t, r) => ({ piezas: t.piezas + r.qty, venta: t.venta + importeVenta(r), costo: t.costo + importeCosto(r) }),
     { piezas: 0, venta: 0, costo: 0 },
@@ -188,10 +191,7 @@ export function Inventory() {
     <div className="space-y-5">
       <CabeceraPagina
         titulo={
-          <div className="flex items-center gap-3">
-            <i className="fa-solid fa-boxes text-dax-accent-text text-xl" aria-hidden="true" />
-            <h1 className="text-2xl font-black text-dax-text">Inventario</h1>
-          </div>
+          <h1 className="dax-titulo-pagina">Inventario</h1>
         }
       />
 
@@ -224,23 +224,28 @@ export function Inventory() {
         </DaxCard>
       )}
 
+      {/* Totales de lo listado (lo que trajo la búsqueda), arriba de la tabla o de las tarjetas. */}
+      {rows.length > 0 && !selected && (
+        <div
+          data-testid={idTotales}
+          className={`grid grid-cols-2 gap-3 ${veCosto ? 'sm:grid-cols-3' : ''}`}
+        >
+          <KpiCard etiqueta="Piezas" icono="fa-cubes" destacada valor={totales.piezas.toLocaleString('es-MX')} detalle={`en ${rows.length} ${rows.length === 1 ? 'renglón listado' : 'renglones listados'}`} />
+          <KpiCard etiqueta="Importe a venta" icono="fa-tags" valor={formatCurrency(totales.venta)} />
+          {veCosto && <KpiCard etiqueta="Importe a costo" icono="fa-coins" valor={formatCurrency(totales.costo)} />}
+        </div>
+      )}
+
       {rows.length > 0 && !selected && (
         <DaxCard padding={false}>
           {esTelefono ? (
             <ListaTarjetas className="p-3">
-              {/* Los totales de la tabla, en una tarjeta resumen para teléfono. */}
-              <div data-testid="totales-telefono" className="rounded-lg bg-dax-elevated p-3 text-xs font-bold text-dax-text flex flex-wrap gap-x-4 gap-y-1">
-                <span>Total de lo listado</span>
-                <span className="tabular-nums">{totales.piezas} pzas</span>
-                <span className="tabular-nums">{formatCurrency(totales.venta)} a venta</span>
-                {veCosto && <span className="tabular-nums">{formatCurrency(totales.costo)} a costo</span>}
-              </div>
               {rows.map((row) => (
                 <TarjetaFila key={row.variant.id}
                   titulo={row.label}
                   subtitulo={<span className="font-mono text-dax-accent-text">{row.sku}</span>}
                   importe={formatCurrency(importeVenta(row))}
-                  estado={<span className={`font-bold tabular-nums ${colorExistencia(row.qty)}`}>{row.qty} en stock</span>}
+                  estado={<span className={`font-medium tabular-nums ${colorExistencia(row.qty)}`}>{row.qty} en stock</span>}
                   datos={[
                     { etiqueta: 'Precio', valor: formatCurrency(row.variant.price ?? 0) },
                     ...(veCosto ? [
@@ -270,16 +275,16 @@ export function Inventory() {
               <tbody>
                 {rows.map((row) => (
                   <tr key={row.variant.id}>
-                    <td className="font-mono text-dax-accent-text text-xs">{row.sku}</td>
-                    <td className="text-dax-text font-semibold">{row.label}</td>
+                    <td className="font-mono text-dax-accent-text text-xs whitespace-nowrap">{row.sku}</td>
+                    <td className="text-dax-text font-medium">{row.label}</td>
                     {/* Precio de ESTA talla: `product.price` es el aplanado de la principal. */}
                     <td className="text-right text-dax-muted tabular-nums">{formatCurrency(row.variant.price ?? 0)}</td>
                     {veCosto && (
                       <td className="text-right text-dax-muted tabular-nums">
-                        {sinCosto(row) ? <span className="text-dax-warning text-xs font-bold">sin costo</span> : formatCurrency(row.variant.cost ?? 0)}
+                        {sinCosto(row) ? <span className="dax-badge dax-badge-yellow">sin costo</span> : formatCurrency(row.variant.cost ?? 0)}
                       </td>
                     )}
-                    <td className={`text-right font-bold tabular-nums ${colorExistencia(row.qty)}`}>{row.qty}</td>
+                    <td className={`text-right font-medium tabular-nums ${colorExistencia(row.qty)}`}>{row.qty}</td>
                     <td className="text-right text-dax-muted tabular-nums">{formatCurrency(importeVenta(row))}</td>
                     {veCosto && <td className="text-right text-dax-muted tabular-nums">{formatCurrency(importeCosto(row))}</td>}
                     <td>
@@ -290,15 +295,6 @@ export function Inventory() {
                   </tr>
                 ))}
               </tbody>
-              <tfoot>
-                <tr className="font-bold text-dax-text" data-testid="totales">
-                  <td colSpan={veCosto ? 4 : 3}>Total de lo listado</td>
-                  <td className="text-right tabular-nums">{totales.piezas}</td>
-                  <td className="text-right tabular-nums">{formatCurrency(totales.venta)}</td>
-                  {veCosto && <td className="text-right tabular-nums">{formatCurrency(totales.costo)}</td>}
-                  <td></td>
-                </tr>
-              </tfoot>
             </table>
           </TablaDesplazable>
           )}
@@ -310,7 +306,7 @@ export function Inventory() {
           <div className="flex max-md:flex-wrap items-center max-md:items-start justify-between gap-2">
             <div>
               <p className="text-[10px] text-dax-muted uppercase tracking-widest">Kardex</p>
-              <p className="text-lg font-black text-dax-text">{selected.label}</p>
+              <p className="text-xl font-light tracking-tight text-dax-text">{selected.label}</p>
               <p className="text-xs font-mono text-dax-accent-text">{selected.sku}</p>
             </div>
             <div className="flex max-md:flex-wrap gap-2 max-md:[&>button]:min-h-[44px]">
@@ -362,7 +358,7 @@ export function Inventory() {
                           <td className="text-xs">
                             <span className={`dax-badge ${colorMovimiento(k.movement_type)}`}>{tipoMovimiento(k.movement_type)}</span>
                           </td>
-                          <td className={`text-right font-bold tabular-nums ${colorMovimiento(k.movement_type)}`}>
+                          <td className={`text-right font-medium tabular-nums ${colorMovimiento(k.movement_type)}`}>
                             {k.qty_change > 0 ? '+' : ''}{k.qty_change}
                           </td>
                           <td className="text-right text-dax-muted text-xs tabular-nums">{k.qty_after}</td>

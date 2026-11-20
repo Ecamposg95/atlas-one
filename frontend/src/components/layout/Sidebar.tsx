@@ -1,5 +1,5 @@
-import { useEffect, useState, type ReactNode } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
 import { useEnabledModulesStore } from '../../store/enabledModulesStore'
 import { useBranchCountStore, esTiendaUnica } from '../../store/branchCountStore'
@@ -7,12 +7,10 @@ import { returnsApi } from '../../api/returns'
 import { confirm } from '../ui/ConfirmDialog'
 import { useTheme } from '../../context/ThemeContext'
 import { AtlasMark } from '../atlas-one'
+import { BranchSwitcher } from './BranchSwitcher'
 import type { Role } from '../../types/auth'
 import { BRANCH_ROLES, urlActiva, visibleNavItems, type NavItem } from './navVisibility'
-import {
-  ALL_NAV, ROLE_ROUTES, HQ_NAV_GROUPS, BRANCH_NAV_GROUPS,
-  GROUP_COLOR, DEFAULT_GROUP_COLOR, URL_COLOR, GASTRO_PRESETS,
-} from './navConfig'
+import { ALL_NAV, ROLE_ROUTES, HQ_NAV_GROUPS, BRANCH_NAV_GROUPS, GASTRO_PRESETS } from './navConfig'
 
 const APPROVER_ROLES: Role[] = ['ADMINISTRADOR', 'DUEÑO', 'GERENTE']
 const RETURNS_URLS = new Set(['/returns'])
@@ -22,10 +20,6 @@ const RETURNS_URLS = new Set(['/returns'])
 function rotuloAccesoGlobal(unaSolaSucursal: boolean): string {
   return unaSolaSucursal ? 'Toda la tienda' : 'Todas las sucursales'
 }
-
-/** Mezcla un token de color con transparencia — el equivalente a un sufijo de
- *  alpha en hex, que con var() no se puede concatenar. */
-const alpha = (color: string, pct: number) => `color-mix(in srgb, ${color} ${pct}%, transparent)`
 
 /** Hook que polea el conteo de devoluciones pendientes cada 60s para roles aprobadores. */
 function usePendingReturnsCount(role: Role): number {
@@ -45,106 +39,58 @@ function usePendingReturnsCount(role: Role): number {
   return count
 }
 
-const ROLE_COLOR: Record<Role, string> = {
-  ADMINISTRADOR: '#FF8A4C', DUEÑO: '#FFA14A', GERENTE: '#FA9360',
-  CAJERO: '#34d399', VENDEDOR: '#fbbf24', SOPORTE_OPERATIVO: '#A8A29A', CLIENTE: '#A8A29A',
-}
-
-// ── Encabezado de sección ───────────────────────────────────────
-function SectionHeader({ children }: { children: ReactNode }) {
-  return (
-    <p style={{
-      textAlign: 'left', margin: '12px 8px 6px',
-      fontSize: '10px', fontWeight: 600, textTransform: 'uppercase',
-      letterSpacing: '0.14em', color: 'rgba(168, 162, 154,0.55)',
-    }}>
-      {children}
-    </p>
-  )
-}
-
-// ── Píldora de navegación — acrílico + riel con el color del módulo ──
-// Solo capa visual: la lógica de qué ítems se ven vive en `visibleNavItems`
-// y en los grupos de arriba.
-function NavPill({ item, active, color, pendingReturns }: {
-  item: NavItem; active: boolean; color: string; pendingReturns: number
+// ── Ítem de navegación ──────────────────────────────────────────
+// Solo capa visual (clases `sb-item*` de index.css): la lógica de qué ítems
+// se ven vive en `visibleNavItems` y en los grupos de navConfig.
+function NavPill({ item, active, pendingReturns }: {
+  item: NavItem; active: boolean; pendingReturns: number
 }) {
   const showReturnsBadge = RETURNS_URLS.has(item.url) && pendingReturns > 0
   return (
-    <Link
-      to={item.url}
-      aria-current={active ? 'page' : undefined}
-      style={{
-        position: 'relative',
-        display: 'flex', alignItems: 'center', gap: '12px',
-        padding: '11px 12px 11px 14px', minHeight: '44px',
-        borderRadius: '12px',
-        textDecoration: 'none', transition: 'background 0.15s ease',
-        background: active
-          ? `linear-gradient(90deg, ${alpha(color, 18)} 0%, rgba(255,255,255,0.07) 100%)`
-          : 'transparent',
-        border: `1px solid ${active ? alpha(color, 33) : 'transparent'}`,
-        backdropFilter: active ? 'blur(12px)' : undefined,
-        boxShadow: active ? 'inset 0 1px 0 rgba(255,255,255,0.10), 0 4px 14px rgba(0,0,0,0.35)' : undefined,
-      }}
-      onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.035)' }}
-      onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLElement).style.background = 'transparent' }}
-    >
-      {active && (
-        <span
-          aria-hidden="true"
-          style={{
-            position: 'absolute', left: '-12px', top: '8px', bottom: '8px', width: '4px',
-            borderRadius: '0 4px 4px 0',
-            background: color, boxShadow: `0 0 12px ${color}`,
-          }}
-        />
-      )}
-      <i
-        className={`fa-solid ${item.icon}`}
-        style={{
-          fontSize: '16px', width: '18px', textAlign: 'center', flexShrink: 0,
-          color: active ? color : 'rgba(255,255,255,0.55)',
-          filter: active ? `drop-shadow(0 0 6px ${alpha(color, 60)})` : undefined,
-        }}
-        aria-hidden="true"
-      />
-      <span style={{
-        fontSize: '13px',
-        fontWeight: active ? 600 : 500,
-        color: active ? '#ffffff' : 'var(--sb-text)',
-        textShadow: active ? `0 0 14px ${alpha(color, 60)}` : undefined,
-        flex: 1,
-        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-      }}>
-        {item.label}
-      </span>
-      {showReturnsBadge ? (
-        <span style={{
-          minWidth: '20px', height: '20px', padding: '0 5px',
-          borderRadius: '10px', flexShrink: 0,
-          background: '#f59e0b', color: '#1c1917',
-          fontSize: '10px', fontWeight: 600,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          {pendingReturns > 99 ? '99+' : pendingReturns}
-        </span>
-      ) : (
-        <i
-          className="fa-solid fa-chevron-right"
-          style={{ fontSize: '10px', color: 'rgba(168, 162, 154,0.45)' }}
-          aria-hidden="true"
-        />
+    <Link to={item.url} aria-current={active ? 'page' : undefined} className="sb-item">
+      <i className={`fa-solid ${item.icon} sb-item-icono`} aria-hidden="true" />
+      <span className="sb-item-rotulo">{item.label}</span>
+      {showReturnsBadge && (
+        <span className="sb-item-aviso">{pendingReturns > 99 ? '99+' : pendingReturns}</span>
       )}
     </Link>
   )
 }
 
-// ── BRANCH NAV — full-width rectangle buttons ───────────────────
+type Seccion = { header: string; items: NavItem[] }
+
+// Lista del menú: secciones rotuladas con sus ítems debajo.
+function ListaNav({ secciones, activa, pendingReturns }: {
+  secciones: Seccion[]; activa: string | null | undefined; pendingReturns: number
+}) {
+  return (
+    <nav style={{ flex: 1, overflowY: 'auto', padding: '16px 10px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+        {secciones.map((section) => (
+          <div key={section.header}>
+            <p className="sb-seccion">{section.header}</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              {section.items.map((item) => (
+                <NavPill
+                  key={item.url}
+                  item={item}
+                  active={item.url === activa}
+                  pendingReturns={pendingReturns}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </nav>
+  )
+}
+
+// ── BRANCH NAV — grupos de sucursal ─────────────────────────────
 function BranchNav({ items, pendingReturns }: { items: NavItem[]; pendingReturns: number }) {
   const { pathname } = useLocation()
   const activa = urlActiva(pathname, items.map((it) => it.url))
-  const grouped: { header: string; items: NavItem[] }[] = []
+  const grouped: Seccion[] = []
   const placed = new Set<string>()
 
   for (const g of BRANCH_NAV_GROUPS) {
@@ -160,38 +106,14 @@ function BranchNav({ items, pendingReturns }: { items: NavItem[]; pendingReturns
   const sobrantes = items.filter((it) => !placed.has(it.url))
   if (sobrantes.length > 0) grouped.push({ header: 'Más', items: sobrantes })
 
-  return (
-    <nav style={{ flex: 1, overflowY: 'auto', padding: '10px 12px' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        {grouped.map((section) => {
-          const color = GROUP_COLOR[section.header] ?? DEFAULT_GROUP_COLOR
-          return (
-            <div key={section.header}>
-              <SectionHeader>{section.header}</SectionHeader>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {section.items.map((item) => (
-                  <NavPill
-                    key={item.url}
-                    item={item}
-                    active={item.url === activa}
-                    color={color}
-                    pendingReturns={pendingReturns}
-                  />
-                ))}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    </nav>
-  )
+  return <ListaNav secciones={grouped} activa={activa} pendingReturns={pendingReturns} />
 }
 
 // ── HQ NAV — lista agrupada + etiquetada (admin/dueño), más legible ──
 function HQNav({ items, pendingReturns }: { items: NavItem[]; pendingReturns: number }) {
   const { pathname } = useLocation()
   const activa = urlActiva(pathname, items.map((it) => it.url))
-  const grouped: { header: string; items: NavItem[] }[] = []
+  const grouped: Seccion[] = []
   const placed = new Set<string>()
 
   for (const g of HQ_NAV_GROUPS) {
@@ -206,37 +128,48 @@ function HQNav({ items, pendingReturns }: { items: NavItem[]; pendingReturns: nu
   const leftover = items.filter((it) => !placed.has(it.url))
   if (leftover.length > 0) grouped.push({ header: 'Más', items: leftover })
 
+  return <ListaNav secciones={grouped} activa={activa} pendingReturns={pendingReturns} />
+}
+
+// Quién puede saltar de una sucursal a otra desde el menú.
+const ROLES_CAMBIAN_SUCURSAL: Role[] = ['ADMINISTRADOR', 'DUEÑO']
+
+// Contraer / expandir el menú (solo escritorio; en teléfono el menú es un cajón).
+function BotonContraer({ contraido, onClick }: { contraido: boolean; onClick: () => void }) {
+  const rotulo = contraido ? 'Expandir menú' : 'Contraer menú'
   return (
-    <nav style={{ flex: 1, overflowY: 'auto', padding: '10px 12px' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-        {grouped.map((section) => {
-          const color = GROUP_COLOR[section.header] ?? DEFAULT_GROUP_COLOR
-          return (
-            <div key={section.header}>
-              <SectionHeader>{section.header}</SectionHeader>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {section.items.map((item) => (
-                  <NavPill
-                    key={item.url}
-                    item={item}
-                    active={item.url === activa}
-                    color={color}
-                    pendingReturns={pendingReturns}
-                  />
-                ))}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    </nav>
+    <button
+      onClick={onClick}
+      title={rotulo}
+      aria-label={rotulo}
+      className="sb-boton"
+      style={{ marginLeft: contraido ? undefined : 'auto', width: '30px', height: '30px' }}
+    >
+      <i className={`fa-solid ${contraido ? 'fa-indent' : 'fa-outdent'}`} style={{ fontSize: '11px' }} aria-hidden="true" />
+    </button>
+  )
+}
+
+// Inicial de la persona. Neutro: el rol ya se lee en el texto de al lado.
+function Avatar({ inicial, titulo }: { inicial: string; titulo?: string }) {
+  return (
+    <div
+      title={titulo}
+      style={{
+        width: '34px', height: '34px', borderRadius: '50%', flexShrink: 0,
+        background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: '13px', fontWeight: 500, color: 'white',
+      }}
+    >
+      {inicial}
+    </div>
   )
 }
 
 // ── MATRIX SIDEBAR (expandido) ──────────────────────────────────
-function MatrixSidebar({ items, logout, isBranchRole }: { items: NavItem[]; logout: () => void; isBranchRole: boolean }) {
+function MatrixSidebar({ items, logout, isBranchRole, onToggle }: { items: NavItem[]; logout: () => void; isBranchRole: boolean; onToggle?: () => void }) {
   const { pathname } = useLocation()
-  const navigate = useNavigate()
   const { user, org, branch } = useAuthStore()
   const { theme, toggleTheme } = useTheme()
   const unaSolaSucursal = esTiendaUnica(useBranchCountStore((s) => s.count))
@@ -256,97 +189,55 @@ function MatrixSidebar({ items, logout, isBranchRole }: { items: NavItem[]; logo
 
       {/* ── Header: logo + org/sucursal ── */}
       <div style={{
-        padding: '18px 16px',
+        padding: '18px 14px 14px',
         borderBottom: '1px solid rgba(255,255,255,0.06)',
         flexShrink: 0,
       }}>
         {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-          <span style={{ color: 'var(--p-accent)', display: 'flex', filter: 'drop-shadow(0 0 10px var(--sb-glow))' }}>
-            <AtlasMark size={30} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px', paddingLeft: '4px' }}>
+          <span style={{ color: 'var(--p-accent)', display: 'flex' }}>
+            <AtlasMark size={28} />
           </span>
-          <div>
-            <p style={{ color: 'white', fontWeight: 500, fontSize: '16px', letterSpacing: '-0.01em', lineHeight: 1 }}>
-              Atlas <span style={{ fontWeight: 300, color: 'rgba(255,255,255,0.62)' }}>ONE</span>
-            </p>
-            <p style={{ fontSize: '8px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(168, 162, 154,0.35)', marginTop: '2px' }}>
-              v2.0 · Suite Comercial
-            </p>
-          </div>
+          <p style={{ color: 'white', fontWeight: 500, fontSize: '17px', letterSpacing: '-0.01em', lineHeight: 1 }}>
+            Atlas <span style={{ fontWeight: 300, color: 'rgba(255,255,255,0.62)' }}>ONE</span>
+          </p>
+          {onToggle && <BotonContraer contraido={false} onClick={onToggle} />}
         </div>
 
-        {/* Org + Branch info card */}
+        {/* Organización y dónde está parada la persona: su sucursal o toda la tienda */}
         <div style={{
-          borderRadius: '10px', overflow: 'hidden',
+          display: 'flex', alignItems: 'center', gap: '10px',
+          padding: '10px 12px', borderRadius: '16px',
           border: '1px solid rgba(255,255,255,0.08)',
           background: 'rgba(255,255,255,0.04)',
         }}>
-          {/* Organización */}
           <div style={{
-            display: 'flex', alignItems: 'center', gap: '8px',
-            padding: '8px 10px',
-            borderBottom: branch ? '1px solid rgba(255,255,255,0.06)' : 'none',
+            width: '30px', height: '30px', borderRadius: '50%', flexShrink: 0,
+            background: 'rgba(255,255,255,0.06)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <div style={{
-              width: '22px', height: '22px', borderRadius: '6px', flexShrink: 0,
-              background: 'rgba(255, 106, 31,0.15)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <i className="fa-solid fa-building" style={{ fontSize: '9px', color: '#FF8A4C' }} />
-            </div>
-            <div style={{ overflow: 'hidden', minWidth: 0 }}>
-              <p style={{ fontSize: '7px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.35)', lineHeight: 1, marginBottom: '2px' }}>
-                Organización
-              </p>
-              <p style={{ fontSize: '10px', fontWeight: 600, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1 }}>
-                {org?.name ?? '—'}
-              </p>
-            </div>
+            <i
+              className={`fa-solid ${branch ? 'fa-store' : 'fa-building'}`}
+              style={{ fontSize: '11px', color: 'rgba(255,255,255,0.7)' }}
+              aria-hidden="true"
+            />
           </div>
-
-          {/* Sucursal */}
-          {branch && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '7px 10px' }}>
-              <div style={{
-                width: '22px', height: '22px', borderRadius: '6px', flexShrink: 0,
-                background: 'rgba(52,211,153,0.12)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                <i className="fa-solid fa-store" style={{ fontSize: '9px', color: '#34d399' }} />
-              </div>
-              <div style={{ overflow: 'hidden', minWidth: 0 }}>
-                <p style={{ fontSize: '7px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.35)', lineHeight: 1, marginBottom: '2px' }}>
-                  Sucursal
-                </p>
-                <p style={{ fontSize: '10px', fontWeight: 600, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1 }}>
-                  {branch.name}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Sin sucursal asignada → modo HQ */}
-          {!branch && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '7px 10px' }}>
-              <div style={{
-                width: '22px', height: '22px', borderRadius: '6px', flexShrink: 0,
-                background: 'rgba(251,191,36,0.1)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                <i className="fa-solid fa-globe" style={{ fontSize: '9px', color: '#fbbf24' }} />
-              </div>
-              <div style={{ overflow: 'hidden', minWidth: 0 }}>
-                <p style={{ fontSize: '7px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.35)', lineHeight: 1, marginBottom: '2px' }}>
-                  Acceso
-                </p>
-                <p style={{ fontSize: '10px', fontWeight: 600, color: '#fbbf24', lineHeight: 1 }}>
-                  {rotuloAccesoGlobal(unaSolaSucursal)}
-                </p>
-              </div>
-            </div>
-          )}
+          <div style={{ overflow: 'hidden', minWidth: 0 }}>
+            <p style={{ fontSize: '13px', fontWeight: 500, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.25 }}>
+              {org?.name ?? '—'}
+            </p>
+            <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.55)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.3, marginTop: '1px' }}>
+              {branch ? branch.name : rotuloAccesoGlobal(unaSolaSucursal)}
+            </p>
+          </div>
         </div>
+
+        {/* Cambio de sucursal: solo quien puede moverse entre sucursales. */}
+        {ROLES_CAMBIAN_SUCURSAL.includes(role) && (
+          <div style={{ marginTop: '8px' }}><BranchSwitcher enMenu /></div>
+        )}
       </div>
+
 
       {/* ── Nav: rectángulos full-width para roles branch, grid SHORT para HQ ── */}
       {isBranchRole ? (
@@ -356,28 +247,15 @@ function MatrixSidebar({ items, logout, isBranchRole }: { items: NavItem[]; logo
       )}
 
       {/* ── Footer: user card + logout ── */}
-      <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', padding: '10px 12px', flexShrink: 0 }}>
+      <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', padding: '12px', flexShrink: 0 }}>
         {/* User card */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '9px',
-          padding: '9px 10px', borderRadius: '10px', marginBottom: '8px',
-          background: 'rgba(255,255,255,0.05)',
-          border: '1px solid rgba(255,255,255,0.08)',
-        }}>
-          <div style={{
-            width: '30px', height: '30px', borderRadius: '9px', flexShrink: 0,
-            background: 'var(--sb-logo-grad)',
-            boxShadow: `0 0 10px ${ROLE_COLOR[role]}55`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '12px', fontWeight: 600, color: 'white',
-          }}>
-            {initial}
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '2px 4px 10px' }}>
+          <Avatar inicial={initial} />
           <div style={{ overflow: 'hidden', minWidth: 0 }}>
-            <p style={{ fontSize: '11px', fontWeight: 600, color: 'white', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2 }}>
+            <p style={{ fontSize: '12px', fontWeight: 500, color: 'white', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.25 }}>
               {user?.full_name || user?.username}
             </p>
-            <p style={{ fontSize: '8px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: ROLE_COLOR[role], marginTop: '2px' }}>
+            <p style={{ fontSize: '10px', fontWeight: 400, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'rgba(168, 162, 154, 0.8)', marginTop: '2px' }}>
               {user?.role}
             </p>
           </div>
@@ -385,24 +263,17 @@ function MatrixSidebar({ items, logout, isBranchRole }: { items: NavItem[]; logo
 
         {/* Mi expediente — solo roles de sucursal, y solo si el menú (módulo + perfil del plan) lo muestra */}
         {isBranchRole && items.some((n) => n.url === '/hr/me') && (
-          <button
-            onClick={() => navigate('/hr/me')}
-            style={{
-              width: '100%', display: 'flex', alignItems: 'center', gap: '8px',
-              padding: '8px 10px', borderRadius: '9px', cursor: 'pointer', transition: 'all 0.15s',
-              fontSize: '11px', fontWeight: 600,
-              color: pathname === '/hr/me' ? 'var(--sb-active-text)' : 'rgba(255,255,255,0.65)',
-              background: pathname === '/hr/me' ? 'var(--sb-active-bg)' : 'transparent',
-              border: `1px solid ${pathname === '/hr/me' ? 'var(--sb-active-line)' : 'rgba(255,255,255,0.08)'}`,
-              marginBottom: '6px',
-            }}
-            onMouseEnter={e => { if (pathname !== '/hr/me') { const el = e.currentTarget as HTMLElement; el.style.color = 'var(--sb-active-text)'; el.style.background = 'var(--sb-active-bg)'; } }}
-            onMouseLeave={e => { if (pathname !== '/hr/me') { const el = e.currentTarget as HTMLElement; el.style.color = 'rgba(255,255,255,0.65)'; el.style.background = 'transparent'; } }}
+          <Link
+            to="/hr/me"
+            aria-current={pathname === '/hr/me' ? 'page' : undefined}
+            className="sb-item"
+            style={{ marginBottom: '8px' }}
           >
-            <i className="fa-solid fa-id-card" style={{ fontSize: '11px', flexShrink: 0 }} />
-            <span>Mi expediente</span>
-          </button>
+            <i className="fa-solid fa-id-card sb-item-icono" aria-hidden="true" />
+            <span className="sb-item-rotulo">Mi expediente</span>
+          </Link>
         )}
+
 
         {/* Theme toggle — mini cielo animado */}
         <button
@@ -434,17 +305,10 @@ function MatrixSidebar({ items, logout, isBranchRole }: { items: NavItem[]; logo
         {/* Logout */}
         <button
           onClick={logout}
-          style={{
-            width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-            padding: '8px', borderRadius: '9px', cursor: 'pointer', transition: 'all 0.15s',
-            fontSize: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em',
-            color: 'rgba(255,255,255,0.65)', background: 'transparent',
-            border: '1px solid rgba(255,255,255,0.08)',
-          }}
-          onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.color = '#fb7185'; el.style.background = 'rgba(225,29,72,0.1)'; el.style.borderColor = 'rgba(244,63,94,0.3)'; }}
-          onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.color = 'rgba(255,255,255,0.65)'; el.style.background = 'transparent'; el.style.borderColor = 'rgba(255,255,255,0.08)'; }}
+          className="sb-boton"
+          style={{ width: '100%', gap: '8px', padding: '9px', fontSize: '12px', fontWeight: 400 }}
         >
-          <i className="fa-solid fa-right-from-bracket" style={{ fontSize: '10px' }} />
+          <i className="fa-solid fa-right-from-bracket" style={{ fontSize: '11px' }} aria-hidden="true" />
           <span>Cerrar sesión</span>
         </button>
       </div>
@@ -453,7 +317,7 @@ function MatrixSidebar({ items, logout, isBranchRole }: { items: NavItem[]; logo
 }
 
 // ── ICON RAIL (contraído) ───────────────────────────────────────
-function IconRail({ items, logout }: { items: NavItem[]; logout: () => void }) {
+function IconRail({ items, logout, onToggle }: { items: NavItem[]; logout: () => void; onToggle?: () => void }) {
   const { pathname } = useLocation()
   const activa = urlActiva(pathname, items.map((it) => it.url))
   const { user, org, branch } = useAuthStore()
@@ -480,74 +344,48 @@ function IconRail({ items, logout }: { items: NavItem[]; logout: () => void }) {
         </span>
       </div>
 
-      {/* Org/branch dots */}
+      {onToggle && (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
+          <BotonContraer contraido onClick={onToggle} />
+        </div>
+      )}
+
+      {/* Organización y sucursal, en un solo punto */}
       <div style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px',
-        padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0,
+        display: 'flex', justifyContent: 'center',
+        padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0,
       }}>
-        <div title={org?.name ?? 'Organización'} style={{
-          width: '28px', height: '28px', borderRadius: '7px',
-          background: 'rgba(255, 106, 31,0.15)', border: '1px solid rgba(255, 106, 31,0.2)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: '10px', fontWeight: 600, color: '#FF8A4C',
-        }}>
+        <div
+          title={`${org?.name ?? 'Organización'} · ${branch ? branch.name : rotuloAccesoGlobal(unaSolaSucursal)}`}
+          style={{
+            width: '34px', height: '34px', borderRadius: '50%',
+            background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '12px', fontWeight: 500, color: 'rgba(255,255,255,0.85)',
+          }}
+        >
           {orgInitial}
         </div>
-        {branch ? (
-          <div title={branch.name} style={{
-            width: '28px', height: '16px', borderRadius: '5px',
-            background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.2)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <i className="fa-solid fa-store" style={{ fontSize: '7px', color: '#34d399' }} />
-          </div>
-        ) : (
-          <div title={rotuloAccesoGlobal(unaSolaSucursal)} style={{
-            width: '28px', height: '16px', borderRadius: '5px',
-            background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.2)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <i className="fa-solid fa-globe" style={{ fontSize: '7px', color: '#fbbf24' }} />
-          </div>
-        )}
       </div>
 
+
       {/* Icon column */}
-      <nav style={{ flex: 1, overflowY: 'auto', padding: '6px' }}>
+      <nav style={{ flex: 1, overflowY: 'auto', padding: '10px 6px' }}>
         {items.map((item) => {
           const active = item.url === activa
           const showReturnsBadge = RETURNS_URLS.has(item.url) && pendingReturns > 0
-          const color = URL_COLOR[item.url] ?? DEFAULT_GROUP_COLOR
           return (
             <Link
               key={item.url}
               to={item.url}
               title={`${item.label}${showReturnsBadge ? ` (${pendingReturns} pendientes)` : ''}`}
+              aria-label={item.label}
               aria-current={active ? 'page' : undefined}
-              style={{
-                position: 'relative',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                height: '38px', borderRadius: '8px', marginBottom: '2px',
-                textDecoration: 'none', transition: 'all 0.15s ease',
-                background: active ? alpha(color, 15) : 'transparent',
-                borderLeft: `2px solid ${active ? color : 'transparent'}`,
-              }}
+              className="sb-item sb-item-riel"
             >
-              <i
-                className={`fa-solid ${item.icon}`}
-                style={{ fontSize: '14px', color: active ? color : alpha(color, 70) }}
-              />
+              <i className={`fa-solid ${item.icon} sb-item-icono`} aria-hidden="true" />
               {showReturnsBadge && (
-                <span style={{
-                  position: 'absolute', top: '4px', right: '4px',
-                  minWidth: '14px', height: '14px', padding: '0 3px',
-                  borderRadius: '7px',
-                  background: '#f59e0b', color: '#1c1917',
-                  fontSize: '8px', fontWeight: 600,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  {pendingReturns > 9 ? '9+' : pendingReturns}
-                </span>
+                <span className="sb-item-aviso">{pendingReturns > 9 ? '9+' : pendingReturns}</span>
               )}
             </Link>
           )
@@ -556,34 +394,18 @@ function IconRail({ items, logout }: { items: NavItem[]; logout: () => void }) {
 
       {/* Avatar + logout */}
       <div style={{
-        borderTop: '1px solid rgba(255,255,255,0.06)', padding: '8px 6px', flexShrink: 0,
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
+        borderTop: '1px solid rgba(255,255,255,0.06)', padding: '10px 6px', flexShrink: 0,
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
       }}>
-        <div
-          title={`${user?.full_name || user?.username} · ${user?.role}`}
-          style={{
-            width: '34px', height: '34px', borderRadius: '9px',
-            background: 'var(--sb-logo-grad)',
-            boxShadow: `0 0 8px ${ROLE_COLOR[role]}55`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '13px', fontWeight: 600, color: 'white',
-          }}
-        >
-          {initial}
-        </div>
+        <Avatar inicial={initial} titulo={`${user?.full_name || user?.username} · ${user?.role}`} />
         <button
           onClick={logout}
           title="Cerrar sesión"
-          style={{
-            width: '34px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            borderRadius: '7px', cursor: 'pointer', transition: 'all 0.15s',
-            background: 'transparent', border: '1px solid rgba(255,255,255,0.08)',
-            color: 'rgba(255,255,255,0.55)',
-          }}
-          onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.color = '#fb7185'; el.style.background = 'rgba(225,29,72,0.1)'; el.style.borderColor = 'rgba(244,63,94,0.3)'; }}
-          onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.color = 'rgba(255,255,255,0.55)'; el.style.background = 'transparent'; el.style.borderColor = 'rgba(255,255,255,0.08)'; }}
+          aria-label="Cerrar sesión"
+          className="sb-boton"
+          style={{ width: '34px', height: '34px' }}
         >
-          <i className="fa-solid fa-right-from-bracket" style={{ fontSize: '11px' }} />
+          <i className="fa-solid fa-right-from-bracket" style={{ fontSize: '11px' }} aria-hidden="true" />
         </button>
       </div>
     </aside>
@@ -591,7 +413,7 @@ function IconRail({ items, logout }: { items: NavItem[]; logout: () => void }) {
 }
 
 // ── ROOT ────────────────────────────────────────────────────────
-export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
+export function Sidebar({ collapsed = false, onToggle }: { collapsed?: boolean; onToggle?: () => void }) {
   const { user, logout, isAuthenticated } = useAuthStore()
   const role = (user?.role ?? 'CAJERO') as Role
   const allowed = ROLE_ROUTES[role] ?? []
@@ -627,6 +449,6 @@ export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
 
   const isBranchRole = BRANCH_ROLES.includes(role)
 
-  if (collapsed) return <IconRail items={items} logout={handleLogout} />
-  return <MatrixSidebar items={items} logout={handleLogout} isBranchRole={isBranchRole} />
+  if (collapsed) return <IconRail items={items} logout={handleLogout} onToggle={onToggle} />
+  return <MatrixSidebar items={items} logout={handleLogout} isBranchRole={isBranchRole} onToggle={onToggle} />
 }

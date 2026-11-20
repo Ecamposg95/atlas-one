@@ -43,32 +43,6 @@ export const HQ_NAV_GROUPS: { header: string; urls: string[] }[] = [
   { header: 'Inteligencia', urls: ['/ai'] },
 ]
 
-// Color de acento por grupo — identidad de módulo en el sidebar. El ícono se
-// tiñe con el color del grupo; el ítem activo lo usa para el riel lateral, el
-// resplandor y el relleno suave. Los encabezados de sección y las etiquetas
-// inactivas se quedan neutros. Los matices viven en index.css (--sb-mod-*),
-// no como hex sueltos aquí.
-export const GROUP_COLOR: Record<string, string> = {
-  // Grupos HQ (admin)
-  'Operación': 'var(--sb-mod-violet)', 'Catálogo': 'var(--sb-mod-green)',
-  'Ventas': 'var(--sb-mod-blue)', 'Inventario': 'var(--sb-mod-amber)',
-  'Compras': 'var(--sb-mod-teal)', 'Clientes': 'var(--sb-mod-rose)',
-  'Organización': 'var(--sb-mod-cyan)', 'Inteligencia': 'var(--sb-mod-indigo)',
-  'Restaurante': 'var(--sb-mod-orange)', 'Más': 'var(--sb-mod-slate)',
-  'Móvil': 'var(--sb-mod-blue)',
-  // Grupos de sucursal
-  'Mi día': 'var(--sb-mod-violet)', 'Mi turno': 'var(--sb-mod-green)',
-  'Reportes': 'var(--sb-mod-indigo)', 'Sistema': 'var(--sb-mod-slate)',
-}
-export const DEFAULT_GROUP_COLOR = 'var(--sb-mod-violet)'
-
-/** url → color del grupo, para el IconRail contraído (que no tiene secciones). */
-export const URL_COLOR: Record<string, string> = {}
-for (const _g of [...HQ_NAV_GROUPS, ...BRANCH_NAV_GROUPS]) {
-  const _c = GROUP_COLOR[_g.header] ?? DEFAULT_GROUP_COLOR
-  for (const _u of _g.urls) if (!(_u in URL_COLOR)) URL_COLOR[_u] = _c
-}
-
 // Glosario: una pantalla, un nombre. La etiqueta de esta tabla es la que se ve
 // en el menú, en la barra superior (`routeTitle`) y en el `<h1>` de la página.
 // Sin "HQ" ni "Global": para una tienda de una sucursal, HQ y sucursal son el

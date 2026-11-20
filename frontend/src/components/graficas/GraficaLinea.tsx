@@ -14,7 +14,7 @@ export interface SerieLinea {
   comparativo?: boolean
 }
 
-/** Línea plana (spec §3.3): acento para la serie principal, tenue para el comparativo, sin relleno. */
+/** Línea plana (spec §3.3): acento para la serie principal, color de apoyo discontinuo para el comparativo, sin relleno. */
 export function GraficaLinea({ etiquetas, series, alto = 224, ariaLabel }: { etiquetas: string[]; series: SerieLinea[]; alto?: number; ariaLabel?: string }) {
   const tema = useTemaGrafica()
   const data = useMemo<ChartData<'line'>>(() => ({
@@ -22,8 +22,8 @@ export function GraficaLinea({ etiquetas, series, alto = 224, ariaLabel }: { eti
     datasets: series.map((s) => ({
       label: s.nombre,
       data: s.valores,
-      borderColor: s.comparativo ? tema.faint : tema.acento,
-      backgroundColor: s.comparativo ? tema.faint : tema.acento,
+      borderColor: s.comparativo ? tema.apoyo : tema.acento,
+      backgroundColor: s.comparativo ? tema.apoyo : tema.acento,
       borderWidth: s.comparativo ? 1.5 : 2,
       borderDash: s.comparativo ? [4, 4] : undefined,
       pointRadius: 0,

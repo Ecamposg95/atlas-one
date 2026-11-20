@@ -33,9 +33,10 @@ describe('tema oscuro Horizon', () => {
     expect(valor(dark, '--dax-on-accent')).toBe('#050505')
   })
 
-  it('el acento es el ámbar en oscuro y el naranja quemado en claro', () => {
+  it('el acento es el ámbar en oscuro y el ember sobre niebla en claro (el quemado queda como tinta)', () => {
     expect(valor(dark, '--dax-accent')).toBe('#FF6A1F')
-    expect(valor(root, '--dax-accent')).toBe('#C2410C')
+    expect(valor(root, '--dax-accent')).toBe('#F2622A')
+    expect(valor(root, '--dax-accent-text')).toBe('#C2410C')
   })
 
   it('no queda ningún hex índigo de la paleta vieja en .dark', () => {

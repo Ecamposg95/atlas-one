@@ -21,14 +21,24 @@
     --atlas-warning:  #fbbf24;
     --atlas-danger:   #fb7185;
 
-    /* ── MODO CLARO (default) — "Paper": papel cálido, tinta casi negra y
-       naranja quemado como acento (contrasta sobre claro; el ámbar no). ── */
-    --dax-bg:          #F6F3EF;   /* papel */
-    --dax-surface:     #EFEAE4;
-    --dax-card:        rgba(255, 255, 255, 0.78);
+    /* ── MODO CLARO (default) — "Niebla" (2026-11-20): niebla fría, tinta
+       índigo y ember como acento, con el índigo como segundo color. Sustituye
+       al papel cálido ("Paper"). La luz es ember + índigo difuminados, con
+       grano, como en las referencias de marca. ── */
+    --dax-bg:          #ECECF0;   /* niebla */
+    --dax-surface:     #E3E3EA;
+    --dax-card:        rgba(255, 255, 255, 0.74);
     --dax-card-solid:  #ffffff;
-    --dax-accent:      #C2410C;
-    --dax-accent-glow: rgba(194, 65, 12, 0.10);
+    --dax-accent:      #F2622A;   /* ember sobre niebla */
+    --dax-accent-glow: rgba(242, 98, 42, 0.12);
+    /* Paleta de apoyo (referencias 2026-11-20). El índigo es el segundo
+       acento del tema claro; bruma y coral son para luz, gráficas y POS. */
+    --dax-indigo:      #2E2B5F;
+    --dax-lavanda:     #7B86C6;
+    --dax-bruma:       #BFD0E6;
+    --dax-coral:       #E5484D;
+    /* Series de apoyo en gráficas (comparativo, barras sin resaltar): no deben ganarle al acento. */
+    --dax-grafica-apoyo: #7B86C6;
     /* Semánticos de estado — los usan el veredicto de cierre y la píldora
        del hero del turno. NO son decorativos: no los uses como acento. */
     --dax-success:     #059669;
@@ -40,37 +50,53 @@
     --dax-warning-soft: color-mix(in srgb, var(--dax-warning) 16%, transparent);
     --dax-danger-soft:  color-mix(in srgb, var(--dax-danger)  12%, transparent);
     /* Tinta de los semánticos cuando el texto va ENCIMA de su propio tinte.
-       Sobre papel, --dax-success/--dax-warning no alcanzan AA a 14 px; estas
+       Sobre claro, --dax-success/--dax-warning no alcanzan AA a 14 px; estas
        versiones oscurecidas sí. En oscuro la tinta vuelve a ser el semántico,
        que ahí ya es la variante aclarada. */
     --dax-success-ink: #047857;
     --dax-warning-ink: #b45309;
-    --dax-accent-soft: color-mix(in srgb, var(--dax-accent) 12%, transparent);
-    /* Tinta del acento sobre fondos claros/teñidos. */
+    --dax-accent-soft: color-mix(in srgb, var(--dax-accent) 14%, transparent);
+    /* Tinta del acento sobre fondos claros/teñidos: el ember lleno no
+       alcanza contraste como texto, el quemado sí. */
     --dax-accent-text: #C2410C;
-    /* Texto/icono encima del acento: blanco sobre el quemado (claro), tinta
-       sobre el ámbar (oscuro). */
-    --dax-on-accent:   #ffffff;
-    --dax-violet-glow: rgba(194, 65, 12, 0.07);   /* nombre histórico: hoy es el resplandor cálido */
-    --dax-border:      #DDD6CE;
-    --dax-border-dim:  #E8E2DA;
-    --dax-text:        #0A0908;
-    --dax-text-muted:  #5C554F;
-    --dax-text-faint:  #7A726B;
-    --dax-shadow:      0 1px 2px rgba(42,32,24,0.05), 0 6px 24px rgba(42,32,24,0.07);
-    --dax-shadow-lg:   0 10px 36px rgba(42,32,24,0.12);
-    --dax-modal-backdrop:  rgba(20, 16, 12, 0.45);
-    --dax-row-border:      rgba(42, 32, 24, 0.10);
-    --dax-elevated:        rgba(42, 32, 24, 0.04);
-    /* Botón primario del kit: píldora de tinta (Horizon). */
-    --dax-btn-bg:      #0A0908;
-    --dax-btn-fg:      #F6F3EF;
-    --dax-btn-bg-hover:#2B2724;
-    /* Luz ambiental del lienzo y grano. En claro (Paper) apenas un resplandor,
-       sin grano. */
-    --dax-ambiente:    radial-gradient(60rem 34rem at 92% -10%, rgba(194, 65, 12, 0.07), transparent 62%);
-    --dax-grano:       none;
-    --dax-barra:       rgba(246, 243, 239, 0.86);   /* cabecera translúcida */
+    /* Texto/icono encima del acento: tinta índigo sobre el ember (claro),
+       tinta negra sobre el ámbar (oscuro). */
+    --dax-on-accent:   #17162B;
+    --dax-violet-glow: rgba(46, 43, 95, 0.08);
+    --dax-border:      #D3D3DE;
+    --dax-border-dim:  #DFDFE8;
+    --dax-text:        #17162B;   /* tinta índigo */
+    --dax-text-muted:  #55546B;
+    --dax-text-faint:  #6B6A82;
+    --dax-shadow:      0 1px 2px rgba(23,22,43,0.05), 0 6px 24px rgba(23,22,43,0.08);
+    --dax-shadow-lg:   0 10px 36px rgba(23,22,43,0.14);
+    --dax-modal-backdrop:  rgba(23, 22, 43, 0.45);
+    --dax-row-border:      rgba(23, 22, 43, 0.10);
+    --dax-elevated:        rgba(23, 22, 43, 0.045);
+    --dax-panel:           rgba(23, 22, 43, 0.05);
+    /* Botón primario del kit: píldora de tinta índigo. */
+    --dax-btn-bg:      #17162B;
+    --dax-btn-fg:      #F4F4F8;
+    --dax-btn-bg-hover:#2E2B5F;
+    /* Luz ambiental del lienzo: ember arriba a la derecha, índigo abajo a
+       la izquierda y un velo de bruma. Con grano. */
+    --dax-ambiente:
+      radial-gradient(56rem 32rem at 96% -12%, rgba(242, 98, 42, 0.20), transparent 62%),
+      radial-gradient(48rem 30rem at -10% 110%, rgba(46, 43, 95, 0.20), transparent 62%),
+      radial-gradient(40rem 24rem at 60% 115%, rgba(123, 134, 198, 0.18), transparent 65%);
+    --dax-grano:       url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    --dax-barra:       rgba(236, 236, 240, 0.86);   /* cabecera translúcida */
+    /* Tarjeta protagonista: el ember se funde en índigo. */
+    --dax-ember-grad:  radial-gradient(120% 95% at 22% 112%, #FFB37A 0%, #F2622A 34%, #4A3A7A 72%, #1F1D42 100%);
+    /* Cobro en el POS: un color por método, todos de la paleta. */
+    --dax-pago-efectivo:    #F2622A;
+    --dax-pago-efectivo-fg: #17162B;
+    --dax-pago-tarjeta:     #2E2B5F;
+    --dax-pago-tarjeta-fg:  #F4F4F8;
+    --dax-pago-transfer:    #7B86C6;
+    --dax-pago-transfer-fg: #17162B;
+    --dax-pago-mixto:       linear-gradient(100deg, #F2622A 0%, #B04A6A 48%, #2E2B5F 100%);
+    --dax-pago-mixto-fg:    #F4F4F8;
 
     /* ── PLATFORM (SUPERADMIN) — v2 mono-acento azul, dark profundo ── */
     --p-bg:        #050505;   /* página */
@@ -127,25 +153,6 @@
     --sb-active-line: color-mix(in srgb, var(--p-accent) 48%, transparent);
     --sb-glow:        color-mix(in srgb, var(--p-accent) 42%, transparent);
     --sb-logo-grad:   linear-gradient(135deg, var(--p-accent) 0%, var(--p-accent-hover) 100%);
-
-    /* ── Identidad por módulo del sidebar (port Rmazh) ──
-       Cada grupo de la navegación tiene su matiz: el ítem activo lo usa para
-       el riel lateral, el resplandor y el relleno del gradiente. Son tokens,
-       no hex sueltos en el TSX, para que el matiz se ajuste en un solo lugar.
-       INVARIANTES entre temas: el sidebar es oscuro en claro y en oscuro
-       (--sb-bg no cambia de familia), así que un solo juego alcanza. */
-    /* Atlas Horizon (2026-11-18): acento único. Los nombres se conservan
-       porque navConfig.ts los referencia, pero todos valen el mismo ámbar. */
-    --sb-mod-violet: #FF8A4C;
-    --sb-mod-green:  #FF8A4C;
-    --sb-mod-blue:   #FF8A4C;
-    --sb-mod-amber:  #FF8A4C;
-    --sb-mod-rose:   #FF8A4C;
-    --sb-mod-cyan:   #FF8A4C;
-    --sb-mod-indigo: #FF8A4C;
-    --sb-mod-orange: #FF8A4C;
-    --sb-mod-teal:   #FF8A4C;
-    --sb-mod-slate:  #A8A29A;
   }
 
   /* ── Color por preset: RETIRADO (2026-11-18) ──
@@ -185,6 +192,7 @@
     --dax-modal-backdrop:  rgba(0, 0, 0, 0.72);
     --dax-row-border:      rgba(255, 255, 255, 0.10);
     --dax-elevated:        rgba(255, 255, 255, 0.05);
+    --dax-panel:           rgba(255, 255, 255, 0.025);
     --dax-btn-bg:      #F5F2EE;
     --dax-btn-fg:      #050505;
     --dax-btn-bg-hover:#FFFFFF;
@@ -193,6 +201,20 @@
       radial-gradient(52rem 30rem at -8% 112%, rgba(122, 36, 10, 0.38), transparent 60%);
     --dax-grano:       url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
     --dax-barra:       rgba(5, 5, 5, 0.72);
+    --dax-indigo:      #5B58B8;
+    --dax-lavanda:     #9AA6E0;
+    --dax-bruma:       #C9DBEA;
+    --dax-coral:       #F0646A;
+    --dax-grafica-apoyo: #565C8F;   /* lavanda apagada: sobre negro la llena le gana al ámbar */
+    --dax-ember-grad:  radial-gradient(120% 90% at 30% 110%, #FFB061 0%, #FF6A1F 35%, #8A2B0C 70%, #2A0E05 100%);
+    --dax-pago-efectivo:    #FF6A1F;
+    --dax-pago-efectivo-fg: #050505;
+    --dax-pago-tarjeta:     #4A47A3;
+    --dax-pago-tarjeta-fg:  #F5F2EE;
+    --dax-pago-transfer:    #9AA6E0;
+    --dax-pago-transfer-fg: #050505;
+    --dax-pago-mixto:       linear-gradient(100deg, #FF6A1F 0%, #B04A6A 48%, #4A47A3 100%);
+    --dax-pago-mixto-fg:    #F5F2EE;
 
     --sb-bg:          #000000;
     --sb-border:      rgba(255, 255, 255, 0.10);
@@ -245,7 +267,7 @@
   ::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--dax-text-faint) 45%, transparent); border-radius: 9999px; }
   ::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--dax-accent) 60%, transparent); }
 
-  /* Grano de película (solo oscuro; en claro --dax-grano es none). Va detrás
+  /* Grano de película (en claro y en oscuro). Va detrás
      del contenido: z-index negativo sobre el fondo del lienzo. */
   body::before {
     content: "";
@@ -351,7 +373,7 @@
   .dax-card {
     background: var(--dax-card);
     border: 1px solid var(--dax-border-dim);
-    border-radius: 18px;
+    border-radius: 22px;
     -webkit-backdrop-filter: blur(20px);
     backdrop-filter: blur(20px);
     box-shadow: var(--dax-shadow);
@@ -361,6 +383,104 @@
     border-color: var(--dax-border);
     box-shadow: var(--dax-shadow-lg);
   }
+
+  /* ─── Panel: el nivel intermedio entre el fondo y la tarjeta. Agrupa
+     tarjetas que responden a un mismo tema; no lleva sombra ni vidrio para
+     que las tarjetas de adentro sigan siendo lo que resalta. ─── */
+  .dax-panel {
+    background: var(--dax-panel);
+    border: 1px solid var(--dax-border-dim);
+    border-radius: 28px;
+    padding: 1rem;
+  }
+  @media (min-width: 640px) { .dax-panel { padding: 1.25rem; } }
+  .dax-panel-titulo {
+    font-size: 1.0625rem;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+    color: var(--dax-text);
+  }
+
+  /* ─── Título de pantalla (Horizon: ligero y grande, nunca pesado) ─── */
+  .dax-titulo-pagina {
+    font-size: 1.75rem;
+    font-weight: 300;
+    letter-spacing: -0.035em;
+    line-height: 1.05;
+    color: var(--dax-text);
+  }
+  @media (min-width: 768px) { .dax-titulo-pagina { font-size: 2.25rem; } }
+
+  /* ── Cobro en el POS ───────────────────────────────────────────
+     Un color por método, todos de la paleta de marca: ember (efectivo),
+     índigo (tarjeta), lavanda (transferencia) y ember→índigo (mixto). */
+  .pos-pago {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.25rem;
+    min-height: 60px; padding: 0 0.5rem;
+    border-radius: 22px; border: 1px solid transparent;
+    font-size: 0.875rem; font-weight: 500;
+    transition: filter 0.15s ease, transform 0.1s ease;
+  }
+  .pos-pago:hover:not(:disabled) { filter: brightness(1.08); }
+  .pos-pago:active:not(:disabled) { transform: scale(0.98); }
+  .pos-pago:focus-visible { outline: 2px solid var(--dax-text); outline-offset: 2px; }
+  .pos-pago:disabled { opacity: 0.3; cursor: not-allowed; }
+  .pos-pago-efectivo { background: var(--dax-pago-efectivo); color: var(--dax-pago-efectivo-fg); }
+  .pos-pago-tarjeta  { background: var(--dax-pago-tarjeta);  color: var(--dax-pago-tarjeta-fg); }
+  .pos-pago-transfer { background: var(--dax-pago-transfer); color: var(--dax-pago-transfer-fg); }
+  .pos-pago-mixto    { background: var(--dax-pago-mixto);    color: var(--dax-pago-mixto-fg); }
+
+  /* ── Menú lateral ──────────────────────────────────────────────
+     Lista sobria: un solo acento. El ítem activo es una píldora teñida de
+     ember con el icono en ember; el resto queda neutro. El menú es oscuro
+     en los dos temas, así que estos valores no cambian con el tema. */
+  .sb-item {
+    display: flex; align-items: center; gap: 0.75rem;
+    min-height: 40px; padding: 0 0.875rem;
+    border-radius: 999px;
+    font-size: 13px; font-weight: 400; line-height: 1.2;
+    color: var(--sb-text); text-decoration: none;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  @media (pointer: coarse) { .sb-item { min-height: 44px; } }
+  .sb-item:hover { background: var(--sb-hover-bg); color: var(--sb-text-hover); }
+  .sb-item:focus-visible { outline: 2px solid var(--p-accent); outline-offset: 2px; }
+  .sb-item[aria-current='page'] {
+    background: color-mix(in srgb, var(--p-accent) 18%, transparent);
+    color: var(--sb-text-hover); font-weight: 500;
+  }
+  .sb-item-icono {
+    width: 18px; flex-shrink: 0; text-align: center; font-size: 15px;
+    color: rgba(255, 255, 255, 0.5);
+    transition: color 0.15s ease;
+  }
+  .sb-item:hover .sb-item-icono { color: rgba(255, 255, 255, 0.8); }
+  .sb-item[aria-current='page'] .sb-item-icono { color: var(--p-accent); }
+  .sb-item-rotulo { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sb-item-aviso {
+    min-width: 20px; height: 20px; padding: 0 6px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 999px; font-size: 10px; font-weight: 600;
+    background: var(--p-accent); color: var(--sb-bg);
+  }
+  /* Variante del riel contraído: solo icono, redonda. */
+  .sb-item-riel { position: relative; width: 40px; height: 40px; min-height: 0; padding: 0; margin: 0 auto 2px; justify-content: center; }
+  .sb-item-riel .sb-item-aviso { position: absolute; top: -2px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; font-size: 9px; }
+  .sb-seccion {
+    margin: 0 0.875rem 0.375rem;
+    font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.2em;
+    color: rgba(168, 162, 154, 0.6);
+  }
+  .sb-boton {
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    border-radius: 999px; cursor: pointer;
+    background: transparent; border: 1px solid rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.6);
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+  .sb-boton:hover { color: var(--sb-text-hover); background: var(--sb-hover-bg); }
+  .sb-boton:focus-visible { outline: 2px solid var(--p-accent); outline-offset: 2px; }
 
   /* ─── Botones: `dax-btn-primary` / `-secondary` / `-danger` / `-ghost` son
      la API oficial del kit (+ `dax-btn-icon` para solo-icono en teléfono).
@@ -471,36 +591,42 @@
     box-shadow: 0 0 0 3px var(--dax-accent-glow);
   }
 
-  /* ─── Tabla ─────────────────────────────────────── */
+  /* ─── Tabla ───────────────────────────────────────
+     Encabezado como rótulo (sin fondo), filas con aire y una regla tenue.
+     El resalte al pasar es neutro: el naranja queda para el dato clave. */
   .dax-table { width: 100%; border-collapse: collapse; }
   .dax-table th {
-    font-size: 0.625rem;
+    font-size: 0.6875rem;
     font-weight: 500;
     color: var(--dax-text-faint);
     text-transform: uppercase;
-    letter-spacing: 0.16em;
-    padding: 0.75rem 1rem;
+    letter-spacing: 0.14em;
+    padding: 0.875rem 1.25rem 0.75rem;
     border-bottom: 1px solid var(--dax-border-dim);
-    background: var(--dax-surface);
     text-align: left;
     white-space: nowrap;
-    transition: background 0.25s ease;
   }
   .dax-table td {
-    padding: 0.75rem 1rem;
+    padding: 0.875rem 1.25rem;
     font-size: 0.8125rem;
     color: var(--dax-text-muted);
     border-bottom: 1px solid var(--dax-border-dim);
+    font-variant-numeric: tabular-nums;
     transition: background 0.15s ease;
   }
-  .dax-table tr:hover td { background: var(--dax-accent-glow); }
+  .dax-table tbody tr:hover td { background: var(--dax-elevated); }
   .dax-table tr:last-child td { border-bottom: none; }
+  /* Tabla compacta (detalle dentro de un modal o tarjeta chica). */
+  .dax-table.text-xs th, .dax-table.text-xs td { padding: 0.625rem 0.875rem; }
 
-  /* ─── Badges ─────────────────────────────────────── */
+  /* ─── Píldoras de estado ──────────────────────────
+     Punto + texto del color del estado sobre su propio tinte. Los colores
+     salen de los tokens, así que contrastan en claro y en oscuro. */
   .dax-badge {
     display: inline-flex;
     align-items: center;
-    padding: 0.15rem 0.6rem;
+    gap: 0.375rem;
+    padding: 0.2rem 0.625rem;
     border-radius: 9999px;
     font-family: var(--font-mono);
     font-size: 0.625rem;
@@ -508,12 +634,21 @@
     text-transform: uppercase;
     letter-spacing: 0.06em;
     white-space: nowrap;
+    background: color-mix(in srgb, currentColor 13%, transparent);
   }
-  .dax-badge-green  { background: rgba(52,211,153,0.12); color: #34d399; border: 1px solid rgba(52,211,153,0.25); }
-  .dax-badge-red    { background: rgba(251,113,133,0.12); color: #fb7185; border: 1px solid rgba(251,113,133,0.25); }
-  .dax-badge-yellow { background: rgba(251,191,36,0.12);  color: #fbbf24; border: 1px solid rgba(251,191,36,0.25); }
-  .dax-badge-blue   { background: var(--dax-accent-soft); color: var(--dax-accent-text); border: 1px solid color-mix(in srgb, var(--dax-accent) 32%, transparent); }
-  .dax-badge-slate  { background: rgba(100,116,139,0.12); color: var(--dax-text-muted); border: 1px solid var(--dax-border-dim); }
+  .dax-badge::before {
+    content: '';
+    width: 0.375rem; height: 0.375rem; flex-shrink: 0;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .dax-badge-green  { color: var(--dax-success-ink); }
+  .dax-badge-red    { color: var(--dax-danger); }
+  .dax-badge-yellow { color: var(--dax-warning-ink); }
+  .dax-badge-blue   { color: var(--dax-accent-text); }
+  .dax-badge-slate  { color: var(--dax-text-muted); background: var(--dax-elevated); }
+  /* Etiqueta informativa (método de pago, categoría): sin punto de estado. */
+  .dax-badge-slate::before { content: none; }
 
   /* ─── Tipografía corporativa ────────────────────── */
   .dax-section-title {
@@ -537,6 +672,50 @@
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.045em;
     color: var(--dax-text);
+  }
+  /* La cifra se encoge para caber en su tarjeta: KpiCard pasa el largo del
+     texto en --kpi-largo y el ancho sale de la propia tarjeta (cqi), así que
+     funciona igual en una rejilla de 6 que en una de 2. Nunca crece de 1.9rem;
+     si ni al mínimo cabe, parte renglón en vez de salirse. */
+  .dax-kpi { container-type: inline-size; }
+  /* Icono de la cifra: círculo neutro; el color lo lleva la tarjeta, no el icono. */
+  .dax-kpi-icono {
+    width: 1.75rem; height: 1.75rem; flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 999px;
+    background: var(--dax-elevated);
+    border: 1px solid var(--dax-border-dim);
+    color: var(--dax-text-muted);
+    font-size: 0.7rem;
+  }
+  /* Píldora de la variación (▲ 12 %). El color de la letra lo pone el <p>. */
+  .dax-kpi-pildora {
+    display: inline-flex; align-items: center; gap: 0.2rem;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, currentColor 14%, transparent);
+    font-weight: 500;
+  }
+  /* Tarjeta protagonista (card ember de Horizon): una por pantalla. Es igual
+     en claro y en oscuro: es la luz de la marca, no una superficie del tema. */
+  .dax-kpi-ember,
+  .dax-kpi-ember:hover {
+    background: var(--dax-ember-grad);
+    border-color: rgba(255, 190, 140, 0.35);
+    color: #FFF4EA;
+  }
+  .dax-kpi-ember .dax-kpi-label { color: rgba(255, 244, 234, 0.78); }
+  .dax-kpi-ember .dax-kpi-value { color: #FFF4EA; }
+  .dax-kpi-ember .dax-kpi-icono {
+    background: rgba(5, 5, 5, 0.22);
+    border-color: rgba(255, 230, 210, 0.3);
+    color: #FFF4EA;
+  }
+  .dax-kpi-ember .dax-kpi-ember-texto { color: rgba(255, 244, 234, 0.82); }
+  .dax-kpi-ember .dax-kpi-pildora { background: rgba(5, 5, 5, 0.28); }
+  .dax-kpi .dax-kpi-value {
+    font-size: clamp(0.95rem, calc(100cqi / (var(--kpi-largo, 8) * 0.6)), 1.9rem);
+    overflow-wrap: anywhere;
   }
 
   /* Tap target móvil — se aplica por pantalla a los botones de solo icono.

@@ -3,8 +3,8 @@ import { formatCurrency } from '../../utils/currency'
 
 /**
  * SalesHeatmap — rejilla día de la semana × hora (spec 2026-10-23 §3.2),
- * pintada con el verde del tema: la intensidad es `amount / max` en cinco
- * escalones de `color-mix(var(--dax-success) N%)`, así se repinta sola en
+ * pintada con el acento del tema (un solo tono, de claro a lleno): la intensidad es `amount / max` en cinco
+ * escalones de `color-mix(var(--dax-accent) N%)`, así se repinta sola en
  * claro y oscuro. Convención de PostgreSQL: day 0 = domingo … 6 = sábado;
  * aquí el lunes va arriba. La ventana de horas la decide quien llama
  * (`recortarHoras` del kit); por defecto 9..21.
@@ -27,7 +27,7 @@ const WEEK_LABELS = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
 const WEEK_CORTO = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 const WEEK_LONG = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
 
-/** Porcentaje del verde del tema por escalón (0 = sin venta). */
+/** Porcentaje del acento del tema por escalón (0 = sin venta). */
 export const INTENSIDAD = [0, 20, 40, 60, 80, 100]
 
 export function escalon(ratio: number): number {
@@ -39,7 +39,7 @@ export function escalon(ratio: number): number {
   return 5
 }
 
-const fondo = (pct: number) => `color-mix(in srgb, var(--dax-success) ${pct}%, transparent)`
+const fondo = (pct: number) => `color-mix(in srgb, var(--dax-accent) ${pct}%, transparent)`
 
 export function SalesHeatmap({ data, hourStart = 9, hourEnd = 21 }: Props) {
   const hours = useMemo(
@@ -67,14 +67,14 @@ export function SalesHeatmap({ data, hourStart = 9, hourEnd = 21 }: Props) {
             <tr>
               <th className="w-6" />
               {hours.map((h) => (
-                <th key={h} className="text-[9px] font-mono font-bold text-dax-faint text-center">{h}</th>
+                <th key={h} className="text-[9px] font-mono font-medium text-dax-faint text-center">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {WEEK_ORDER_PG.map((pgDay, rowIdx) => (
               <tr key={pgDay}>
-                <td className="text-[10px] font-bold text-dax-muted pr-1 w-6 text-right align-middle">{WEEK_LABELS[rowIdx]}</td>
+                <td className="text-[10px] font-medium text-dax-muted pr-1 w-6 text-right align-middle">{WEEK_LABELS[rowIdx]}</td>
                 {hours.map((h) => {
                   const c = cells.get(`${pgDay}-${h}`)
                   const amt = c?.amount ?? 0
@@ -102,20 +102,20 @@ export function SalesHeatmap({ data, hourStart = 9, hourEnd = 21 }: Props) {
       </div>
 
       <div className="mt-3 flex items-center justify-end gap-1.5">
-        <span className="text-[9px] font-bold uppercase tracking-wider text-dax-faint">Menos</span>
+        <span className="text-[9px] font-medium uppercase tracking-wider text-dax-faint">Menos</span>
         {INTENSIDAD.map((pct) => (
           <div key={pct} className={`h-2 w-4 rounded-sm ${pct === 0 ? 'bg-dax-elevated' : ''}`}
             style={pct > 0 ? { background: fondo(pct) } : undefined} /* estilo dinámico: la leyenda repite los escalones */ />
         ))}
-        <span className="text-[9px] font-bold uppercase tracking-wider text-dax-faint">Más</span>
+        <span className="text-[9px] font-medium uppercase tracking-wider text-dax-faint">Más</span>
       </div>
 
       {hover && (
         <div role="tooltip" className="pointer-events-none absolute top-0 right-0 bg-dax-card border border-dax-border rounded-lg px-3 py-2 shadow-lg z-10">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-dax-success">
+          <p className="text-[10px] font-medium uppercase tracking-wider text-dax-accent-text">
             {WEEK_LONG[hover.dayIdx]} · {hover.hour}:00
           </p>
-          <p className="text-sm font-black tabular-nums text-dax-text">{formatCurrency(hover.amount)}</p>
+          <p className="text-sm font-medium tabular-nums text-dax-text">{formatCurrency(hover.amount)}</p>
           <p className="text-[10px] text-dax-muted">{hover.tickets} {hover.tickets === 1 ? 'ticket' : 'tickets'}</p>
         </div>
       )}

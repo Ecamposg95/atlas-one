@@ -195,7 +195,7 @@ export function Reportes({ conSucursales = false }: { conSucursales?: boolean })
   return (
     <div className="space-y-5">
       <CabeceraPagina
-        titulo={<h1 className="text-2xl font-black text-dax-text">Reportes</h1>}
+        titulo={<h1 className="dax-titulo-pagina">Reportes</h1>}
         descripcion="Periodos y comparativos contra el periodo anterior. Lo de hoy está en el Inicio."
         // El CSV es de oficina: el endpoint trata al gerente como HQ, así que `/reports` no lo ofrece.
         acciones={conSucursales ? (
@@ -252,16 +252,16 @@ export function Reportes({ conSucursales = false }: { conSucursales?: boolean })
         <>
           {/* Cifras del periodo con variación contra el anterior */}
           <div className={`grid grid-cols-1 sm:grid-cols-2 ${conUtilidad ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-3`}>
-            <KpiCard etiqueta="Venta neta" valor={formatCurrency(k.sales)} detalle={etiquetaPeriodo}
+            <KpiCard destacada icono="fa-sack-dollar" etiqueta="Venta neta" valor={formatCurrency(k.sales)} detalle={etiquetaPeriodo}
               variacion={variacion(k.sales, k.prev_sales ?? 0, 'vs periodo anterior')} data-testid="kpi-venta" />
-            <KpiCard etiqueta="Tickets" valor={String(k.orders)}
+            <KpiCard icono="fa-receipt" etiqueta="Tickets" valor={String(k.orders)}
               variacion={variacion(k.orders, k.prev_orders ?? 0, 'vs periodo anterior')} data-testid="kpi-tickets" />
-            <KpiCard etiqueta="Ticket promedio" valor={formatCurrency(k.avg_ticket)}
+            <KpiCard icono="fa-scale-balanced" etiqueta="Ticket promedio" valor={formatCurrency(k.avg_ticket)}
               variacion={variacion(k.avg_ticket, k.prev_avg_ticket ?? 0, 'vs periodo anterior')} data-testid="kpi-promedio" />
-            <KpiCard etiqueta="Devoluciones" valor={formatCurrency(k.returns ?? 0)} detalle={plural(k.returns_count ?? 0, 'devolución', 'devoluciones')}
+            <KpiCard icono="fa-rotate-left" etiqueta="Devoluciones" valor={formatCurrency(k.returns ?? 0)} detalle={plural(k.returns_count ?? 0, 'devolución', 'devoluciones')}
               variacion={variacion(k.returns ?? 0, k.prev_returns ?? 0, 'vs periodo anterior', true)} data-testid="kpi-devoluciones" />
             {conUtilidad && (
-              <KpiCard etiqueta="Utilidad bruta" valor={formatCurrency(k.gross_profit as number)}
+              <KpiCard icono="fa-coins" etiqueta="Utilidad bruta" valor={formatCurrency(k.gross_profit as number)}
                 detalle={`sobre ${formatCurrency(conCosto)} con costo${(k.sales_without_cost ?? 0) > 0 ? ` · ${formatCurrency(k.sales_without_cost as number)} sin costo` : ''}`}
                 variacion={variacion(k.gross_profit as number, k.prev_gross_profit ?? 0, 'vs periodo anterior')} data-testid="kpi-utilidad" />
             )}
@@ -270,7 +270,7 @@ export function Reportes({ conSucursales = false }: { conSucursales?: boolean })
           {/* Tendencia (8) · Cómo me pagaron (4) */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
             <DaxCard className="lg:col-span-8">
-              <Titulo nota="El periodo anterior, en gris">¿Cómo fue cada día?</Titulo>
+              <Titulo nota="El periodo anterior, punteado">¿Cómo fue cada día?</Titulo>
               {data.charts.trend.data.length === 0 ? <Vacio>Sin ventas en el periodo.</Vacio> : (
                 <GraficaLinea etiquetas={etiquetasTendenciaDia} series={seriesTendencia} ariaLabel="Venta neta por día del periodo contra el periodo anterior" />
               )}
@@ -286,7 +286,7 @@ export function Reportes({ conSucursales = false }: { conSucursales?: boolean })
                     centro={(
                       <>
                         <span className="dax-kpi-label">Total</span>
-                        <span className="text-base font-black tabular-nums text-dax-text">{formatCurrency(totalMetodos)}</span>
+                        <span className="text-base font-medium tabular-nums text-dax-text">{formatCurrency(totalMetodos)}</span>
                       </>
                     )}
                   />
@@ -294,7 +294,7 @@ export function Reportes({ conSucursales = false }: { conSucursales?: boolean })
                     {metodos.map((m) => (
                       <li key={m.clave} data-testid="metodo" className="flex justify-between text-sm">
                         <span className="text-dax-muted">{m.nombre} <span className="text-dax-faint">· {plural(m.count, 'cobro', 'cobros')}</span></span>
-                        <span className="font-bold tabular-nums text-dax-text">{formatCurrency(m.total)}</span>
+                        <span className="font-medium tabular-nums text-dax-text">{formatCurrency(m.total)}</span>
                       </li>
                     ))}
                   </ul>
@@ -342,7 +342,7 @@ export function Reportes({ conSucursales = false }: { conSucursales?: boolean })
                   {sucursalesCc.map((b) => (
                     <li key={b.id} className="flex justify-between border-t border-dax-border-dim py-1">
                       <span className="text-dax-muted">{b.name}</span>
-                      <span className="font-bold tabular-nums text-dax-text">{formatCurrency(b.total_sales)}</span>
+                      <span className="font-medium tabular-nums text-dax-text">{formatCurrency(b.total_sales)}</span>
                     </li>
                   ))}
                 </ul>
@@ -380,7 +380,7 @@ export function Reportes({ conSucursales = false }: { conSucursales?: boolean })
                       <td className="py-1.5 text-dax-faint tabular-nums">{i + 1}</td>
                       <td className="py-1.5 text-dax-text">{p.name}</td>
                       <td className="py-1.5 text-right tabular-nums text-dax-muted">{piezas(p.qty)}</td>
-                      <td className="py-1.5 text-right tabular-nums font-bold text-dax-text">{formatCurrency(p.total ?? 0)}</td>
+                      <td className="py-1.5 text-right tabular-nums font-medium text-dax-text">{formatCurrency(p.total ?? 0)}</td>
                       <td className="py-1.5 pl-3">
                         <div className="h-1.5 rounded-full bg-dax-border-dim overflow-hidden">
                           <div className="h-full rounded-full bg-dax-accent"

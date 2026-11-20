@@ -890,11 +890,10 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                 setEditingGlobalDisc(true)
                 setGlobalDiscInput(String(globalDiscount || 0))
               }}
-              className="rounded-lg px-2.5 py-2 bg-amber-500 border border-amber-400 hover:bg-amber-600 transition-colors text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm"
-              style={{ color: '#fff' }}
+              className="rounded-full px-3 py-2 border transition-colors text-xs font-medium flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed bg-dax-warning-soft border-dax-warning text-dax-text"
               title={`Descuento global -${globalDiscount}% (${formatCurrency(globalDiscountAmount)})`}
             >
-              <i className="fa-solid fa-tag text-[10px]" style={{ color: '#fff' }} aria-hidden="true" />
+              <i className="fa-solid fa-tag text-[10px] text-dax-muted" aria-hidden="true" />
               <span className="truncate">Desc. -{globalDiscount}%</span>
             </button>
           ) : (
@@ -904,11 +903,10 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                 setGlobalDiscInput(String(globalDiscount || 0))
               }}
               disabled={cart.length === 0}
-              className="rounded-lg px-2.5 py-2 bg-amber-500/70 border border-amber-400 hover:bg-amber-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm"
-              style={{ color: '#fff' }}
+              className="rounded-full px-3 py-2 border transition-colors text-xs font-medium flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed bg-dax-card border-dax-border text-dax-text hover:bg-dax-elevated"
               title="Aplicar descuento global al ticket"
             >
-              <i className="fa-solid fa-tag text-[10px]" style={{ color: '#fff' }} aria-hidden="true" />
+              <i className="fa-solid fa-tag text-[10px] text-dax-muted" aria-hidden="true" />
               <span className="truncate">Descuento global</span>
             </button>
           ))}
@@ -940,21 +938,19 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
                   }
                 }}
                 disabled={cart.length === 0}
-                className="rounded-lg px-2.5 py-2 bg-indigo-500/70 border border-indigo-400 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm"
-                style={{ color: '#fff' }}
+                className="rounded-full px-3 py-2 border transition-colors text-xs font-medium flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed bg-dax-card border-dax-border text-dax-text hover:bg-dax-elevated"
                 title="Aplica precio caja a todos los productos del carrito que tengan tier caja configurado y cantidad suficiente. Sobreescribe precios manuales."
               >
-                <i className="fa-solid fa-box text-[10px]" style={{ color: '#fff' }} aria-hidden="true" />
+                <i className="fa-solid fa-box text-[10px] text-dax-muted" aria-hidden="true" />
                 <span className="truncate">Aplicar caja</span>
               </button>
             ) : (
               <button
                 onClick={() => restoreAutoTier()}
-                className="rounded-lg px-2.5 py-2 bg-emerald-500 border border-emerald-400 hover:bg-emerald-600 transition-colors text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm"
-                style={{ color: '#fff' }}
+                className="rounded-full px-3 py-2 border transition-colors text-xs font-medium flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed bg-dax-success-soft border-dax-success text-dax-text"
                 title={`Caja aplicada en ${appliedCount}/${totalCount} — clic para restaurar`}
               >
-                <i className="fa-solid fa-box text-[10px]" style={{ color: '#fff' }} aria-hidden="true" />
+                <i className="fa-solid fa-box text-[10px] text-dax-muted" aria-hidden="true" />
                 <span className="truncate">Caja {appliedCount}/{totalCount}</span>
               </button>
             )
@@ -1028,26 +1024,14 @@ export function CartPanel({ onPay, onPark, customerName, onClearCustomer, sessio
         {/* `< sm`: 2×2 (con cuatro columnas "Transfer." se cortaba en 76 px).
             `≥ sm`: el reparto 1.4/1/1/1 de siempre. */}
         <div className="grid gap-2 grid-cols-2 sm:[grid-template-columns:1.4fr_1fr_1fr_1fr]">
-          <button onClick={() => onPay('CASH')} disabled={isEmpty}
-            className="flex flex-col items-center justify-center gap-1 min-h-[56px] px-2 rounded-2xl bg-dax-accent text-dax-on-accent font-bold shadow-lg shadow-black/10 hover:brightness-110 transition disabled:opacity-30 disabled:cursor-not-allowed">
-            <i className="fa-solid fa-money-bill text-xl" aria-hidden="true" />
-            <span className="text-sm font-bold">Efectivo</span>
-          </button>
-          <button onClick={() => onPay('CARD')} disabled={isEmpty}
-            className="flex flex-col items-center justify-center gap-1 min-h-[56px] px-2 rounded-2xl bg-dax-elevated text-dax-text font-semibold border border-dax-border hover:brightness-95 dark:hover:brightness-125 transition disabled:opacity-30 disabled:cursor-not-allowed">
-            <i className="fa-solid fa-credit-card text-xl" aria-hidden="true" />
-            <span className="text-sm">Tarjeta</span>
-          </button>
-          <button onClick={() => onPay('TRANSFER')} disabled={isEmpty}
-            className="flex flex-col items-center justify-center gap-1 min-h-[56px] px-2 rounded-2xl bg-dax-elevated text-dax-text font-semibold border border-dax-border hover:brightness-95 dark:hover:brightness-125 transition disabled:opacity-30 disabled:cursor-not-allowed">
-            <i className="fa-solid fa-mobile-screen text-xl" aria-hidden="true" />
-            <span className="text-sm">Transfer.</span>
-          </button>
-          <button onClick={() => onPay('MIXED')} disabled={isEmpty}
-            className="flex flex-col items-center justify-center gap-1 min-h-[56px] px-2 rounded-2xl bg-dax-elevated text-dax-text font-semibold border border-dax-border hover:brightness-95 dark:hover:brightness-125 transition disabled:opacity-30 disabled:cursor-not-allowed">
-            <i className="fa-solid fa-layer-group text-xl" aria-hidden="true" />
-            <span className="text-sm">Mixto</span>
-          </button>
+          {/* Las clases van completas (no armadas con plantilla) para que Tailwind no las purgue. */}
+          {([['CASH', 'pos-pago-efectivo', 'fa-money-bill', 'Efectivo'], ['CARD', 'pos-pago-tarjeta', 'fa-credit-card', 'Tarjeta'],
+            ['TRANSFER', 'pos-pago-transfer', 'fa-mobile-screen', 'Transfer.'], ['MIXED', 'pos-pago-mixto', 'fa-layer-group', 'Mixto']] as const).map(([metodo, clase, icono, rotulo]) => (
+            <button key={metodo} type="button" onClick={() => onPay(metodo)} disabled={isEmpty} className={`pos-pago ${clase}`}>
+              <i className={`fa-solid ${icono} text-lg`} aria-hidden="true" />
+              <span>{rotulo}</span>
+            </button>
+          ))}
         </div>
       </div>
 

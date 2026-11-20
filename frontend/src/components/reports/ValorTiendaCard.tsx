@@ -38,7 +38,7 @@ export function ValorTiendaCard({
 
   return (
     <section
-      className="dax-card p-5 rounded-2xl border-t-2 border-t-dax-accent relative overflow-hidden"
+      className="dax-card p-5 relative overflow-hidden"
       aria-label="Valor de la tienda"
       data-testid="valor-tienda"
     >
@@ -55,7 +55,7 @@ export function ValorTiendaCard({
       ) : (
         <>
           <p className="dax-kpi-label">{etiquetaPrincipal}</p>
-          <h2 className="text-2xl md:text-3xl font-bold text-dax-text tabular-nums" data-testid="valor-principal">
+          <h2 className="dax-kpi-value mt-1" data-testid="valor-principal">
             {formatCurrency(principal)}
           </h2>
           <div className="mt-1 flex flex-wrap justify-between gap-x-3 gap-y-1 text-xs font-mono">

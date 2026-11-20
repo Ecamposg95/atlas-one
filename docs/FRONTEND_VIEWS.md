@@ -16,7 +16,7 @@
 ### Routing (`App.tsx`)
 Tres árboles bajo `<BrowserRouter>`:
 1. **`/login`** — público (`Login.tsx`).
-2. **`/` (App shell)** — envuelto en `Layout` (sidebar + topbar) tras auth. Aquí viven casi todas las vistas operativas. Incluye `/hq/*`, `/mobile/*`, y el resto de rutas planas.
+2. **`/` (App shell)** — envuelto en `Layout` (sidebar; en teléfono, una barra delgada que abre el menú) tras auth. Aquí viven casi todas las vistas operativas. Incluye `/hq/*`, `/mobile/*`, y el resto de rutas planas.
 3. **`/platform/*`** — panel super-admin, envuelto en `PlatformLayout` (sidebar propia), gate SUPERADMIN.
 
 `RoleHomeRedirect` (index de `/`) decide el landing por rol/preset: gastro → `/home`; sin preset Atlas One → `/hq/operations`. El **login** enruta directamente: SUPERADMIN→`/platform/metrics`, VENDEDOR/SOPORTE→`/mobile/dashboard`, CAJERO/GERENTE→`/atlas-pos`, CLIENTE→`/portal`, Admin/Dueño→`/`.

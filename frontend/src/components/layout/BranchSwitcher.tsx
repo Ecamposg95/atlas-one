@@ -10,7 +10,11 @@ interface Branch {
   branch_type: string
 }
 
-export function BranchSwitcher() {
+/**
+ * `enMenu`: variante para el menú lateral (botón a todo el ancho y lista
+ * anclada a la izquierda, que se abre hacia el contenido).
+ */
+export function BranchSwitcher({ enMenu = false }: { enMenu?: boolean } = {}) {
   const [open, setOpen] = useState(false)
   const [branches, setBranches] = useState<Branch[]>([])
   const [loading, setLoading] = useState(false)
@@ -73,16 +77,18 @@ export function BranchSwitcher() {
         style={{
           display: 'flex',
           alignItems: 'center',
+          justifyContent: enMenu ? 'center' : undefined,
+          width: enMenu ? '100%' : undefined,
           gap: '0.5rem',
           padding: '0.4rem 0.875rem',
-          background: 'var(--dax-card)',
-          border: '1px solid var(--dax-border)',
+          background: enMenu ? 'rgba(255,255,255,0.04)' : 'var(--dax-card)',
+          border: `1px solid ${enMenu ? 'rgba(255,255,255,0.08)' : 'var(--dax-border)'}`,
           borderRadius: '999px',
-          color: 'var(--dax-text)',
-          fontSize: '0.7rem',
-          fontWeight: 600,
-          textTransform: 'uppercase',
-          letterSpacing: '0.08em',
+          color: enMenu ? 'rgba(255,255,255,0.8)' : 'var(--dax-text)',
+          fontSize: enMenu ? '12px' : '0.7rem',
+          fontWeight: enMenu ? 400 : 600,
+          textTransform: enMenu ? undefined : 'uppercase',
+          letterSpacing: enMenu ? undefined : '0.08em',
           cursor: 'pointer',
           transition: 'all 0.2s',
         }}
@@ -91,12 +97,12 @@ export function BranchSwitcher() {
           ;(e.currentTarget as HTMLElement).style.color = 'var(--dax-accent-text)'
         }}
         onMouseLeave={e => {
-          ;(e.currentTarget as HTMLElement).style.borderColor = 'var(--dax-border)'
-          ;(e.currentTarget as HTMLElement).style.color = 'var(--dax-text)'
+          ;(e.currentTarget as HTMLElement).style.borderColor = enMenu ? 'rgba(255,255,255,0.08)' : 'var(--dax-border)'
+          ;(e.currentTarget as HTMLElement).style.color = enMenu ? 'rgba(255,255,255,0.8)' : 'var(--dax-text)'
         }}
       >
         <i className="fa-solid fa-shuffle" style={{ fontSize: '0.65rem', color: 'var(--dax-accent-text)' }} />
-        Sucursal
+        {enMenu ? 'Cambiar sucursal' : 'Sucursal'}
         <i className="fa-solid fa-chevron-down" style={{ fontSize: '0.55rem', color: 'var(--dax-text-faint)' }} />
       </button>
 
@@ -104,9 +110,10 @@ export function BranchSwitcher() {
         <div
           style={{
             position: 'absolute',
-            right: 0,
+            ...(enMenu ? { left: 0 } : { right: 0 }),
             top: 'calc(100% + 8px)',
             width: '260px',
+            maxWidth: 'calc(100vw - 32px)',
             background: 'var(--dax-card-solid)',
             border: '1px solid var(--dax-border)',
             borderRadius: '14px',

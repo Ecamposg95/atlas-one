@@ -205,10 +205,7 @@ function ReturnsAdminView() {
     <div className="space-y-5">
       <CabeceraPagina
         titulo={
-          <div className="flex items-center gap-3">
-            <i className="fa-solid fa-undo text-dax-accent-text text-xl" aria-hidden="true" />
-            <h1 className="text-2xl font-black text-dax-text">Devoluciones</h1>
-          </div>
+          <h1 className="dax-titulo-pagina">Devoluciones</h1>
         }
         acciones={
           <>
@@ -242,7 +239,7 @@ function ReturnsAdminView() {
           >
             {t === 'pending' ? 'Pendientes' : 'Historial'}
             {t === 'pending' && pending.length > 0 && (
-              <span role="img" aria-label={`${pending.length} por aprobar`} className="ml-1.5 rounded-full bg-dax-danger text-dax-on-accent text-[10px] font-black px-1.5 py-0.5">{pending.length}</span>
+              <span role="img" aria-label={`${pending.length} por aprobar`} className="ml-1.5 rounded-full bg-dax-danger text-dax-on-accent text-[10px] font-semibold px-1.5 py-0.5">{pending.length}</span>
             )}
           </button>
         ))}
@@ -316,18 +313,18 @@ function ReturnsAdminView() {
                 <tbody>
                   {items.map((r) => (
                     <tr key={r.id}>
-                      <td className="font-mono text-dax-accent-text text-xs">{returnLabel(r)}</td>
+                      <td className="font-mono text-dax-accent-text text-xs whitespace-nowrap">{returnLabel(r)}</td>
                       {muestraSucursal && <td className="text-xs text-dax-muted">{returnBranchName(r) ?? '—'}</td>}
-                      <td className="text-sm">{returnRequestedBy(r)}</td>
-                      <td className="text-xs text-dax-muted">{fechaCorta(r.created_at)}</td>
+                      <td className="text-sm text-dax-text">{returnRequestedBy(r)}</td>
+                      <td className="text-xs text-dax-muted whitespace-nowrap">{fechaCorta(r.created_at)}</td>
                       <td className="text-xs max-w-[160px] truncate">{r.reason}</td>
-                      <td className="text-right font-semibold text-dax-danger">{formatCurrency(r.total_refunded)}</td>
+                      <td className="text-right text-sm font-medium text-dax-text whitespace-nowrap">{formatCurrency(r.total_refunded)}</td>
                       <td>{badgeEstado(r.status)}</td>
                       <td>
                         <button
                           type="button"
                           onClick={() => setSelected(r)}
-                          className="dax-btn-icon text-dax-muted hover:text-dax-text text-xs"
+                          className="dax-btn-ghost dax-btn-icon !p-0 w-8 h-8 justify-center text-xs"
                           aria-label={`Ver detalle de ${returnLabel(r)}`}
                         >
                           <i className="fa-solid fa-eye" aria-hidden="true" />
@@ -391,7 +388,7 @@ function ReturnsAdminView() {
             </div>
           )}
 
-          <div className="flex justify-between font-black text-dax-text border-t border-dax-border-dim pt-3">
+          <div className="flex justify-between font-medium text-dax-text border-t border-dax-border-dim pt-3">
             <span>Total reembolso</span><span className="text-dax-danger">{formatCurrency(selected.total_refunded)}</span>
           </div>
         </Modal>
