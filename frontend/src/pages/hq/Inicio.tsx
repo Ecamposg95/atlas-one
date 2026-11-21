@@ -65,6 +65,23 @@ function Titulo({ children, enlace }: { children: ReactNode; enlace?: { a: strin
   )
 }
 
+/** Panel: agrupa las tarjetas de un mismo tema bajo un título (nivel entre el fondo y la tarjeta). */
+function Panel({ titulo, enlace, children }: { titulo: ReactNode; enlace?: { a: string; texto: string }; children: ReactNode }) {
+  return (
+    <section className="dax-panel">
+      <div className="flex items-center justify-between gap-2 mb-3 px-1">
+        <h2 className="dax-panel-titulo">{titulo}</h2>
+        {enlace && (
+          <Link to={enlace.a} className="text-[10px] font-bold text-dax-accent-text hover:underline whitespace-nowrap max-md:inline-flex max-md:items-center max-md:min-h-[44px]">
+            {enlace.texto}
+          </Link>
+        )}
+      </div>
+      <div className="space-y-3">{children}</div>
+    </section>
+  )
+}
+
 const Vacio = ({ children }: { children: ReactNode }) => <p className="text-sm text-dax-muted">{children}</p>
 const Th = ({ children, der }: { children: ReactNode; der?: boolean }) => (
   <th className={`py-1 ${der ? 'text-right' : ''}`}>{children}</th>
@@ -291,14 +308,13 @@ function Pendientes({ datos, esTelefono }: { datos: NonNullable<DatosInicio['pen
 function PorCobrar({ datos }: { datos: NonNullable<DatosInicio['por_cobrar']> }) {
   const clientes = datos.clientes === 1 ? '1 cliente' : `${datos.clientes} clientes`
   return (
-    <DaxCard>
-      <Titulo enlace={{ a: '/customers/cobranza', texto: 'Ver cuentas por cobrar →' }}>Por cobrar</Titulo>
+    <Panel titulo="Por cobrar" enlace={{ a: '/customers/cobranza', texto: 'Ver cuentas por cobrar →' }}>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" data-testid="por-cobrar">
-        <KpiCard etiqueta="Total por cobrar" valor={formatCurrency(datos.total)} detalle={clientes} />
-        <KpiCard etiqueta="Vencido a más de 30 días" valor={formatCurrency(datos.vencido_30)}
+        <KpiCard etiqueta="Total por cobrar" icono="fa-hand-holding-dollar" valor={formatCurrency(datos.total)} detalle={clientes} />
+        <KpiCard etiqueta="Vencido a más de 30 días" icono="fa-hourglass-end" valor={formatCurrency(datos.vencido_30)}
           tono={datos.vencido_30 > 0 ? 'danger' : undefined} />
       </div>
-    </DaxCard>
+    </Panel>
   )
 }
 
@@ -308,24 +324,26 @@ function Sucursales({ lista, grafica }: { lista: NonNullable<DatosInicio['sucurs
       : c.estado === 'cerrado' ? <span className="text-dax-muted">Turno cerrado</span>
         : <span className="text-dax-faint">Sin turno</span>
   return (
-    <DaxCard>
-      <Titulo enlace={{ a: '/hq/branches', texto: 'Ver sucursales →' }}>Cómo va cada sucursal (hoy)</Titulo>
-      {grafica}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3" data-testid="sucursales">
+    <Panel titulo="Cómo va cada sucursal (hoy)" enlace={{ a: '/hq/branches', texto: 'Ver sucursales →' }}>
+      {grafica && <DaxCard>{grafica}</DaxCard>}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" data-testid="sucursales">
         {lista.map((s) => (
-          <Link key={s.branch_id} to={`/hq/branches/${s.branch_id}`} className="block rounded-lg border border-dax-border-dim p-3 hover:border-dax-accent max-md:min-h-[44px]">
-            <p className="font-bold text-dax-text text-sm">{s.nombre}</p>
-            <p className="text-xl font-bold text-dax-text tabular-nums">{formatCurrency(s.ventas_hoy)}</p>
-            <p className="text-xs text-dax-muted">{ventas(s.tickets_hoy)} · {estadoCorte(s.corte)}</p>
+          <Link key={s.branch_id} to={`/hq/branches/${s.branch_id}`} className="block dax-card p-4 max-md:min-h-[44px]">
+            <p className="dax-kpi-label">{s.nombre}</p>
+            <p className="text-2xl font-light tracking-tight text-dax-text tabular-nums mt-2">{formatCurrency(s.ventas_hoy)}</p>
+            <p className="text-xs text-dax-muted mt-1">{ventas(s.tickets_hoy)} · {estadoCorte(s.corte)}</p>
             {s.poca_existencia > 0 && (
               <p className="text-xs text-dax-warning mt-1">{s.poca_existencia === 1 ? '1 producto se está acabando' : `${s.poca_existencia} productos se están acabando`}</p>
             )}
           </Link>
         ))}
       </div>
-    </DaxCard>
+    </Panel>
   )
 }
+
+/** "viernes 20 de noviembre": la fecha de hoy, como rótulo sobre el título. */
+const hoyLargo = () => new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })
 
 export function Inicio() {
   const esTelefono = useEsTelefono()
@@ -387,7 +405,12 @@ export function Inicio() {
   return (
     <div className="space-y-5">
       <CabeceraPagina
-        titulo={<h1 className="text-2xl font-black text-dax-text">¿Cómo voy?</h1>}
+        titulo={(
+          <>
+            <p className="dax-section-title mb-2">{hoyLargo()}</p>
+            <h1 className="dax-titulo-pagina">¿Cómo voy?</h1>
+          </>
+        )}
         descripcion="Lo vendido, la caja, lo que se acaba y lo que hay que atender."
       />
 
@@ -399,21 +422,22 @@ export function Inicio() {
         <>
           {/* 1 · Cifras */}
           <div className={`grid grid-cols-1 ${conUtilidad ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-3'} gap-3`}>
-            <KpiCard etiqueta="Hoy" valor={formatCurrency(datos.hoy.total)}
+            <KpiCard etiqueta="Hoy" icono="fa-bolt" destacada valor={formatCurrency(datos.hoy.total)}
               detalle={devueltoHoy > 0 ? `${ventas(datos.hoy.tickets)} · ${formatCurrency(devueltoHoy)} devuelto` : ventas(datos.hoy.tickets)}
               variacion={conVariacion ? variacion(datos.hoy.total, datos.ayer.total, 'vs ayer') : undefined} data-testid="cifra-hoy" />
-            <KpiCard etiqueta="Ayer" valor={formatCurrency(datos.ayer.total)} detalle={ventas(datos.ayer.tickets)}
+            <KpiCard etiqueta="Ayer" icono="fa-clock-rotate-left" valor={formatCurrency(datos.ayer.total)} detalle={ventas(datos.ayer.tickets)}
               variacion={conVariacion && antier !== null ? variacion(datos.ayer.total, antier, 'vs antier') : undefined} data-testid="cifra-ayer" />
-            <KpiCard etiqueta="Últimos 7 días" valor={formatCurrency(datos.semana.total)} detalle={ventas(datos.semana.tickets)}
+            <KpiCard etiqueta="Últimos 7 días" icono="fa-calendar-week" valor={formatCurrency(datos.semana.total)} detalle={ventas(datos.semana.tickets)}
               variacion={conVariacion && semanaAnterior !== null ? variacion(datos.semana.total, semanaAnterior, 'vs semana anterior') : undefined} data-testid="cifra-semana" />
             {conUtilidad && (
-              <KpiCard etiqueta="Utilidad bruta de hoy" valor={formatCurrency(datos.utilidad_bruta_hoy as number)}
+              <KpiCard etiqueta="Utilidad bruta de hoy" icono="fa-coins" valor={formatCurrency(datos.utilidad_bruta_hoy as number)}
                 detalle={`sobre ${formatCurrency(conCosto)} con costo${sinCosto > 0 ? ` · ${formatCurrency(sinCosto)} vendidos sin costo` : ''}`}
                 variacion={conVariacion && datos.utilidad_bruta_ayer != null ? variacion(datos.utilidad_bruta_hoy as number, datos.utilidad_bruta_ayer, 'vs ayer') : undefined}
                 data-testid="cifra-utilidad" />
             )}
           </div>
 
+          <Panel titulo="Ventas y caja">
           {conGraficas ? (
             <>
               {/* 2 · Tendencia (8) · Cómo te pagaron (4) */}
@@ -458,20 +482,21 @@ export function Inicio() {
               </DaxCard>
             </div>
           )}
+          </Panel>
 
           {/* 4 · Pendientes */}
           {datos.pendientes && <Pendientes datos={datos.pendientes} esTelefono={esTelefono} />}
           {/* 4b · Por cobrar: solo si hay deuda (render condicional, no hidden) */}
           {datos.por_cobrar && datos.por_cobrar.total > 0 && <PorCobrar datos={datos.por_cobrar} />}
 
-          {/* 5 · Se está acabando · Lo que más se vendió */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            <SeAcaba datos={datos} esTelefono={esTelefono} basico={basico} />
-            <MasVendido datos={datos} esTelefono={esTelefono} />
-          </div>
-
-          {/* 6 · No se mueve */}
-          {datos.sin_movimiento && <NoSeMueve datos={datos.sin_movimiento} esTelefono={esTelefono} />}
+          {/* 5 · Se está acabando · Lo que más se vendió · 6 · No se mueve */}
+          <Panel titulo="Productos">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <SeAcaba datos={datos} esTelefono={esTelefono} basico={basico} />
+              <MasVendido datos={datos} esTelefono={esTelefono} />
+            </div>
+            {datos.sin_movimiento && <NoSeMueve datos={datos.sin_movimiento} esTelefono={esTelefono} />}
+          </Panel>
 
           {/* 7 · Sucursales: barras (solo con gráficas) + tarjetas */}
           {datos.sucursales && (

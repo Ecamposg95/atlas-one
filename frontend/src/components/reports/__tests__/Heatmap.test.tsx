@@ -36,7 +36,7 @@ describe('SalesHeatmap', () => {
     const vacia = screen.getByTestId('celda-2-12')
     expect(vacia.getAttribute('data-intensidad')).toBe('0')
     expect(vacia.className).toContain('bg-dax-elevated')
-    expect(screen.getByTestId('celda-1-12').getAttribute('style')).toContain('--dax-success')
+    expect(screen.getByTestId('celda-1-12').getAttribute('style')).toContain('--dax-accent')
   })
 
   it('escalon reparte en cinco pasos', () => {

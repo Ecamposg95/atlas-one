@@ -22,12 +22,12 @@ import { GraficaBarras, GraficaDona, GraficaLinea } from '..'
 const raiz = document.documentElement
 const datasets = (id: string) => JSON.parse(screen.getByTestId(id).getAttribute('data-datasets') ?? '[]') as Dataset[]
 
-afterEach(() => { cleanup(); raiz.style.removeProperty('--dax-accent'); raiz.style.removeProperty('--dax-text-faint') })
+afterEach(() => { cleanup(); raiz.style.removeProperty('--dax-accent'); raiz.style.removeProperty('--dax-grafica-apoyo') })
 
 describe('GraficaLinea', () => {
-  it('serie principal en acento y comparativo tenue y discontinuo; sin relleno; 300 ms', () => {
+  it('serie principal en acento y comparativo en el color de apoyo y discontinuo; sin relleno; 300 ms', () => {
     raiz.style.setProperty('--dax-accent', '#111111')
-    raiz.style.setProperty('--dax-text-faint', '#999999')
+    raiz.style.setProperty('--dax-grafica-apoyo', '#999999')
     render(<GraficaLinea etiquetas={['l', 'm']} series={[
       { nombre: 'Estos 7 días', valores: [1, 2] },
       { nombre: 'Semana anterior', valores: [3, 4], comparativo: true },
@@ -65,9 +65,9 @@ describe('GraficaBarras', () => {
     expect(datasets('bar')[0].backgroundColor).toEqual(['#111111', '#111111'])
     expect(screen.getByTestId('bar').getAttribute('data-eje')).toBe('x')
   })
-  it('con resaltar, esa barra va en acento y el resto tenue', () => {
+  it('con resaltar, esa barra va en acento y el resto en el color de apoyo', () => {
     raiz.style.setProperty('--dax-accent', '#111111')
-    raiz.style.setProperty('--dax-text-faint', '#999999')
+    raiz.style.setProperty('--dax-grafica-apoyo', '#999999')
     render(<GraficaBarras etiquetas={['a', 'b', 'c']} valores={[1, 2, 3]} resaltar={1} />)
     expect(datasets('bar')[0].backgroundColor).toEqual(['#999999', '#111111', '#999999'])
   })

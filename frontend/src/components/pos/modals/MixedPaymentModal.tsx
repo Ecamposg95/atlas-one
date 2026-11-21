@@ -11,9 +11,9 @@ interface PaymentLine {
 }
 
 const METHOD_LABELS: Record<Method, { label: string; icon: string; color: string }> = {
-  CASH: { label: 'Efectivo', icon: 'fa-money-bill', color: 'text-emerald-400' },
-  CARD: { label: 'Tarjeta', icon: 'fa-credit-card', color: 'text-indigo-400' },
-  TRANSFER: { label: 'Transferencia', icon: 'fa-mobile-screen', color: 'text-blue-400' },
+  CASH: { label: 'Efectivo', icon: 'fa-money-bill', color: 'text-dax-accent-text' },
+  CARD: { label: 'Tarjeta', icon: 'fa-credit-card', color: 'text-dax-accent-text' },
+  TRANSFER: { label: 'Transferencia', icon: 'fa-mobile-screen', color: 'text-dax-accent-text' },
 }
 
 interface Props {
