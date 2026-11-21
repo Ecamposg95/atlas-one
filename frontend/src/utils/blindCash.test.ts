@@ -24,11 +24,18 @@ describe('shouldRevealExpected', () => {
   it('revela solo con el turno cerrado', () => {
     expect(shouldRevealExpected(true)).toBe(true)
   })
+  it('con el conteo ciego apagado en la tienda revela aun con el turno abierto', () => {
+    expect(shouldRevealExpected(false, false)).toBe(true)
+    expect(shouldRevealExpected(false, true)).toBe(false)
+  })
 })
 
 describe('shouldShowExpectedKpi', () => {
   it('enmascara mientras el turno esta abierto', () => {
     expect(shouldShowExpectedKpi(true)).toBe(false)
     expect(shouldShowExpectedKpi(false)).toBe(true)
+  })
+  it('con el conteo ciego apagado se ve con el turno abierto', () => {
+    expect(shouldShowExpectedKpi(true, false)).toBe(true)
   })
 })

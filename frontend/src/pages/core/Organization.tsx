@@ -9,7 +9,7 @@ import { confirm as confirmDialog } from '../../components/ui/ConfirmDialog'
 import client from '../../api/client'
 import { errorDetailText } from '../../utils/errorDetail'
 import { MasOpciones } from '../../components/ui/MasOpciones'
-import { useModoBasico } from '../../store/enabledModulesStore'
+import { useEnabledModulesStore, useModoBasico } from '../../store/enabledModulesStore'
 
 const BRANCH_TYPES: Branch['branch_type'][] = ['HQ', 'STORE', 'WAREHOUSE', 'OFFICE']
 const branchTypeLabel = (t: string) =>
@@ -90,6 +90,8 @@ export function Organization() {
         card_surcharge_pct: comision === '' || comision == null ? 0 : comision,
       })
       setOrg(updated); setOrgForm(updated)
+      // El conteo ciego viaja en /me/context: se relee para que esta sesión lo tome ya.
+      void useEnabledModulesStore.getState().load()
       await cargarFx()
     } catch (e: any) {
       // El 422 del PUT trae el motivo en español ("En modo manual hay que
@@ -390,6 +392,32 @@ export function Organization() {
                   )}
                 </p>
               </div>
+            </div>
+            <div className="flex justify-end mt-4">
+              <button onClick={saveOrg} disabled={saving || nameInvalido} className="dax-btn-primary text-xs disabled:opacity-40">
+                {saving ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Guardar</>}
+              </button>
+            </div>
+          </DaxCard>
+
+          {/* Conteo ciego del corte de caja */}
+          <DaxCard>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">
+              <i className="fa-solid fa-eye-slash mr-1.5" />Corte de caja
+            </p>
+            <div className="flex items-start gap-3">
+              <input
+                type="checkbox" id="conteo-ciego-chk" className="w-4 h-4 mt-0.5"
+                checked={orgForm.conteo_ciego ?? true}
+                onChange={e => setOrgForm(p => ({ ...p, conteo_ciego: e.target.checked }))}
+              />
+              <label htmlFor="conteo-ciego-chk" className="text-xs text-slate-300 cursor-pointer">
+                Conteo ciego
+                <span className="block text-[10px] text-slate-600">
+                  Con el turno abierto, quien cobra no ve el efectivo esperado ni su desglose:
+                  cuenta la caja y la diferencia aparece al cerrar. Apagado, lo ve antes de contar.
+                </span>
+              </label>
             </div>
             <div className="flex justify-end mt-4">
               <button onClick={saveOrg} disabled={saving || nameInvalido} className="dax-btn-primary text-xs disabled:opacity-40">

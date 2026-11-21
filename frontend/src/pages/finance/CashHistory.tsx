@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { BLIND_MASK, BLIND_LABEL, isValidCount, shouldRevealExpected } from '../../utils/blindCash'
+import { BLIND_MASK, BLIND_LABEL, isValidCount, shouldRevealExpected, useConteoCiego } from '../../utils/blindCash'
 import { useIsBranchUser } from '../../components/branch/useIsBranchUser'
 import { CashBranchView } from '../../components/branch/CashBranchView'
 import { cashApi, type CashSummary } from '../../api/cash'
@@ -123,7 +123,7 @@ function CloseModal({ summary, onClose, onDone, onConfirm }: {
   const [result, setResult] = useState<CloseResult | null>(null)
   // Con el turno abierto tampoco se enseña el desglose de efectivo (fondo,
   // ventas, entradas, salidas, reembolsos): sumado da el esperado.
-  const revelar = shouldRevealExpected(result != null)
+  const revelar = shouldRevealExpected(result != null, useConteoCiego())
   const titleCiego = `${BLIND_LABEL} — cuenta el efectivo y captúralo abajo`
   const monto = (texto: string) => (revelar ? texto : BLIND_MASK)
 
@@ -174,9 +174,11 @@ function CloseModal({ summary, onClose, onDone, onConfirm }: {
               {monto(formatCurrency(summary.expected_cash))}
             </span>
           </div>
-          <p className="text-[11px] text-dax-muted">
-            {BLIND_LABEL} · el desglose, el esperado y la diferencia se muestran al cerrar
-          </p>
+          {!revelar && (
+            <p className="text-[11px] text-dax-muted">
+              {BLIND_LABEL} · el desglose, el esperado y la diferencia se muestran al cerrar
+            </p>
+          )}
         </div>
         <div>
           <label className="block text-[10px] font-bold text-dax-muted uppercase tracking-wider mb-1">Efectivo contado</label>
