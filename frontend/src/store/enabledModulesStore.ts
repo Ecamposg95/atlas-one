@@ -25,6 +25,7 @@ interface ContextResponse {
   plan?: { clave?: unknown; nombre?: unknown } | null
   campos_producto?: unknown
   perfil_ui?: unknown
+  conteo_ciego?: unknown
   // (other fields present in /me/context but not needed here)
 }
 
@@ -39,6 +40,11 @@ export function leerPerfilUi(crudo: unknown): PerfilUi {
   return crudo === 'basico' ? 'basico' : 'completo'
 }
 
+/** Solo un `false` explícito apaga el conteo ciego; ausente o raro = encendido. */
+export function leerConteoCiego(crudo: unknown): boolean {
+  return crudo !== false
+}
+
 interface EnabledModulesStore {
   enabledModules: string[]
   preset: string | null
@@ -49,6 +55,8 @@ interface EnabledModulesStore {
   camposProducto: CamposProducto
   /** Perfil de interfaz; 'completo' mientras no carga, si falló o si el servidor no lo manda. */
   perfilUi: PerfilUi
+  /** Conteo ciego del corte; encendido mientras no carga, si falló o si el servidor no lo manda. */
+  conteoCiego: boolean
   loaded: boolean
   loading: boolean
   load: () => Promise<void>
@@ -69,6 +77,7 @@ export const useEnabledModulesStore = create<EnabledModulesStore>((set, get) => 
   plan: null,
   camposProducto: TODO_VISIBLE,
   perfilUi: 'completo',
+  conteoCiego: true,
   loaded: false,
   loading: false,
 
@@ -88,6 +97,7 @@ export const useEnabledModulesStore = create<EnabledModulesStore>((set, get) => 
         plan,
         camposProducto: leerCamposProducto(r.data?.campos_producto),
         perfilUi: leerPerfilUi(r.data?.perfil_ui),
+        conteoCiego: leerConteoCiego(r.data?.conteo_ciego),
         loaded: true,
         loading: false,
       })
@@ -98,13 +108,13 @@ export const useEnabledModulesStore = create<EnabledModulesStore>((set, get) => 
       // Las capacidades NO siguen esta política: fallan cerradas (lista
       // vacía), igual que cuando el servidor sí responde pero la tienda no
       // tiene ninguna encendida.
-      set({ enabledModules: [], preset: null, capacidades: [], plan: null, camposProducto: TODO_VISIBLE, perfilUi: 'completo', loaded: true, loading: false })
+      set({ enabledModules: [], preset: null, capacidades: [], plan: null, camposProducto: TODO_VISIBLE, perfilUi: 'completo', conteoCiego: true, loaded: true, loading: false })
       applyPresetAttribute(null)
     }
   },
 
   reset: () => {
-    set({ enabledModules: [], preset: null, capacidades: [], plan: null, camposProducto: TODO_VISIBLE, perfilUi: 'completo', loaded: false, loading: false })
+    set({ enabledModules: [], preset: null, capacidades: [], plan: null, camposProducto: TODO_VISIBLE, perfilUi: 'completo', conteoCiego: true, loaded: false, loading: false })
     applyPresetAttribute(null)
   },
 }))

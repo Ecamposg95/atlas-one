@@ -31,3 +31,23 @@ describe('enabledModulesStore: campos_producto', () => {
     expect(useEnabledModulesStore.getState().camposProducto).toEqual({ visibles: [], ocultos: [] })
   })
 })
+
+describe('enabledModulesStore: conteo_ciego', () => {
+  it('solo un false explícito lo apaga; ausente o con el contexto caído sigue encendido', async () => {
+    get.mockResolvedValue({ data: { enabled_modules: ['core'], conteo_ciego: false } })
+    await useEnabledModulesStore.getState().load()
+    expect(useEnabledModulesStore.getState().conteoCiego).toBe(false)
+
+    useEnabledModulesStore.getState().reset()
+    get.mockResolvedValue({ data: { enabled_modules: ['core'] } })
+    await useEnabledModulesStore.getState().load()
+    expect(useEnabledModulesStore.getState().conteoCiego).toBe(true)
+
+    useEnabledModulesStore.getState().reset()
+    get.mockResolvedValue({ data: { enabled_modules: ['core'], conteo_ciego: false } })
+    await useEnabledModulesStore.getState().load()
+    get.mockRejectedValue(new Error('red'))
+    await useEnabledModulesStore.getState().load()
+    expect(useEnabledModulesStore.getState().conteoCiego).toBe(true)
+  })
+})

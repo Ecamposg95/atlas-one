@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { cashApi } from '../../../api/cash'
+import { useConteoCiego } from '../../../utils/blindCash'
 import { formatCurrency } from '../../../utils/currency'
 import { closeVerdict } from '../../../theme/verdict'
 
@@ -23,12 +25,27 @@ interface Resultado {
  * diferencia (ver utils/blindCash). Paso resultado: tras confirmar, el turno ya
  * está cerrado y se muestra Esperado / Contado / Diferencia con la `difference`
  * que devolvió el backend. Ya no se puede corregir el conteo hasta que cuadre.
+ *
+ * Si la tienda apagó el conteo ciego (`useConteoCiego`), el paso de captura
+ * enseña el esperado en caja; el campo sigue sin pre-llenarse.
  */
 export function CloseSessionModal({ onClose, onConfirm }: Props) {
   const [closingAmount, setClosingAmount] = useState('')
   const [notes, setNotes] = useState('')
   const [loading, setLoading] = useState(false)
   const [resultado, setResultado] = useState<Resultado | null>(null)
+
+  const ciego = useConteoCiego()
+  const [esperado, setEsperado] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (ciego) return
+    let vivo = true
+    cashApi.getSummary()
+      .then((s) => { if (vivo) setEsperado(Number(s.expected_cash)) })
+      .catch(() => { /* sin esperado: se captura igual */ })
+    return () => { vivo = false }
+  }, [ciego])
 
   const closingNum = parseFloat(closingAmount) || 0
 
@@ -83,9 +100,16 @@ export function CloseSessionModal({ onClose, onConfirm }: Props) {
                   step="0.01"
                   autoFocus
                 />
-                <p className="text-[11px] text-slate-500 mt-1">
-                  Conteo ciego · el esperado y la diferencia se muestran al cerrar
-                </p>
+                {ciego ? (
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Conteo ciego · el esperado y la diferencia se muestran al cerrar
+                  </p>
+                ) : esperado != null && Number.isFinite(esperado) && (
+                  <p className="text-xs text-slate-400 mt-2 flex justify-between">
+                    <span>Esperado en caja</span>
+                    <span className="tabular-nums font-bold text-dax-text">{formatCurrency(esperado)}</span>
+                  </p>
+                )}
               </div>
 
               <div>
