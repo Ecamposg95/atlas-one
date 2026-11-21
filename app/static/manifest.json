@@ -1,26 +1,38 @@
 {
-  "name": "Atlas POS — Atlas ERP",
-  "short_name": "Atlas POS",
-  "description": "Sistema ERP & Punto de Venta · Atlas Tech",
-  "start_url": "/atlas-pos",
+  "name": "Atlas ONE",
+  "short_name": "Atlas ONE",
+  "description": "Punto de venta y operación del negocio · Atlas Tech",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#0f172a",
-  "theme_color": "#0f172a",
+  "background_color": "#050505",
+  "theme_color": "#050505",
   "lang": "es-MX",
   "icons": [
     {
-      "src": "/static/img/icon-192.png",
+      "src": "/static/img/icon-192.png?v=2",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "/static/img/icon-512.png",
+      "src": "/static/img/icon-512.png?v=2",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/static/img/icon-192.png?v=2",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/static/img/icon-512.png?v=2",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
   "shortcuts": [
@@ -28,13 +40,24 @@
       "name": "Punto de Venta",
       "short_name": "POS",
       "url": "/pos",
-      "icons": [{ "src": "/static/img/icon-192.png", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "/static/img/icon-192.png?v=2",
+          "sizes": "192x192"
+        }
+      ]
     },
     {
       "name": "Operaciones HQ",
       "short_name": "Operaciones",
       "url": "/hq/operations",
-      "icons": [{ "src": "/static/img/icon-192.png", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "/static/img/icon-192.png?v=2",
+          "sizes": "192x192"
+        }
+      ]
     }
-  ]
+  ],
+  "id": "/"
 }
