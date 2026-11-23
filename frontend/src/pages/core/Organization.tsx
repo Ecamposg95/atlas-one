@@ -425,6 +425,33 @@ export function Organization() {
               </button>
             </div>
           </DaxCard>
+
+          {/* Precio por sucursal */}
+          <DaxCard>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">
+              <i className="fa-solid fa-tag mr-1.5" />Precios
+            </p>
+            <div className="flex items-start gap-3">
+              <input
+                type="checkbox" id="precio-sucursal-chk" className="w-4 h-4 mt-0.5"
+                checked={orgForm.precio_por_sucursal ?? false}
+                onChange={e => setOrgForm(p => ({ ...p, precio_por_sucursal: e.target.checked }))}
+              />
+              <label htmlFor="precio-sucursal-chk" className="text-xs text-slate-300 cursor-pointer">
+                Cada sucursal con su precio
+                <span className="block text-[10px] text-slate-600">
+                  El precio que alguien de una sucursal cambia en un producto o una talla solo
+                  cambia en su sucursal; las demás conservan el suyo. Quien no tiene sucursal
+                  edita el precio base. Apagado, cualquier cambio de precio aplica a todas.
+                </span>
+              </label>
+            </div>
+            <div className="flex justify-end mt-4">
+              <button onClick={saveOrg} disabled={saving || nameInvalido} className="dax-btn-primary text-xs disabled:opacity-40">
+                {saving ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Guardar</>}
+              </button>
+            </div>
+          </DaxCard>
           </MasOpciones>
 
           {/* Encabezado y pie de ticket */}

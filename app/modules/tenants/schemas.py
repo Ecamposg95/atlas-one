@@ -108,6 +108,8 @@ class OrganizationUpdate(BaseModel):
     ticket_show_vendor: Optional[bool] = None
     # Conteo ciego del corte: fuera de la whitelist de no-admins del router.
     conteo_ciego: Optional[bool] = None
+    # Precio por sucursal: tambien fuera de la whitelist de no-admins.
+    precio_por_sucursal: Optional[bool] = None
     # Cae FUERA de la whitelist de no-admins del router: solo
     # ADMINISTRADOR/DUEÑO cambia el estilo del ticket.
     ticket_line_style: Optional[str] = None
@@ -169,6 +171,8 @@ class OrganizationRead(OrganizationBase):
 
     # Conteo ciego del corte de caja; el panel de Empresa pinta el interruptor.
     conteo_ciego: bool = True
+    # Precio por sucursal; el panel de Empresa pinta el interruptor.
+    precio_por_sucursal: bool = False
 
     # Modo básico: la plataforma lee el perfil forzado; Empresa, el tope.
     perfil_ui: Optional[str] = None
