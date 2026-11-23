@@ -441,8 +441,9 @@ export function Organization() {
                 Cada sucursal con su precio
                 <span className="block text-[10px] text-slate-600">
                   El precio que alguien de una sucursal cambia en un producto o una talla solo
-                  cambia en su sucursal; las demás conservan el suyo. Quien no tiene sucursal
-                  edita el precio base. Apagado, cualquier cambio de precio aplica a todas.
+                  cambia en su sucursal; las demás conservan el suyo. Administrador y dueño
+                  editan el precio base y, en la ficha, el de cada sucursal. Apagado, cualquier
+                  cambio de precio aplica a todas.
                 </span>
               </label>
             </div>
