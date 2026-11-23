@@ -203,6 +203,12 @@ class Organization(Base):
     # apagarlo desde Empresa; es solo de interfaz (viaja en /me/context).
     conteo_ciego = Column(Boolean, nullable=False, default=True, server_default="true")
 
+    # Precio por sucursal (2026-11-23). APAGADO por omision. Encendido, el precio
+    # que alguien con sucursal edita (ficha o talla) se guarda como el precio de
+    # SU sucursal (`price_override`) y no toca el precio base de las demas; la
+    # ficha le muestra ese mismo precio. Sin sucursal se edita el precio base.
+    precio_por_sucursal = Column(Boolean, nullable=False, default=False, server_default="false")
+
     # Estilo del renglon de producto del ticket (2026-09-21):
     #   'compact'  -> una linea: cantidad + descripcion recortada + precios
     #                 (DEFAULT, y es lo que sigue viendo toda tienda viva)

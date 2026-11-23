@@ -38,6 +38,7 @@ from app.crud.products import (
     log_pbs_change,
 )
 from app.modules.products.sale_name import sale_name, variant_sale_name
+from app.modules.products.services.precio_sucursal import precio_por_sucursal_activo
 from app.modules.products.schemas import (
     ProductCreate, ProductRead, ProductUpdate,
     DepartmentRead, StockLevel, BatchActionRequest, ProductListResponse,
@@ -268,6 +269,13 @@ def _compute_product_read(
                 None,
             )
             vr.effective_price = override if override is not None else vr.price
+
+        # Precio por sucursal (org con el ajuste encendido): cada sucursal ve y
+        # edita SU precio, así que la talla muestra el de la sucursal también en
+        # `price` (el que pinta y guarda el editor de tallas).
+        if real_branch_id and precio_por_sucursal_activo(db, org_de_p):
+            for vr in p_read.variants:
+                vr.price = vr.effective_price
 
         # Existencia por variante en la sucursal objetivo. Con una sola
         # variante coincide con stock_total; con varias es lo que permite al

@@ -46,6 +46,7 @@ ninguna organización existente cambia de comportamiento sin configurarlas):
 | `perfil_ui` | `String(12)` | `NULL` | Modo básico (2026-10): `NULL`/`auto` = se deriva del plan (solo `FREE` explícito → básico; NULL, vacío, desconocido o de paga → completo), `basico`/`completo` = forzado por la plataforma. Solo decide qué muestra la interfaz (`app/services/perfil_ui.py`) |
 | `umbral_poca_existencia` | `Integer` | `NULL` | Tope en piezas de "Se está acabando" del Inicio básico; `NULL` = 3. Lo guarda la dueña en Empresa |
 | `conteo_ciego` | `Boolean` | `true` | Corte de caja a ciegas: con el turno abierto la caja no ve el esperado ni su desglose. Solo de interfaz (viaja en `/users/me/context`; `frontend/src/utils/blindCash.ts`). Lo apaga ADMINISTRADOR/DUEÑO en Empresa → Corte de caja |
+| `precio_por_sucursal` | `Boolean` | `false` | Cada sucursal con su precio: encendido, el precio que edita alguien con sucursal (ficha o talla) se guarda en `product_branch_status.price_override` de su sucursal y no toca el base; la ficha le muestra ese precio. Sin sucursal se edita el base; escalones y empaques no se tocan desde una sucursal. `app/modules/products/services/precio_sucursal.py`. Lo enciende ADMINISTRADOR/DUEÑO en Empresa → Precios |
 
 **Columnas en `branches`** (`app/modules/tenants/models.py`):
 
