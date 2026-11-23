@@ -162,6 +162,49 @@ def test_encendido_talla_que_no_vende_su_sucursal_edita_el_base(client, db, org,
                                                 ProductBranchStatus.branch_id == branch_a.id).count() == 0
 
 
+def test_encendido_el_admin_con_sucursal_edita_el_precio_base(client, db, org, tienda, branch_a, branch_b, auth_admin_a):
+    """ADMINISTRADOR/DUEÑO mandan en toda la organización aunque tengan sucursal."""
+    p, v_m, v_g = tienda
+    _encender(db, org)
+    r = client.put(f"/api/products/{p.id}", json={"price": 1100}, headers=_h(auth_admin_a, org))
+    assert r.status_code == 200, r.text
+    db.expire_all()
+    assert db.get(ProductVariant, v_m.id).price == Decimal("1100")
+    assert _pbs(db, v_m, branch_a).price_override is None
+    r = client.put(f"/api/products/variants/{v_g.id}", json={"price": 1150}, headers=_h(auth_admin_a, org))
+    assert r.status_code == 200, r.text
+    db.expire_all()
+    assert db.get(ProductVariant, v_g.id).price == Decimal("1150")
+    assert _pbs(db, v_g, branch_a).price_override is None
+
+
+def test_encendido_la_ficha_del_admin_muestra_el_base_y_no_lo_pisa(client, db, org, tienda, branch_a, auth_admin_a):
+    """Su sucursal tiene precio propio: la ficha del admin enseña el base, así
+    que guardar sin tocar el precio no copia el de la sucursal al base."""
+    p, v_m, _ = tienda
+    _encender(db, org)
+    _pbs(db, v_m, branch_a).price_override = Decimal("800")
+    db.flush()
+    data = client.get(f"/api/products/{p.id}", headers=_h(auth_admin_a, org)).json()
+    assert Decimal(str(data["price"])) == Decimal("1000")
+    assert len(data["prices"]) == 1  # los escalones siguen a la vista
+    m = next(v for v in data["variants"] if v["sku"] == "PLY-M")
+    assert Decimal(str(m["price"])) == Decimal("1000")
+    assert Decimal(str(m["effective_price"])) == Decimal("800")  # el POS cobra el de la sucursal
+
+
+def test_encendido_el_admin_fija_el_precio_de_una_sucursal_en_la_matriz(client, db, org, tienda, branch_a, branch_b, auth_admin_a):
+    p, v_m, _ = tienda
+    _encender(db, org)
+    r = client.patch(f"/api/products/variants/{v_m.id}/branch-status", params={"branch_id": branch_b.id},
+                     json={"price_override": 750}, headers=_h(auth_admin_a, org))
+    assert r.status_code == 200, r.text
+    db.expire_all()
+    assert _pbs(db, v_m, branch_b).price_override == Decimal("750")
+    assert _pbs(db, v_m, branch_a).price_override is None
+    assert db.get(ProductVariant, v_m.id).price == Decimal("1000")
+
+
 # ── El ajuste ────────────────────────────────────────────────────────────────
 def test_el_admin_lo_enciende_y_la_cajera_no(client, db, org, auth_admin, auth_cajero_a, admin_user, cajero_a):
     r = client.put("/api/organization/", json={"precio_por_sucursal": True}, headers=_h(auth_cajero_a, org))
