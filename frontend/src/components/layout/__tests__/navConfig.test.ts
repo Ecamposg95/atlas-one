@@ -83,11 +83,11 @@ describe('los grupos del menú', () => {
     expect(grupo('Operación')).toEqual(['/hq/operations', '/hq/reports-hub', '/hq/valor-inventario'])
     expect(grupo('Ventas')).toEqual(['/sales', '/returns', '/cash-history', '/quotes', '/quotes/new', '/seguimiento'])
     expect(grupo('Catálogo')).toEqual(['/products', '/fotos', '/departments', '/brands', '/labels'])
-    expect(grupo('Inventario')).toEqual(['/inventory', '/inventory/conteos', '/scanner', '/logistics', '/boxes'])
+    expect(grupo('Inventario')).toEqual(['/inventory', '/inventory/conteos', '/mobile/query', '/logistics', '/boxes'])
     expect(grupo('Compras')).toEqual(['/purchases', '/expenses', '/purchasing'])
     expect(grupo('Clientes')).toEqual(['/customers', '/appointments', '/commissions', '/memberships'])
     expect(grupo('Restaurante')).toEqual(['/menu', '/tables', '/mobile/comanda', '/kitchen', '/recipes', '/meseros', '/bar/bottles'])
-    expect(grupo('Organización')).toEqual(['/organization', '/hq/branches', '/users', '/hr', '/configuracion'])
+    expect(grupo('Organización')).toEqual(['/configuracion', '/users', '/hr'])
     expect(grupo('Inteligencia')).toEqual(['/ai'])
   })
 
@@ -154,7 +154,7 @@ describe('el título de la barra superior', () => {
 
   it('cae al ítem más específico del que cuelga la URL', () => {
     expect(routeTitle('/products/42/edit')).toBe('Productos')
-    expect(routeTitle('/hq/branches/3')).toBe('Sucursales')
+    expect(routeTitle('/inventory/conteos/3')).toBe('Conteo')
   })
 
   it('prefiere el prefijo más largo cuando hay dos candidatos', () => {
@@ -178,9 +178,8 @@ describe('las guardas de ruta', () => {
     )
   })
 
-  it('dejan fuera a la cajera de Usuarios y de Empresa', () => {
+  it('dejan fuera a la cajera de Usuarios y del Inicio de oficina', () => {
     expect(rolesConAcceso('/users')).not.toContain('CAJERO')
-    expect(rolesConAcceso('/organization')).not.toContain('CAJERO')
     expect(rolesConAcceso('/hq/operations')).not.toContain('CAJERO')
   })
 
@@ -251,7 +250,7 @@ describe('los ítems que recibieron `module:` en SP2', () => {
 
   it('la operación diaria sigue sin `module:` (no hay vía nueva para esconderle la caja a una tienda)', () => {
     for (const u of ['/atlas-pos', '/pos', '/sales', '/cash-history', '/returns', '/products', '/reports',
-                     '/configuracion', '/hq/operations', '/organization', '/hq/branches', '/users']) {
+                     '/configuracion', '/hq/operations', '/users']) {
       expect(conModulo[u], u).toBeUndefined()
     }
   })

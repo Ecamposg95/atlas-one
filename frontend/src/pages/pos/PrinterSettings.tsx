@@ -85,7 +85,8 @@ const SAMPLE_SUBTOTAL = 81.03
 const SAMPLE_IVA = 12.97
 const SAMPLE_TOTAL = 94.0
 
-export function PrinterSettings() {
+/** `incrustada`: dentro del centro de ajustes, que ya pone el título de la página. */
+export function PrinterSettings({ incrustada = false }: { incrustada?: boolean } = {}) {
   const { branch, org, user, setBranch } = useAuthStore()
   const esAdmin = user?.role === 'ADMINISTRADOR' || user?.role === 'DUEÑO'
   // La cajera nunca llega aquí (utils/vistaDeConfiguracion); el gerente instala como el dueño.
@@ -418,8 +419,12 @@ export function PrinterSettings() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <i className="fa-solid fa-gear text-indigo-400 text-xl" aria-hidden="true" />
-          <h1 className="text-2xl font-black" style={{ color: 'var(--dax-text)' }}>Configuración</h1>
+          {incrustada ? (
+            <h2 className="text-lg font-black" style={{ color: 'var(--dax-text)' }}>Impresoras, cajón y ticket por sucursal</h2>
+          ) : (<>
+            <i className="fa-solid fa-gear text-indigo-400 text-xl" aria-hidden="true" />
+            <h1 className="text-2xl font-black" style={{ color: 'var(--dax-text)' }}>Configuración</h1>
+          </>)}
           {branch && (
             <span className="text-xs text-slate-400">Configurando: <b>{branch.name}</b></span>
           )}

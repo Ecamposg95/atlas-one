@@ -166,7 +166,7 @@ describe('Inicio', () => {
     const sucursales = screen.getByTestId('sucursales')
     expect(sucursales.textContent).toContain('Roma')
     expect(sucursales.textContent).toContain('2 productos se están acabando')
-    expect(sucursales.querySelector('a')?.getAttribute('href')).toBe('/hq/branches/1')
+    expect(sucursales.querySelector('a')?.getAttribute('href')).toBe('/configuracion?tab=sucursales&sucursal=1')
   })
 
   it('en completo monta las cuatro gráficas y conserva la lista de métodos y la caja', async () => {

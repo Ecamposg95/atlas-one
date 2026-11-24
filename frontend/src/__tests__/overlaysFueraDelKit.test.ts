@@ -39,7 +39,6 @@ const CONOCIDOS: Record<string, number> = {
   '/components/tables/TableFormModal.tsx': 1,
   '/pages/core/Brands.tsx': 1,
   '/pages/core/Departments.tsx': 1,
-  '/pages/core/Organization.tsx': 1,
   '/pages/core/Users.tsx': 1,
   '/pages/crm/Customers.tsx': 1,
   '/pages/finance/CashHistory.tsx': 2,

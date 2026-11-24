@@ -59,7 +59,7 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 | `/hq/reports-hub` | `reports/Reportes` (con selector de sucursal; básico y completo) | Admin, Dueño | pos |
 | `/hq/sales`, `/hq/returns`, `/hq/inventory`, `/admin/catalog` | redirigen (`RedirigirConQuery`, conserva `?…`) a `/sales`, `/returns`, `/inventory`, `/products` — Fase 3, 2026-10-25 | — | — |
 | `/hq/valor-inventario` | `hq/HQValorInventario` | Admin, Dueño, Gerente | reports |
-| `/hq/branches`, `/:branchId` | `hq/HQBranches` (la ruta hija abre esa sucursal en la misma pantalla) | Admin | inventory |
+| `/hq/branches`, `/:branchId`, `/organization`, `/scanner` | Redirigen: Sucursales y Empresa a `/configuracion?tab=…`; el escáner a `/mobile/query` | — | — |
 | `/labels` | `labels/Labels` | Admin, Dueño, Gerente, Cajero | labels |
 | `/fotos` | `products/FotosProductos` | Admin, Dueño, Gerente, Cajero | tienda_en_linea (menú) — buscar producto, tomar foto con la cámara del teléfono (`capture="environment"`), subir a la galería (`POST /products/{id}/images`, filtro `sin_foto`) y publicar/quitar de la tienda (admin/dueño). Las fotos se reducen en el teléfono a ≤1600 px JPEG (`utils/comprimirImagen.ts`) antes de subir. |
 | `/products`, `/new`, `/:id/edit` | `inventory/Products` (Productos; para admin y dueño en perfil completo trae las cifras, aprobación y archivado del Catálogo viejo), `products/ProductForm` | Admin, Dueño, Gerente, Cajero | catalog |
@@ -74,7 +74,7 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 | `/customers/cobranza` | `crm/Cobranza` | Admin, Dueño, Gerente | crm |
 | `/hr`, `/hr/me` | `hr/HR`, `HRMe` | Admin / todos | — |
 | `/portal` | `portal/Portal` | Cliente | — |
-| `/users`, `/organization`, `/startup` | `core/Users`, `Organization`, `Startup` | Admin | — |
+| `/users`, `/startup` | `core/Users`, `Startup` | Admin | — |
 | `/home`, `/tables`, `/kitchen`, `/meseros`, `/bar/bottles`, `/menu`, `/recipes` | ver §2 Gastro | según preset | tables/kitchen/bar/menu/recipes |
 | `/mobile/*` | `mobile/*` | Vendedor (owner: Dueño/Admin) | — |
 | `/appointments`, `/commissions`, `/memberships`, `/ai`, `/purchasing` | `coming-soon/index` | según módulo | (stubs) |
@@ -189,7 +189,8 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Notas:** Errores silenciados; reloj cada 10s. **Gotcha:** hooks tras early-return (`useIsBranchUser` antes del return) — patrón frágil.
 
 ### `/configuracion` — Configuración
-- **Archivo:** `pages/pos/Configuracion.tsx` elige por rol (`utils/vistaDeConfiguracion.ts`) entre `PrinterSettings.tsx` y `PrinterSettingsCajera.tsx`. `/printer-settings` redirige aquí.
+- **Archivo:** `pages/pos/Configuracion.tsx` elige por rol (`utils/vistaDeConfiguracion.ts`): administrador y dueño ven el **centro de ajustes** (`esCentroDeAjustes`), el gerente `PrinterSettings.tsx` y la caja `PrinterSettingsCajera.tsx`. `/printer-settings` redirige a `?tab=impresoras`; `/organization` y `/hq/branches` redirigen aquí.
+- **Centro de ajustes (admin/dueño), pestañas en `?tab=`:** `empresa` (datos y logo), `sucursales` (`core/Sucursales.tsx`), `ventas` (tipo de cambio, comisión de tarjeta, conteo ciego, precio por sucursal, aviso de poca existencia en básico), `ticket` (encabezado, pie, términos, redes), `impresoras` (`PrinterSettings incrustada`), `tienda` (si el canal está encendido) y `mas` (accesos a Usuarios, Departamentos y Marcas). Las de empresa/ventas/ticket son `core/Organization.tsx` con `seccion`.
 - **Propósito:** impresoras, cajón de dinero y ticket. Gerente, admin y dueño tienen pestañas **Impresoras** (agente por sistema, Bluetooth, instalar impresora), **Cajón** (`components/pos/CajonCard`: abrir ahora y si abre solo al cobrar, guarda al momento) y **Ticket** (papel, logo, editor con vista previa). La cajera elige la impresora de su PC, prueba y abre el cajón; nada de su pantalla escribe en la sucursal, y en teléfono solo se explica que eso se hace desde la PC.
 - **Quién la ve:** todos los roles de tienda — módulo `pos`.
 - **Datos/API:** `client.get/put('/branches/:id')`, logo `post/delete`, `client.get('/organization/')`, `printerApi.*` (`abrirCajonManual` abre por el agente y registra `DRAWER_OPENED_MANUAL` con `POST /printer/drawer-opened`), Web Bluetooth API.
@@ -261,10 +262,10 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Datos/API:** `reportsApi.valorInventario` ×2-3 (departamento, marca[, sucursal]), `organizationApi.getBranches`.
 - **Notas:** La tarjeta `components/reports/ValorTiendaCard.tsx` del Inicio muestra el mismo dato; cuando hay piezas sin costo la cifra grande es la de venta y el costo baja a secundaria con el aviso "N piezas sin costo".
 
-### `/hq/branches` y `/hq/branches/:branchId` — Sucursales 📱
-- **Archivo:** `pages/hq/HQBranches.tsx`
-- **Propósito:** rejilla de tarjetas (abierta/cerrada por `status === 'ONLINE'` del backend, ventas hoy, turnos abiertos, se está acabando) y, al tocar una (o con `:branchId` en la URL), su detalle de hoy debajo: KPIs, lo más vendido, se está acabando, últimas ventas.
-- **Datos/API:** `organizationApi.getBranches`, `reportsApi.commandCenterStats`, `reportsApi.dashboard({ branch_id })`.
+### `/configuracion?tab=sucursales` — Sucursales 📱
+- **Archivo:** `pages/core/Sucursales.tsx` (une el tablero que era `/hq/branches` y el alta/edición que vivía en Empresa).
+- **Propósito:** rejilla de tarjetas (abierta/cerrada por `status === 'ONLINE'` del backend, ventas hoy, turnos abiertos, se está acabando) con lápiz y bote por sucursal y «Nueva sucursal»; al tocar una (o con `&sucursal=ID`), su detalle de hoy debajo. El modal de edición también cambia **Vende** y **Activa**; solo manda lo que cambió (`cambiosDeSucursal`): mandar el tipo de la matriz sin `can_sell` le apagaba la venta.
+- **Datos/API:** `organizationApi.getBranches/createBranch/updateBranch/deleteBranch`, `reportsApi.commandCenterStats`, `reportsApi.dashboard({ branch_id })`. Si las cifras de hoy fallan, la lista se sigue pudiendo administrar.
 
 ---
 
@@ -297,7 +298,7 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Archivo:** `pages/inventory/conteos/ConteoSesion.tsx`
 - **Propósito:** Sesión "lista primero": el departamento completo aparece con su paloma (pendiente / revisado / con diferencia) y cada lectura palomea la fila, la resalta, la trae a la vista y muestra la tarjeta de la pieza con "Ver ficha" y +1. La pistola USB teclea el código + Enter en el campo siempre enfocado (se reenfoca tras cada lectura y al cerrar modales; un `keydown` global devuelve el foco al campo si quedó en un botón; las lecturas rápidas se encolan en orden), así que no necesita "Siguiente"; la cámara es opcional ("Usar cámara") y solo ella se pausa tras cada lectura. También buscador por nombre y "ligar código" para desconocidos. Cantidades editables por fila (PATCH; 0 borra). La lista se relee del servidor: recargar o cambiar de dispositivo no pierde nada. Cada fila enseña lo que se coteja con la etiqueta: nombre, marca · modelo · color, SKU · código, talla, departamento, precio, sistema y contado. **En escritorio (≥ 1024, `useIsMobile()` falso)** la pantalla va a dos columnas: lista a todo lo ancho y, a la derecha, un panel fijo con la última lectura y la ficha de la pieza, que se abre sola con cada lectura (salvo que se esté corrigiendo otra) y no es un modal, así que la pistola sigue palomeando. En teléfono y tablet todo se apila y la ficha es un modal.
 - **Datos/API:** `conteosApi.ver/lista/escanear/agregarLinea/patchLinea/borrarLinea/ajustarLinea/cerrar/cancelar`; `productsApi.getById/getBrands/getDepartments/update/updateVariant/uploadImage` para la ficha, el buscador y para ligar un código a una variante.
-- **Componentes clave:** `useLectorCodigos.ts` (**reutiliza** `pages/scanner/barcodeReader.ts`: detector nativo con respaldo ZXing, mismo módulo que usa `/scanner`), `BuscadorVariante.tsx`, `ListaDepartamento.tsx` (filas/tarjetas con palomas), `FichaProducto.tsx` (ver y corregir la ficha completa: del producto nombre, marca, modelo, descripción, departamento y foto por `PUT /products/{id}` + `POST /products/{id}/image`; de la talla talla, color, código, precio y costo por `PUT /products/variants/{id}`; solo viaja lo que cambió, `ficha.ts::cambiosFicha`; marca `corregida`; si el cambio de departamento saca la pieza de la lista, la ficha se cierra y avisa), helpers `avance.ts`, `lista.ts`, `sesion.ts` y `ficha.ts`.
+- **Componentes clave:** `useLectorCodigos.ts` (**reutiliza** `pages/scanner/barcodeReader.ts`: detector nativo con respaldo ZXing, mismo módulo que usa Consultar, `/mobile/query`), `BuscadorVariante.tsx`, `ListaDepartamento.tsx` (filas/tarjetas con palomas), `FichaProducto.tsx` (ver y corregir la ficha completa: del producto nombre, marca, modelo, descripción, departamento y foto por `PUT /products/{id}` + `POST /products/{id}/image`; de la talla talla, color, código, precio y costo por `PUT /products/variants/{id}`; solo viaja lo que cambió, `ficha.ts::cambiosFicha`; marca `corregida`; si el cambio de departamento saca la pieza de la lista, la ficha se cierra y avisa), helpers `avance.ts`, `lista.ts`, `sesion.ts` y `ficha.ts`.
 - **Notas:** Un código con varias variantes devuelve `ambiguo` y se elige de la lista; una pieza fuera del departamento se cuenta pero marca `fuera_de_alcance`. Cerrar congela el conteo y lleva al reporte. **"Cancelar conteo"** (`dax-btn-danger`, junto a "Cerrar conteo", con `ConfirmDialog`) descarta lo contado sin congelar reporte ni tocar existencias (`POST /api/inventory/counts/{id}/cancel`; los ajustes ya hechos en piso se conservan) y vuelve a la lista; abrir por URL la sesión de un conteo cancelado regresa a la lista con un aviso.
 
 ### `/inventory/conteos/:id/reporte` — Reporte del conteo 📱
@@ -421,17 +422,8 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Datos/API:** `usersApi.getAll/create/update`, `organizationApi.getBranches`.
 - **Notas:** Username no editable en edición. Sucursal vacía = "HQ / Global". Errores muestran el detalle real del backend.
 
-### `/organization` — Empresa y sucursales
-- **Archivo:** `pages/core/Organization.tsx` (631 líneas — creció por USD/comisión de tarjeta/ticket boutique, ver `docs/presets/BOUTIQUE.md §3.4`)
-- **Propósito:** Config de empresa (datos fiscales, logo, header/footer de ticket) + CRUD de sucursales.
-- **Quién la ve:** Admin.
-- **Datos/API:** `organizationApi.getOrg/updateOrg/getBranches/createBranch/updateBranch/deleteBranch`, logo via `client`.
-- **Notas:** 2 tabs. Validación de logo (PNG/JPEG/WEBP ≤1MB). HQ no se elimina.
-  Header/footer se imprimen en el POS. Fixes 2026-09-22: guardar/borrar sucursal ahora
-  muestra el motivo real del backend en vez de un mensaje genérico (auditoría #16); no
-  se puede dejar "Razón social" vacía y guardar — antes ponía `organization.name` en
-  `NULL` silenciosamente (auditoría #17, los 4 botones que comparten `saveOrg` se
-  deshabilitan si el campo está vacío).
+### `/organization` — redirige a `/configuracion`
+- **Archivo:** `pages/core/Organization.tsx` ya no es una ruta: es el componente de las pestañas Empresa, Ventas y caja y Ticket de `/configuracion` (prop `seccion`; sin ella pinta todo). Guarda con `organizationApi.updateOrg`; logo vía `client` (PNG/JPEG/WEBP ≤ 1 MB). Las sucursales están en `core/Sucursales.tsx`.
 
 ### `/startup` — Onboarding (asistente inicial)
 - **Archivo:** `pages/core/Startup.tsx` (271 líneas)
@@ -465,11 +457,11 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Quién la ve:** Vendedor (única vista móvil con escritura).
 - **Datos/API:** `hrApi.getMe/updateMe`. Estado `noProfile` si falla getMe.
 
-### `/mobile/query` — Consulta móvil
-- **Archivo:** `pages/mobile/MobileQuery.tsx` (148 líneas)
-- **Propósito:** Buscador de productos en piso (nombre/SKU/código): precio, stock, precios por volumen.
-- **Quién la ve:** Vendedor.
-- **Datos/API:** `productsApi.search`. Debounce 350ms. Solo lectura.
+### `/mobile/query` — Consultar (buscador de precios + escáner)
+- **Archivo:** `pages/scanner/StoreScanner.tsx` (`/scanner` redirige aquí; `MobileQuery.tsx` se borró).
+- **Propósito:** una sola pantalla para piso: teclear busca por nombre/SKU/código (`productsApi.search`, debounce 350 ms) y la cámara o «Buscar» hacen la búsqueda exacta (`productsApi.scanExact`). Muestra precio y existencia por talla.
+- **Quién la ve:** todos (pestaña «Consultar» del armazón móvil y entrada «Consultar» del menú). Admin, dueño, gerente y cajero además corrigen precio y escalones, cuentan existencia (`POST /inventory/adjust`) y ligan un código a un producto; vendedor y soporte ven la ficha de solo lectura (`PUEDEN_EDITAR`).
+- **Datos/API:** `productsApi.search/scanExact/getById/update/updateVariant/adjustStock`, `organizationApi.getBranches` (admin sin sucursal elige dónde cuenta).
 
 ### `/mobile/sales` — Cotización móvil
 - **Archivo:** `pages/mobile/MobileSales.tsx` (243 líneas)
