@@ -114,13 +114,18 @@ def get_cash_discrepancies(
 
     from app.services.cash_reconciliation import compute_expected_cash
 
-    sesiones = db.query(CashSession).options(
+    # Dueño y administrador: toda la organización. Gerente y caja: su sucursal.
+    ambito = mv.ambito_sin_eleccion(current_user, org_id)
+    consulta = db.query(CashSession).options(
         joinedload(CashSession.user),
         joinedload(CashSession.branch),
     ).join(CashSession.branch).filter(
         Branch.organization_id == org_id,
         CashSession.closed_at.isnot(None),
-    ).order_by(desc(CashSession.closed_at)).limit(limit).all()
+    )
+    if not ambito.toda_la_org:
+        consulta = consulta.filter(CashSession.branch_id == ambito.branch_id)
+    sesiones = consulta.order_by(desc(CashSession.closed_at)).limit(limit).all()
 
     salida = []
     for s in sesiones:
@@ -488,7 +493,9 @@ def get_command_center_stats(
     """
     _sin_totales_para_cajero(current_user)
     periodo = mv.periodo_de_query(start_date, end_date)      # una sola fecha = ese día; invertido = 422
-    ambito = mv.Ambito(org_id, None, True)          # el centro de mando siempre es de toda la org
+    # De toda la organización solo para dueño/administrador; el gerente recibe
+    # las mismas llaves acotadas a su sucursal (antes veía la empresa entera).
+    ambito = mv.ambito_sin_eleccion(current_user, org_id)
     sales_filters = mv.filtros_documentos(ambito, periodo)
 
     actual = mv.resumen(db, ambito, periodo)
@@ -504,7 +511,7 @@ def get_command_center_stats(
         sales_growth = 0.0
 
     # Canceladas del periodo (informativo)
-    cancel_stats = db.query(
+    cancel_q = db.query(
         func.count(SalesDocument.id).label("count"),
         func.sum(SalesDocument.total_amount).label("total")
     ).filter(
@@ -512,7 +519,10 @@ def get_command_center_stats(
         mv.dia_mx(SalesDocument.created_at) >= periodo.inicio,
         mv.dia_mx(SalesDocument.created_at) <= periodo.fin,
         SalesDocument.status == DocumentStatus.CANCELLED,
-    ).first()
+    )
+    if not ambito.toda_la_org:
+        cancel_q = cancel_q.filter(SalesDocument.branch_id == ambito.branch_id)
+    cancel_stats = cancel_q.first()
     cancel_count = cancel_stats.count or 0
     cancel_total = float(cancel_stats.total or 0)
 
@@ -527,7 +537,10 @@ def get_command_center_stats(
 
     # --- 2. BRANCH BREAKDOWN ---
     # Aggregate queries (no N+1): sales-per-branch, open-sessions, critical-stock.
-    branches_db = db.query(Branch).filter(Branch.organization_id == org_id).all()
+    branches_q = db.query(Branch).filter(Branch.organization_id == org_id)
+    if not ambito.toda_la_org:
+        branches_q = branches_q.filter(Branch.id == ambito.branch_id)
+    branches_db = branches_q.all()
 
     por_sucursal = mv.por_sucursal(db, org_id, periodo)
 
@@ -594,8 +607,8 @@ def get_command_center_stats(
         Product.is_active == True,
         StockOnHand.is_active == True
     )
-    if not _is_admin(current_user) and current_user.branch_id:
-        _alerts_q = _alerts_q.filter(StockOnHand.branch_id == current_user.branch_id)
+    if not ambito.toda_la_org:
+        _alerts_q = _alerts_q.filter(StockOnHand.branch_id == ambito.branch_id)
     low_stock = _alerts_q.limit(10).all()
 
     _now_iso = datetime.now(_MX).isoformat()

@@ -1144,12 +1144,16 @@ def _verify_session_access(db: Session, session_id: int, current_user: User) -> 
     session = db.query(CashSession).filter(CashSession.id == session_id).first()
     if not session:
         raise HTTPException(404, "Sesión no encontrada")
-    # Verificar organizacion via membership (User no tiene organization_id directo)
+    # Verificar organizacion via membership (User no tiene organization_id directo).
+    # Se busca la membresía ACTIVA en la organización de la sesión, no "la
+    # primera" del usuario: con dos membresías, esa primera no tenía orden y el
+    # acceso dependía de cuál devolviera la base.
     user_org = db.query(UserOrganization.organization_id).filter(
         UserOrganization.user_id == current_user.id,
-        UserOrganization.is_active == True
+        UserOrganization.organization_id == session.branch.organization_id,
+        UserOrganization.is_active == True,  # noqa: E712
     ).first()
-    if not user_org or session.branch.organization_id != user_org.organization_id:
+    if not user_org:
         raise HTTPException(403, "No tienes acceso a esta sesión")
     if current_user.branch_id and session.branch_id != current_user.branch_id:
         raise HTTPException(403, "No tienes acceso a esta sesión")

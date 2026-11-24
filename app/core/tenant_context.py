@@ -15,6 +15,18 @@ from app.core.security.auth import get_current_user
 from app.models.users import PlatformRole, User, UserOrganization
 
 
+def membresia_principal(db: Session, user_id: int) -> Optional[UserOrganization]:
+    """La organización "por omisión" de un usuario: su membresía ACTIVA de menor
+    `organization_id`. Una sola regla para el login y para el contexto sin
+    cabecera; antes cada uno tomaba "la primera" sin orden (y el login, sin
+    mirar `is_active`), así que con dos membresías el resultado dependía del
+    plan de la consulta."""
+    return db.query(UserOrganization).filter(
+        UserOrganization.user_id == user_id,
+        UserOrganization.is_active == True,  # noqa: E712
+    ).order_by(UserOrganization.organization_id.asc()).first()
+
+
 def get_current_active_organization(
     request: Request,
     x_organization_id: Optional[int] = Header(None, alias="X-Organization-ID"),
@@ -32,7 +44,11 @@ def get_current_active_organization(
     """
     from app.models.organization import Organization
 
-    resolved_org_id = x_organization_id or request.cookies.get("support_org_id")
+    # La cookie de soporte solo cuenta para el personal de plataforma; en
+    # cualquier otro usuario se ignora (no se confía en quién la puso).
+    es_plataforma = current_user.platform_role in (PlatformRole.SUPERADMIN, PlatformRole.SUPPORT)
+    cookie_soporte = request.cookies.get("support_org_id") if es_plataforma else None
+    resolved_org_id = x_organization_id or cookie_soporte
 
     if resolved_org_id:
         try:
@@ -53,10 +69,7 @@ def get_current_active_organization(
             raise HTTPException(status_code=403, detail="No access to this organization")
         return resolved_org_id
 
-    assoc = db.query(UserOrganization).filter(
-        UserOrganization.user_id == current_user.id,
-        UserOrganization.is_active == True,  # noqa: E712
-    ).first()
+    assoc = membresia_principal(db, current_user.id)
     if assoc:
         return assoc.organization_id
 

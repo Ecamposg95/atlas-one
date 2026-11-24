@@ -462,7 +462,7 @@ def delete_organization(
         raise HTTPException(status_code=500, detail=f"Hard delete failed: {str(e)}")
 
 @router.post("/organizations/{org_id}/admins")
-def assign_org_admin(org_id: int, user_data: AdminAssign, db: Session = Depends(get_db), current_user: User = Depends(require_platform_admin)):
+def assign_org_admin(org_id: int, user_data: AdminAssign, db: Session = Depends(get_db), current_user: User = Depends(require_superadmin)):
     org = db.query(Organization).filter(Organization.id == org_id).first()
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -572,7 +572,7 @@ def activate_organization(org_id: int, db: Session = Depends(get_db), current_us
     return {"message": "Organization activated", "status": org.status}
 
 @router.post("/organizations/{org_id}/bootstrap")
-def bootstrap_organization(org_id: int, db: Session = Depends(get_db)):
+def bootstrap_organization(org_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_superadmin)):
     from app.models.organization import Branch, BranchType
     org = db.query(Organization).filter(Organization.id == org_id).first()
     if not org:
@@ -614,7 +614,7 @@ def bootstrap_organization(org_id: int, db: Session = Depends(get_db)):
     }
 
 @router.get("/organizations/{org_id}/export")
-def export_organization_data(org_id: int, db: Session = Depends(get_db)):
+def export_organization_data(org_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_superadmin)):
     """
     Generates a JSON dump of the organization's critical data.
     Focuses on Customers (Clients) as requested for backup.
