@@ -106,3 +106,101 @@ def test_c6_sin_descuento_el_reembolso_no_cambia(
     }, headers=h)
     assert dev.status_code in (200, 201), dev.text
     assert Decimal(str(dev.json()["items"][0]["refund_amount"])) == Decimal("100.00")
+
+
+# ── M13: forma de la solicitud ───────────────────────────────────────────────
+# Una partida con cantidad <= 0 o la misma variante repetida dejaba una
+# devolución PENDING inaprobable que bloqueaba las devoluciones legítimas de
+# esa venta (solo se admite una PENDING por venta).
+import pytest
+
+
+def _venta_de_dos(client, db, org, branch_a, admin_user, auth_admin, products_setup):
+    admin_user.branch_id = branch_a.id
+    db.add(admin_user)
+    db.commit()
+    _preparar_pos(db, org, branch_a, admin_user)
+    _, variant = products_setup["product_a"]
+    h = _h(auth_admin, org)
+    venta = client.post("/api/sales/", json={
+        "doc_type": "ORDER",
+        "items": [{"sku": variant.sku, "quantity": 2}],
+        "payments": [{"method": "CASH", "amount": "200.00"}],
+    }, headers=h)
+    assert venta.status_code == 200, venta.text
+    return venta.json()["sale_id"], variant, h
+
+
+def _solicitud(sale_id, items):
+    return {
+        "sale_id": sale_id, "reason": "Regresión M13",
+        "total_refunded": "1.00", "refund_method": "CASH",
+        "items": [
+            {"variant_id": vid, "quantity": qty, "refund_amount": "1.00",
+             "is_inventory_reentry": True}
+            for vid, qty in items
+        ],
+    }
+
+
+def _devoluciones(db, sale_id):
+    from app.models.returns import SaleReturn
+    return db.query(SaleReturn).filter(SaleReturn.sale_id == sale_id).count()
+
+
+@pytest.mark.parametrize("cantidad", ["0", "-1", "-0.5"])
+def test_m13_cantidad_cero_o_negativa_se_rechaza(
+    cantidad, client, db, org, branch_a, admin_user, auth_admin, products_setup
+):
+    sale_id, variant, h = _venta_de_dos(
+        client, db, org, branch_a, admin_user, auth_admin, products_setup)
+
+    dev = client.post("/api/returns/", json=_solicitud(sale_id, [(variant.id, cantidad)]), headers=h)
+
+    assert dev.status_code == 400, dev.text
+    assert "mayor a cero" in dev.json()["detail"]
+    assert _devoluciones(db, sale_id) == 0, "no debe quedar una PENDING que bloquee la venta"
+
+
+def test_m13_la_misma_variante_repetida_se_rechaza(
+    client, db, org, branch_a, admin_user, auth_admin, products_setup
+):
+    sale_id, variant, h = _venta_de_dos(
+        client, db, org, branch_a, admin_user, auth_admin, products_setup)
+
+    # 2 + 2 de una venta de 2: cada partida pasaba sola la validación.
+    dev = client.post(
+        "/api/returns/",
+        json=_solicitud(sale_id, [(variant.id, "2"), (variant.id, "2")]), headers=h)
+
+    assert dev.status_code == 400, dev.text
+    assert "más de una vez" in dev.json()["detail"]
+    assert _devoluciones(db, sale_id) == 0
+
+
+def test_m13_sin_partidas_se_rechaza(
+    client, db, org, branch_a, admin_user, auth_admin, products_setup
+):
+    sale_id, _, h = _venta_de_dos(
+        client, db, org, branch_a, admin_user, auth_admin, products_setup)
+
+    dev = client.post("/api/returns/", json=_solicitud(sale_id, []), headers=h)
+
+    assert dev.status_code == 400, dev.text
+    assert "no tiene productos" in dev.json()["detail"]
+    assert _devoluciones(db, sale_id) == 0
+
+
+def test_m13_tras_el_rechazo_la_devolucion_legitima_si_entra(
+    client, db, org, branch_a, admin_user, auth_admin, products_setup
+):
+    sale_id, variant, h = _venta_de_dos(
+        client, db, org, branch_a, admin_user, auth_admin, products_setup)
+    assert client.post(
+        "/api/returns/", json=_solicitud(sale_id, [(variant.id, "0")]), headers=h
+    ).status_code == 400
+
+    dev = client.post("/api/returns/", json=_solicitud(sale_id, [(variant.id, "1")]), headers=h)
+
+    assert dev.status_code in (200, 201), dev.text
+    assert Decimal(str(dev.json()["items"][0]["refund_amount"])) == Decimal("100.00")
