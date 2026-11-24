@@ -125,3 +125,62 @@ def test_cancelar_dos_veces_repone_el_stock_una_sola_vez(
     segunda = client.delete(f"/api/sales/{sale_id}", headers=h)
     assert segunda.status_code == 400 and "ya está cancelada" in segunda.json()["detail"]
     assert _stock(db, variant, branch_a) == antes
+
+
+# ── Aprobar una devolución ───────────────────────────────────────────────────
+
+def test_approve_return_bloquea_devolucion_venta_y_existencias():
+    from app.crud import returns as crud_returns
+    src = _sin_espacios(crud_returns.approve_return)
+    dev = src.index("q.populate_existing().with_for_update().first()")
+    venta = src.index(".populate_existing().with_for_update(of=SalesDocument).first()")
+    r0 = src.index("sale.status==DocumentStatus.CANCELLED")
+    # Devolución → venta, y la venta bloqueada ANTES de mirar si está cancelada.
+    assert dev < venta < r0
+    assert src.count(ORDENADO) == 1
+
+
+def test_aprobar_no_usa_la_copia_vieja_de_la_devolucion(
+    client, db, org, branch_a, admin_user, auth_admin, products_setup
+):
+    """La segunda de dos aprobaciones simultáneas espera el candado con la
+    devolución ya cargada en su sesión como PENDING. Si al obtenerlo se queda
+    con esa copia, vuelve a reingresar la mercancía y a sacar el dinero (en una
+    devolución parcial nada más la frenaba). Aquí se reproduce sin hilos: la
+    sesión tiene la copia vieja y la base ya dice APPROVED."""
+    from sqlalchemy import text
+
+    from app.crud import returns as crud_returns
+    from app.models.inventory import InventoryMovement
+    from app.models.returns import SaleReturn
+
+    admin_user.branch_id = branch_a.id
+    db.add(admin_user); db.commit()
+    _preparar(db, org, branch_a, admin_user)
+    _, variant = products_setup["product_a"]
+    h = {**auth_admin, "X-Organization-ID": str(org.id)}
+    venta = client.post("/api/sales/", json={
+        "doc_type": "ORDER", "items": [{"sku": variant.sku, "quantity": 2}],
+        "payments": [{"method": "CASH", "amount": "200.00"}]}, headers=h)
+    assert venta.status_code == 200, venta.text
+    dev = client.post("/api/returns/", json={
+        "sale_id": venta.json()["sale_id"], "reason": "parcial",
+        "total_refunded": "100.00", "refund_method": "CASH",
+        "items": [{"variant_id": variant.id, "quantity": "1",
+                   "refund_amount": "100.00", "is_inventory_reentry": True}]}, headers=h)
+    assert dev.status_code in (200, 201), dev.text
+    ret_id = dev.json()["id"]
+
+    copia = db.query(SaleReturn).filter(SaleReturn.id == ret_id).one()
+    assert copia.status == "PENDING"
+    # "Otra petición" la aprobó por debajo de esta sesión.
+    db.execute(text("UPDATE sale_returns SET status = 'APPROVED' WHERE id = :i"), {"i": ret_id})
+    antes = Decimal(str(db.query(StockOnHand.qty_on_hand).filter(
+        StockOnHand.variant_id == variant.id, StockOnHand.branch_id == branch_a.id).scalar()))
+
+    resultado = crud_returns.approve_return(db, ret_id, admin_user.id, organization_id=org.id)
+
+    assert resultado.status == "APPROVED"
+    assert _stock(db, variant, branch_a) == antes, "no debe reingresar otra vez"
+    assert db.query(InventoryMovement).filter(
+        InventoryMovement.reference == f"RETURN:{ret_id}").count() == 0

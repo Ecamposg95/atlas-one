@@ -153,7 +153,13 @@ def approve_return(db: Session, return_id: str, supervisor_id: int,
     q = db.query(SaleReturn).filter(SaleReturn.id == return_id)
     if organization_id is not None:
         q = q.filter(SaleReturn.organization_id == organization_id)
-    db_return = q.with_for_update().first()
+    # `populate_existing`: el router ya cargó esta devolución (sin candado)
+    # para validar la organización, y una fila que la sesión ya tiene NO se
+    # refresca al releerla con `FOR UPDATE`: la segunda aprobación esperaba el
+    # candado y luego seguía viendo su copia vieja en PENDING. En una
+    # devolución total la frenaba R-2 (ya no queda nada por devolver); en una
+    # PARCIAL se aprobaba dos veces — doble reingreso y doble salida de caja.
+    db_return = q.populate_existing().with_for_update().first()
     if not db_return:
         raise ValueError("Devolución no encontrada")
 
@@ -171,8 +177,18 @@ def approve_return(db: Session, return_id: str, supervisor_id: int,
     if refund_amount <= Decimal("0"):
         raise ValueError("El monto de la devolución debe ser mayor a cero.")
 
-    # 2. Get Sale (needed for R-2)
-    sale = db_return.sale  # Relationship
+    # 2. Get Sale (needed for R-2) — con candado y recién leída. Sin él, una
+    # cancelación simultánea de la venta pasaba el R-0 de abajo (las dos
+    # peticiones veían la venta sin cancelar) y el dinero salía dos veces.
+    # Orden global de candados: (devolución →) documento → existencias →
+    # cliente, el mismo de cobrar, cancelar y abonar.
+    sale = (
+        db.query(SalesDocument)
+        .filter(SalesDocument.id == db_return.sale_id)
+        .populate_existing()
+        .with_for_update(of=SalesDocument)
+        .first()
+    )
 
     # R-0: una venta cancelada ya devolvio su dinero por otra via. Aprobar una
     # devolucion encima sobrescribiria su estado CANCELLED y sacaria efectivo
@@ -213,6 +229,14 @@ def approve_return(db: Session, return_id: str, supervisor_id: int,
     db.flush()
 
     # 4. Inventory & Stock
+    # Existencias que reingresan: bloqueadas juntas y en orden de id, para que
+    # el reingreso no pise (ni lo pise) una venta simultánea de esa pieza. El
+    # `.first()` de abajo devuelve estas mismas filas ya bloqueadas.
+    db.query(StockOnHand).filter(
+        StockOnHand.branch_id == db_return.branch_id,
+        StockOnHand.variant_id.in_(
+            [i.variant_id for i in db_return.items if i.is_inventory_reentry]),
+    ).order_by(StockOnHand.id).with_for_update().all()
     for item in db_return.items:
         if item.is_inventory_reentry:
              # Actualizar StockOnHand
