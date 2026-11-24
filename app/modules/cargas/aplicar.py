@@ -225,6 +225,7 @@ class _Aplicador:
             actor_user_id=self.user.id, action="CARGA_PRECIO_ACTUALIZADO",
             entity_type="ProductVariant", entity_id=str(v.id),
             payload=json.dumps({
+                "organization_id": self.carga.organization_id,
                 "carga_id": self.carga.id, "folio": self.carga.folio, "variant_id": v.id,
                 "sku": v.sku, "precio_anterior": _dinero(antes_precio),
                 "precio_nuevo": _dinero(v.price), "costo_anterior": _dinero(antes_costo),
@@ -514,7 +515,9 @@ def aplicar_carga(db: Session, carga: CargaMercancia, user: User) -> ResumenApli
             db.add(PlatformAuditLog(
                 actor_user_id=user.id, action="CARGA_APLICADA",
                 entity_type="CargaMercancia", entity_id=str(carga.id),
-                payload=json.dumps({"carga_id": carga.id, "folio": carga.folio,
+                payload=json.dumps({"organization_id": carga.organization_id,
+                                    "carga_id": carga.id, "folio": carga.folio,
+                                    "rol": str(getattr(user.role, "value", user.role)),
                                     "totales": totales, "source": "ai"}),
             ))
             db.flush()

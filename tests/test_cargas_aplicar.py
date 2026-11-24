@@ -174,6 +174,8 @@ def test_entrada_crea_nuevos_y_suma_existentes(db, org, branch_a, admin_a, catal
     [aud] = _audit(db, "CARGA_APLICADA")
     assert aud["carga_id"] == carga.id and aud["folio"] == carga.folio and aud["source"] == "ai"
     assert aud["totales"]["productos_nuevos"] == 1
+    # Bitácora de escrituras de IA: se sabe de qué empresa fue y con qué rol se autorizó.
+    assert aud["organization_id"] == org.id and aud["rol"] == "ADMINISTRADOR"
 
 
 def test_migracion_fija_existencia(db, org, branch_a, admin_a, catalogo):
