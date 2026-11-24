@@ -276,6 +276,8 @@ def scaffold(key: str, *, stub: bool, force: bool) -> None:
     if not stub:
         print(f"  □ scripts/railway_init.py run_migrations(): add CREATE TABLE / column DDL if needed")
     print(f"  □ scripts/init_presets_v2.py MODULES_CATALOG: add tuple for '{key}'")
+    print(f"  □ app/services/estado_modulos.py ESTADO_MODULOS: declare '{key}' (oculto until it has backend + screen)")
+    print(f"      and mirror it in frontend/src/utils/estadoModulos.ts (see CLAUDE.md §5 «Destapar un módulo»)")
     print(f"  □ scripts/init_presets_v2.py MODULE_UPSELL: add entry for '{key}'")
     print(f"  □ scripts/init_presets_v2.py PRESETS: add '{key}' to the relevant ATLAS_ONE_* preset(s)")
     print(f"  □ frontend/src/api/{key}.ts: create client (see frontend/src/api/customers.ts for pattern)")

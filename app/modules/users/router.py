@@ -138,6 +138,12 @@ def read_user_context(
     from app.capacidades import resolver
     ctx["capacidades"] = resolver(ctx["enabled_modules"])
 
+    # Módulos que la interfaz no debe mostrar aunque estén encendidos: no están
+    # construidos (decisión 2026-11-24). `enabled_modules` no se recorta: el
+    # servidor sigue permitiendo lo mismo; esto solo esconde menú y tarjetas.
+    from app.services.estado_modulos import no_disponibles
+    ctx["modulos_no_disponibles"] = no_disponibles()
+
     # Campos del formulario de producto según el giro (mega plan, principio 3).
     from app.modules.products.campos import campos_producto
     ctx["campos_producto"] = campos_producto(ctx["preset"], ctx["enabled_modules"], ctx["perfil_ui"])

@@ -36,7 +36,7 @@ export const HQ_NAV_GROUPS: { header: string; urls: string[] }[] = [
   { header: 'Ventas',       urls: ['/sales', '/returns', '/cash-history', '/quotes', '/quotes/new', '/seguimiento'] },
   { header: 'Catálogo',     urls: ['/products', '/fotos', '/departments', '/brands', '/labels'] },
   { header: 'Inventario',   urls: ['/inventory', '/inventory/conteos', '/mobile/query', '/logistics', '/boxes'] },
-  { header: 'Compras',      urls: ['/purchases', '/expenses', '/purchasing'] },
+  { header: 'Compras',      urls: ['/purchases', '/expenses'] },
   { header: 'Clientes',     urls: ['/customers', '/appointments', '/commissions', '/memberships'] },
   { header: 'Restaurante',  urls: ['/menu', '/tables', '/mobile/comanda', '/kitchen', '/recipes', '/meseros', '/bar/bottles'] },
   { header: 'Organización', urls: ['/configuracion', '/users', '/hr'] },
@@ -71,13 +71,15 @@ export const ALL_NAV: NavItem[] = [
   { label: 'Clientes',          short: 'CRM', icon: 'fa-address-book',        url: '/customers',        group: 'hq',   sort: 17, module: 'crm' },
   { label: 'Usuarios',          short: 'USR', icon: 'fa-users-cog',           url: '/users',            group: 'hq',   sort: 20 },
   { label: 'Recursos Humanos',  short: 'HR',  icon: 'fa-user-tie',            url: '/hr',               group: 'hq',   sort: 21, module: 'hr' },
-  // Atlas One stub modules (Beta — visible when the module is enabled for the org)
+  // Agenda, Comisiones, Membresías e IA aún no están construidos: el ítem queda
+  // declarado pero `visibleNavItems` no lo pinta mientras su módulo no esté
+  // `disponible` (utils/estadoModulos.ts), y su ruta en App.tsx manda al inicio.
+  // Para destaparlos: CLAUDE.md §5 «Destapar un módulo».
   { label: 'Agenda',            short: 'AGE', icon: 'fa-calendar',            url: '/appointments',     group: 'hq',   sort: 22, module: 'appointments' },
   { label: 'Comisiones',        short: 'CMS', icon: 'fa-percent',             url: '/commissions',      group: 'hq',   sort: 23, module: 'commissions' },
   { label: 'Membresías',        short: 'MEM', icon: 'fa-id-card',             url: '/memberships',      group: 'hq',   sort: 24, module: 'memberships' },
   { label: 'Recetas',           short: 'REC', icon: 'fa-book',                url: '/recipes',          group: 'hq',   sort: 25, module: 'recipes' },
   { label: 'IA',                short: 'IA',  icon: 'fa-microchip',           url: '/ai',               group: 'hq',   sort: 26, module: 'ai' },
-  { label: 'Pedidos compras',   short: 'OC',  icon: 'fa-truck',               url: '/purchasing',       group: 'hq',   sort: 27, module: 'purchasing' },
   { label: 'Mesas',             short: 'MSA', icon: 'fa-chair',               url: '/tables',           group: 'hq',   sort: 28, module: 'tables' },
   { label: 'Cocina (KDS)',      short: 'KDS', icon: 'fa-fire-burner',         url: '/kitchen',          group: 'hq',   sort: 29, module: 'kitchen' },
   { label: 'Meseros',           short: 'MSR', icon: 'fa-user-tie',            url: '/meseros',          group: 'hq',   sort: 30, module: 'tables' },
@@ -114,8 +116,8 @@ export const ROLE_ROUTES: Record<Role, string[]> = {
   // admin, no en la de quien está en el mostrador, y hubo que mover ventas a
   // mano por eso. El backend sigue aceptando al admin en `create_sale` (se usa
   // para capturar ventas históricas por API); esto es solo la navegación.
-  ADMINISTRADOR:    ['/mobile/query','/fotos','/sales','/returns','/products','/inventory','/configuracion','/labels','/mobile/owner','/cash-history','/hq/operations','/hq/reports-hub','/hq/valor-inventario','/inventory/conteos','/departments','/users','/customers','/customers/cobranza','/brands','/hr','/hr/me','/logistics','/boxes','/quotes','/quotes/new','/seguimiento','/purchases','/expenses','/appointments','/commissions','/memberships','/recipes','/ai','/purchasing','/tables','/kitchen','/meseros','/bar/bottles','/menu','/mobile/comanda'],
-  DUEÑO:            ['/mobile/query','/fotos','/pos','/sales','/returns','/products','/inventory','/configuracion','/labels','/mobile/owner','/cash-history','/hq/operations','/hq/reports-hub','/hq/valor-inventario','/inventory/conteos','/customers','/customers/cobranza','/hr/me','/logistics','/boxes','/quotes','/quotes/new','/seguimiento','/purchases','/expenses','/appointments','/commissions','/memberships','/recipes','/ai','/purchasing','/tables','/kitchen','/meseros','/bar/bottles','/menu','/mobile/comanda'],
+  ADMINISTRADOR:    ['/mobile/query','/fotos','/sales','/returns','/products','/inventory','/configuracion','/labels','/mobile/owner','/cash-history','/hq/operations','/hq/reports-hub','/hq/valor-inventario','/inventory/conteos','/departments','/users','/customers','/customers/cobranza','/brands','/hr','/hr/me','/logistics','/boxes','/quotes','/quotes/new','/seguimiento','/purchases','/expenses','/appointments','/commissions','/memberships','/recipes','/ai','/tables','/kitchen','/meseros','/bar/bottles','/menu','/mobile/comanda'],
+  DUEÑO:            ['/mobile/query','/fotos','/pos','/sales','/returns','/products','/inventory','/configuracion','/labels','/mobile/owner','/cash-history','/hq/operations','/hq/reports-hub','/hq/valor-inventario','/inventory/conteos','/customers','/customers/cobranza','/hr/me','/logistics','/boxes','/quotes','/quotes/new','/seguimiento','/purchases','/expenses','/appointments','/commissions','/memberships','/recipes','/ai','/tables','/kitchen','/meseros','/bar/bottles','/menu','/mobile/comanda'],
   GERENTE:          ['/mobile/query','/fotos','/labels','/configuracion','/cash-history','/reports','/hq/valor-inventario','/hr/me','/products','/pos','/sales','/customers','/customers/cobranza','/returns','/atlas-pos','/tables','/kitchen','/recipes','/meseros','/bar/bottles','/menu','/mobile/comanda'],
   CAJERO:           ['/mobile/query','/fotos','/labels','/pos','/cash-history','/hr/me','/products','/configuracion','/sales','/customers','/returns','/atlas-pos','/tables','/kitchen','/bar/bottles','/menu','/mobile/comanda'],
   VENDEDOR:         ['/mobile/dashboard','/mobile/query','/mobile/sales','/mobile/profile','/hr/me','/atlas-pos'],

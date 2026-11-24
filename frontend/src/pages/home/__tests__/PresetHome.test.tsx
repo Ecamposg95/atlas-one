@@ -61,3 +61,25 @@ describe('PresetHome fuera de FREE', () => {
     expect(screen.getByText('Compras')).toBeTruthy()
   })
 })
+
+describe('PresetHome no anuncia módulos sin construir', () => {
+  it('Promociones no se pinta ni entra a la tarjeta de plan, aunque el módulo esté encendido', () => {
+    pintar(ULTRA, ['core', 'promotions'])
+    expect(screen.queryByText('Promociones')).toBeNull()
+    cleanup()
+    pintar(FREE, ['core'])
+    expect(screen.getByTestId('tarjeta-plan').textContent).not.toContain('Promociones')
+  })
+
+  it('Compras lleva a la pantalla real, no al relleno', () => {
+    pintar(ULTRA, ['core', 'purchasing'])
+    expect(screen.getByText('Ver compras').closest('a')?.getAttribute('href')).toBe('/purchases')
+  })
+
+  it('cuando el servidor lo declara disponible, el widget vuelve solo', () => {
+    useEnabledModulesStore.setState({ noDisponibles: {} })
+    pintar(ULTRA, ['core'])
+    expect(screen.getByText('Promociones')).toBeTruthy()
+    useEnabledModulesStore.getState().reset()
+  })
+})

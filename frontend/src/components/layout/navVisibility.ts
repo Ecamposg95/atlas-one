@@ -1,6 +1,7 @@
 import type { PerfilUi, PlanOrg, Role } from '../../types/auth'
 import { recortarPorPlan } from './navPerfilPlan'
 import { recortarPorPerfil } from './navPerfilBasico'
+import { moduloDisponible, NO_DISPONIBLES, type ModulosNoDisponibles } from '../../utils/estadoModulos'
 
 /** Roles que operan desde una sucursal (ven BranchNav, no el árbol de HQ). */
 export const BRANCH_ROLES: Role[] = ['CAJERO', 'GERENTE']
@@ -47,6 +48,8 @@ export interface NavVisibilityOptions {
   plan?: PlanOrg | null
   /** Perfil de interfaz. 'basico' esconde lo de navPerfilBasico; null/undefined/'completo' = nada. */
   perfilUi?: PerfilUi | null
+  /** Módulos sin construir (`/me/context`). Sin dato, el espejo local: esto NO falla abierto. */
+  noDisponibles?: ModulosNoDisponibles
 }
 
 /**
@@ -58,14 +61,19 @@ export interface NavVisibilityOptions {
  * se muestra todo lo permitido al rol, antes que dejar al usuario sin menú.
  * Con éxito el backend devuelve al menos ['core'], así que una lista no vacía
  * es autoritativa.
+ *
+ * Lo que no está construido es la excepción: un ítem cuyo módulo no está
+ * `disponible` no se pinta nunca, ni con el módulo encendido ni mientras carga
+ * (utils/estadoModulos.ts). Esconde el enlace; la base no se toca.
  */
 export function visibleNavItems(items: NavItem[], opts: NavVisibilityOptions): NavItem[] {
-  const { role, allowed, enabledModules, isGastro, plan, perfilUi } = opts
+  const { role, allowed, enabledModules, isGastro, plan, perfilUi, noDisponibles = NO_DISPONIBLES } = opts
   const modulesLoaded = enabledModules.length > 0
   const hasModule = (key: string | undefined) => !key || !modulesLoaded || enabledModules.includes(key)
   const isBranchRole = BRANCH_ROLES.includes(role)
   const porModulo = items
     .filter((n) => allowed.includes(n.url))
+    .filter((n) => moduloDisponible(n.module, noDisponibles))
     .filter((n) => hasModule(n.module))
     .filter((n) => !isBranchRole || hasModule(n.branchModule))
     .filter((n) => !(n.hideForGastro && isGastro))

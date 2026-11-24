@@ -12,6 +12,7 @@ from app.models.users import User, UserOrganization, Role as AppRole
 from app.schemas.organization import OrganizationCreate, OrganizationRead, OrganizationUpdate
 from app.core.security import get_password_hash
 from app.services import plans
+from app.services.estado_modulos import esta_disponible, estado_de
 from app.modules.platform.dependencies import require_platform_admin, require_superadmin
 
 from ._shared import (
@@ -748,6 +749,9 @@ def get_org_module_status(org_id: int, db: Session = Depends(get_db)):
             "is_enabled": is_enabled,
             "plan_minimo": minimo.clave if minimo else None,
             "permitido_por_plan": mod.key in permitidos,
+            # disponible | en_construccion | oculto: la plataforma sí lo ve y lo
+            # puede encender, pero marcado (app/services/estado_modulos.py).
+            "estado": estado_de(mod.key),
         })
     return result
 
@@ -852,6 +856,10 @@ def get_upsell_recommendations(
 
     for mod in candidates:
         if mod.key in active_modules:
+            continue
+        # Lo que no está construido no se recomienda (sí aparece, marcado, en
+        # la matriz de módulos de arriba).
+        if not esta_disponible(mod.key):
             continue
         meta = mod.upsell_metadata or {}
         recommended = meta.get("recommended_presets", []) or []

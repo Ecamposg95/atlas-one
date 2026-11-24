@@ -9,6 +9,7 @@ import { PlatformPageShell } from '../../components/platform/PlatformPageShell'
 import { KPICard } from '../../components/platform/KPICard'
 import { DataTable, DataTableColumn } from '../../components/platform/DataTable'
 import { StatusBadge } from '../../components/platform/StatusBadge'
+import { rotuloNoDisponible } from '../../utils/estadoModulos'
 import { SideDrawer } from '../../components/platform/SideDrawer'
 import { ConfirmModal } from '../../components/platform/ConfirmModal'
 
@@ -495,7 +496,10 @@ export function PlatformModules() {
       sortable: true,
       sortValue: m => m.status || '',
       accessor: m => (
-        m.status === 'STABLE'
+        // Sin construir manda sobre STABLE/BETA: es lo que la tienda (no) ve.
+        rotuloNoDisponible(m.key, m.estado)
+          ? <StatusBadge status="inactive" label={rotuloNoDisponible(m.key, m.estado)!} />
+          : m.status === 'STABLE'
           ? <StatusBadge status="stable" />
           : m.status === 'BETA'
             ? <StatusBadge status="beta" />

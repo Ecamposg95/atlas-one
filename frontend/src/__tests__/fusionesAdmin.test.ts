@@ -12,9 +12,10 @@ import { OCULTAS_BASICO_HQ } from '../components/layout/navPerfilBasico'
 const raiz = resolve(__dirname, '..')
 const src = (p: string) => readFileSync(resolve(raiz, p), 'utf8')
 // 2026-11-23: Empresa y Sucursales viven en Configuración; el escáner, en Consultar (/mobile/query).
-const FUSIONADAS = ['/hq/sales', '/hq/returns', '/hq/inventory', '/admin/catalog', '/organization', '/hq/branches', '/scanner']
+// 2026-11-24: «Pedidos compras» (/purchasing) era un relleno; Compras es /purchases.
+const FUSIONADAS = ['/hq/sales', '/hq/returns', '/hq/inventory', '/admin/catalog', '/organization', '/hq/branches', '/scanner', '/purchasing']
 const BORRADOS = ['pages/hq/HQSalesLog.tsx', 'pages/hq/HQReturns.tsx', 'pages/hq/HQInventory.tsx', 'pages/core/AdminCatalog.tsx',
-  'pages/hq/HQBranches.tsx', 'pages/mobile/MobileQuery.tsx']
+  'pages/hq/HQBranches.tsx', 'pages/mobile/MobileQuery.tsx', 'pages/coming-soon/index.tsx', 'components/ComingSoon.tsx']
 
 describe('Fase 3 del admin: ningún módulo repetido', () => {
   it('las pantallas HQ fusionadas ya no existen', () => {
@@ -33,6 +34,7 @@ describe('Fase 3 del admin: ningún módulo repetido', () => {
     expect(app).toMatch(/path="branches" element=\{<RedirigirConQuery a="\/configuracion\?tab=sucursales" \/>\}/)
     expect(app).toMatch(/path="branches\/:branchId" element=\{<RedirigirASucursal \/>\}/)
     expect(app).toMatch(/path="scanner" element=\{<RedirigirConQuery a="\/mobile\/query" \/>\}/)
+    expect(app).toMatch(/path="purchasing"\s+element=\{<RedirigirConQuery a="\/purchases" \/>\}/)
   })
 
   it('ni el menú, ni los permisos, ni el perfil básico nombran una URL fusionada', () => {
