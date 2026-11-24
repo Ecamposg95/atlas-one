@@ -125,6 +125,16 @@ def resolver_ambito(current_user: User, org_id: int, branch_id: Optional[int]) -
     return Ambito(org_id, current_user.branch_id, False)
 
 
+def ambito_sin_eleccion(current_user: User, org_id: int) -> Ambito:
+    """Ámbito de los reportes que no dejan elegir sucursal (arqueos, centro de
+    mando): dueño, administrador y superadmin ven la organización; gerente,
+    caja y los demás, solo su sucursal (sin sucursal asignada: cero filas).
+    A diferencia de `resolver_ambito`, aquí el gerente NO es de oficina."""
+    if ve_costos(current_user):
+        return Ambito(org_id, None, True)
+    return Ambito(org_id, current_user.branch_id, False)
+
+
 def ve_costos(user: User) -> bool:
     """Quién ve costos y utilidad: dueño, administrador y superadmin. El gerente no
     (misma regla que la valuación y el Inicio)."""
