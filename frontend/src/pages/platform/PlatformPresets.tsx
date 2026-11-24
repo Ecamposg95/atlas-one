@@ -47,7 +47,7 @@ const labelStyle: React.CSSProperties = {
 const buttonPrimary: React.CSSProperties = {
   background: 'var(--p-teal)',
   color: 'var(--dax-on-accent)',
-  fontWeight: 700,
+  fontWeight: 600,
   border: 'none',
   padding: '8px 16px',
   borderRadius: 4,
@@ -107,7 +107,7 @@ function ModulePill({ moduleKey, status }: { moduleKey: string; status?: string 
           padding: '1px 6px',
           borderRadius: 3,
           fontSize: 9,
-          fontWeight: 700,
+          fontWeight: 600,
           letterSpacing: '0.04em',
         }}>
           {s.label}
@@ -120,12 +120,12 @@ function ModulePill({ moduleKey, status }: { moduleKey: string; status?: string 
 function SystemBadge() {
   return (
     <span style={{
-      background: 'rgba(192,38,211,0.15)',
+      background: 'rgba(211, 96, 38,0.15)',
       color: 'var(--p-magenta)',
       padding: '2px 8px',
       borderRadius: 4,
       fontSize: '0.65rem',
-      fontWeight: 700,
+      fontWeight: 600,
       textTransform: 'uppercase',
       letterSpacing: '0.06em',
       whiteSpace: 'nowrap',
@@ -433,7 +433,7 @@ export function PlatformPresets() {
           fontSize: 12,
           color: 'var(--p-text)',
           cursor: 'pointer',
-          background: onlySystem ? 'rgba(192,38,211,0.12)' : 'var(--p-surface-2)',
+          background: onlySystem ? 'rgba(211, 96, 38,0.12)' : 'var(--p-surface-2)',
           border: `1px solid ${onlySystem ? 'var(--p-magenta)' : 'var(--p-border)'}`,
           padding: '5px 10px',
           borderRadius: 4,
@@ -494,7 +494,7 @@ export function PlatformPresets() {
                       <h3 style={{
                         margin: 0,
                         fontSize: '0.95rem',
-                        fontWeight: 700,
+                        fontWeight: 600,
                         color: 'var(--p-text)',
                       }}>
                         {p.display_name}
@@ -517,9 +517,9 @@ export function PlatformPresets() {
                 {/* Industry chip + orgs-using */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <span style={{
-                    background: 'rgba(0,229,255,0.10)',
+                    background: 'rgba(249, 87, 6,0.10)',
                     color: 'var(--p-cyan)',
-                    border: '1px solid rgba(0,229,255,0.25)',
+                    border: '1px solid rgba(249, 87, 6,0.25)',
                     padding: '3px 10px',
                     borderRadius: 4,
                     fontSize: 11,
@@ -531,9 +531,9 @@ export function PlatformPresets() {
                   <span
                     title={orgsUsing.map(o => o.name).join(', ') || 'Sin orgs asignadas'}
                     style={{
-                      background: orgsUsing.length > 0 ? 'rgba(0,201,177,0.10)' : 'var(--p-surface-2)',
+                      background: orgsUsing.length > 0 ? 'rgba(196, 69, 5,0.10)' : 'var(--p-surface-2)',
                       color: orgsUsing.length > 0 ? 'var(--p-teal)' : 'var(--p-muted)',
-                      border: `1px solid ${orgsUsing.length > 0 ? 'rgba(0,201,177,0.25)' : 'var(--p-border)'}`,
+                      border: `1px solid ${orgsUsing.length > 0 ? 'rgba(196, 69, 5,0.25)' : 'var(--p-border)'}`,
                       padding: '3px 10px',
                       borderRadius: 4,
                       fontSize: 11,
@@ -737,7 +737,7 @@ export function PlatformPresets() {
                       padding: '8px 10px',
                       cursor: 'pointer',
                       borderBottom: '1px solid var(--p-border)',
-                      background: checked ? 'rgba(0,201,177,0.06)' : 'transparent',
+                      background: checked ? 'rgba(196, 69, 5,0.06)' : 'transparent',
                     }}
                   >
                     <input
@@ -757,7 +757,7 @@ export function PlatformPresets() {
                           padding: '1px 6px',
                           borderRadius: 3,
                           fontSize: 9,
-                          fontWeight: 700,
+                          fontWeight: 600,
                           letterSpacing: '0.04em',
                         }}>
                           {m.status}
@@ -831,7 +831,7 @@ export function PlatformPresets() {
               flexDirection: 'column',
             }}
           >
-            <h3 style={{ margin: 0, color: 'var(--p-text)', fontSize: '1rem', fontWeight: 700 }}>
+            <h3 style={{ margin: 0, color: 'var(--p-text)', fontSize: '1rem', fontWeight: 600 }}>
               <i className="fa-solid fa-shield-halved" style={{ color: 'var(--p-magenta)', marginRight: 8 }} />
               Editar system preset
             </h3>
@@ -925,7 +925,7 @@ function ConfirmInline({
   return (
     <div>
       <p style={{ color: 'var(--p-text)', fontSize: '0.8rem', marginBottom: 6 }}>
-        Para continuar, escribe <code style={{ color: 'var(--p-magenta)', fontWeight: 700 }}>{resourceName}</code>:
+        Para continuar, escribe <code style={{ color: 'var(--p-magenta)', fontWeight: 600 }}>{resourceName}</code>:
       </p>
       <input
         value={typed}
@@ -965,7 +965,7 @@ function ConfirmInline({
           style={{
             background: 'var(--p-magenta)',
             color: '#fff',
-            fontWeight: 700,
+            fontWeight: 600,
             border: 'none',
             padding: '6px 16px',
             borderRadius: 4,

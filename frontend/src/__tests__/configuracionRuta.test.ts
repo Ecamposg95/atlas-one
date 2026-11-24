@@ -8,7 +8,7 @@ const raiz = resolve(__dirname, '..')
 describe('Impresora ahora es Configuración', () => {
   it('la URL vieja redirige conservando la consulta', () => {
     const app = readFileSync(resolve(raiz, 'App.tsx'), 'utf8')
-    expect(app).toMatch(/path="printer-settings" element=\{<RedirigirConQuery a="\/configuracion" \/>\}/)
+    expect(app).toMatch(/path="printer-settings" element=\{<RedirigirConQuery a="\/configuracion\?tab=impresoras" \/>\}/)
     expect(app).toMatch(/path="configuracion" element=\{<RutaPorRol url="\/configuracion">/)
   })
 

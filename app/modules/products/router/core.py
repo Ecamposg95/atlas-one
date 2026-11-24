@@ -21,6 +21,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel, ConfigDict
 from app.utils import image_storage
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
@@ -61,6 +62,7 @@ def read_products(
     active_only: bool = False,  # Filter: solo productos activos
     approval_status: str = None, # NEW: Filter by status
     include_inactive: bool = False,  # Admin: incluir productos desactivados
+    sin_foto: bool = False,  # Solo productos sin foto principal (pantalla Fotos)
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization),
@@ -107,6 +109,10 @@ def read_products(
 
     if active_only:
         query = query.filter(Product.is_active == True)
+
+    # `image_url` sigue a la primaria de la galería: vacía = el producto no tiene foto.
+    if sin_foto:
+        query = query.filter(or_(Product.image_url.is_(None), Product.image_url == ""))
 
     # target_branch_id para enriquecimiento de stock (abajo) — fuera del filtro de visibilidad
     target_branch_id = branch_id if branch_id is not None else current_user.branch_id

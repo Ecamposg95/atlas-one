@@ -62,6 +62,12 @@ export interface Organization {
   // Comisión por pago con tarjeta (2026-09-17). 0 = apagada: no se cobra ni se
   // muestra nada en el POS, el ticket, el corte ni los reportes.
   card_surcharge_pct?: number | string
+  // Conteo ciego del corte de caja (2026-11-21). true = la caja no ve el
+  // esperado ni su desglose con el turno abierto. Solo admin/dueño lo cambia.
+  conteo_ciego?: boolean
+  // Precio por sucursal (2026-11-23). true = el precio que edita alguien con
+  // sucursal solo cambia el de su sucursal. Solo admin/dueño lo cambia.
+  precio_por_sucursal?: boolean
   // Modo básico (2026-10). `perfil_ui` lo cambia solo la plataforma; aquí se
   // lee y el PUT de tenant lo descarta. El tope es de "se está acabando".
   perfil_ui?: string | null

@@ -126,7 +126,7 @@ function HomeShell({
         }}>
           {orgName} · {title}
         </p>
-        <h1 style={{ margin: '4px 0 8px', fontSize: '1.6rem', fontWeight: 700 }}>
+        <h1 style={{ margin: '4px 0 8px', fontSize: '1.6rem', fontWeight: 600 }}>
           {greeting ? `Hola, ${greeting}` : 'Bienvenido'}
         </h1>
         <p style={{ margin: 0, color: 'var(--p-muted)', fontSize: 14 }}>{subtitle}</p>
@@ -138,7 +138,7 @@ function HomeShell({
           background: `${accent}22`,
           color: accent,
           fontSize: 11,
-          fontWeight: 700,
+          fontWeight: 600,
           letterSpacing: '0.04em',
           textTransform: 'uppercase',
         }}>
@@ -215,7 +215,7 @@ function Widget({ icon, title, description, cta, ctaUrl, beta }: WidgetProps) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <span style={{
           width: 32, height: 32, borderRadius: 6,
-          background: 'rgba(0,201,177,0.12)',
+          background: 'rgba(196, 69, 5,0.12)',
           color: 'var(--p-teal)',
           display: 'inline-flex',
           alignItems: 'center',
@@ -231,7 +231,7 @@ function Widget({ icon, title, description, cta, ctaUrl, beta }: WidgetProps) {
             fontSize: 9,
             padding: '1px 6px',
             borderRadius: 3,
-            fontWeight: 700,
+            fontWeight: 600,
             letterSpacing: '0.04em',
             background: 'rgba(245,158,11,0.18)',
             color: 'var(--p-warning)',
@@ -268,7 +268,7 @@ function BarberHome({ greeting, orgName, puedeCobrar, plan, enabledModules }: Ho
       enabledModules={enabledModules}
       title="Atlas One Barber"
       subtitle="Agenda de cortes, paquetes prepagados y comisiones del equipo."
-      accent="#0891b2"
+      accent="#B24108"
     >
       <Widget module="appointments" icon="fa-calendar" title="Agenda de hoy" description="Cortes y barbas agendadas, sillas disponibles." cta="Abrir agenda" ctaUrl="/appointments" beta />
       <Widget module="memberships" icon="fa-id-card" title="Paquetes prepagados" description="Bonos de N cortes y vencimientos próximos." cta="Ver paquetes" ctaUrl="/memberships" beta />
@@ -310,7 +310,7 @@ function HealthHome({ greeting, orgName, puedeCobrar, plan, enabledModules }: Ho
       enabledModules={enabledModules}
       title="Atlas One Health"
       subtitle="Pacientes, agenda, planes de tratamiento y cobros."
-      accent="#06b6d4"
+      accent="#D44B06"
     >
       <Widget module="appointments" icon="fa-calendar" title="Consultas de hoy" description="Agenda por consultorio y profesional." cta="Abrir agenda" ctaUrl="/appointments" beta />
       <Widget module="crm" icon="fa-user-injured" title="Pacientes" description="Historial clínico, notas y contactos." cta="Ver pacientes" ctaUrl="/customers" />
@@ -371,7 +371,7 @@ function BarHome({ greeting, orgName, puedeCobrar }: HomeProps) {
       orgName={orgName}
       title="Atlas One Bar"
       subtitle="Barra, mesas, turnos e inventario líquido — control de la noche."
-      accent="#7c3aed"
+      accent="#EA580C"
       topLabel="Bebidas top"
       actions={[
         { icon: 'fa-martini-glass', label: 'Barra · comandas', to: '/tables' },
@@ -394,11 +394,11 @@ function RetailHome({ greeting, orgName, plan, enabledModules }: HomeProps) {
       enabledModules={enabledModules}
       title="Atlas One Retail"
       subtitle="Inventario, compras, sucursales y caja multi-tienda."
-      accent="#3366ff"
+      accent="#FA7938"
     >
       <Widget module="inventory" icon="fa-boxes" title="Inventario" description="Stock por sucursal y movimientos del día." cta="Ver inventario" ctaUrl="/inventory" />
       <Widget module="purchasing" icon="fa-truck" title="Compras" description="Órdenes a proveedores y recepciones." cta="Ver compras" ctaUrl="/purchasing" beta />
-      <Widget icon="fa-store" title="Sucursales" description="Resumen de cada sucursal y catálogo habilitado." cta="Ver sucursales" ctaUrl="/hq/branches" />
+      <Widget icon="fa-store" title="Sucursales" description="Resumen de cada sucursal y catálogo habilitado." cta="Ver sucursales" ctaUrl="/configuracion?tab=sucursales" />
       <Widget module="promotions" icon="fa-tag" title="Promociones" description="Promos activas, descuentos por temporada." cta="Ver promos" ctaUrl="/products" />
       <Widget module="quotes" icon="fa-file-invoice-dollar" title="Cotizaciones" description="Presupuestos abiertos y conversión a venta." cta="Ver cotizaciones" ctaUrl="/quotes" />
       <Widget module="reports" icon="fa-chart-pie" title="Reportes" description="Margen, rotación, productos top." cta="Ver reportes" ctaUrl="/hq/reports-hub" />
@@ -436,7 +436,7 @@ function EnterpriseHome({ greeting, orgName, plan, enabledModules }: HomeProps) 
       enabledModules={enabledModules}
       title="Atlas One Enterprise"
       subtitle="Toda la operación a la vista: multi-sucursal, IA, integraciones."
-      accent="#aa44ff"
+      accent="#FA8449"
     >
       <Widget icon="fa-gauge-high" title="Control Tower" description="KPIs ejecutivos y salud de la plataforma." cta="Ir a operaciones" ctaUrl="/hq/operations" />
       <Widget module="ai" icon="fa-microchip" title="Copiloto IA" description="Predicciones, automatizaciones y resúmenes." cta="Abrir IA" ctaUrl="/ai" beta />

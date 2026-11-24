@@ -3,8 +3,12 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react'
 import { CloseSessionModal } from '../CloseSessionModal'
 import { formatCurrency } from '../../../../utils/currency'
+import { useEnabledModulesStore } from '../../../../store/enabledModulesStore'
 
-afterEach(cleanup)
+const getSummary = vi.hoisted(() => vi.fn())
+vi.mock('../../../../api/cash', () => ({ cashApi: { getSummary } }))
+
+afterEach(() => { cleanup(); getSummary.mockReset(); useEnabledModulesStore.setState({ conteoCiego: true }) })
 
 function capturar(monto: string) {
   fireEvent.change(screen.getByPlaceholderText('0.00'), { target: { value: monto } })
@@ -48,5 +52,22 @@ describe('CloseSessionModal: conteo ciego', () => {
     expect(screen.queryByText('Esperado en caja')).toBeNull()
     expect(screen.queryByText(/\$/)).toBeNull() // ningún importe en pantalla
     expect(screen.getByPlaceholderText('0.00')).toBeTruthy()
+  })
+})
+
+describe('CloseSessionModal: tienda sin conteo ciego', () => {
+  it('enseña el esperado antes de contar, sin pre-llenar el campo ni la nota de conteo ciego', async () => {
+    useEnabledModulesStore.setState({ conteoCiego: false })
+    getSummary.mockResolvedValue({ expected_cash: 1234.5 })
+    render(<CloseSessionModal onClose={vi.fn()} onConfirm={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText(formatCurrency(1234.5))).toBeTruthy())
+    expect(screen.getByText('Esperado en caja')).toBeTruthy()
+    expect(screen.queryByText(/Conteo ciego/)).toBeNull()
+    expect((screen.getByPlaceholderText('0.00') as HTMLInputElement).value).toBe('')
+  })
+
+  it('con conteo ciego no pide el resumen', () => {
+    render(<CloseSessionModal onClose={vi.fn()} onConfirm={vi.fn()} />)
+    expect(getSummary).not.toHaveBeenCalled()
   })
 })

@@ -21,7 +21,7 @@ export const BRANCH_NAV_GROUPS: { header: string; urls: string[] }[] = [
   { header: 'Restaurante',   urls: ['/menu', '/tables', '/mobile/comanda', '/kitchen', '/bar/bottles'] },
   { header: 'Mi turno',      urls: ['/cash-history', '/sales'] },
   { header: 'Clientes',      urls: ['/customers'] },
-  { header: 'Inventario',    urls: ['/products', '/scanner', '/labels'] },
+  { header: 'Inventario',    urls: ['/products', '/fotos', '/mobile/query', '/labels'] },
   { header: 'Reportes',      urls: ['/reports', '/hq/valor-inventario', '/meseros'] },
   { header: 'Sistema',       urls: ['/configuracion'] },
 ]
@@ -34,40 +34,14 @@ export const BRANCH_NAV_GROUPS: { header: string; urls: string[] }[] = [
 export const HQ_NAV_GROUPS: { header: string; urls: string[] }[] = [
   { header: 'Operación',    urls: ['/hq/operations', '/hq/reports-hub', '/hq/valor-inventario'] },
   { header: 'Ventas',       urls: ['/sales', '/returns', '/cash-history', '/quotes', '/quotes/new', '/seguimiento'] },
-  { header: 'Catálogo',     urls: ['/products', '/departments', '/brands', '/labels'] },
-  { header: 'Inventario',   urls: ['/inventory', '/inventory/conteos', '/inventory/cargas', '/scanner', '/logistics', '/boxes'] },
+  { header: 'Catálogo',     urls: ['/products', '/fotos', '/departments', '/brands', '/labels'] },
+  { header: 'Inventario',   urls: ['/inventory', '/inventory/conteos', '/inventory/cargas', '/mobile/query', '/logistics', '/boxes'] },
   { header: 'Compras',      urls: ['/purchases', '/expenses', '/purchasing'] },
   { header: 'Clientes',     urls: ['/customers', '/appointments', '/commissions', '/memberships'] },
   { header: 'Restaurante',  urls: ['/menu', '/tables', '/mobile/comanda', '/kitchen', '/recipes', '/meseros', '/bar/bottles'] },
-  { header: 'Organización', urls: ['/organization', '/hq/branches', '/users', '/hr', '/configuracion'] },
+  { header: 'Organización', urls: ['/configuracion', '/users', '/hr'] },
   { header: 'Inteligencia', urls: ['/ai'] },
 ]
-
-// Color de acento por grupo — identidad de módulo en el sidebar. El ícono se
-// tiñe con el color del grupo; el ítem activo lo usa para el riel lateral, el
-// resplandor y el relleno suave. Los encabezados de sección y las etiquetas
-// inactivas se quedan neutros. Los matices viven en index.css (--sb-mod-*),
-// no como hex sueltos aquí.
-export const GROUP_COLOR: Record<string, string> = {
-  // Grupos HQ (admin)
-  'Operación': 'var(--sb-mod-violet)', 'Catálogo': 'var(--sb-mod-green)',
-  'Ventas': 'var(--sb-mod-blue)', 'Inventario': 'var(--sb-mod-amber)',
-  'Compras': 'var(--sb-mod-teal)', 'Clientes': 'var(--sb-mod-rose)',
-  'Organización': 'var(--sb-mod-cyan)', 'Inteligencia': 'var(--sb-mod-indigo)',
-  'Restaurante': 'var(--sb-mod-orange)', 'Más': 'var(--sb-mod-slate)',
-  'Móvil': 'var(--sb-mod-blue)',
-  // Grupos de sucursal
-  'Mi día': 'var(--sb-mod-violet)', 'Mi turno': 'var(--sb-mod-green)',
-  'Reportes': 'var(--sb-mod-indigo)', 'Sistema': 'var(--sb-mod-slate)',
-}
-export const DEFAULT_GROUP_COLOR = 'var(--sb-mod-violet)'
-
-/** url → color del grupo, para el IconRail contraído (que no tiene secciones). */
-export const URL_COLOR: Record<string, string> = {}
-for (const _g of [...HQ_NAV_GROUPS, ...BRANCH_NAV_GROUPS]) {
-  const _c = GROUP_COLOR[_g.header] ?? DEFAULT_GROUP_COLOR
-  for (const _u of _g.urls) if (!(_u in URL_COLOR)) URL_COLOR[_u] = _c
-}
 
 // Glosario: una pantalla, un nombre. La etiqueta de esta tabla es la que se ve
 // en el menú, en la barra superior (`routeTitle`) y en el `<h1>` de la página.
@@ -88,15 +62,14 @@ export const ALL_NAV: NavItem[] = [
   { label: 'Compras',           short: 'CMP', icon: 'fa-shopping-cart',       url: '/purchases',        group: 'hq',   sort: 11, module: 'purchasing' },
   { label: 'Gastos',            short: 'GST', icon: 'fa-money-bill-wave',     url: '/expenses',         group: 'hq',   sort: 12, module: 'finance' },
   { label: 'Inventario',        short: 'INV', icon: 'fa-boxes',               url: '/inventory',        group: 'hq',   sort: 13, module: 'inventory' },
-  { label: 'Escáner',           short: 'SCN', icon: 'fa-barcode',             url: '/scanner',          group: 'hq',   sort: 13.5, module: 'inventory', branchModule: 'scanner' },
   { label: 'Conteo',            short: 'CNT', icon: 'fa-list-check',           url: '/inventory/conteos', group: 'hq',   sort: 13.6, module: 'inventory' },
   { label: 'Cargar mercancía',  short: 'CRG', icon: 'fa-file-import',         url: '/inventory/cargas', group: 'hq',   sort: 13.55, module: 'ai' },
+  // Fotos desde el teléfono para la tienda en línea: solo donde el canal está encendido.
+  { label: 'Fotos',             short: 'FOT', icon: 'fa-camera',              url: '/fotos',            group: 'hq',   sort: 3.5, module: 'tienda_en_linea' },
   { label: 'Etiquetas',         short: 'ETQ', icon: 'fa-tag',                 url: '/labels',           group: 'hq',   sort: 13.6, module: 'labels' },
   { label: 'Logística',         short: 'LOG', icon: 'fa-truck-loading',       url: '/logistics',        group: 'hq',   sort: 15, module: 'logistics' },
   { label: 'Cajas y contenedores', short: 'CJA', icon: 'fa-box-open',         url: '/boxes',            group: 'hq',   sort: 16, module: 'logistics' },
   { label: 'Clientes',          short: 'CRM', icon: 'fa-address-book',        url: '/customers',        group: 'hq',   sort: 17, module: 'crm' },
-  { label: 'Empresa',           short: 'EMP', icon: 'fa-building',            url: '/organization',     group: 'hq',   sort: 18 },
-  { label: 'Sucursales',        short: 'SCR', icon: 'fa-store',               url: '/hq/branches',      group: 'hq',   sort: 19 },
   { label: 'Usuarios',          short: 'USR', icon: 'fa-users-cog',           url: '/users',            group: 'hq',   sort: 20 },
   { label: 'Recursos Humanos',  short: 'HR',  icon: 'fa-user-tie',            url: '/hr',               group: 'hq',   sort: 21, module: 'hr' },
   // Atlas One stub modules (Beta — visible when the module is enabled for the org)
@@ -126,7 +99,7 @@ export const ALL_NAV: NavItem[] = [
   // al escritorio desde la pestaña «Más» del móvil se queda sin camino de
   // regreso salvo escribiendo la URL (admin-findings I-10).
   { label: 'Dashboard móvil',   short: 'DSH', icon: 'fa-mobile-screen',       url: '/mobile/dashboard', group: 'mob',  sort: 0 },
-  { label: 'Consulta móvil',    short: 'QRY', icon: 'fa-mobile-alt',          url: '/mobile/query',     group: 'mob',  sort: 1, module: 'catalog' },
+  { label: 'Consultar',         short: 'QRY', icon: 'fa-barcode',             url: '/mobile/query',     group: 'mob',  sort: 1, module: 'catalog' },
   // La "cotización móvil" crea cotizaciones (POST /api/quotes): es el módulo quotes.
   { label: 'Cotización móvil',  short: 'COT', icon: 'fa-file-invoice',        url: '/mobile/sales',     group: 'mob',  sort: 2, module: 'quotes' },
   { label: 'Perfil móvil',      short: 'PRF', icon: 'fa-user-circle',         url: '/mobile/profile',   group: 'mob',  sort: 3  },
@@ -142,10 +115,10 @@ export const ROLE_ROUTES: Record<Role, string[]> = {
   // admin, no en la de quien está en el mostrador, y hubo que mover ventas a
   // mano por eso. El backend sigue aceptando al admin en `create_sale` (se usa
   // para capturar ventas históricas por API); esto es solo la navegación.
-  ADMINISTRADOR:    ['/sales','/returns','/products','/inventory','/inventory/cargas','/configuracion','/labels','/mobile/owner','/cash-history','/hq/operations','/hq/reports-hub','/hq/valor-inventario','/scanner','/inventory/conteos','/departments','/organization','/users','/customers','/customers/cobranza','/hq/branches','/brands','/hr','/hr/me','/logistics','/boxes','/quotes','/quotes/new','/seguimiento','/purchases','/expenses','/appointments','/commissions','/memberships','/recipes','/ai','/purchasing','/tables','/kitchen','/meseros','/bar/bottles','/menu','/mobile/comanda'],
-  DUEÑO:            ['/pos','/sales','/returns','/products','/inventory','/inventory/cargas','/configuracion','/labels','/mobile/owner','/cash-history','/hq/operations','/hq/reports-hub','/hq/valor-inventario','/scanner','/inventory/conteos','/customers','/customers/cobranza','/hr/me','/logistics','/boxes','/quotes','/quotes/new','/seguimiento','/purchases','/expenses','/appointments','/commissions','/memberships','/recipes','/ai','/purchasing','/tables','/kitchen','/meseros','/bar/bottles','/menu','/mobile/comanda'],
-  GERENTE:          ['/labels','/inventory/cargas','/configuracion','/cash-history','/reports','/hq/valor-inventario','/hr/me','/products','/scanner','/pos','/sales','/customers','/customers/cobranza','/returns','/atlas-pos','/tables','/kitchen','/recipes','/meseros','/bar/bottles','/menu','/mobile/comanda'],
-  CAJERO:           ['/labels','/pos','/cash-history','/hr/me','/products','/scanner','/configuracion','/sales','/customers','/returns','/atlas-pos','/tables','/kitchen','/bar/bottles','/menu','/mobile/comanda'],
+  ADMINISTRADOR:    ['/mobile/query','/fotos','/sales','/returns','/products','/inventory','/inventory/cargas','/configuracion','/labels','/mobile/owner','/cash-history','/hq/operations','/hq/reports-hub','/hq/valor-inventario','/inventory/conteos','/departments','/users','/customers','/customers/cobranza','/brands','/hr','/hr/me','/logistics','/boxes','/quotes','/quotes/new','/seguimiento','/purchases','/expenses','/appointments','/commissions','/memberships','/recipes','/ai','/purchasing','/tables','/kitchen','/meseros','/bar/bottles','/menu','/mobile/comanda'],
+  DUEÑO:            ['/mobile/query','/fotos','/pos','/sales','/returns','/products','/inventory','/inventory/cargas','/configuracion','/labels','/mobile/owner','/cash-history','/hq/operations','/hq/reports-hub','/hq/valor-inventario','/inventory/conteos','/customers','/customers/cobranza','/hr/me','/logistics','/boxes','/quotes','/quotes/new','/seguimiento','/purchases','/expenses','/appointments','/commissions','/memberships','/recipes','/ai','/purchasing','/tables','/kitchen','/meseros','/bar/bottles','/menu','/mobile/comanda'],
+  GERENTE:          ['/mobile/query','/fotos','/labels','/inventory/cargas','/configuracion','/cash-history','/reports','/hq/valor-inventario','/hr/me','/products','/pos','/sales','/customers','/customers/cobranza','/returns','/atlas-pos','/tables','/kitchen','/recipes','/meseros','/bar/bottles','/menu','/mobile/comanda'],
+  CAJERO:           ['/mobile/query','/fotos','/labels','/pos','/cash-history','/hr/me','/products','/configuracion','/sales','/customers','/returns','/atlas-pos','/tables','/kitchen','/bar/bottles','/menu','/mobile/comanda'],
   VENDEDOR:         ['/mobile/dashboard','/mobile/query','/mobile/sales','/mobile/profile','/hr/me','/atlas-pos'],
   SOPORTE_OPERATIVO:['/mobile/dashboard','/mobile/query','/mobile/profile','/hr/me','/atlas-pos'],
   CLIENTE:          ['/portal'],

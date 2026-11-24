@@ -27,6 +27,7 @@ from app.modules.products.services.variantes import (  # noqa: F401  (re-export 
     crear_variantes,
     pareja_repetida as _pareja_repetida,
 )
+from app.modules.products.services.precio_sucursal import fijar_precio_de_sucursal, sucursal_del_precio
 from app.modules.products.services.web import tocar_producto
 from app.modules.products.variant_label import variant_label
 
@@ -138,7 +139,12 @@ def editar_variante(
     if body.price is not None:
         if body.price <= 0:
             raise HTTPException(status_code=422, detail="El precio debe ser mayor a cero.")
-        v.price = body.price
+        sucursal_precio = sucursal_del_precio(db, org_id, current_user, v)
+        if sucursal_precio is not None:
+            # Precio por sucursal: solo cambia el de la sucursal de quien edita.
+            fijar_precio_de_sucursal(db, org_id, sucursal_precio, [v], body.price)
+        else:
+            v.price = body.price
     if body.cost is not None:
         v.cost = body.cost
     v.color, v.size = color, size

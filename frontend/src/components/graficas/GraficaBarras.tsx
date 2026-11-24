@@ -29,9 +29,9 @@ export function GraficaBarras({ etiquetas, valores, resaltar = null, horizontal 
     datasets: [{
       label: nombre,
       data: valores,
-      backgroundColor: valores.map((_, i) => (resaltar === null || i === resaltar ? tema.acento : tema.faint)),
+      backgroundColor: valores.map((_, i) => (resaltar === null || i === resaltar ? tema.acento : tema.apoyo)),
       borderWidth: 0,
-      borderRadius: 3,
+      borderRadius: 6,
       maxBarThickness: 28,
     }],
   }), [etiquetas, valores, resaltar, nombre, tema])

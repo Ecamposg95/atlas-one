@@ -33,12 +33,13 @@ describe('useTemaGrafica', () => {
     await waitFor(() => expect(result.current.acento).toBe('#222222'))
   })
 
-  it('métodos: efectivo = success, tarjeta = acento, transferencia = warning, otros = tenue', () => {
-    raiz.style.setProperty('--dax-success', '#00aa00')
+  it('métodos, como en el POS: efectivo = acento, tarjeta = índigo, transferencia = lavanda, otros = tenue', () => {
+    raiz.style.setProperty('--dax-indigo', '#00aa00')
     const t = leerTemaGrafica()
-    expect(colorMetodo('CASH', t)).toBe('#00aa00')
-    expect(colorMetodo('card', t)).toBe(t.acento)
-    expect(colorMetodo('TRANSFER', t)).toBe(t.warning)
+    raiz.style.removeProperty('--dax-indigo')
+    expect(colorMetodo('CASH', t)).toBe(t.acento)
+    expect(colorMetodo('card', t)).toBe('#00aa00')
+    expect(colorMetodo('TRANSFER', t)).toBe(t.lavanda)
     expect(colorMetodo('MIXED', t)).toBe(t.faint)
   })
 })

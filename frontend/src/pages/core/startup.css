@@ -1,15 +1,15 @@
 .startup-page {
     --bg-dark: #070714;
-    --accent: #6C6CFF;
-    --accent-glow: rgba(108, 108, 255, 0.4);
-    --purple-accent: #9D6CFF;
-    --purple-glow: rgba(157, 108, 255, 0.4);
+    --accent: #FB9E70;
+    --accent-glow: rgba(251, 158, 112, 0.4);
+    --purple-accent: #FB9E70;
+    --purple-glow: rgba(251, 158, 112, 0.4);
     --glass: rgba(255, 255, 255, 0.03);
     --glass-border: rgba(255, 255, 255, 0.08);
 
     background-color: var(--bg-dark);
     color: #f0f0f0;
-    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    font-family: var(--font-sans);
     font-weight: 500;
     position: fixed;
     inset: 0;
@@ -30,13 +30,13 @@
     left: 0;
     width: 100%;
     height: 100%;
-    background: radial-gradient(circle at 50% 50%, #14143A 0%, #070714 100%);
+    background: radial-gradient(circle at 50% 50%, #3A2114 0%, #070714 100%);
     z-index: -1;
     transition: background 1.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .startup-page.purple-mode .bg-glow {
-    background: radial-gradient(circle at 50% 50%, #241145 0%, #070714 100%);
+    background: radial-gradient(circle at 50% 50%, #452211 0%, #070714 100%);
 }
 
 /* --- Orb Master --- */
@@ -85,7 +85,7 @@
 .startup-page .logo-a {
     width: 30px;
     height: 30px;
-    fill: #14143A;
+    fill: #3A2114;
     transition: fill 0.8s ease;
 }
 
@@ -94,19 +94,19 @@
 }
 
 .startup-page.purple-mode .logo-a {
-    fill: #241145;
+    fill: #452211;
 }
 
 .startup-page .orb-ring {
     position: absolute;
-    border: 1px solid rgba(108, 108, 255, 0.15);
+    border: 1px solid rgba(251, 158, 112, 0.15);
     border-radius: 50%;
     animation: rotate var(--speed) linear infinite;
     transition: border-color 0.8s ease;
 }
 
 .startup-page.purple-mode .orb-ring {
-    border-color: rgba(157, 108, 255, 0.2);
+    border-color: rgba(251, 158, 112, 0.2);
 }
 
 .startup-page .ring-1 {
@@ -175,7 +175,7 @@
 }
 
 .startup-page.purple-mode .sub-message {
-    color: #B79AFF;
+    color: #FCBD9D;
 }
 
 .startup-page .main-message.visible,
@@ -219,15 +219,15 @@
 
 .startup-page .setup-card:hover {
     border-color: var(--accent);
-    background: rgba(108, 108, 255, 0.06);
+    background: rgba(251, 158, 112, 0.06);
     transform: translateY(-10px);
     box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
 }
 
 .startup-page .setup-card.card-atlas-pos:hover {
     border-color: var(--purple-accent);
-    background: rgba(157, 108, 255, 0.08);
-    box-shadow: 0 25px 60px rgba(76, 50, 160, 0.4);
+    background: rgba(251, 158, 112, 0.08);
+    box-shadow: 0 25px 60px rgba(160, 87, 50, 0.4);
 }
 
 .startup-page .setup-card.is-dimmed {
@@ -255,7 +255,7 @@
 .startup-page .icon-box {
     width: 48px;
     height: 48px;
-    background: rgba(108, 108, 255, 0.12);
+    background: rgba(251, 158, 112, 0.12);
     border-radius: 16px;
     display: flex;
     align-items: center;
@@ -266,7 +266,7 @@
 }
 
 .startup-page .setup-card.card-atlas-pos .icon-box {
-    background: rgba(157, 108, 255, 0.15);
+    background: rgba(251, 158, 112, 0.15);
     color: var(--purple-accent);
 }
 

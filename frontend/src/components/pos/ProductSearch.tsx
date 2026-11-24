@@ -32,10 +32,10 @@ type TierView = {
 const TIER_PALETTE: Array<Omit<TierView, 'label' | 'name' | 'value'>> = [
   { color: '#047857', bg: 'rgba(16,185,129,0.10)', border: 'rgba(16,185,129,0.35)' },   // emerald
   { color: '#b45309', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.40)' },   // amber
-  { color: '#6d28d9', bg: 'rgba(139,92,246,0.10)', border: 'rgba(139,92,246,0.40)' },   // violet
-  { color: '#0e7490', bg: 'rgba(6,182,212,0.10)',  border: 'rgba(6,182,212,0.40)'  },   // cyan
+  { color: '#D96328', bg: 'rgba(255, 161, 74,0.10)', border: 'rgba(255, 161, 74,0.40)' },   // violet
+  { color: '#90390E', bg: 'rgba(212, 75, 6,0.10)',  border: 'rgba(212, 75, 6,0.40)'  },   // cyan
   { color: '#be185d', bg: 'rgba(236,72,153,0.10)', border: 'rgba(236,72,153,0.40)' },   // pink
-  { color: '#4338ca', bg: 'rgba(99,102,241,0.10)', border: 'rgba(99,102,241,0.40)' },   // indigo
+  { color: '#C2410C', bg: 'rgba(255, 106, 31,0.10)', border: 'rgba(255, 106, 31,0.40)' },   // indigo
 ]
 
 // Etiquetas fijas por posición en la card — independientes del price_name del backend.
@@ -338,8 +338,8 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
                   : 'flex flex-col gap-1.5 rounded-2xl p-3 transition-shadow hover:shadow-md'}
                 style={{
                   background: 'var(--dax-surface)',
-                  border: `1.5px solid ${isInCart ? 'rgba(139,92,246,0.55)' : 'var(--dax-border-dim)'}`,
-                  boxShadow: isInCart ? '0 0 0 2px rgba(139,92,246,0.18)' : undefined,
+                  border: `1.5px solid ${isInCart ? 'rgba(255, 161, 74,0.55)' : 'var(--dax-border-dim)'}`,
+                  boxShadow: isInCart ? '0 0 0 2px rgba(255, 161, 74,0.18)' : undefined,
                 }}
               >
                 <button
@@ -370,7 +370,7 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
                     {(p.variants?.length ?? 0) > 1 && (
                       <span
                         className="text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0"
-                        style={{ background: 'rgba(99,102,241,0.15)', color: '#4338ca' }}
+                        style={{ background: 'rgba(255, 106, 31,0.15)', color: '#C2410C' }}
                       >
                         {p.variants!.length} variantes
                       </span>
@@ -390,7 +390,7 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
                     <div className="flex flex-col gap-1 pt-1">
                       {/* Precio base (Menudeo) — prominente, full width */}
                       <div
-                        className="rounded-lg px-2 py-1.5 flex items-center justify-between gap-2"
+                        className="rounded-lg px-2 py-1.5 flex flex-wrap items-center justify-between gap-x-2"
                         style={{ background: tiers[0].bg, border: `1px solid ${tiers[0].border}` }}
                         title={tiers[0].name}
                       >
@@ -462,7 +462,7 @@ export function ProductSearch({ refreshKey = 0 }: ProductSearchProps = {}) {
                     ? 'w-11 h-11 flex-shrink-0 self-center flex items-center justify-center text-sm rounded-xl border transition-colors'
                     : 'w-full mt-1 py-1.5 text-xs font-semibold rounded-xl border transition-colors'}
                   style={{ borderColor: 'var(--dax-border)', color: 'var(--dax-text-muted)' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(139,92,246,0.08)' }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255, 161, 74,0.08)' }}
                   onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
                   title="Ver detalles"
                 >

@@ -68,6 +68,13 @@ def upload_image(
     """
     if _USE_CLOUDINARY:
         import cloudinary.uploader
+        extra = {}
+        if folder == PRODUCTS_FOLDER:
+            # Transformación de entrada: Cloudinary guarda la foto ya reducida
+            # (lado mayor ≤ 2000 px, calidad automática). El teléfono ya la manda
+            # chica; esto cubre las que llegan de escritorio o por API y mantiene
+            # el almacenamiento del plan Free bajo control.
+            extra["transformation"] = [{"width": 2000, "height": 2000, "crop": "limit", "quality": "auto:good"}]
         result = cloudinary.uploader.upload(
             content,
             public_id=public_id,
@@ -76,6 +83,7 @@ def upload_image(
             resource_type="image",
             format=_ext_from_content_type(content_type),
             invalidate=True,  # purga el CDN cache de la URL anterior
+            **extra,
         )
         # Cloudinary regresa secure_url con esquema https.
         return result.get("secure_url") or result.get("url")

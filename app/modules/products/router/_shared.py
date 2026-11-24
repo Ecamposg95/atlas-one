@@ -38,6 +38,7 @@ from app.crud.products import (
     log_pbs_change,
 )
 from app.modules.products.sale_name import sale_name, variant_sale_name
+from app.modules.products.services.precio_sucursal import edita_precio_base, precio_por_sucursal_activo
 from app.modules.products.schemas import (
     ProductCreate, ProductRead, ProductUpdate,
     DepartmentRead, StockLevel, BatchActionRequest, ProductListResponse,
@@ -224,9 +225,18 @@ def _compute_product_read(
                 ProductBranchStatus.variant_id == v.id
             ).all()
 
+        # Precio por sucursal: la FICHA de ADMINISTRADOR/DUEÑO (lectura sin
+        # sucursal pedida) muestra el precio BASE, que es el que su guardado
+        # edita; si viera el de su sucursal lo copiaría al base al guardar.
+        ficha_base = (
+            target_branch_id is None
+            and edita_precio_base(current_user)
+            and precio_por_sucursal_activo(db, org_de_p)
+        )
+
         # [PRICE OVERRIDE] Aplicar precio fijo de sucursal si está configurado.
         # Tiene precedencia sobre el precio base y anula los precios escalonados.
-        if real_branch_id:
+        if real_branch_id and not ficha_base:
             bs_for_branch = next(
                 (bs for bs in p_read.branch_statuses if bs.branch_id == real_branch_id),
                 None
@@ -268,6 +278,13 @@ def _compute_product_read(
                 None,
             )
             vr.effective_price = override if override is not None else vr.price
+
+        # Precio por sucursal (org con el ajuste encendido): cada sucursal ve y
+        # edita SU precio, así que la talla muestra el de la sucursal también en
+        # `price` (el que pinta y guarda el editor de tallas).
+        if real_branch_id and not ficha_base and precio_por_sucursal_activo(db, org_de_p):
+            for vr in p_read.variants:
+                vr.price = vr.effective_price
 
         # Existencia por variante en la sucursal objetivo. Con una sola
         # variante coincide con stock_total; con varias es lo que permite al

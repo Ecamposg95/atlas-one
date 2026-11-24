@@ -22,6 +22,7 @@ from app.services.barcodes import AsignadorDeCodigos
 
 from .codigos import asignar_barcode_interno, sku_de_copia, validar_barcode_libre, validar_sku_unico
 from .comun import MANAGER_ROLES, variante_principal, variantes_vivas
+from .precio_sucursal import fijar_precio_de_sucursal, sucursal_del_precio
 from .precios import armar_empaques, armar_escalones
 from .sucursales import (
     armar_estado_por_sucursal, copiar_estado_por_sucursal, registrar_stock_inicial, resolver_sucursales_destino,
@@ -227,7 +228,8 @@ def _editar_ficha(producto: Product, datos: ProductUpdate, enviados: set[str]) -
 
 
 def _editar_principal(db: Session, org_id: int, producto: Product, v: ProductVariant,
-                      datos: ProductUpdate, enviados: set[str]) -> None:
+                      datos: ProductUpdate, enviados: set[str],
+                      sucursal_precio: Optional[int] = None) -> None:
     if datos.sku is not None and datos.sku.strip() != v.sku:
         v.sku = validar_sku_unico(db, org_id, datos.sku, excepto_id=v.id)
     if "barcode" in enviados:
@@ -243,12 +245,15 @@ def _editar_principal(db: Session, org_id: int, producto: Product, v: ProductVar
         v.color, v.size = color, size
         v.variant_name = variant_label(color, size)
     if datos.price is not None:
-        v.price = datos.price
         # La casilla del formulario baja el precio nuevo a todas las tallas
         # vivas (las retiradas no).
-        if datos.precio_a_todas_las_tallas:
-            for hermana in variantes_vivas(producto):
-                hermana.price = datos.price
+        destino = variantes_vivas(producto) if datos.precio_a_todas_las_tallas else [v]
+        if sucursal_precio is not None:
+            # Precio por sucursal: solo cambia el de la sucursal de quien edita.
+            fijar_precio_de_sucursal(db, org_id, sucursal_precio, destino, datos.price)
+        else:
+            for variante in destino:
+                variante.price = datos.price
     if datos.cost is not None:
         v.cost = datos.cost
     if datos.has_iva is not None:
@@ -275,12 +280,17 @@ def actualizar_producto(db: Session, org_id: int, user: User, product_id: str, d
 
     v = variante_principal(producto)
     if v is not None:
-        _editar_principal(db, org_id, producto, v, datos, enviados)
-        mapa: dict[str, str] = {}
-        if datos.packaging_units is not None:
-            mapa = armar_empaques(db, org_id, v, datos.packaging_units, reemplazar=True)
-        if datos.prices is not None:
-            armar_escalones(db, org_id, v, datos.prices, mapa, reemplazar=True)
+        sucursal_precio = sucursal_del_precio(db, org_id, user, v)
+        _editar_principal(db, org_id, producto, v, datos, enviados, sucursal_precio)
+        # Con precio de sucursal la ficha le llega SIN escalones (no aplican
+        # ahí) y el formulario los devolvería vacíos: borraría los de todas las
+        # sucursales. Escalones y empaques son del catálogo; se quedan como están.
+        if sucursal_precio is None:
+            mapa: dict[str, str] = {}
+            if datos.packaging_units is not None:
+                mapa = armar_empaques(db, org_id, v, datos.packaging_units, reemplazar=True)
+            if datos.prices is not None:
+                armar_escalones(db, org_id, v, datos.prices, mapa, reemplazar=True)
         # Disponibilidad: CAJERO no la toca; lista vacía tampoco (borraría toda
         # la visibilidad). Se valida ANTES de borrar nada.
         if datos.target_branch_ids and user.role in ("ADMINISTRADOR", "DUEÑO"):

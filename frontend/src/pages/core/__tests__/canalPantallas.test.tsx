@@ -77,23 +77,31 @@ describe('Departamentos', () => {
 })
 
 describe('Configuración', () => {
-  it('sin canal: igual que hoy, sin pestañas', async () => {
+  it('admin sin canal: el centro de ajustes, sin la pestaña de tienda', async () => {
     como('ADMINISTRADOR', [])
-    render(<Configuracion />)
+    render(<MemoryRouter initialEntries={['/configuracion?tab=impresoras']}><Configuracion /></MemoryRouter>)
     expect(screen.getByText('PANTALLA IMPRESORA')).toBeTruthy()
+    expect(screen.getByRole('tab', { name: /Sucursales/ })).toBeTruthy()
     expect(screen.queryByText('Tienda en línea')).toBeNull()
+  })
+
+  it('gerente: la configuración de su sucursal, sin pestañas del negocio', () => {
+    como('GERENTE', ['tienda_en_linea'])
+    render(<MemoryRouter><Configuracion /></MemoryRouter>)
+    expect(screen.getByText('PANTALLA IMPRESORA')).toBeTruthy()
+    expect(screen.queryByRole('tab')).toBeNull()
   })
 
   it('cajera con canal: no ve la pestaña', () => {
     como('CAJERO', ['tienda_en_linea'])
-    render(<Configuracion />)
+    render(<MemoryRouter><Configuracion /></MemoryRouter>)
     expect(screen.getByText('IMPRESORA CAJERA')).toBeTruthy()
     expect(screen.queryByText('Tienda en línea')).toBeNull()
   })
 
   it('admin con canal: pestaña con casillas por sucursal que vende; guardar manda los ids', async () => {
     como('ADMINISTRADOR', ['tienda_en_linea'])
-    render(<Configuracion />)
+    render(<MemoryRouter initialEntries={['/configuracion?tab=impresoras']}><Configuracion /></MemoryRouter>)
     fireEvent.click(screen.getByText('Tienda en línea'))
     expect(await screen.findByLabelText('Roma')).toBeTruthy()
     expect(screen.queryByLabelText('Bodega')).toBeNull()
@@ -104,7 +112,7 @@ describe('Configuración', () => {
 
   it('«Todas las que venden» manda null', async () => {
     como('ADMINISTRADOR', ['tienda_en_linea'])
-    render(<Configuracion />)
+    render(<MemoryRouter initialEntries={['/configuracion?tab=impresoras']}><Configuracion /></MemoryRouter>)
     fireEvent.click(screen.getByText('Tienda en línea'))
     await screen.findByLabelText('Roma')
     fireEvent.click(screen.getByLabelText('Todas las que venden'))

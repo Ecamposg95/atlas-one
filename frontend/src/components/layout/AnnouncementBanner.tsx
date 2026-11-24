@@ -11,7 +11,7 @@ const ORDEN: Record<AnnouncementSeverity, number> = {
 const COLOR: Record<AnnouncementSeverity, { fondo: string; borde: string; icono: string }> = {
   critical: { fondo: 'linear-gradient(90deg, rgba(190,18,60,0.95) 0%, rgba(225,29,72,0.95) 100%)', borde: 'rgba(251,113,133,0.5)', icono: 'fa-circle-exclamation' },
   warning:  { fondo: 'linear-gradient(90deg, rgba(180,83,9,0.95) 0%, rgba(217,119,6,0.95) 100%)',  borde: 'rgba(251,191,36,0.5)', icono: 'fa-triangle-exclamation' },
-  info:     { fondo: 'linear-gradient(90deg, rgba(30,64,175,0.95) 0%, rgba(37,99,235,0.95) 100%)', borde: 'rgba(96,165,250,0.5)', icono: 'fa-circle-info' },
+  info:     { fondo: 'linear-gradient(90deg, rgba(175, 78, 30,0.95) 0%, rgba(235, 103, 37,0.95) 100%)', borde: 'rgba(250, 147, 96,0.5)', icono: 'fa-circle-info' },
   success:  { fondo: 'linear-gradient(90deg, rgba(6,95,70,0.95) 0%, rgba(16,185,129,0.95) 100%)',  borde: 'rgba(52,211,153,0.5)', icono: 'fa-circle-check' },
 }
 
@@ -88,11 +88,11 @@ export function AnnouncementBanner() {
         justifyContent: 'center',
         gap: '0.75rem',
         fontSize: '0.8125rem',
-        fontFamily: "'IBM Plex Sans', sans-serif",
+        fontFamily: 'var(--font-sans)',
       }}
     >
       <i className={`fa-solid ${tono.icono}`} aria-hidden="true" />
-      <span style={{ fontWeight: 700 }}>{aviso.title}</span>
+      <span style={{ fontWeight: 600 }}>{aviso.title}</span>
       <span style={{ opacity: 0.9 }}>{aviso.body_md}</span>
       {avisos.length > 1 && (
         <button

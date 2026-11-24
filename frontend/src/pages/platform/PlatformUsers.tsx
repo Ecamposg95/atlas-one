@@ -71,7 +71,7 @@ const ghostBtn: React.CSSProperties = {
 const primaryBtn: React.CSSProperties = {
   background: 'var(--p-teal)',
   color: 'var(--dax-on-accent)',
-  fontWeight: 700,
+  fontWeight: 600,
   padding: '8px 16px',
   border: 'none',
   borderRadius: 4,
@@ -661,7 +661,7 @@ export function PlatformUsers() {
               maxWidth: '90vw',
             }}
           >
-            <h3 style={{ margin: 0, color: 'var(--p-text)', fontSize: '1rem', fontWeight: 700 }}>
+            <h3 style={{ margin: 0, color: 'var(--p-text)', fontSize: '1rem', fontWeight: 600 }}>
               Reset password — @{resetTarget.username}
             </h3>
             <p style={{ color: 'var(--p-muted)', fontSize: '0.85rem', marginTop: 8, marginBottom: 16 }}>
@@ -681,7 +681,7 @@ export function PlatformUsers() {
                 style={{
                   background: 'var(--p-warning)',
                   color: '#000',
-                  fontWeight: 700,
+                  fontWeight: 600,
                   padding: '6px 16px',
                   border: 'none',
                   borderRadius: 4,
@@ -720,7 +720,7 @@ export function PlatformUsers() {
               maxWidth: '90vw',
             }}
           >
-            <h3 style={{ margin: 0, color: 'var(--p-text)', fontSize: '1rem', fontWeight: 700 }}>
+            <h3 style={{ margin: 0, color: 'var(--p-text)', fontSize: '1rem', fontWeight: 600 }}>
               Password temporal generado
             </h3>
             <p style={{ color: 'var(--p-muted)', fontSize: '0.85rem', marginTop: 8, marginBottom: 12 }}>
@@ -742,7 +742,7 @@ export function PlatformUsers() {
                 color: 'var(--p-teal)',
                 fontFamily: 'monospace',
                 fontSize: 14,
-                fontWeight: 700,
+                fontWeight: 600,
                 wordBreak: 'break-all',
               }}>
                 {resetResult.pwd}
@@ -756,7 +756,7 @@ export function PlatformUsers() {
                   padding: '4px 10px',
                   borderRadius: 4,
                   fontSize: 11,
-                  fontWeight: 700,
+                  fontWeight: 600,
                   cursor: 'pointer',
                   fontFamily: 'inherit',
                   whiteSpace: 'nowrap',

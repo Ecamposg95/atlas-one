@@ -48,7 +48,7 @@ html.ui-no-motion .animate-pulse, html.ui-no-motion .animate-ping {
   background: #fef3c7; box-shadow: 0 0 30px 6px rgba(254,243,199,.35);
   animation: sky-rise 2s cubic-bezier(.2,.8,.2,1) both; }
 /* El "mordisco" de la luna copia el extremo oscuro del degradado de noche. */
-.sky-moon::after { content: ''; position: absolute; width: 58px; height: 58px; border-radius: 50%; background: var(--sky-moon-bite, #0f172a); left: 25px; top: -7px; }
+.sky-moon::after { content: ''; position: absolute; width: 58px; height: 58px; border-radius: 50%; background: var(--sky-moon-bite, #0C0908); left: 25px; top: -7px; }
 .sky-star { position: absolute; width: 3px; height: 3px; border-radius: 50%; background: #fff;
   animation: sky-twinkle 2.4s ease-in-out 25; }
 .sky-shoot { position: absolute; width: 90px; height: 2px; top: 30px; left: 40px; opacity: 0;
@@ -69,9 +69,15 @@ html.ui-no-motion .animate-pulse, html.ui-no-motion .animate-ping {
 
 /* ── Hero: el cielo es el fondo; el turno es banda + píldora ─────────────── */
 .hero-sky { position: relative; overflow: hidden; color: #fff; min-height: 210px; text-shadow: 0 1px 2px rgba(0,0,0,.25); }
-.hero-sky[data-period="day"]    { background: linear-gradient(120deg, #0369A1 0%, #0EA5E9 55%, #38BDF8 100%); }
-.hero-sky[data-period="sunset"] { background: linear-gradient(120deg, #7C2D12 0%, #EA580C 50%, #F59E0B 100%); }
-.hero-sky[data-period="night"]  { background: linear-gradient(120deg, #020617 0%, #0F172A 55%, #1E1B4B 100%); }
+/* Atlas Horizon: el cielo ya no es azul. De día, luz ámbar plena; al atardecer,
+   brasa; de noche, negro cálido con la brasa al fondo. */
+.hero-sky[data-period="day"]    { background: linear-gradient(120deg, #2A0E05 0%, #C2410C 52%, #FFA14A 100%); }
+.hero-sky[data-period="sunset"] { background: linear-gradient(120deg, #0B0705 0%, #7A240A 50%, #FF6A1F 100%); }
+.hero-sky[data-period="night"]  { background: linear-gradient(120deg, #050505 0%, #0C0908 55%, #3A140A 100%); }
+/* Línea del horizonte: el borde iluminado de un arco enorme, detrás del texto. */
+.hero-sky::after { content: ''; position: absolute; left: 28%; right: -18%; bottom: -230px; height: 300px;
+  border-radius: 50%; pointer-events: none; border-top: 1px solid rgba(255,190,140,.5);
+  box-shadow: 0 -8px 46px rgba(255,120,50,.32); }
 /* El extremo claro de day/sunset bajaba el contraste del texto secundario
    alineado a la derecha. Scrim que solo oscurece el degradado — pintado antes
    que .sky/.hero-band/el contenido, así que queda debajo de todos. */
@@ -86,10 +92,10 @@ html.light .hero-sky .text-white { color: #fff !important; }
    la tinta es blanco o casi negro — contraste sobre un color sólido, no una
    elección de paleta (index.css usa los mismos literales). */
 .hero-pill { display: inline-flex; align-items: center; gap: .375rem; border-radius: 9999px;
-  font-size: .75rem; font-weight: 700; padding: .375rem .75rem; text-shadow: none; }
+  font-size: .75rem; font-weight: 600; padding: .375rem .75rem; text-shadow: none; }
 .hero-pill-open   { background: var(--dax-success); color: #fff; }
 .hero-pill-closed { background: var(--dax-warning); color: #0b0b0b; }
-.hero-pill-none   { background: var(--dax-accent);  color: #fff; }
+.hero-pill-none   { background: var(--dax-accent);  color: var(--dax-on-accent); }
 
 /* ── A3 · entrada en cascada: cada tarjeta lleva style="--i: n" ──────────── */
 .anim-cascade { animation: cascade-in .5s cubic-bezier(.2,.8,.2,1) both; animation-delay: calc(var(--i, 0) * 100ms); }
@@ -121,7 +127,7 @@ html.light .hero-sky .text-white { color: #fff !important; }
 /* CTA blanco sobre el cielo. La tinta es el acento del vertical, que NO cambia
    con el tema (a diferencia de --dax-accent, aclarado en oscuro): sobre blanco
    hay que mantener un color oscuro en los dos temas. */
-.hero-cta { color: var(--p-accent); }
+.hero-cta { color: #C2410C; }
 
 /* ── Botón de tema con mini cielo (port Rmazh) ───────────────────────────────
    Misma convención que .sky-*: el sol, las nubes, la luna y las estrellas son
@@ -129,11 +135,11 @@ html.light .hero-sky .text-white { color: #fff !important; }
    Loops finitos: vivo al llegar, quieto después. */
 .theme-toggle { position: relative; width: 100%; height: 52px; border-radius: 12px; overflow: hidden;
   border: 1px solid rgba(255,255,255,.10); cursor: pointer; display: flex; align-items: center;
-  justify-content: center; gap: 8px; padding: 0 12px; color: #fff; font-size: 12px; font-weight: 700;
+  justify-content: center; gap: 8px; padding: 0 12px; color: #fff; font-size: 12px; font-weight: 600;
   margin-bottom: 6px; text-shadow: 0 1px 2px rgba(0,0,0,.45); transition: filter .15s ease; }
 .theme-toggle:hover { filter: brightness(1.08); }
-.theme-toggle.is-light { background: linear-gradient(120deg, #0369A1, #38BDF8); }
-.theme-toggle.is-dark  { background: linear-gradient(120deg, #020617, #1E1B4B); }
+.theme-toggle.is-light { background: linear-gradient(120deg, #C2410C, #FFA14A); }
+.theme-toggle.is-dark  { background: linear-gradient(120deg, #050505, #3A140A); }
 .tt-sky { position: absolute; inset: 0; pointer-events: none; }
 .tt-label, .tt-icon { position: relative; z-index: 1; }
 .tt-icon { font-size: 12px; opacity: .85; }
@@ -144,7 +150,7 @@ html.light .hero-sky .text-white { color: #fff !important; }
 .tt-cloud::before { content: ''; position: absolute; width: 10px; height: 10px; border-radius: 50%; background: inherit; top: -5px; left: 5px; }
 .tt-moon { position: absolute; left: 32%; top: 50%; width: 14px; height: 14px; margin-top: -7px; border-radius: 50%;
   background: #fef3c7; box-shadow: 0 0 12px 3px rgba(254,243,199,.35); }
-.tt-moon::after { content: ''; position: absolute; width: 11px; height: 11px; border-radius: 50%; background: #0f172a; left: 5px; top: -2px; }
+.tt-moon::after { content: ''; position: absolute; width: 11px; height: 11px; border-radius: 50%; background: #0C0908; left: 5px; top: -2px; }
 .tt-star { position: absolute; width: 2px; height: 2px; border-radius: 50%; background: #fff;
   animation: sky-twinkle 2.4s ease-in-out 25; }
 @keyframes tt-bob   { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-2px) } }

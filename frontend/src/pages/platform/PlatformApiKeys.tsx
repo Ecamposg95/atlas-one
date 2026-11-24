@@ -327,7 +327,7 @@ export function PlatformApiKeys() {
               border: '1px solid ' + (revoked ? 'rgba(239,68,68,0.25)' : 'rgba(34,197,94,0.25)'),
               fontFamily: 'var(--font-mono)',
               fontSize: 10,
-              fontWeight: 700,
+              fontWeight: 600,
               textTransform: 'uppercase',
               letterSpacing: '0.08em',
             }}

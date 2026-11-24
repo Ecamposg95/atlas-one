@@ -156,7 +156,7 @@ function StepHeader({ step }: { step: StepKey }) {
                   display: 'grid',
                   placeItems: 'center',
                   fontSize: 10,
-                  fontWeight: 700,
+                  fontWeight: 600,
                 }}
               >
                 {done ? <i className="fa-solid fa-check" style={{ fontSize: 9 }} /> : it.n}
@@ -676,7 +676,7 @@ export function PlatformOrgWizard({ open, onClose, onSuccess }: Props) {
                             borderRadius: 999,
                             background: 'var(--p-accent-soft)',
                             color: 'var(--p-accent)',
-                            fontWeight: 700,
+                            fontWeight: 600,
                             letterSpacing: '0.04em',
                             textTransform: 'uppercase',
                           }}
@@ -839,7 +839,7 @@ export function PlatformOrgWizard({ open, onClose, onSuccess }: Props) {
           padding: '10px 12px',
         }}
       >
-        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--p-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--p-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>
           Progreso
         </div>
         {progress.map((p) => {

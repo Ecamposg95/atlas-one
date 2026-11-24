@@ -10,3 +10,12 @@ export type VistaDeConfiguracion = 'caja' | 'completa'
 export function vistaDeConfiguracion(role: Role | null | undefined): VistaDeConfiguracion {
   return role === 'ADMINISTRADOR' || role === 'DUEÑO' || role === 'GERENTE' ? 'completa' : 'caja'
 }
+
+/**
+ * Administrador y dueño no configuran una sucursal sino el negocio:
+ * `/configuracion` les abre el centro único de ajustes (empresa, sucursales,
+ * ventas y caja, ticket, impresoras…).
+ */
+export function esCentroDeAjustes(role: Role | null | undefined): boolean {
+  return role === 'ADMINISTRADOR' || role === 'DUEÑO'
+}

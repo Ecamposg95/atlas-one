@@ -41,8 +41,8 @@ export function ImpersonationBanner() {
       role="status"
       aria-live="polite"
       style={{
-        background: 'linear-gradient(90deg, rgba(13,148,136,0.95) 0%, rgba(20,184,166,0.95) 100%)',
-        borderBottom: '1px solid rgba(45,212,191,0.5)',
+        background: 'linear-gradient(90deg, rgba(148, 58, 13,0.95) 0%, rgba(184, 75, 20,0.95) 100%)',
+        borderBottom: '1px solid rgba(212, 101, 45,0.5)',
         color: 'white',
         padding: '0.5rem 1rem',
         display: 'flex',
@@ -50,9 +50,9 @@ export function ImpersonationBanner() {
         justifyContent: 'center',
         gap: '1rem',
         fontSize: '0.75rem',
-        fontWeight: 700,
+        fontWeight: 600,
         letterSpacing: '0.05em',
-        fontFamily: "'IBM Plex Sans', sans-serif",
+        fontFamily: 'var(--font-sans)',
       }}
     >
       <i className="fa-solid fa-eye" />
@@ -70,7 +70,7 @@ export function ImpersonationBanner() {
           padding: '0.25rem 0.75rem',
           borderRadius: '6px',
           fontSize: '0.7rem',
-          fontWeight: 800,
+          fontWeight: 600,
           letterSpacing: '0.1em',
           textTransform: 'uppercase',
           cursor: exiting ? 'not-allowed' : 'pointer',

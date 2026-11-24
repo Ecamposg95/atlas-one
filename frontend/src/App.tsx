@@ -12,7 +12,7 @@ const _savedTheme = localStorage.getItem('atlas_theme') ?? 'dark'
 document.documentElement.classList.add(_savedTheme)
 import { Layout } from './components/layout/Layout'
 import { RequireRole, RutaPorRol } from './components/layout/RequireRole'
-import { RedirigirConQuery } from './components/layout/RedirigirConQuery'
+import { RedirigirConQuery, RedirigirASucursal } from './components/layout/RedirigirConQuery'
 
 import { LoginPage } from './pages/Login'
 
@@ -27,23 +27,21 @@ const NotFoundPage = lazy(() => import('./pages/NotFound').then(m => ({ default:
 // HQ / Admin
 // Reportes (Fase 2 del admin): una sola pantalla para HQ y sucursal; chart.js va en su chunk, no en el de entrada.
 const Reportes        = lazy(() => import('./pages/reports/Reportes').then(m => ({ default: m.Reportes })))
-const HQBranches      = lazy(() => import('./pages/hq/HQBranches').then(m => ({ default: m.HQBranches })))
 const HQValorInventario = lazy(() => import('./pages/hq/HQValorInventario').then(m => ({ default: m.HQValorInventario })))
 // Inicio del dueño (SP6): chunk propio sin chart.js; básico y completo son la misma pantalla.
 const Inicio          = lazy(() => import('./pages/hq/Inicio').then(m => ({ default: m.Inicio })))
 
 // Catalog / Core
-const StoreScanner    = lazy(() => import('./pages/scanner/StoreScanner').then(m => ({ default: m.StoreScanner })))
 const Conteos       = lazy(() => import('./pages/inventory/conteos/Conteos').then(m => ({ default: m.Conteos })))
 const ConteoSesion  = lazy(() => import('./pages/inventory/conteos/ConteoSesion').then(m => ({ default: m.ConteoSesion })))
 const Cargas        = lazy(() => import('./pages/inventory/cargas/Cargas').then(m => ({ default: m.Cargas })))
 const CargaPlan     = lazy(() => import('./pages/inventory/cargas/CargaPlan'))
 const ConteoReporte = lazy(() => import('./pages/inventory/conteos/ConteoReporte').then(m => ({ default: m.ConteoReporte })))
+const FotosProductos  = lazy(() => import('./pages/products/FotosProductos').then(m => ({ default: m.FotosProductos })))
 const Labels          = lazy(() => import('./pages/labels/Labels').then(m => ({ default: m.Labels })))
 const Departments     = lazy(() => import('./pages/core/Departments').then(m => ({ default: m.Departments })))
 const Brands          = lazy(() => import('./pages/core/Brands').then(m => ({ default: m.Brands })))
 const Users           = lazy(() => import('./pages/core/Users').then(m => ({ default: m.Users })))
-const Organization    = lazy(() => import('./pages/core/Organization').then(m => ({ default: m.Organization })))
 const Startup         = lazy(() => import('./pages/core/Startup').then(m => ({ default: m.Startup })))
 const ProductForm = lazy(() => import('./pages/products/ProductForm').then(m => ({ default: m.ProductForm })))
 
@@ -88,7 +86,8 @@ const Configuracion   = lazy(() => import('./pages/pos/Configuracion').then(m =>
 
 // Mobile
 const MobileDashboard = lazy(() => import('./pages/mobile/MobileDashboard').then(m => ({ default: m.MobileDashboard })))
-const MobileQuery     = lazy(() => import('./pages/mobile/MobileQuery').then(m => ({ default: m.MobileQuery })))
+// Consultar: el buscador de precios y el escáner de tienda son la misma pantalla.
+const MobileQuery     = lazy(() => import('./pages/scanner/StoreScanner').then(m => ({ default: m.StoreScanner })))
 const MobileSales     = lazy(() => import('./pages/mobile/MobileSales').then(m => ({ default: m.MobileSales })))
 const MobileProfile   = lazy(() => import('./pages/mobile/MobileProfile').then(m => ({ default: m.MobileProfile })))
 const MobileOwnerDashboard = lazy(() => import('./pages/mobile/MobileOwnerDashboard').then(m => ({ default: m.MobileOwnerDashboard })))
@@ -281,25 +280,17 @@ export default function App() {
             <Route path="returns" element={<RedirigirConQuery a="/returns" />} />
             <Route path="inventory" element={<RedirigirConQuery a="/inventory" />} />
             <Route path="valor-inventario" element={<RutaPorRol url="/hq/valor-inventario"><Suspense fallback={<PageLoader />}><HQValorInventario /></Suspense></RutaPorRol>} />
-            <Route path="branches" element={<RutaPorRol url="/hq/branches"><Suspense fallback={<PageLoader />}><HQBranches /></Suspense></RutaPorRol>} />
-            <Route path="branches/:branchId" element={<RutaPorRol url="/hq/branches"><Suspense fallback={<PageLoader />}><HQBranches /></Suspense></RutaPorRol>} />
+            {/* Sucursales vive en Configuración (pestaña Sucursales); el detalle viejo abre ahí mismo. */}
+            <Route path="branches" element={<RedirigirConQuery a="/configuracion?tab=sucursales" />} />
+            <Route path="branches/:branchId" element={<RedirigirASucursal />} />
           </Route>
 
           {/* El Catálogo del admin vive en /products desde la Fase 3 (cifras, aprobación y
               archivado para HQ en perfil completo); la URL vieja y su alta redirigen. */}
           <Route path="admin/catalog" element={<RedirigirConQuery a="/products" />} />
           <Route path="admin/products/new" element={<Navigate to="/products/new" replace />} />
-          {/* Scanner de tienda — corrige precios y cuenta existencias parado en
-              el pasillo. Mismo guard que products/:id/edit:
-              es escritura de catálogo/inventario scoped por sucursal. */}
-          <Route
-            path="scanner"
-            element={
-              <RequireRole roles={['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO']}>
-                <Suspense fallback={<PageLoader />}><StoreScanner /></Suspense>
-              </RequireRole>
-            }
-          />
+          {/* El escáner de tienda vive en Consultar (/mobile/query): cámara, precio y conteo en una sola pantalla. */}
+          <Route path="scanner" element={<RedirigirConQuery a="/mobile/query" />} />
           {/* Etiquetas — quien etiqueta es quien acomoda el piso, así que entra
               desde CAJERO. El módulo `labels` gatea el acceso real en el
               backend (`require_module`); aquí solo se filtra por rol. */}
@@ -314,7 +305,8 @@ export default function App() {
           <Route path="departments"   element={<RutaPorRol url="/departments"><Suspense fallback={<PageLoader />}><Departments /></Suspense></RutaPorRol>} />
           <Route path="brands"        element={<RutaPorRol url="/brands"><Suspense fallback={<PageLoader />}><Brands /></Suspense></RutaPorRol>} />
           <Route path="users"         element={<RutaPorRol url="/users"><Suspense fallback={<PageLoader />}><Users /></Suspense></RutaPorRol>} />
-          <Route path="organization"  element={<RutaPorRol url="/organization"><Suspense fallback={<PageLoader />}><Organization /></Suspense></RutaPorRol>} />
+          {/* Empresa vive en Configuración (pestañas Empresa, Ventas y caja y Ticket). */}
+          <Route path="organization"  element={<RedirigirConQuery a="/configuracion" />} />
           <Route path="startup"       element={<Suspense fallback={<PageLoader />}><Startup /></Suspense>} />
 
           {/* Ventas */}
@@ -342,6 +334,7 @@ export default function App() {
           <Route path="inventory" element={<Suspense fallback={<PageLoader />}><Inventory /></Suspense>} />
           <Route path="logistics" element={<RutaPorRol url="/logistics"><Suspense fallback={<PageLoader />}><Logistics /></Suspense></RutaPorRol>} />
           <Route path="boxes"     element={<RutaPorRol url="/boxes"><Suspense fallback={<PageLoader />}><Boxes /></Suspense></RutaPorRol>} />
+          <Route path="fotos" element={<RutaPorRol url="/fotos"><Suspense fallback={<PageLoader />}><FotosProductos /></Suspense></RutaPorRol>} />
           <Route path="products"  element={<RutaPorRol url="/products"><Suspense fallback={<PageLoader />}><Products /></Suspense></RutaPorRol>} />
           <Route path="products/new" element={
             <RequireRole roles={['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO']}>
@@ -383,7 +376,7 @@ export default function App() {
           {/* POS */}
           <Route path="pos"             element={<RutaPorRol url="/pos"><Suspense fallback={<PageLoader />}><POS /></Suspense></RutaPorRol>} />
           <Route path="configuracion" element={<RutaPorRol url="/configuracion"><Suspense fallback={<PageLoader />}><Configuracion /></Suspense></RutaPorRol>} />
-          <Route path="printer-settings" element={<RedirigirConQuery a="/configuracion" />} />
+          <Route path="printer-settings" element={<RedirigirConQuery a="/configuracion?tab=impresoras" />} />
 
           <Route path="*" element={<Suspense fallback={<PageLoader />}><NotFoundPage /></Suspense>} />
         </Route>

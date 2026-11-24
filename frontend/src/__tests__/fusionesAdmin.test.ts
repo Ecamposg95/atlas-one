@@ -11,8 +11,10 @@ import { OCULTAS_BASICO_HQ } from '../components/layout/navPerfilBasico'
  */
 const raiz = resolve(__dirname, '..')
 const src = (p: string) => readFileSync(resolve(raiz, p), 'utf8')
-const FUSIONADAS = ['/hq/sales', '/hq/returns', '/hq/inventory', '/admin/catalog']
-const BORRADOS = ['pages/hq/HQSalesLog.tsx', 'pages/hq/HQReturns.tsx', 'pages/hq/HQInventory.tsx', 'pages/core/AdminCatalog.tsx']
+// 2026-11-23: Empresa y Sucursales viven en Configuración; el escáner, en Consultar (/mobile/query).
+const FUSIONADAS = ['/hq/sales', '/hq/returns', '/hq/inventory', '/admin/catalog', '/organization', '/hq/branches', '/scanner']
+const BORRADOS = ['pages/hq/HQSalesLog.tsx', 'pages/hq/HQReturns.tsx', 'pages/hq/HQInventory.tsx', 'pages/core/AdminCatalog.tsx',
+  'pages/hq/HQBranches.tsx', 'pages/mobile/MobileQuery.tsx']
 
 describe('Fase 3 del admin: ningún módulo repetido', () => {
   it('las pantallas HQ fusionadas ya no existen', () => {
@@ -26,6 +28,11 @@ describe('Fase 3 del admin: ningún módulo repetido', () => {
     expect(app).toMatch(/path="returns" element=\{<RedirigirConQuery a="\/returns" \/>\}/)
     expect(app).toMatch(/path="inventory" element=\{<RedirigirConQuery a="\/inventory" \/>\}/)
     expect(app).toMatch(/path="admin\/catalog" element=\{<RedirigirConQuery a="\/products" \/>\}/)
+    expect(app).not.toMatch(/HQBranches|pages\/mobile\/MobileQuery/)
+    expect(app).toMatch(/path="organization"\s+element=\{<RedirigirConQuery a="\/configuracion" \/>\}/)
+    expect(app).toMatch(/path="branches" element=\{<RedirigirConQuery a="\/configuracion\?tab=sucursales" \/>\}/)
+    expect(app).toMatch(/path="branches\/:branchId" element=\{<RedirigirASucursal \/>\}/)
+    expect(app).toMatch(/path="scanner" element=\{<RedirigirConQuery a="\/mobile\/query" \/>\}/)
   })
 
   it('ni el menú, ni los permisos, ni el perfil básico nombran una URL fusionada', () => {
@@ -42,7 +49,7 @@ describe('Fase 3 del admin: ningún módulo repetido', () => {
 
   it('ninguna pantalla enlaza a una URL fusionada', () => {
     for (const f of ['pages/hq/Inicio.tsx', 'components/layout/Sidebar.tsx', 'pages/menu/MenuVisual.tsx', 'pages/home/PresetHome.tsx']) {
-      expect(src(f), f).not.toMatch(/\/hq\/(sales|returns|inventory)|\/admin\/catalog/)
+      expect(src(f), f).not.toMatch(/\/hq\/(sales|returns|inventory|branches)|\/admin\/catalog|['"`]\/(organization|scanner)['"`?]/)
     }
   })
 })

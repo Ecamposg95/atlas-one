@@ -57,6 +57,8 @@ def read_user_context(
         "plan": None,
         # Modo básico: qué tan larga es la interfaz. Sin org activa, completa.
         "perfil_ui": "completo",
+        # Conteo ciego del corte: encendido salvo que la tienda lo apague.
+        "conteo_ciego": True,
     }
 
     # 1. Resolve Organization
@@ -75,6 +77,7 @@ def read_user_context(
             ctx["plan"] = resumen_plan(org)
             from app.services.perfil_ui import perfil_efectivo
             ctx["perfil_ui"] = perfil_efectivo(org)
+            ctx["conteo_ciego"] = getattr(org, "conteo_ciego", True) is not False
 
             # Preset info
             if org.industry_type:

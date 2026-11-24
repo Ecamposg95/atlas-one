@@ -16,6 +16,16 @@
 
 All scripts default to **dry-run**. Pass `--apply` to persist.
 
+**Where to run (production, VPS IONOS since 2026-09-22):** the scripts ship inside the
+image, so run them in the app container — the commands below are shown bare for brevity:
+
+```bash
+ssh ionos 'docker exec -w /app -e PYTHONPATH=/app atlas-one-prod python scripts/audit_cash_anomalies.py --since 2026-04-01'
+```
+
+SQL goes through the shared Postgres container:
+`ssh -t ionos 'docker exec -it postgres psql -U postgres atlas_one_prod'`.
+
 ---
 
 ## Scenarios
@@ -94,7 +104,7 @@ Then `recompute_session_differences.py --session-id X --apply`.
 - [ ] Confirmed the diagnosis in `/platform/cash-audit/{session_id}` first
 - [ ] Ran dry-run and the output matches what you expected
 - [ ] You have `operator-id` and `note` ready (audit trail)
-- [ ] Backup of `cash_movements`, `sale_returns`, `sales_documents` for the affected rows (Railway snapshot or `pg_dump --table=...`)
+- [ ] Backup taken before `--apply`: `ssh ionos 'docker exec postgres pg_dump -U postgres atlas_one_prod | gzip > /srv/backups/atlas_one_prod_antes_de_<qué>_<fecha>.sql.gz'` (Railway snapshots no longer apply; the nightly 03:30 dump may be hours old)
 - [ ] Notified the cashier/branch manager of what you're about to fix
 
 ## Audit trail expectations

@@ -1074,9 +1074,9 @@ export function POS() {
                 onClick={runFlush}
                 className="text-xs font-bold px-3 py-1.5 rounded-lg"
                 style={{
-                  background: 'rgba(99,102,241,0.14)',
-                  border: '1.5px solid rgba(99,102,241,0.50)',
-                  color: '#4338ca',
+                  background: 'rgba(255, 106, 31,0.14)',
+                  border: '1.5px solid rgba(255, 106, 31,0.50)',
+                  color: '#C2410C',
                 }}
               >
                 <i className="fa-solid fa-rotate mr-1.5" /> Reintentar ahora

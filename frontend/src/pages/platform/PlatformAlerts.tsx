@@ -40,7 +40,7 @@ function severityColor(severity: string): SeverityColor {
     case 'warning':
       return { token: 'var(--p-warning)', bg: 'rgba(245,158,11,0.12)' }
     case 'info':
-      return { token: 'var(--p-accent)', bg: 'rgba(59,130,246,0.12)' }
+      return { token: 'var(--p-accent)', bg: 'rgba(246, 121, 59,0.12)' }
     default:
       return { token: 'var(--p-muted)', bg: 'rgba(107,107,120,0.18)' }
   }
@@ -690,7 +690,7 @@ const chipStyle: React.CSSProperties = {
   padding: '3px 10px',
   borderRadius: 999,
   border: '1px solid transparent',
-  fontWeight: 700,
+  fontWeight: 600,
   whiteSpace: 'nowrap',
 }
 

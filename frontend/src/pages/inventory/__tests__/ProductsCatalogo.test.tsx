@@ -82,6 +82,10 @@ describe('Productos: catálogo fusionado (HQ en perfil completo)', () => {
   it('un pendiente ofrece Aprobar y Rechazar; un archivado, Restaurar; la Matriz va siempre, también con una sola tienda', async () => {
     pintar()
     await screen.findByText('Blusa nueva')
+    // Por omisión se ven tarjetas; la columna de estado por sucursal es de la lista.
+    expect(document.querySelector('table')).toBeNull()
+    fireEvent.click(screen.getByLabelText('Vista lista'))
+    expect(document.querySelector('table')).not.toBeNull()
     expect(screen.getByText('Pendiente')).toBeTruthy()
     expect(screen.getByText('Archivado')).toBeTruthy()
     expect(screen.getAllByText('Sin sucursal')).toHaveLength(2)   // ambos productos tienen branch_statuses vacío

@@ -95,7 +95,7 @@ export function ProductImageUploader({ product, onUpdated }: Props) {
       <input
         ref={inputRef}
         type="file"
-        accept="image/jpeg,image/png,image/webp"
+        accept="image/*"
         className="hidden"
         onChange={handleFileChange}
       />

@@ -28,10 +28,10 @@ interface Props {
 const TIER_PALETTE: Array<{ color: string; bg: string; border: string }> = [
   { color: '#047857', bg: 'rgba(16,185,129,0.08)',  border: 'rgba(16,185,129,0.40)' },  // emerald
   { color: '#b45309', bg: 'rgba(245,158,11,0.08)',  border: 'rgba(245,158,11,0.45)' },  // amber
-  { color: '#6d28d9', bg: 'rgba(139,92,246,0.08)',  border: 'rgba(139,92,246,0.45)' },  // violet
-  { color: '#0e7490', bg: 'rgba(6,182,212,0.08)',   border: 'rgba(6,182,212,0.40)'  },  // cyan
+  { color: '#D96328', bg: 'rgba(255, 161, 74,0.08)',  border: 'rgba(255, 161, 74,0.45)' },  // violet
+  { color: '#90390E', bg: 'rgba(212, 75, 6,0.08)',   border: 'rgba(212, 75, 6,0.40)'  },  // cyan
   { color: '#be185d', bg: 'rgba(236,72,153,0.08)',  border: 'rgba(236,72,153,0.40)' },  // pink
-  { color: '#4338ca', bg: 'rgba(99,102,241,0.08)',  border: 'rgba(99,102,241,0.45)' },  // indigo
+  { color: '#C2410C', bg: 'rgba(255, 106, 31,0.08)',  border: 'rgba(255, 106, 31,0.45)' },  // indigo
 ]
 const paletteFor = (i: number) => TIER_PALETTE[i % TIER_PALETTE.length]
 
@@ -231,7 +231,7 @@ export function ProductDetailModal({ product, onClose, onAddToCart, onSaved, can
                     const s = Number(v.stock_total ?? 0)
                     const esActual = v.id === selectedVariantId
                     return (
-                      <tr key={v.id} style={{ borderTop: '1px solid var(--dax-border-dim)', background: esActual ? 'rgba(99,102,241,0.08)' : undefined }}>
+                      <tr key={v.id} style={{ borderTop: '1px solid var(--dax-border-dim)', background: esActual ? 'rgba(255, 106, 31,0.08)' : undefined }}>
                         <td className="px-2 py-1.5 font-semibold" style={{ color: 'var(--dax-text)' }}>
                           {v.sale_name ?? variantDisplayName(v, live.name)}
                         </td>

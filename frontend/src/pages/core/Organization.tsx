@@ -1,23 +1,13 @@
 import { useEffect, useState, useRef } from 'react'
-import { organizationApi, type Organization, type Branch, type BranchCreate, type ExchangeRateInfo } from '../../api/organization'
+import { organizationApi, type Organization, type ExchangeRateInfo, type Branch } from '../../api/organization'
 import { DaxCard } from '../../components/ui/DaxCard'
-import { TablaDesplazable } from '../../components/ui/TablaDesplazable'
 import { Spinner } from '../../components/ui/Spinner'
-import { Badge } from '../../components/ui/Badge'
 import { toast } from '../../store/toastStore'
-import { confirm as confirmDialog } from '../../components/ui/ConfirmDialog'
 import client from '../../api/client'
 import { errorDetailText } from '../../utils/errorDetail'
 import { MasOpciones } from '../../components/ui/MasOpciones'
 import { ReglasCarga } from './ReglasCarga'
-import { useModoBasico, useEnabledModulesStore } from '../../store/enabledModulesStore'
-
-const BRANCH_TYPES: Branch['branch_type'][] = ['HQ', 'STORE', 'WAREHOUSE', 'OFFICE']
-const branchTypeLabel = (t: string) =>
-  ({ HQ: 'Casa Matriz', STORE: 'Sucursal', WAREHOUSE: 'Almacén', OFFICE: 'Oficina' }[t] ?? t)
-
-interface BranchForm { name: string; branch_type: Branch['branch_type']; address: string; phone: string }
-const EMPTY_BRANCH: BranchForm = { name: '', branch_type: 'STORE', address: '', phone: '' }
+import { useEnabledModulesStore, useModoBasico } from '../../store/enabledModulesStore'
 
 // Vista previa del renglón del ticket (panel de Empresa).
 //
@@ -45,17 +35,19 @@ const VISTA_PREVIA_DETALLADA = [
   '    Talla M   @4,000.00 4,000.00',
 ].join('\n')
 
-export function Organization() {
-  const [tab, setTab] = useState<'org' | 'branches'>('org')
+/** Qué parte de los ajustes de la empresa se pinta. Sin `seccion`, todas. */
+export type SeccionEmpresa = 'empresa' | 'ventas' | 'ticket'
+
+/**
+ * Ajustes de la organización. Vive dentro de `/configuracion` (una pestaña por
+ * `seccion`); las sucursales tienen su propia pantalla (`Sucursales.tsx`).
+ */
+export function Organization({ seccion }: { seccion?: SeccionEmpresa } = {}) {
+  const ve = (s: SeccionEmpresa) => !seccion || seccion === s
   const [org, setOrg] = useState<Organization | null>(null)
-  const [branches, setBranches] = useState<Branch[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [orgForm, setOrgForm] = useState<Partial<Organization>>({})
-  const [branchModal, setBranchModal] = useState<'create' | 'edit' | null>(null)
-  const [editingBranch, setEditingBranch] = useState<Branch | null>(null)
-  const [branchForm, setBranchForm] = useState<BranchForm>(EMPTY_BRANCH)
-  const [branchSaving, setBranchSaving] = useState(false)
   const [logoUploading, setLogoUploading] = useState(false)
   const [logoError, setLogoError] = useState<string | null>(null)
   const logoInputRef = useRef<HTMLInputElement>(null)
@@ -66,12 +58,14 @@ export function Organization() {
   const tieneIA = useEnabledModulesStore((s) => s.enabledModules.includes('ai'))
   const [instrucciones, setInstrucciones] = useState('')
   const [guardandoIA, setGuardandoIA] = useState(false)
+  const [branches, setBranches] = useState<Branch[]>([])
 
   useEffect(() => {
     setLoading(true)
     Promise.all([
       organizationApi.getOrg().then((o) => { setOrg(o); setOrgForm(o); setInstrucciones(o.ai_instrucciones ?? '') }),
-      organizationApi.getBranches().then(setBranches),
+      // Las sucursales solo se usan en las reglas de carga (módulo de IA).
+      organizationApi.getBranches().then(setBranches).catch(() => {}),
       organizationApi.getExchangeRate().then(setFxInfo).catch(() => {}),
     ]).catch(() => {}).finally(() => setLoading(false))
   }, [])
@@ -94,6 +88,8 @@ export function Organization() {
         card_surcharge_pct: comision === '' || comision == null ? 0 : comision,
       })
       setOrg(updated); setOrgForm(updated)
+      // El conteo ciego viaja en /me/context: se relee para que esta sesión lo tome ya.
+      void useEnabledModulesStore.getState().load()
       await cargarFx()
     } catch (e: any) {
       // El 422 del PUT trae el motivo en español ("En modo manual hay que
@@ -122,41 +118,6 @@ export function Organization() {
     } catch (e: any) {
       toast.error(errorDetailText(e?.response?.data?.detail, 'No se pudo bajar el tipo de cambio de Banxico'))
     } finally { setFxRefreshing(false) }
-  }
-
-  const openCreateBranch = () => { setBranchForm(EMPTY_BRANCH); setEditingBranch(null); setBranchModal('create') }
-  const openEditBranch = (b: Branch) => {
-    setBranchForm({ name: b.name, branch_type: b.branch_type, address: b.address ?? '', phone: b.phone ?? '' })
-    setEditingBranch(b); setBranchModal('edit')
-  }
-
-  const saveBranch = async () => {
-    setBranchSaving(true)
-    try {
-      const payload: BranchCreate = { name: branchForm.name, branch_type: branchForm.branch_type, address: branchForm.address || undefined, phone: branchForm.phone || undefined }
-      if (branchModal === 'create') await organizationApi.createBranch(payload)
-      else if (editingBranch) await organizationApi.updateBranch(editingBranch.id, payload)
-      setBranchModal(null)
-      organizationApi.getBranches().then(setBranches).catch(() => {})
-    } catch (e: any) {
-      toast.error(errorDetailText(e?.response?.data?.detail, 'Error al guardar la sucursal'))
-    } finally { setBranchSaving(false) }
-  }
-
-  const deleteBranch = async (branch: Branch) => {
-    const ok = await confirmDialog({
-      title: 'Eliminar sucursal',
-      message: `¿Eliminar la sucursal "${branch.name}"?`,
-      variant: 'danger',
-      confirmText: 'Eliminar',
-    })
-    if (!ok) return
-    try {
-      await organizationApi.deleteBranch(branch.id)
-      setBranches((prev) => prev.filter((b) => b.id !== branch.id))
-    } catch (e: any) {
-      toast.error(errorDetailText(e?.response?.data?.detail, 'Error al eliminar la sucursal'))
-    }
   }
 
   const uploadOrgLogo = async (file: File) => {
@@ -194,30 +155,14 @@ export function Organization() {
   const of = (field: keyof Organization, val: string) =>
     setOrgForm((prev) => ({ ...prev, [field]: field === 'name' ? val : (val || null) }))
   const nameInvalido = !orgForm.name?.trim()
-  const bf = (field: keyof BranchForm, val: string) => setBranchForm((prev) => ({ ...prev, [field]: val }))
 
   if (loading) return <Spinner text="Cargando organización..." />
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center gap-3">
-        <i className="fa-solid fa-building text-indigo-400 text-xl" />
-        <h1 className="text-2xl font-black text-white">Empresa</h1>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex flex-wrap gap-1 bg-slate-800/50 p-1 rounded-lg w-full sm:w-fit">
-        {(['org', 'branches'] as const).map((t) => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`flex-1 sm:flex-none min-h-[44px] sm:min-h-0 px-4 py-1.5 rounded-md text-sm font-semibold transition-colors ${tab === t ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}>
-            {t === 'org' ? 'Datos de Empresa' : `Sucursales (${branches.length})`}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'org' && org && (
+      {org && (
         <div className="space-y-4">
-          <DaxCard>
+          {ve('empresa') && <DaxCard>
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">Información de la Empresa</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
@@ -251,11 +196,11 @@ export function Organization() {
                 {saving ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Guardar cambios</>}
               </button>
             </div>
-          </DaxCard>
+          </DaxCard>}
 
-          <MasOpciones activo={modoBasico}>
+          {(ve('empresa') || ve('ventas')) && <MasOpciones activo={modoBasico && seccion !== 'ventas'}>
           {/* Logo de la empresa */}
-          <DaxCard>
+          {ve('empresa') && <DaxCard>
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">
               <i className="fa-solid fa-image mr-1.5" />Logo de la Empresa
             </p>
@@ -300,8 +245,9 @@ export function Organization() {
                 {logoError && <p className="text-xs text-red-400 mt-1">{logoError}</p>}
               </div>
             </div>
-          </DaxCard>
+          </DaxCard>}
 
+          {ve('ventas') && <>
           {/* Tipo de cambio USD */}
           <DaxCard>
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">
@@ -412,10 +358,65 @@ export function Organization() {
               </button>
             </div>
           </DaxCard>
-          </MasOpciones>
+
+          {/* Conteo ciego del corte de caja */}
+          <DaxCard>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">
+              <i className="fa-solid fa-eye-slash mr-1.5" />Corte de caja
+            </p>
+            <div className="flex items-start gap-3">
+              <input
+                type="checkbox" id="conteo-ciego-chk" className="w-4 h-4 mt-0.5"
+                checked={orgForm.conteo_ciego ?? true}
+                onChange={e => setOrgForm(p => ({ ...p, conteo_ciego: e.target.checked }))}
+              />
+              <label htmlFor="conteo-ciego-chk" className="text-xs text-slate-300 cursor-pointer">
+                Conteo ciego
+                <span className="block text-[10px] text-slate-600">
+                  Con el turno abierto, quien cobra no ve el efectivo esperado ni su desglose:
+                  cuenta la caja y la diferencia aparece al cerrar. Apagado, lo ve antes de contar.
+                </span>
+              </label>
+            </div>
+            <div className="flex justify-end mt-4">
+              <button onClick={saveOrg} disabled={saving || nameInvalido} className="dax-btn-primary text-xs disabled:opacity-40">
+                {saving ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Guardar</>}
+              </button>
+            </div>
+          </DaxCard>
+
+          {/* Precio por sucursal */}
+          <DaxCard>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">
+              <i className="fa-solid fa-tag mr-1.5" />Precios
+            </p>
+            <div className="flex items-start gap-3">
+              <input
+                type="checkbox" id="precio-sucursal-chk" className="w-4 h-4 mt-0.5"
+                checked={orgForm.precio_por_sucursal ?? false}
+                onChange={e => setOrgForm(p => ({ ...p, precio_por_sucursal: e.target.checked }))}
+              />
+              <label htmlFor="precio-sucursal-chk" className="text-xs text-slate-300 cursor-pointer">
+                Cada sucursal con su precio
+                <span className="block text-[10px] text-slate-600">
+                  El precio que alguien de una sucursal cambia en un producto o una talla solo
+                  cambia en su sucursal; las demás conservan el suyo. Administrador y dueño
+                  editan el precio base y, en la ficha, el de cada sucursal. Apagado, cualquier
+                  cambio de precio aplica a todas.
+                </span>
+              </label>
+            </div>
+            <div className="flex justify-end mt-4">
+              <button onClick={saveOrg} disabled={saving || nameInvalido} className="dax-btn-primary text-xs disabled:opacity-40">
+                {saving ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Guardar</>}
+              </button>
+            </div>
+          </DaxCard>
+          </>}
+          </MasOpciones>}
 
           {/* Encabezado y pie de ticket */}
-          <DaxCard>
+          {ve('ticket') && <DaxCard>
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">
               <i className="fa-solid fa-receipt mr-1.5" />Encabezado y Pie de Ticket
             </p>
@@ -549,10 +550,10 @@ export function Organization() {
                 </button>
               </div>
             </div>
-          </DaxCard>
+          </DaxCard>}
 
           {/* Modo básico: tope de "Se está acabando" del Inicio. */}
-          {modoBasico && (
+          {modoBasico && ve('ventas') && (
             <DaxCard>
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">
                 <i className="fa-solid fa-boxes-stacked mr-1.5" />Lo que se está acabando
@@ -579,7 +580,7 @@ export function Organization() {
             </DaxCard>
           )}
 
-          {tieneIA && (
+          {tieneIA && ve('empresa') && (
             <>
               <DaxCard>
                 <p className="text-[10px] font-bold text-dax-faint uppercase tracking-widest mb-4">Instrucciones para la IA</p>
@@ -597,105 +598,6 @@ export function Organization() {
               <ReglasCarga org={org} branches={branches} onGuardado={(o) => setOrg((prev) => (prev ? { ...prev, reglas_carga: o.reglas_carga } : prev))} />
             </>
           )}
-        </div>
-      )}
-
-      {tab === 'branches' && (
-        <div className="space-y-3">
-          <div className="flex justify-end">
-            <button onClick={openCreateBranch} className="dax-btn-primary text-xs">
-              <i className="fa-solid fa-plus" /> Nueva Sucursal
-            </button>
-          </div>
-          <DaxCard padding={false}>
-            {branches.length === 0 ? (
-              <div className="p-12 text-center text-slate-600">Sin sucursales</div>
-            ) : (
-              <TablaDesplazable sangrado={false}>
-                <table className="dax-table w-full">
-                  <thead>
-                    <tr>
-                      <th>Nombre</th>
-                      <th>Tipo</th>
-                      <th>Teléfono</th>
-                      <th>Dirección</th>
-                      <th>Estado</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {branches.map((b) => (
-                      <tr key={b.id}>
-                        <td className="font-semibold text-white">{b.name}</td>
-                        <td><Badge variant={b.branch_type === 'HQ' ? 'yellow' : 'blue'}>{branchTypeLabel(b.branch_type)}</Badge></td>
-                        <td className="text-slate-400 text-sm">{b.phone ?? '—'}</td>
-                        <td className="text-slate-400 text-sm max-w-[200px] truncate">{b.address ?? '—'}</td>
-                        <td>
-                          <Badge variant={b.is_active ? 'green' : 'slate'}>
-                            {b.is_active ? 'Activa' : 'Inactiva'}
-                          </Badge>
-                        </td>
-                        {/* El `flex` iba en el `<td>`: la celda dejaba de ser
-                            `table-cell` y se salía del reparto de columnas. */}
-                        <td className="whitespace-nowrap">
-                          <div className="flex gap-1">
-                            <button onClick={() => openEditBranch(b)} aria-label={`Editar ${b.name}`}
-                              className="dax-btn-icon text-slate-500 hover:text-white text-xs">
-                              <i className="fa-solid fa-pen" />
-                            </button>
-                            {!b.is_headquarters && (
-                              <button onClick={() => deleteBranch(b)} aria-label={`Eliminar ${b.name}`}
-                                className="dax-btn-icon text-slate-600 hover:text-red-400 text-xs ml-1">
-                                <i className="fa-solid fa-trash" />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </TablaDesplazable>
-            )}
-          </DaxCard>
-        </div>
-      )}
-
-      {/* Modal sucursal */}
-      {branchModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setBranchModal(null)}>
-          <div className="dax-card dax-modal p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-lg font-black text-white">{branchModal === 'create' ? 'Nueva Sucursal' : 'Editar Sucursal'}</h3>
-              <button onClick={() => setBranchModal(null)} className="dax-btn-icon text-slate-500 hover:text-white"><i className="fa-solid fa-xmark text-lg" /></button>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="dax-label">Nombre</label>
-                <input value={branchForm.name} onChange={(e) => bf('name', e.target.value)} className="dax-input w-full" placeholder="Sucursal Centro" />
-              </div>
-              <div>
-                <label className="dax-label">Tipo</label>
-                <select value={branchForm.branch_type} onChange={(e) => bf('branch_type', e.target.value)} className="dax-input w-full">
-                  {BRANCH_TYPES.map((t) => <option key={t} value={t}>{branchTypeLabel(t)}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="dax-label">Teléfono</label>
-                <input value={branchForm.phone} onChange={(e) => bf('phone', e.target.value)} className="dax-input w-full" />
-              </div>
-              <div>
-                <label className="dax-label">Dirección</label>
-                <input value={branchForm.address} onChange={(e) => bf('address', e.target.value)} className="dax-input w-full" />
-              </div>
-            </div>
-            <div className="dax-modal-footer -mx-6 px-6 flex gap-2 mt-5">
-              <button onClick={() => setBranchModal(null)} className="dax-btn-secondary flex-1">Cancelar</button>
-              <button onClick={saveBranch} disabled={branchSaving || !branchForm.name} className="dax-btn-primary flex-1 justify-center disabled:opacity-40">
-                {branchSaving ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Guardar</>}
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </div>

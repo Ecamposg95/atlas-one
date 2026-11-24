@@ -68,7 +68,7 @@ const clienteVenta = (s: SalesDocument) =>
   s.customer_name ?? <span className="text-dax-faint italic">Público general</span>
 const pagosVenta = (s: SalesDocument) =>
   s.payments?.map((p, i) => (
-    <span key={i} className="dax-badge dax-badge-blue mr-1">{METHOD_LABELS[p.method] ?? p.method}</span>
+    <span key={i} className="dax-badge dax-badge-slate mr-1">{METHOD_LABELS[p.method] ?? p.method}</span>
   ))
 const sePuedeDevolver = (s: SalesDocument) => s.status === 'PAID' || s.status === 'REFUNDED_PARTIAL'
 // Estados reales del backend: PAID / CANCELLED / REFUNDED_* / PENDING / DRAFT
@@ -212,31 +212,39 @@ export function SalesHistory() {
   )
 
   // Ver / Reimprimir / Devolver: los mismos botones en la fila y en la tarjeta.
+  // En la tabla van `compactas` (solo icono, con su nombre en `aria-label`) para
+  // que las columnas de datos no se partan en varios renglones.
   // `stopPropagation` evita que el toque abra además el detalle de la fila.
-  const accionesVenta = (s: SalesDocument) => (
-    <>
-      <button type="button" onClick={(e) => { e.stopPropagation(); setSel(s) }} className="dax-btn-secondary text-xs" title="Ver detalle">
-        <i className="fa-solid fa-eye" aria-hidden="true" /> Ver
-      </button>
-      <button
-        type="button"
-        onClick={(e) => { e.stopPropagation(); reprintTicket(s) }}
-        disabled={reprinting || !printerName}
-        className="dax-btn-secondary text-xs disabled:opacity-40 disabled:cursor-not-allowed"
-        title={printerName ? 'Reimprimir ticket' : 'Configura una impresora'}
-      >
-        <i className="fa-solid fa-print" aria-hidden="true" /> Reimprimir
-      </button>
-      <button type="button" onClick={(e) => { e.stopPropagation(); setTicketWa(s) }} className="dax-btn-secondary text-xs" title="Enviar ticket por WhatsApp">
-        <i className="fa-brands fa-whatsapp" aria-hidden="true" /> WhatsApp
-      </button>
-      {sePuedeDevolver(s) && (
-        <button type="button" onClick={(e) => { e.stopPropagation(); setReturnSale(s) }} className="dax-btn-danger text-xs" title="Iniciar devolución">
-          <i className="fa-solid fa-undo" aria-hidden="true" /> Devolver
+  const accionesVenta = (s: SalesDocument, compactas = false) => {
+    const clase = (base: string, extra = '') =>
+      compactas ? `dax-btn-ghost dax-btn-icon !p-0 w-8 h-8 justify-center ${extra}` : `${base} text-xs`
+    const rotulo = (texto: string) => (compactas ? null : <> {texto}</>)
+    return (
+      <>
+        <button type="button" onClick={(e) => { e.stopPropagation(); setSel(s) }} className={clase('dax-btn-secondary')} title="Ver detalle" aria-label="Ver">
+          <i className="fa-solid fa-eye" aria-hidden="true" />{rotulo('Ver')}
         </button>
-      )}
-    </>
-  )
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); reprintTicket(s) }}
+          disabled={reprinting || !printerName}
+          className={`${clase('dax-btn-secondary')} disabled:opacity-40 disabled:cursor-not-allowed`}
+          title={printerName ? 'Reimprimir ticket' : 'Configura una impresora'}
+          aria-label="Reimprimir"
+        >
+          <i className="fa-solid fa-print" aria-hidden="true" />{rotulo('Reimprimir')}
+        </button>
+        <button type="button" onClick={(e) => { e.stopPropagation(); setTicketWa(s) }} className={clase('dax-btn-secondary')} title="Enviar ticket por WhatsApp" aria-label="WhatsApp">
+          <i className="fa-brands fa-whatsapp" aria-hidden="true" />{rotulo('WhatsApp')}
+        </button>
+        {sePuedeDevolver(s) && (
+          <button type="button" onClick={(e) => { e.stopPropagation(); setReturnSale(s) }} className={clase('dax-btn-danger', 'text-dax-danger')} title="Iniciar devolución" aria-label="Devolver">
+            <i className="fa-solid fa-undo" aria-hidden="true" />{rotulo('Devolver')}
+          </button>
+        )}
+      </>
+    )
+  }
 
   // Paginación: una sola, debajo de la tabla (escritorio) o de las tarjetas (teléfono).
   const paginacion = pages > 1 && (
@@ -261,9 +269,8 @@ export function SalesHistory() {
     <div className="space-y-5">
       <CabeceraPagina
         titulo={
-          <div className="flex items-center gap-3">
-            <i className="fa-solid fa-receipt text-dax-accent-text text-xl" aria-hidden="true" />
-            <h1 className="text-2xl font-black text-dax-text">
+          <div>
+            <h1 className="dax-titulo-pagina">
               {esCajera
                 ? `Ventas de hoy · ${new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'short' })}`
                 : 'Ventas'}
@@ -274,12 +281,12 @@ export function SalesHistory() {
 
       {stats && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          <KpiCard etiqueta="Total" valor={formatCurrency(stats.total_sales)} tono="success" data-testid="kpi-total" />
-          <KpiCard etiqueta="Transacciones" valor={String(stats.total_transactions)} />
-          <KpiCard etiqueta="Ticket promedio" valor={formatCurrency(stats.average_ticket)} />
-          <KpiCard etiqueta="Método top" valor={metodoTop ? (METHOD_LABELS[metodoTop] ?? metodoTop) : '—'} />
-          <KpiCard etiqueta="Devoluciones" valor={`${stats.refund_count ?? 0} · ${formatCurrency(stats.refund_total ?? 0)}`} tono="danger" />
-          <KpiCard etiqueta="Hora pico" valor={stats.peak_hour ?? '—'} />
+          <KpiCard etiqueta="Total" icono="fa-sack-dollar" destacada valor={formatCurrency(stats.total_sales)} data-testid="kpi-total" />
+          <KpiCard etiqueta="Transacciones" icono="fa-receipt" valor={String(stats.total_transactions)} />
+          <KpiCard etiqueta="Ticket promedio" icono="fa-scale-balanced" valor={formatCurrency(stats.average_ticket)} />
+          <KpiCard etiqueta="Método top" icono="fa-credit-card" valor={metodoTop ? (METHOD_LABELS[metodoTop] ?? metodoTop) : '—'} />
+          <KpiCard etiqueta="Devoluciones" icono="fa-rotate-left" valor={`${stats.refund_count ?? 0} · ${formatCurrency(stats.refund_total ?? 0)}`} tono="danger" />
+          <KpiCard etiqueta="Hora pico" icono="fa-clock" valor={stats.peak_hour ?? '—'} />
         </div>
       )}
 
@@ -381,15 +388,15 @@ export function SalesHistory() {
                 <tbody>
                   {visibles.map((s) => (
                     <tr key={s.id} onClick={() => setSel(s)} className="cursor-pointer">
-                      <td className="font-mono text-dax-accent-text text-xs">{saleLabel(s)}</td>
+                      <td className="font-mono text-dax-accent-text text-xs whitespace-nowrap">{saleLabel(s)}</td>
                       {conSucursales && <td className="text-xs text-dax-muted">{s.branch_name ?? '—'}</td>}
-                      <td className="text-xs text-dax-muted">{fechaVenta(s)}</td>
-                      <td className="text-sm">{clienteVenta(s)}</td>
-                      <td className="text-right font-semibold text-dax-success">{formatCurrency(s.total_amount)}</td>
+                      <td className="text-xs text-dax-muted whitespace-nowrap">{fechaVenta(s)}</td>
+                      <td className="text-sm text-dax-text">{clienteVenta(s)}</td>
+                      <td className="text-right text-sm font-medium text-dax-text whitespace-nowrap">{formatCurrency(s.total_amount)}</td>
                       <td>{pagosVenta(s)}</td>
                       <td>{badgeEstado(s)}</td>
-                      <td className="text-right">
-                        <div className="flex items-center justify-end gap-2">{accionesVenta(s)}</div>
+                      <td className="w-px">
+                        <div className="flex items-center justify-start gap-1">{accionesVenta(s, true)}</div>
                       </td>
                     </tr>
                   ))}

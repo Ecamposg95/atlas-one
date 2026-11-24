@@ -3,7 +3,7 @@ import { motionDisabled } from '../../theme/motion'
 
 // Papelitos de colores: son ILUSTRACIÓN, igual que el cielo. No siguen el tema
 // ni el acento del vertical — un confeti monocromo no celebra nada.
-const COLORS = ['#fde047', '#ffffff', '#c4b5fd', '#34d399', '#fdba74']
+const COLORS = ['#fde047', '#ffffff', '#FFD3A8', '#34d399', '#fdba74']
 
 /**
  * 12 piezas, 2 s, se desmonta solo. El padre debe ser `relative overflow-hidden`.

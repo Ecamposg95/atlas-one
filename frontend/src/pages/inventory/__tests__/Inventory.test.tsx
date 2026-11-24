@@ -200,14 +200,14 @@ describe('Inventario (/inventory, fusión de Existencias)', () => {
     expect(screen.queryByText('$40.00')).toBeNull()
   })
 
-  it('en teléfono hay una tarjeta resumen con los totales (a costo solo para oficina)', async () => {
+  it('en teléfono los totales van en las mismas tarjetas de arriba (a costo solo para oficina)', async () => {
     telefono.valor = true
     pintar(); buscar()
     await screen.findByText('Blusa')
     const t = await screen.findByTestId('totales-telefono')
-    expect(t.textContent).toContain('5 pzas')
-    expect(t.textContent).toContain('$700.00 a venta')
-    expect(t.textContent).toContain('$120.00 a costo')
+    expect(t.textContent).toContain('Piezas5')
+    expect(t.textContent).toContain('Importe a venta$700.00')
+    expect(t.textContent).toContain('Importe a costo$120.00')
     cleanup()
     usuario('GERENTE')
     pintar(); buscar()

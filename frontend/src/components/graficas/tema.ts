@@ -18,6 +18,12 @@ export interface TemaGrafica {
   /** `--dax-card-solid`: fondo del tooltip y separación entre gajos de la dona. */
   cardSolid: string
   acento: string
+  /** `--dax-indigo`: segundo color de la paleta (tarjeta, segunda serie). */
+  indigo: string
+  /** `--dax-lavanda`: tercer color (transferencia). */
+  lavanda: string
+  /** `--dax-grafica-apoyo`: comparativos y barras sin resaltar; más apagado que el acento. */
+  apoyo: string
   success: string
   warning: string
   danger: string
@@ -26,12 +32,12 @@ export interface TemaGrafica {
 /** Respaldos = tema oscuro de index.css; solo se usan sin DOM o sin la variable. */
 const RESPALDO: TemaGrafica = {
   texto: '#ededed', muted: '#b5b5b5', faint: '#8a8a8a', borde: 'rgba(255, 255, 255, 0.08)', cardSolid: '#161616',
-  acento: '#6366f1', success: '#34D399', warning: '#FBBF24', danger: '#F87171',
+  acento: '#FF6A1F', indigo: '#5B58B8', lavanda: '#9AA6E0', apoyo: '#565C8F', success: '#34D399', warning: '#FBBF24', danger: '#F87171',
 }
 
 const VARIABLES: Record<keyof TemaGrafica, string> = {
   texto: '--dax-text', muted: '--dax-text-muted', faint: '--dax-text-faint', borde: '--dax-border-dim',
-  cardSolid: '--dax-card-solid', acento: '--dax-accent', success: '--dax-success', warning: '--dax-warning',
+  cardSolid: '--dax-card-solid', acento: '--dax-accent', indigo: '--dax-indigo', lavanda: '--dax-lavanda', apoyo: '--dax-grafica-apoyo', success: '--dax-success', warning: '--dax-warning',
   danger: '--dax-danger',
 }
 
@@ -70,12 +76,13 @@ export function useTemaGrafica(): TemaGrafica {
   return useMemo(() => leerTemaGrafica(), [claveTema])
 }
 
-/** Efectivo = success, tarjeta = acento, transferencia = warning, lo demás tenue (spec §3.3). */
+/** Mismos colores que los botones de cobro del POS: efectivo = acento (ember), tarjeta = índigo,
+ *  transferencia = lavanda, lo demás tenue. Verde y ámbar quedan para estados, no para series. */
 export function colorMetodo(metodo: string, tema: TemaGrafica): string {
   switch (metodo.toUpperCase()) {
-    case 'CASH': return tema.success
-    case 'CARD': return tema.acento
-    case 'TRANSFER': return tema.warning
+    case 'CASH': return tema.acento
+    case 'CARD': return tema.indigo
+    case 'TRANSFER': return tema.lavanda
     default: return tema.faint
   }
 }

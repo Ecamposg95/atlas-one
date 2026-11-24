@@ -3,8 +3,9 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 /**
- * Tema "full black" (2026-11-14): la barra lateral es lo más oscuro (#000000),
- * el cuerpo un poco menos, todo neutro, sin tinte índigo.
+ * Tema oscuro Atlas Horizon (2026-11-18; antes "full black", 2026-11-14): la
+ * barra lateral es lo más oscuro (#000000), el cuerpo negro cálido, sin tinte
+ * índigo, con el ámbar de la marca como único acento.
  */
 const css = readFileSync(resolve(__dirname, '..', 'index.css'), 'utf8')
 
@@ -16,7 +17,7 @@ function bloque(selector: string): string {
 const valor = (b: string, token: string) =>
   new RegExp(`${token}:\\s*([^;]+);`).exec(b)?.[1].trim()
 
-describe('tema full black', () => {
+describe('tema oscuro Horizon', () => {
   const root = bloque(':root')
   const dark = bloque('.dark')
 
@@ -25,11 +26,17 @@ describe('tema full black', () => {
     expect(valor(dark, '--sb-bg')).toBe('#000000')
   })
 
-  it('el modo oscuro usa grises neutros, con el cuerpo más claro que la barra', () => {
-    expect(valor(dark, '--dax-bg')).toBe('#0a0a0a')
-    expect(valor(dark, '--dax-surface')).toBe('#111111')
-    expect(valor(dark, '--dax-card-solid')).toBe('#161616')
-    expect(valor(dark, '--dax-on-accent')).toBe('#000000')
+  it('el modo oscuro usa el negro cálido de Horizon, con el cuerpo más claro que la barra', () => {
+    expect(valor(dark, '--dax-bg')).toBe('#050505')
+    expect(valor(dark, '--dax-surface')).toBe('#0B0A09')
+    expect(valor(dark, '--dax-card-solid')).toBe('#12100F')
+    expect(valor(dark, '--dax-on-accent')).toBe('#050505')
+  })
+
+  it('el acento es el ámbar en oscuro y el ember sobre niebla en claro (el quemado queda como tinta)', () => {
+    expect(valor(dark, '--dax-accent')).toBe('#FF6A1F')
+    expect(valor(root, '--dax-accent')).toBe('#F2622A')
+    expect(valor(root, '--dax-accent-text')).toBe('#C2410C')
   })
 
   it('no queda ningún hex índigo de la paleta vieja en .dark', () => {

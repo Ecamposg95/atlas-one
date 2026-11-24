@@ -335,7 +335,7 @@ async def portal_dashboard_redirect():
 
 @app.get("/branches", include_in_schema=False)
 async def branches_redirect():
-    return RedirectResponse(url="/hq/branches", status_code=302)
+    return RedirectResponse(url="/configuracion?tab=sucursales", status_code=302)
 
 @app.get("/home", include_in_schema=False)
 async def home_redirect():

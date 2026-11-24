@@ -22,7 +22,7 @@ const menu = (role: Role, plan: PlanOrg | null, enabledModules = ATLAS_POS) =>
 const DIARIO_ADMIN = [
   '/hq/operations', '/hq/reports-hub', '/sales', '/products', '/labels', '/configuracion',
   '/cash-history', '/returns', '/inventory',
-  '/users', '/hq/branches', '/organization',
+  '/users',
 ]
 const DIARIO_CAJERA = [
   '/atlas-pos', '/pos', '/sales', '/cash-history', '/returns', '/products', '/labels', '/configuracion',

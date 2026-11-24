@@ -142,7 +142,7 @@ export function PlatformHealth() {
       accessor: r => (
         <span
           style={{
-            background: 'rgba(59, 130, 246, 0.12)',
+            background: 'rgba(246, 121, 59, 0.12)',
             color: 'var(--p-accent)',
             padding: '2px 8px',
             borderRadius: 4,
@@ -173,7 +173,7 @@ export function PlatformHealth() {
             color: healthColor(r.health_score),
             fontFamily: 'var(--font-mono)',
             fontSize: 12,
-            fontWeight: 700,
+            fontWeight: 600,
             fontVariantNumeric: 'tabular-nums',
           }}
           title={`Score ${r.health_score}/100`}

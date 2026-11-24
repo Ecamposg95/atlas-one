@@ -95,7 +95,7 @@ const labelStyle: React.CSSProperties = {
 const buttonPrimary: React.CSSProperties = {
   background: 'var(--p-teal)',
   color: 'var(--dax-on-accent)',
-  fontWeight: 700,
+  fontWeight: 600,
   border: 'none',
   padding: '8px 16px',
   borderRadius: 4,
@@ -118,7 +118,7 @@ const buttonSecondary: React.CSSProperties = {
 }
 
 const chipStyle = (active: boolean): React.CSSProperties => ({
-  background: active ? 'rgba(0,201,177,0.12)' : 'var(--p-surface-2)',
+  background: active ? 'rgba(196, 69, 5,0.12)' : 'var(--p-surface-2)',
   color: active ? 'var(--p-teal)' : 'var(--p-muted)',
   border: `1px solid ${active ? 'var(--p-teal)' : 'var(--p-border)'}`,
   padding: '4px 10px',
@@ -132,10 +132,10 @@ const chipStyle = (active: boolean): React.CSSProperties => ({
 
 // ── Type pill (HQ/STORE/...) ────────────────────────────────────────────────
 const TYPE_COLOR: Record<string, { bg: string; color: string }> = {
-  HQ:        { bg: 'rgba(192,38,211,0.12)', color: 'var(--p-magenta)' },
-  STORE:     { bg: 'rgba(0,201,177,0.12)',  color: 'var(--p-teal)' },
+  HQ:        { bg: 'rgba(211, 96, 38,0.12)', color: 'var(--p-magenta)' },
+  STORE:     { bg: 'rgba(196, 69, 5,0.12)',  color: 'var(--p-teal)' },
   WAREHOUSE: { bg: 'rgba(245,158,11,0.12)', color: 'var(--p-warning)' },
-  OFFICE:    { bg: 'rgba(0,229,255,0.12)',  color: 'var(--p-cyan)' },
+  OFFICE:    { bg: 'rgba(249, 87, 6,0.12)',  color: 'var(--p-cyan)' },
 }
 
 function TypePill({ value }: { value: string }) {
@@ -534,7 +534,7 @@ export function PlatformBranches() {
             padding: '2px 10px',
             borderRadius: 999,
             fontSize: 11,
-            fontWeight: 700,
+            fontWeight: 600,
           }}>
             {n}
           </span>
@@ -918,7 +918,7 @@ export function PlatformBranches() {
                 <p style={{ margin: 0, fontSize: 12, color: 'var(--p-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>
                   Alertas activas
                 </p>
-                <p style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: 'var(--p-danger)' }}>
+                <p style={{ margin: 0, fontSize: '1.5rem', fontWeight: 600, color: 'var(--p-danger)' }}>
                   {alertsTarget.alerts_count ?? 0}
                 </p>
               </div>
@@ -978,7 +978,7 @@ export function PlatformBranches() {
               maxWidth: '90vw',
             }}
           >
-            <h3 style={{ margin: 0, color: 'var(--p-text)', fontSize: '1rem', fontWeight: 700 }}>
+            <h3 style={{ margin: 0, color: 'var(--p-text)', fontSize: '1rem', fontWeight: 600 }}>
               <i className="fa-solid fa-triangle-exclamation" style={{ color: 'var(--p-warning)', marginRight: 8 }} />
               Eliminación bloqueada
             </h3>
@@ -1018,7 +1018,7 @@ export function PlatformBranches() {
                   style={{
                     background: 'var(--p-warning)',
                     color: '#000',
-                    fontWeight: 700,
+                    fontWeight: 600,
                     border: 'none',
                     padding: '6px 16px',
                     borderRadius: 4,
@@ -1035,7 +1035,7 @@ export function PlatformBranches() {
                 style={{
                   background: 'var(--p-danger)',
                   color: '#fff',
-                  fontWeight: 700,
+                  fontWeight: 600,
                   border: 'none',
                   padding: '6px 16px',
                   borderRadius: 4,

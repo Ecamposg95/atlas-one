@@ -1,6 +1,7 @@
 # Mapa de despliegues — Atlas ONE
 
-> Última actualización: 2026-09-22 — corte de producción de Railway al VPS IONOS.
+> Última actualización: 2026-11-18 — tabla de destinos contrastada con el servidor.
+> Corte de producción de Railway al VPS IONOS: 2026-09-22.
 > Historia del corte: `docs/superpowers/plans/2026-09-01-migracion-atlas-one-ionos.md`
 > (plan) y `.github/workflows/ci.yml` (pipeline final, distinto del plan original: en
 > vez de `git archive`/rsync manual, CI/CD empuja por SSH y verifica el commit
@@ -12,20 +13,25 @@ Dónde vive cada cosa y qué rama la alimenta. Léelo antes de tocar `main`.
 
 | Destino | Rama | Base de datos | Quién lo usa |
 |---|---|---|---|
-| `app.atlasone.com.mx` | `main` | Postgres 18 en el VPS (`atlas_one_prod`) | **Producción — Novedades Kaory, Ginebra, Imaltzin, Eleven Fashion, todos los días** |
-| `atlasone.com.mx` | — | — | Landing estática |
-| `rmazh.atlasone.com.mx` | — | — | Reservado para otro repositorio |
+| `app.atlasone.com.mx` | `main` | Postgres 18 en el VPS (`atlas_one_prod`) | **Producción — Novedades Kaory, Ginebra, Imaltzin, Eleven Fashion, Novedades America y las demás tiendas, todos los días** |
+| `atlasone.com.mx` | `main` (`landing/index.html`), **publicación manual** | — | Landing estática. Un push a `main` NO la actualiza: se copia a mano al VPS (ver [`ionos-vps.md`](ionos-vps.md), "Landing") |
+| `rmazh.atlasone.com.mx` | otro repositorio | `rmazh_prod`, mismo Postgres | rmazh (Data X POS) — contenedor `rmazh` en el VPS; su operación se documenta en su repositorio |
+| `hrflow.atlasone.com.mx` | otro repositorio | `hrflow_*`, mismo Postgres | hrflow — ajeno a este repo, comparte servidor |
 
-`atlas-one.up.railway.app` **ya no sirve producción**: el 2026-09-22 se cortó el
-tráfico de Kaory al VPS. El proyecto de Railway (`atlas-bos`) sigue existiendo
-—apagarlo es un paso aparte, pendiente— pero no tiene despliegue automático activo
-desde `main` y no debe tratarse como destino vigente.
+No hay entorno de QA ni beta: lo que queda de `atlas-one-beta` en el VPS son restos
+apagados (ver [`ionos-vps.md`](ionos-vps.md)).
+
+`atlas-one.up.railway.app` **ya no existe**: el 2026-09-22 se cortó el tráfico de Kaory
+al VPS y, al 2026-11-18, el proyecto `atlas-bos` ya no aparece en la cuenta de Railway (el
+dominio responde 404). No queda rollback a Railway para Atlas One. En Railway sigue el
+proyecto `Rmazh POS` (entornos `qa` y `beta`, servicio `Atlas-API`), que es de otro
+repositorio y es de donde se exportan las tiendas que migran (ver `CLAUDE.md §5`).
 
 ## ⚠️ `main` despliega producción automáticamente
 
 `.github/workflows/ci.yml`, job `deploy-ionos`, tiene despliegue automático por SSH al
-VPS IONOS. **Cada push a `main` reconstruye y reemplaza el punto de venta que Kaory,
-Ginebra, Imaltzin y Eleven están usando**, después de que pytest + vitest + tsc + build
+VPS IONOS. **Cada push a `main` reconstruye y reemplaza el punto de venta que todas las
+tiendas están usando**, después de que pytest + vitest + tsc + build
 pasen en el mismo workflow. No es una rama de integración: es producción en vivo.
 
 La tienda de Kaory opera hasta cerca de las 20:00 hora de México. Cualquier cambio que
@@ -41,7 +47,7 @@ propósito), hoy el `Dockerfile` de la raíz **es** el mecanismo de build de pro
 ## Ramas
 
 ```
-main  ──▶ VPS IONOS (app.atlasone.com.mx) — Kaory, Ginebra, Imaltzin, Eleven
+main  ──▶ VPS IONOS (app.atlasone.com.mx) — todas las tiendas
 ```
 
 Tronco único desde el 2026-09-22: `staging` (que traía Gastro Suite, ledger de botellas
@@ -91,8 +97,8 @@ seguido (plan completo en
 3. Se verificaron los conteos de `sales_documents`, `payments` e `inventory_movements`.
 4. Se apuntó la terminal de Kaory al dominio nuevo.
 5. Prueba de humo: venta real con ticket impreso, corte de caja.
-6. Railway se dejó encendido como rollback — sigue así (ver arriba); apagarlo es
-   trabajo aparte, no bloqueante.
+6. Railway se dejó encendido como rollback; el proyecto se retiró después (ya no está
+   en la cuenta al 2026-11-18, ver arriba).
 7. `staging` se fusionó a `main` por fast-forward (ver `branching-strategy.md`) y el
    despliegue pasó de rsync manual a CI/CD (`docs/DEPLOY.md`).
 

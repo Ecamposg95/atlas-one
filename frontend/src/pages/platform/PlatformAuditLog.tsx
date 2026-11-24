@@ -32,7 +32,7 @@ function actionColor(action: string): ActionColor {
   const A = action.toUpperCase()
   // IMPERSONATE first — reuses --p-magenta exclusively here.
   if (A.startsWith('IMPERSONATE')) {
-    return { token: 'var(--p-magenta)', bg: 'rgba(192,38,211,0.12)' }
+    return { token: 'var(--p-magenta)', bg: 'rgba(211, 96, 38,0.12)' }
   }
   if (
     A.startsWith('DELETE') ||
@@ -58,7 +58,7 @@ function actionColor(action: string): ActionColor {
     A.startsWith('TOGGLE') ||
     A.startsWith('APPLY')
   ) {
-    return { token: 'var(--p-accent)', bg: 'rgba(59,130,246,0.12)' }
+    return { token: 'var(--p-accent)', bg: 'rgba(246, 121, 59,0.12)' }
   }
   return { token: 'var(--p-muted)', bg: 'rgba(107,107,120,0.18)' }
 }
@@ -638,7 +638,7 @@ const actionChipStyle: React.CSSProperties = {
   textTransform: 'uppercase',
   padding: '3px 10px',
   borderRadius: 999,
-  fontWeight: 700,
+  fontWeight: 600,
   whiteSpace: 'nowrap',
 }
 

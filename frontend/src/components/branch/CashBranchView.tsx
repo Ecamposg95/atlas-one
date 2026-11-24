@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { BLIND_MASK, BLIND_LABEL, isValidCount, shouldRevealExpected, shouldShowExpectedKpi } from '../../utils/blindCash'
+import { BLIND_MASK, BLIND_LABEL, isValidCount, shouldRevealExpected, shouldShowExpectedKpi, useConteoCiego } from '../../utils/blindCash'
 import client from '../../api/client'
 import { cashApi, type CashSummary } from '../../api/cash'
 import { printerApi } from '../../api/printer'
@@ -69,9 +69,9 @@ function KpiCard({ icon, label, value, valueClass, sub, iconBg, iconColor }: Kpi
       <div className="flex items-center gap-2">
         <div
           className="flex items-center justify-center w-7 h-7 rounded-lg flex-shrink-0"
-          style={{ background: iconBg ?? 'rgba(139,92,246,0.12)' }}
+          style={{ background: iconBg ?? 'rgba(255, 161, 74,0.12)' }}
         >
-          <i className={`fa-solid ${icon} text-sm`} style={{ color: iconColor ?? '#a78bfa' }} />
+          <i className={`fa-solid ${icon} text-sm`} style={{ color: iconColor ?? '#FFA14A' }} />
         </div>
         <span className={ui.kpiLabel}>{label}</span>
       </div>
@@ -185,7 +185,7 @@ function CloseShiftModal({ onClosed, onCancel }: CloseShiftModalProps) {
   const expected = summary?.expected_cash ?? 0
   // Conteo ciego: con el turno abierto tampoco se enseña el desglose de
   // efectivo (fondo, ventas, entradas, salidas, reembolsos): sumado da el esperado.
-  const revelar = shouldRevealExpected(result != null)
+  const revelar = shouldRevealExpected(result != null, useConteoCiego())
   const CIEGO = 'text-dax-muted'
   const titleCiego = `${BLIND_LABEL} — cuenta el efectivo y captúralo abajo`
   const countedNum = parseFloat(counted)
@@ -306,9 +306,11 @@ function CloseShiftModal({ onClosed, onCancel }: CloseShiftModalProps) {
                   </span>
                 )}
               </div>
-              <p className={`text-[11px] ${CIEGO} mt-1`}>
-                {BLIND_LABEL} · el desglose, el esperado y la diferencia se muestran al cerrar
-              </p>
+              {!revelar && (
+                <p className={`text-[11px] ${CIEGO} mt-1`}>
+                  {BLIND_LABEL} · el desglose, el esperado y la diferencia se muestran al cerrar
+                </p>
+              )}
             </div>
 
             <label className={`block ${ui.kpiLabel} mb-1`}>Efectivo contado</label>
@@ -423,6 +425,9 @@ interface MethodTotals {
 
 export function CashBranchView() {
   const [current, setCurrent] = useState<CashSession | null>(null)
+  // Conteo ciego: con turno abierto y el ajuste de la tienda encendido.
+  const ciego = useConteoCiego()
+  const oculto = !!current && ciego
   const [past, setPast] = useState<CashSession[]>([])
   const [loading, setLoading] = useState(true)
   const [reprintingId, setReprintingId] = useState<number | null>(null)
@@ -653,8 +658,8 @@ export function CashBranchView() {
                       {formatElapsed(current.opened_at)}
                     </p>
                     {/* Conteo ciego: el fondo es parte del esperado; se ve al cerrar. */}
-                    <p className="text-white/90 text-sm font-semibold tabular-nums" title={BLIND_LABEL}>
-                      Fondo {BLIND_MASK}
+                    <p className="text-white/90 text-sm font-semibold tabular-nums" title={oculto ? BLIND_LABEL : undefined}>
+                      Fondo {oculto ? BLIND_MASK : fmtMoney(String(current.opening_balance))}
                     </p>
                   </div>
                 ) : todayClosedSession ? (
@@ -725,8 +730,8 @@ export function CashBranchView() {
             label={COPY.cashKpis.totalSales}
             // Con turno abierto se enmascara: ventas totales − tarjeta −
             // transferencia − fiado = ventas en efectivo (parte del esperado).
-            value={current ? BLIND_MASK : summary ? fmtMoney(String(summary.total_sales)) : '—'}
-            sub={current ? BLIND_LABEL : undefined}
+            value={oculto ? BLIND_MASK : summary ? fmtMoney(String(summary.total_sales)) : '—'}
+            sub={oculto ? BLIND_LABEL : undefined}
             iconBg="rgba(16,185,129,0.12)"
             iconColor="#10b981"
             valueClass="text-emerald-600 dark:text-emerald-400"
@@ -759,26 +764,26 @@ export function CashBranchView() {
               // Con turno cerrado la etiqueta dice "Cierre reportado", asi que
               // debe mostrar lo que el cajero CONTO, no lo que el sistema esperaba.
               current
-                ? (shouldShowExpectedKpi(true) ? fmtMoney(String(summary?.expected_cash ?? 0)) : BLIND_MASK)
+                ? (shouldShowExpectedKpi(true, ciego) ? fmtMoney(String(summary?.expected_cash ?? 0)) : BLIND_MASK)
                 : (todayClosedSession?.closing_balance != null
                     ? fmtMoney(String(todayClosedSession.closing_balance))
                     : '—')
             }
             sub={
               current
-                ? BLIND_LABEL
+                ? (oculto ? BLIND_LABEL : undefined)
                 : todayClosedSession
                   ? `Inicial: ${fmtMoney(todayClosedSession.opening_balance)}`
                   : undefined
             }
-            iconBg="rgba(139,92,246,0.12)"
-            iconColor="#a78bfa"
+            iconBg="rgba(255, 161, 74,0.12)"
+            iconColor="#FFA14A"
           />
           <KpiCard
             icon="fa-arrow-down"
             label={COPY.cashKpis.inflows}
-            value={current ? BLIND_MASK : summary ? `+${fmtMoney(String(summary.total_inflows))}` : '—'}
-            sub={current ? BLIND_LABEL : undefined}
+            value={oculto ? BLIND_MASK : summary ? `+${fmtMoney(String(summary.total_inflows))}` : '—'}
+            sub={oculto ? BLIND_LABEL : undefined}
             iconBg="rgba(16,185,129,0.12)"
             iconColor="#10b981"
             valueClass="text-emerald-600 dark:text-emerald-400"
@@ -786,8 +791,8 @@ export function CashBranchView() {
           <KpiCard
             icon="fa-arrow-up"
             label={COPY.cashKpis.outflows}
-            value={current ? BLIND_MASK : summary ? `-${fmtMoney(String(summary.total_outflows))}` : '—'}
-            sub={current ? BLIND_LABEL : undefined}
+            value={oculto ? BLIND_MASK : summary ? `-${fmtMoney(String(summary.total_outflows))}` : '—'}
+            sub={oculto ? BLIND_LABEL : undefined}
             iconBg="rgba(244,63,94,0.12)"
             iconColor="#f43f5e"
             valueClass="text-rose-600 dark:text-rose-400"
@@ -816,15 +821,15 @@ export function CashBranchView() {
               {(
                 [
                   { key: 'CASH',     icon: 'fa-money-bill-wave',  iconBg: 'rgba(16,185,129,0.1)',  iconColor: '#10b981' },
-                  { key: 'CARD',     icon: 'fa-credit-card',      iconBg: 'rgba(139,92,246,0.1)', iconColor: '#a78bfa' },
-                  { key: 'TRANSFER', icon: 'fa-building-columns', iconBg: 'rgba(59,130,246,0.1)', iconColor: '#60a5fa' },
+                  { key: 'CARD',     icon: 'fa-credit-card',      iconBg: 'rgba(255, 161, 74,0.1)', iconColor: '#FFA14A' },
+                  { key: 'TRANSFER', icon: 'fa-building-columns', iconBg: 'rgba(246, 121, 59,0.1)', iconColor: '#FA9360' },
                 ] as const
               ).map(({ key, icon, iconBg, iconColor }) => {
                 const amount = (methodTotals as Record<string, number | undefined>)[key] ?? 0
                 // Conteo ciego: con turno abierto el efectivo es lo que el cajero
                 // cuenta, así que se enmascara. Tarjeta y transferencia no son
                 // conteo físico y se quedan.
-                const enmascarar = key === 'CASH' && !!current
+                const enmascarar = key === 'CASH' && oculto
                 return (
                   <div
                     key={key}

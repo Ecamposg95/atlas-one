@@ -1,5 +1,4 @@
-import { useMemo } from 'react'
-import { DaxCard } from '../ui/DaxCard'
+import { useMemo, type CSSProperties } from 'react'
 
 interface Kpis {
   total_skus: number
@@ -18,9 +17,12 @@ interface Props {
   onFilterNoBranch?: () => void
 }
 
-const CARD_BASE =
-  'p-3 rounded-xl border bg-gradient-to-br transition-all duration-200'
-
+/**
+ * Cifras del catálogo, con las clases del kit (`dax-kpi*`): icono en círculo,
+ * rótulo y cifra ligera. "Total SKUs" es la tarjeta protagonista; las demás
+ * solo toman color cuando hay algo que atender (pendientes, sin sucursal,
+ * stock crítico o en cero). Solo tokens.
+ */
 export function CatalogKpis({ data, loading, onFilterPending, onFilterNoBranch }: Props) {
   const skeleton = loading && !data
   const safe = useMemo(() => data ?? {
@@ -30,51 +32,44 @@ export function CatalogKpis({ data, loading, onFilterPending, onFilterNoBranch }
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-      <Card
-        label="Total SKUs"
-        value={safe.total_skus}
-        color="indigo"
-        icon="fa-cubes"
-        skeleton={skeleton}
-      />
+      <Card label="Total SKUs" value={safe.total_skus} icon="fa-cubes" skeleton={skeleton} destacada />
       <Card
         label="Activos POS"
         value={safe.active_pos}
-        color="emerald"
         icon="fa-store"
         skeleton={skeleton}
-        sub={safe.total_skus > 0 ? `${Math.round(safe.active_pos / safe.total_skus * 100)}%` : undefined}
+        sub={safe.total_skus > 0 ? `${Math.round(safe.active_pos / safe.total_skus * 100)} % del catálogo` : undefined}
       />
       <Card
         label="Pendientes"
         value={safe.pending_approval}
-        color={safe.pending_approval > 0 ? 'amber' : 'slate'}
+        tono={safe.pending_approval > 0 ? 'text-dax-warning' : undefined}
         icon="fa-hourglass-half"
         skeleton={skeleton}
-        interactive={safe.pending_approval > 0 && !!onFilterPending}
+        sub={safe.pending_approval > 0 && onFilterPending ? 'Ver pendientes →' : undefined}
         onClick={safe.pending_approval > 0 ? onFilterPending : undefined}
       />
       <Card
         label="Sin sucursal"
         value={safe.no_branch}
-        color={safe.no_branch > 0 ? 'fuchsia' : 'slate'}
+        tono={safe.no_branch > 0 ? 'text-dax-warning' : undefined}
         icon="fa-link-slash"
         skeleton={skeleton}
-        interactive={safe.no_branch > 0 && !!onFilterNoBranch}
+        sub={safe.no_branch > 0 && onFilterNoBranch ? 'Ver cuáles →' : undefined}
         onClick={safe.no_branch > 0 ? onFilterNoBranch : undefined}
       />
       <Card
         label="Stock crítico"
         value={safe.critical_stock}
-        color={safe.critical_stock > 0 ? 'orange' : 'slate'}
+        tono={safe.critical_stock > 0 ? 'text-dax-warning' : undefined}
         icon="fa-triangle-exclamation"
         skeleton={skeleton}
-        sub={`≤ ${safe.threshold}`}
+        sub={`${safe.threshold} piezas o menos`}
       />
       <Card
         label="Stock cero"
         value={safe.zero_stock}
-        color={safe.zero_stock > 0 ? 'rose' : 'slate'}
+        tono={safe.zero_stock > 0 ? 'text-dax-danger' : undefined}
         icon="fa-ban"
         skeleton={skeleton}
       />
@@ -85,51 +80,38 @@ export function CatalogKpis({ data, loading, onFilterPending, onFilterNoBranch }
 interface CardProps {
   label: string
   value: number
-  color: 'indigo' | 'emerald' | 'amber' | 'fuchsia' | 'orange' | 'rose' | 'slate'
   icon: string
+  /** Clase de color de la cifra cuando hay algo que atender. */
+  tono?: string
   skeleton?: boolean
   sub?: string
-  interactive?: boolean
+  destacada?: boolean
+  /** Con `onClick` la tarjeta es un botón que aplica su filtro. */
   onClick?: () => void
 }
 
-const COLOR_CLASSES: Record<CardProps['color'], { border: string; from: string; text: string }> = {
-  indigo:   { border: 'border-indigo-500/20',   from: 'from-indigo-500/10',   text: 'text-indigo-300' },
-  emerald:  { border: 'border-emerald-500/20',  from: 'from-emerald-500/10',  text: 'text-emerald-300' },
-  amber:    { border: 'border-amber-500/30',    from: 'from-amber-500/15',    text: 'text-amber-300' },
-  fuchsia:  { border: 'border-fuchsia-500/25',  from: 'from-fuchsia-500/12',  text: 'text-fuchsia-300' },
-  orange:   { border: 'border-orange-500/25',   from: 'from-orange-500/12',   text: 'text-orange-300' },
-  rose:     { border: 'border-rose-500/25',     from: 'from-rose-500/12',     text: 'text-rose-300' },
-  slate:    { border: 'border-slate-700/50',    from: 'from-slate-800/40',    text: 'text-slate-300' },
-}
-
-function Card({ label, value, color, icon, skeleton, sub, interactive, onClick }: CardProps) {
-  const c = COLOR_CLASSES[color]
-  const Wrapper: any = interactive ? 'button' : 'div'
-
-  return (
-    <Wrapper
-      onClick={interactive ? onClick : undefined}
-      className={`${CARD_BASE} ${c.border} ${c.from} to-transparent ${
-        interactive ? 'hover:scale-[1.015] cursor-pointer text-left w-full' : ''
-      }`}
-    >
-      <div className="flex items-start justify-between mb-1">
-        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-          {label}
-        </p>
-        <i className={`fa-solid ${icon} ${c.text} text-xs`} />
+function Card({ label, value, icon, tono, skeleton, sub, destacada = false, onClick }: CardProps) {
+  const texto = value.toLocaleString('es-MX')
+  const clase = `dax-card dax-kpi p-4 ${destacada ? 'dax-kpi-ember' : ''}`
+  const contenido = (
+    <>
+      <div className="flex items-center gap-2 mb-2">
+        <span className="dax-kpi-icono" aria-hidden="true"><i className={`fa-solid ${icon}`} /></span>
+        <p className="dax-kpi-label">{label}</p>
       </div>
       {skeleton ? (
-        <div className="h-7 w-16 rounded bg-slate-700/40 animate-pulse" />
+        <div className="h-8 w-16 rounded-full bg-dax-elevated animate-pulse" />
       ) : (
-        <div className="flex items-baseline gap-2">
-          <p className={`text-2xl font-black tabular-nums ${c.text}`}>
-            {value.toLocaleString('es-MX')}
-          </p>
-          {sub && <span className="text-[11px] font-semibold text-slate-500">{sub}</span>}
-        </div>
+        <p className={`dax-kpi-value ${tono && !destacada ? tono : ''}`} style={{ '--kpi-largo': texto.length } as CSSProperties}>
+          {texto}
+        </p>
       )}
-    </Wrapper>
+      {sub && !skeleton && (
+        <p className={`text-xs mt-1.5 ${destacada ? 'dax-kpi-ember-texto' : 'text-dax-muted'}`}>{sub}</p>
+      )}
+    </>
   )
+  return onClick
+    ? <button type="button" onClick={onClick} className={`${clase} text-left w-full cursor-pointer`}>{contenido}</button>
+    : <div className={clase}>{contenido}</div>
 }

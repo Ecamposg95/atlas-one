@@ -3,7 +3,7 @@ import { urlActiva } from '../navVisibility'
 
 // Menú de oficina tras la Fase 3: /inventory es prefijo de /inventory/conteos
 // y /quotes de /quotes/new. Antes del arreglo el sidebar encendía los dos.
-const URLS = ['/hq/operations', '/inventory', '/inventory/conteos', '/scanner', '/quotes', '/quotes/new', '/sales']
+const URLS = ['/hq/operations', '/inventory', '/inventory/conteos', '/mobile/query', '/quotes', '/quotes/new', '/sales']
 
 describe('urlActiva', () => {
   it('en Conteo gana Conteo, no Inventario', () => {

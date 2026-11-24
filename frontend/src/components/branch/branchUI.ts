@@ -1,7 +1,9 @@
 /**
  * Atlas Branch UI tokens — shared design system for all *BranchView and
- * Cockpit components. Brand palette: solid purple (primary action + surfaces)
- * over warm-stone (light) / deep-slate (dark) neutrals.
+ * Cockpit components. Atlas Horizon: `purple`/`slate` ya no son morado ni
+ * azulado — tailwind.config.js los reasigna a la escala ámbar y a un neutro
+ * cálido. La página es transparente para dejar ver la luz del lienzo y las
+ * tarjetas son de vidrio.
  *
  * Status colors (emerald/green) are kept ONLY as semantic indicators for
  * "shift open", "positive variance", "no pending". They are NOT brand colors.
@@ -12,11 +14,11 @@
 
 export const ui = {
   // Page shell
-  page: 'min-h-full bg-stone-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100',
+  page: 'min-h-full text-slate-900 dark:text-slate-100',
   // Wide, dense container (uses more screen width than max-w-3xl)
   container: 'max-w-7xl mx-auto px-4 lg:px-6',
   // Surface panels — iOS-premium: rounded-3xl + soft shadow, no border
-  card: 'rounded-3xl bg-white dark:bg-slate-900 shadow-lg shadow-slate-900/5 dark:shadow-black/30',
+  card: 'rounded-3xl bg-white/80 dark:bg-white/[0.045] backdrop-blur-xl border border-stone-200/70 dark:border-white/10 shadow-lg shadow-slate-900/5 dark:shadow-black/30',
   cardHover: 'hover:border-purple-400 dark:hover:border-purple-500 transition-colors',
   // Hero panel — solid purple, no gradient
   hero: 'rounded-3xl bg-purple-600 dark:bg-purple-700 text-white shadow-2xl shadow-purple-900/20',

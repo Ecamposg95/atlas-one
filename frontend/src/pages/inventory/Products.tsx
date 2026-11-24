@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState, useCallback, useRef } from 'react'
+import { Fragment, useEffect, useState, useCallback, useRef, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { productsApi } from '../../api/products'
 import { useAuthStore } from '../../store/authStore'
@@ -327,19 +327,21 @@ function EstadoAprobacion({ p }: { p: Product }) {
  * aprobar/rechazar (pendientes),
  * historial, editar, duplicar y archivar/restaurar— con `aria-label` «Acción — Producto».
  */
-function AccionesDeFila({ p, onEditar, conTexto = false, catalogo = false, conMatriz = true, ocupado = false, onAccion }: {
+function AccionesDeFila({ p, onEditar, conTexto = false, catalogo = false, conMatriz = true, ocupado = false, envolver = false, onAccion }: {
   p: Product
   onEditar: (p: Product) => void
   conTexto?: boolean
   catalogo?: boolean
   conMatriz?: boolean
+  /** En la tarjeta de la rejilla: si no caben en un renglón, pasan al siguiente. */
+  envolver?: boolean
   /** Hay una acción en curso: se deshabilitan los botones para no duplicarla. */
   ocupado?: boolean
   onAccion?: (clave: ClaveAccionCatalogo, p: Product) => void
 }) {
   if (catalogo && onAccion) {
     return (
-      <div className={conTexto ? 'flex flex-wrap gap-1.5' : 'inline-flex items-center gap-1'}>
+      <div className={conTexto ? 'flex flex-wrap gap-1.5' : `inline-flex items-center justify-end gap-0.5 ${envolver ? 'flex-wrap' : ''}`}>
         {accionesDeProducto(p, { conMatriz }).map((clave) => {
           const meta = ACCIONES_CATALOGO[clave]
           return (
@@ -348,7 +350,7 @@ function AccionesDeFila({ p, onEditar, conTexto = false, catalogo = false, conMa
               type="button"
               disabled={ocupado}
               onClick={() => (clave === 'editar' ? onEditar(p) : onAccion(clave, p))}
-              className={`${meta.clase} ${conTexto ? 'text-xs' : 'dax-btn-icon text-xs'} disabled:opacity-50`}
+              className={`${meta.clase} ${conTexto ? 'text-xs' : 'dax-btn-icon !p-0 w-8 h-8 justify-center text-xs'} disabled:opacity-50`}
               title={meta.etiqueta}
               aria-label={`${meta.etiqueta} — ${p.name}`}
             >
@@ -371,7 +373,7 @@ function AccionesDeFila({ p, onEditar, conTexto = false, catalogo = false, conMa
     <div className="inline-flex items-center gap-1">
       <button
         onClick={() => onEditar(p)}
-        className="dax-btn-icon transition-colors p-1 text-slate-500 hover:text-indigo-400"
+        className="dax-btn-ghost dax-btn-icon !p-0 w-8 h-8 justify-center"
         title="Editar producto"
         aria-label="Editar producto"
       >
@@ -397,6 +399,19 @@ function CasillaWeb({ p, marcada, onToggle }: { p: Product; marcada: boolean; on
 }
 
 // ─── Main Products Page ─────────────────────────────────────────────────────────
+
+/** La rejilla va sobre un panel tenue (cada producto es su tarjeta); la lista,
+ *  dentro de una sola tarjeta como siempre. */
+function Marco({ rejilla, children }: { rejilla: boolean; children: ReactNode }) {
+  return rejilla
+    ? <section className="dax-panel">{children}</section>
+    : <DaxCard padding={false}>{children}</DaxCard>
+}
+
+const CLAVE_VISTA = 'atlas_vista_productos'
+function leerVista(): 'list' | 'grid' {
+  try { return localStorage.getItem(CLAVE_VISTA) === 'list' ? 'list' : 'grid' } catch { return 'grid' }
+}
 
 export function Products() {
   // Roles de sucursal (CAJERO/GERENTE) ven la vista simplificada por renglón;
@@ -450,7 +465,14 @@ function ProductsHQView() {
   const [search, setSearch] = useState('')
   const [deptId, setDeptId] = useState<string>('')
   const [loading, setLoading] = useState(true)
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list')
+  // Tarjetas por omisión; la elección se recuerda en este navegador. En modo
+  // básico no hay selector de vista, así que ahí se queda la lista.
+  const [vistaElegida, setVistaElegida] = useState<'list' | 'grid'>(leerVista)
+  const viewMode: 'list' | 'grid' = modoBasico ? 'list' : vistaElegida
+  const setViewMode = (v: 'list' | 'grid') => {
+    setVistaElegida(v)
+    try { localStorage.setItem(CLAVE_VISTA, v) } catch { /* sin almacenamiento: vale solo esta visita */ }
+  }
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Formulario único (components/products/FormularioProducto) dentro de un Modal.
@@ -712,18 +734,15 @@ function ProductsHQView() {
           orden de escritorio. Todo el bloque de botones va en `acciones`. */}
       <CabeceraPagina
         titulo={
-          <div className="flex items-center gap-3">
-            <i className="fa-solid fa-barcode text-indigo-400 text-xl" />
-            <h1 className="text-2xl font-black text-white">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="dax-titulo-pagina">
               {isHQ ? 'Productos' : 'Consulta de productos'}
             </h1>
             {/* Con una sola tienda, "HQ Global" no nombra nada que la dueña
                 reconozca: el alcance ya es "toda la tienda". El chip solo
                 aparece cuando de verdad hay varias sucursales. */}
             {isHQ && !unaSolaSucursal && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-violet-600/20 text-violet-400 border border-violet-500/30 rounded text-[9px] font-black uppercase tracking-widest">
-                <i className="fa-solid fa-building-shield text-[8px]" /> Todas las sucursales
-              </span>
+              <span className="dax-badge dax-badge-slate">Todas las sucursales</span>
             )}
           </div>
         }
@@ -733,7 +752,7 @@ function ProductsHQView() {
                 desbordaba la página a 390 px: ahora envuelve y bajo `sm` los
                 botones son solo icono (el texto vive en el `aria-label`). */}
             <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
-              <span className="text-slate-500 text-sm">{total.toLocaleString()} productos</span>
+              <span className="text-dax-muted text-sm">{total.toLocaleString()} productos</span>
               {canEdit && (
                 <>
                   {!modoBasico && (
@@ -799,23 +818,20 @@ function ProductsHQView() {
                 </>
               )}
               {!modoBasico && (
-              <div className="flex items-center bg-slate-800 rounded-lg border border-slate-700/50 p-0.5">
-                <button
-                  onClick={() => setViewMode('list')}
-                  className={`dax-btn-icon p-1.5 rounded-md transition-colors ${viewMode === 'list' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}
-                  title="Vista lista"
-                  aria-label="Vista lista"
-                >
-                  <i className="fa-solid fa-list w-4 text-xs" />
-                </button>
-                <button
-                  onClick={() => setViewMode('grid')}
-                  className={`dax-btn-icon p-1.5 rounded-md transition-colors ${viewMode === 'grid' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}
-                  title="Vista cuadrícula"
-                  aria-label="Vista cuadrícula"
-                >
-                  <i className="fa-solid fa-grip w-4 text-xs" />
-                </button>
+              <div className="flex items-center rounded-full border border-dax-border-dim bg-dax-card p-0.5" role="group" aria-label="Vista">
+                {([['grid', 'fa-grip', 'Vista cuadrícula'], ['list', 'fa-list', 'Vista lista']] as const).map(([v, icono, rotulo]) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setViewMode(v)}
+                    aria-pressed={viewMode === v}
+                    className={`dax-btn-icon w-8 h-8 rounded-full flex items-center justify-center transition-colors ${viewMode === v ? 'bg-dax-accent-soft text-dax-accent-text' : 'text-dax-faint hover:text-dax-text'}`}
+                    title={rotulo}
+                    aria-label={rotulo}
+                  >
+                    <i className={`fa-solid ${icono} text-xs`} aria-hidden="true" />
+                  </button>
+                ))}
               </div>
               )}
             </div>
@@ -900,8 +916,8 @@ function ProductsHQView() {
         />
       )}
 
-      {/* Tabla */}
-      <DaxCard padding={false}>
+      {/* Productos: rejilla de tarjetas (por omisión) o lista */}
+      <Marco rejilla={viewMode === 'grid'}>
         {esTelefono && viewMode === 'list' ? (
           // Teléfono: la lista pasa a tarjetas (la cuadrícula no cambia).
           <ListaTarjetas cargando={loading} vacio={products.length === 0} textoVacio="Sin resultados" className="p-3">
@@ -946,22 +962,22 @@ function ProductsHQView() {
         ) : products.length === 0 ? (
           <div className="p-12 text-center text-slate-600">Sin resultados</div>
         ) : viewMode === 'grid' ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 p-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
             {products.map((p) => (
-              <div key={p.id} className="bg-slate-800 rounded-xl p-3 flex flex-col gap-2 border border-slate-700/30 hover:border-indigo-500/30 transition-colors group relative">
+              <article key={p.id} className="dax-card p-3 flex flex-col gap-3 group relative">
                 {p.image_url ? (
-                  <img src={p.image_url} alt={p.name} className="w-full aspect-square object-contain rounded-lg bg-slate-700 p-1" />
+                  <img src={p.image_url} alt={p.name} loading="lazy" className="w-full aspect-square object-contain rounded-2xl bg-dax-elevated p-2" />
                 ) : (
-                  <div className="w-full aspect-square bg-slate-700/50 rounded-lg flex items-center justify-center">
-                    <i className="fa-solid fa-box text-slate-500 text-2xl" />
+                  <div className="w-full aspect-square rounded-2xl bg-dax-elevated flex items-center justify-center">
+                    <i className="fa-solid fa-box text-dax-faint text-2xl" aria-hidden="true" />
                   </div>
                 )}
-                <div className="flex-1">
-                  <p className="text-white text-xs font-semibold line-clamp-2 leading-tight">{p.sale_name ?? p.name}</p>
-                  <p className="text-slate-500 text-[10px] font-mono mt-0.5">{p.sku}</p>
-                  {p.department_name && <p className="text-slate-600 text-[10px] mt-0.5 truncate">{p.department_name}</p>}
+                <div className="flex-1 min-w-0 px-1">
+                  <p className="text-dax-text text-sm font-medium line-clamp-2 leading-snug">{p.sale_name ?? p.name}</p>
+                  <p className="text-dax-faint text-[11px] font-mono mt-1 truncate">{p.sku}</p>
+                  {p.department_name && <p className="text-dax-muted text-[11px] mt-0.5 truncate">{p.department_name}</p>}
                 </div>
-                <div className="flex items-center justify-between">
+                <div className="flex items-end justify-between gap-2 px-1 pb-1">
                   {(() => {
                     // Con precio de sucursal (override) manda el override, igual
                     // que en la lista: el rango solo se muestra sin override.
@@ -971,7 +987,7 @@ function ProductsHQView() {
                     const rango = priceRange(p.variants ?? [])
                     const mostrarRango = override == null && rango != null && !rango.uniforme
                     return (
-                      <span className="text-emerald-400 text-xs font-bold">
+                      <span className={`text-dax-text font-light tracking-tight ${mostrarRango ? 'text-sm' : 'text-lg'}`}>
                         {mostrarRango
                           ? `${formatCurrency(rango!.min)} – ${formatCurrency(rango!.max)}`
                           : formatCurrency(override ?? p.price ?? 0)}
@@ -987,7 +1003,7 @@ function ProductsHQView() {
                         : (p.stock_total ?? p.stock ?? 0)
                     if (variantCount <= 1) {
                       return (
-                        <span className={`dax-badge text-[10px] ${qty > 0 ? 'dax-badge-green' : 'dax-badge-red'}`}>
+                        <span className={`dax-badge ${qty > 0 ? 'dax-badge-green' : 'dax-badge-red'}`} title="Existencia">
                           {qty}
                         </span>
                       )
@@ -1002,37 +1018,33 @@ function ProductsHQView() {
                         title={`Ver la existencia por ${SINGULAR_GRUPO[grupo]}`}
                         className="flex flex-col items-end group/tallas"
                       >
-                        <span className={`dax-badge text-[10px] ${qty > 0 ? 'dax-badge-green' : 'dax-badge-red'}`}>
+                        <span className={`dax-badge ${qty > 0 ? 'dax-badge-green' : 'dax-badge-red'}`}>
                           {qty}
                         </span>
-                        <span className="text-slate-400 text-[10px] mt-0.5 group-hover/tallas:text-indigo-400">
+                        <span className="text-dax-faint text-[10px] mt-1 group-hover/tallas:text-dax-accent-text">
                           de {variantCount} {grupo}
                         </span>
                       </button>
                     )
                   })()}
                 </div>
-                {/* En un teléfono no hay `hover`: con `opacity-0` los botones
-                    existían pero no se veían nunca. Visibles bajo `md`; de
-                    `md` hacia arriba, igual que siempre. */}
-                {canEdit && (
-                  <div className="absolute top-2 right-2 flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-                    <button
-                      onClick={() => openEdit(p)}
-                      className="w-6 h-6 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 rounded-full flex items-center justify-center bg-slate-700 border border-slate-600 hover:bg-indigo-600 hover:border-indigo-500"
-                      title="Editar producto"
-                      aria-label="Editar producto"
-                    >
-                      <i className="fa-solid fa-pencil text-[9px] text-white" />
-                    </button>
+                {/* Lo mismo que ofrece la lista: casilla de la tienda web y las
+                    acciones del producto, siempre a la vista (en teléfono no hay hover). */}
+                {(puedePublicar || canEdit) && (
+                  <div className="flex items-center gap-2 border-t border-dax-border-dim pt-2">
+                    {puedePublicar && <CasillaWeb p={p} marcada={seleccion.has(p.id)} onToggle={alternarSeleccion} />}
+                    {canEdit && <div className="ml-auto"><AccionesDeFila p={p} onEditar={openEdit} catalogo={catalogo} onAccion={correrAccion} ocupado={accionEnCurso} envolver /></div>}
                   </div>
                 )}
-              </div>
+                {catalogo && (!p.is_active || (p.approval_status && p.approval_status !== 'APPROVED')) && (
+                  <div className="absolute top-5 left-5"><EstadoAprobacion p={p} /></div>
+                )}
+              </article>
             ))}
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="dax-table w-full">
+            <table className="dax-table w-full [&_td]:px-3 [&_th]:px-3">
               <thead>
                 <tr>
                   {puedePublicar && <th aria-label="Seleccionar" />}
@@ -1060,7 +1072,7 @@ function ProductsHQView() {
                               checked={seleccion.has(p.id)} onChange={() => alternarSeleccion(p.id)} />
                           </td>
                         )}
-                        <td className="font-mono text-slate-400 text-xs">{p.sku}</td>
+                        <td className="font-mono text-slate-400 text-xs whitespace-nowrap">{p.sku}</td>
                         <td>
                           <div className="flex items-center gap-2">
                             {p.image_url ? (
@@ -1070,7 +1082,7 @@ function ProductsHQView() {
                                 <i className="fa-solid fa-box text-slate-500 text-xs" />
                               </div>
                             )}
-                            <span className="font-medium text-white">{p.sale_name ?? p.name}</span>
+                            <span className="font-medium text-white min-w-[7rem]">{p.sale_name ?? p.name}</span>
                           </div>
                         </td>
                         <td className="text-slate-400 text-xs">{p.department_name ?? '—'}</td>
@@ -1086,7 +1098,7 @@ function ProductsHQView() {
                         {catalogo && <td><EstadoAprobacion p={p} /></td>}
                         {puedePublicar && <td><InsigniaWeb p={p} /></td>}
                         {canEdit && (
-                          <td className="text-right">
+                          <td className="text-right whitespace-nowrap">
                             <AccionesDeFila p={p} onEditar={openEdit} catalogo={catalogo} onAccion={correrAccion} ocupado={accionEnCurso} />
                           </td>
                         )}
@@ -1142,7 +1154,7 @@ function ProductsHQView() {
             </button>
           </div>
         )}
-      </DaxCard>
+      </Marco>
 
       {/* Modales */}
       {showImport && (

@@ -153,6 +153,12 @@ COLUMN_MIGRATIONS = [
     ("organization", "ticket_tiktok",      "ALTER TABLE organization ADD COLUMN ticket_tiktok VARCHAR;"),
     ("organization", "ticket_whatsapp",    "ALTER TABLE organization ADD COLUMN ticket_whatsapp VARCHAR;"),
     ("organization", "ticket_show_vendor", "ALTER TABLE organization ADD COLUMN ticket_show_vendor BOOLEAN NOT NULL DEFAULT FALSE;"),
+    # Conteo ciego opcional 2026-11-21. Nace TRUE: toda tienda viva conserva el
+    # corte ciego de siempre; su dueño lo apaga desde Empresa.
+    ("organization", "conteo_ciego", "ALTER TABLE organization ADD COLUMN conteo_ciego BOOLEAN NOT NULL DEFAULT TRUE;"),
+    # Precio por sucursal 2026-11-23. Nace FALSE: ninguna tienda cambia de
+    # comportamiento hasta que se encienda (Eleven Fashion lo pidio).
+    ("organization", "precio_por_sucursal", "ALTER TABLE organization ADD COLUMN precio_por_sucursal BOOLEAN NOT NULL DEFAULT FALSE;"),
     # Ficha boutique 2026-09-21. Los tres campos del producto nacen NULL: el
     # nombre de venta de quien no los capture sigue siendo su `name` de hoy.
     # `ticket_line_style` nace 'compact': ninguna tienda viva estrena un
