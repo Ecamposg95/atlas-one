@@ -22,12 +22,15 @@ import {
 import { computeAdjustment } from './stockAdjust'
 
 /**
- * Scanner de tienda.
+ * Consultar (`/mobile/query`): el buscador de precios y el escáner de tienda
+ * en una sola pantalla. `/scanner` redirige aquí.
  *
- * Para el admin/gerente/cajero parado en el pasillo: escanea un producto con
- * la cámara del teléfono, lo ve y corrige precio, escalones y existencias ahí
- * mismo. El scope por organización y sucursal lo aplica el backend — esta
- * pantalla no alcanza otra tienda.
+ * Cualquiera busca por nombre, SKU o código —tecleando o con la cámara— y ve
+ * precio y existencia. Admin, dueño, gerente y cajero además corrigen precio,
+ * escalones y existencias ahí mismo, y le pegan el código a un producto que no
+ * lo tiene (`PUEDEN_EDITAR`); vendedor y soporte solo consultan. El scope por
+ * organización y sucursal lo aplica el backend — esta pantalla no alcanza
+ * otra tienda.
  *
  * v1 a propósito: foto y ficha (nombre/departamento/marca) del producto
  * quedan fuera hasta saber si la herramienta sirve en piso. Sí se porta la
@@ -40,9 +43,17 @@ import { computeAdjustment } from './stockAdjust'
  */
 
 const BRANCH_KEY = 'atlas_scanner_branch_id'
+/** Quién corrige precio y existencias desde aquí; el resto solo consulta. */
+const PUEDEN_EDITAR = ['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO']
 
 export function StoreScanner() {
   const user = useAuthStore((s) => s.user)
+  const puedeEditar = PUEDEN_EDITAR.includes(String(user?.role ?? ''))
+  // Búsqueda por nombre mientras se teclea (lo que era la consulta móvil).
+  const [sugeridos, setSugeridos] = useState<Product[]>([])
+  const [buscando, setBuscando] = useState(false)
+  const esperaRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const turnoRef = useRef(0)
 
   const [code, setCode] = useState('')
   const [results, setResults] = useState<Product[] | null>(null)
@@ -87,6 +98,8 @@ export function StoreScanner() {
   const lookup = useCallback(async (raw: string) => {
     const clean = raw.trim()
     if (!clean) return
+    // La búsqueda exacta manda: se suelta la de texto que estuviera en espera.
+    if (esperaRef.current) clearTimeout(esperaRef.current)
     setLoading(true)
     setSelected(null)
     setLookupError(false)
@@ -104,6 +117,42 @@ export function StoreScanner() {
       setLoading(false)
     }
   }, [effectiveBranchId])
+
+  // Teclear busca por nombre, SKU o código (texto libre); Buscar o la cámara
+  // hacen la búsqueda exacta. Los resultados de texto solo se listan.
+  const alTeclear = (val: string) => {
+    setCode(val)
+    setSelected(null)
+    setResults(null)
+    setLookupError(false)
+    if (esperaRef.current) clearTimeout(esperaRef.current)
+    const turno = ++turnoRef.current
+    if (val.trim().length < 2) { setSugeridos([]); setBuscando(false); return }
+    setBuscando(true)
+    esperaRef.current = setTimeout(async () => {
+      try {
+        const res = await productsApi.search(val.trim(), 0, 20)
+        if (turno === turnoRef.current) setSugeridos(res.items ?? [])
+      } catch {
+        if (turno === turnoRef.current) setSugeridos([])
+      } finally {
+        if (turno === turnoRef.current) setBuscando(false)
+      }
+    }, 350)
+  }
+
+  // Un resultado de texto no trae el detalle por talla: quien edita lo abre completo.
+  const abrir = async (p: Product) => {
+    if (!puedeEditar) { setSelected(p); return }
+    setLoading(true)
+    try {
+      setSelected(await productsApi.getById(p.id))
+    } catch {
+      setSelected(p)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const stopCam = useCallback(() => {
     if (loopRef.current) { window.clearInterval(loopRef.current); loopRef.current = null }
@@ -164,6 +213,9 @@ export function StoreScanner() {
           const clean = normalizeCode(hits?.[0]?.rawValue)
           if (clean && clean !== lastCodeRef.current) {
             lastCodeRef.current = clean
+            turnoRef.current++
+            setSugeridos([])
+            setBuscando(false)
             setCode(clean)
             void lookup(clean)
           }
@@ -179,7 +231,11 @@ export function StoreScanner() {
     }
   }, [lookup, stopCam])
 
-  useEffect(() => () => { cancelledRef.current = true; stopCam() }, [stopCam])
+  useEffect(() => () => {
+    cancelledRef.current = true
+    if (esperaRef.current) clearTimeout(esperaRef.current)
+    stopCam()
+  }, [stopCam])
 
   const pickBranch = (id: number | null) => {
     setBranchId(id)
@@ -191,10 +247,10 @@ export function StoreScanner() {
     <div className="space-y-4 max-w-lg mx-auto pb-24">
       <div className="flex items-center gap-3">
         <i className="fa-solid fa-barcode text-indigo-400 text-xl" />
-        <h1 className="text-2xl font-black text-white">Scanner de tienda</h1>
+        <h1 className="text-2xl font-black text-white">Consultar</h1>
       </div>
 
-      {!user?.branch_id && (
+      {!user?.branch_id && puedeEditar && (
         <DaxCard>
           <label className="block">
             <span className="text-xs text-slate-400">¿En qué sucursal estás?</span>
@@ -215,50 +271,53 @@ export function StoreScanner() {
 
       <DaxCard>
         <div className="space-y-3">
-          <div className="relative rounded-lg overflow-hidden bg-black/40" style={{ aspectRatio: '4/3' }}>
-            <video ref={videoRef} playsInline muted className="w-full h-full object-cover" />
-            <canvas ref={canvasRef} className="hidden" />
-            {!camOn && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <button onClick={startCam} className="dax-btn-primary">
-                  <i className="fa-solid fa-camera" />Encender cámara
-                </button>
-              </div>
-            )}
-          </div>
-
-          {camOn && (
-            <button onClick={stopCam} className="text-xs text-slate-400 underline">
-              Apagar cámara
-            </button>
-          )}
-
-          {camError && <p className="text-sm text-amber-400">{camError}</p>}
-          {!isNativeDetectorAvailable() && (
-            <p className="text-[11px] text-slate-500">
-              Este navegador decodifica por software; en Android con Chrome el escaneo es más rápido.
-            </p>
-          )}
-
-          {/* Siempre disponible: hay variantes sin código de barras, y cuando
-              la etiqueta está rota escanear no es opción. */}
+          {/* La búsqueda va primero: es un buscador de precios. Teclear busca
+              por nombre; hay variantes sin código de barras, y cuando la
+              etiqueta está rota escanear no es opción. */}
           <form
             onSubmit={(e) => { e.preventDefault(); void lookup(normalizeTyped(code)) }}
             className="flex gap-2"
           >
             <input
               value={code}
-              onChange={(e) => setCode(e.target.value)}
+              onChange={(e) => alTeclear(e.target.value)}
               inputMode="text"
-              placeholder="O teclea el código / SKU"
+              placeholder="Nombre, SKU o código"
               className="dax-input flex-1"
             />
             <button type="submit" className="dax-btn-secondary">Buscar</button>
           </form>
+
+          {/* El <video> queda montado aunque la cámara esté apagada (el
+              arranque le asigna el stream); solo ocupa lugar encendida. */}
+          <div
+            className={camOn ? 'relative rounded-lg overflow-hidden bg-black/40' : 'h-0 overflow-hidden'}
+            style={camOn ? { aspectRatio: '4/3' } : undefined}
+          >
+            <video ref={videoRef} playsInline muted className="w-full h-full object-cover" />
+            <canvas ref={canvasRef} className="hidden" />
+          </div>
+
+          {camOn ? (
+            <button onClick={stopCam} className="text-xs text-slate-400 underline min-h-[44px]">
+              Apagar cámara
+            </button>
+          ) : (
+            <button onClick={startCam} className="dax-btn-primary w-full justify-center min-h-[44px]">
+              <i className="fa-solid fa-camera" />Escanear con la cámara
+            </button>
+          )}
+
+          {camError && <p className="text-sm text-amber-400">{camError}</p>}
+          {camOn && !isNativeDetectorAvailable() && (
+            <p className="text-[11px] text-slate-500">
+              Este navegador decodifica por software; en Android con Chrome el escaneo es más rápido.
+            </p>
+          )}
         </div>
       </DaxCard>
 
-      {loading && <div className="flex justify-center py-6"><Spinner /></div>}
+      {(loading || buscando) && <div className="flex justify-center py-6"><Spinner /></div>}
 
       {!loading && lookupError && (
         <DaxCard>
@@ -269,11 +328,56 @@ export function StoreScanner() {
         </DaxCard>
       )}
 
-      {!loading && !lookupError && results?.length === 0 && (
-        <AttachCodePanel
-          code={normalizeTyped(code)}
-          onAttached={(p) => { setResults([p]); setSelected(p) }}
-        />
+      {/* Coincidencias por nombre, SKU o código mientras se teclea. */}
+      {!loading && !selected && !(results && results.length > 0) && sugeridos.length > 0 && (
+        <DaxCard padding={false}>
+          <div className="divide-y divide-slate-700/40" data-testid="sugeridos">
+            {sugeridos.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => void abrir(p)}
+                className="w-full flex items-center gap-3 px-4 py-3 min-h-[44px] hover:bg-slate-700/30 transition-colors text-left"
+              >
+                {p.image_url ? (
+                  <img src={p.image_url} alt="" className="h-10 w-10 object-contain rounded flex-shrink-0" />
+                ) : (
+                  <div className="h-10 w-10 bg-slate-800 rounded flex-shrink-0 flex items-center justify-center">
+                    <i className="fa-solid fa-box text-slate-600 text-xs" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-white text-sm truncate">{p.sale_name ?? p.name}</p>
+                  <p className="text-slate-500 text-xs font-mono">{p.sku}</p>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-emerald-400 font-bold text-sm tabular-nums">{formatCurrency(p.price ?? 0)}</p>
+                  <p className={`text-xs tabular-nums ${(p.stock_total ?? 0) > 0 ? 'text-slate-500' : 'text-red-400'}`}>
+                    Existencia: {p.stock_total ?? 0}
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </DaxCard>
+      )}
+
+      {!loading && !buscando && !lookupError && !selected && results == null && sugeridos.length === 0 && code.trim().length >= 2 && (
+        <DaxCard><p className="text-sm text-slate-400 text-center">Sin coincidencias para «{code.trim()}». Toca Buscar para buscarlo como código exacto.</p></DaxCard>
+      )}
+
+      {!loading && !lookupError && results?.length === 0 && sugeridos.length === 0 && (
+        puedeEditar ? (
+          <AttachCodePanel
+            code={normalizeTyped(code)}
+            onAttached={(p) => { setResults([p]); setSelected(p) }}
+          />
+        ) : (
+          <DaxCard>
+            <p className="text-slate-300 text-sm">
+              No hay ningún producto con el código <b className="font-mono">{normalizeTyped(code)}</b> en esta sucursal.
+            </p>
+          </DaxCard>
+        )
       )}
 
       {!loading && results && results.length > 1 && !selected && (
@@ -297,14 +401,93 @@ export function StoreScanner() {
         </DaxCard>
       )}
 
-      {selected && (
+      {selected && (sugeridos.length > 0 || (results?.length ?? 0) > 1) && (
+        <button onClick={() => setSelected(null)} className="dax-btn-secondary text-xs min-h-[44px] w-full justify-center">
+          <i className="fa-solid fa-arrow-left" /> Volver a resultados
+        </button>
+      )}
+
+      {selected && (puedeEditar ? (
         <ProductEditPanel
           product={selected}
           branchId={effectiveBranchId ?? null}
           onChanged={setSelected}
         />
+      ) : (
+        <FichaConsulta product={selected} />
+      ))}
+
+      {!code && !selected && !camOn && (
+        <p className="text-center text-sm text-slate-500 py-6">
+          Escribe o escanea para ver precio y existencia.
+        </p>
       )}
     </div>
+  )
+}
+
+/** Ficha de solo lectura (vendedor, soporte): precio, existencia, escalones y tallas. */
+function FichaConsulta({ product }: { product: Product }) {
+  const variantes = product.variants ?? []
+  return (
+    <DaxCard>
+      <div className="flex items-start gap-4">
+        {product.image_url ? (
+          <img src={product.image_url} alt={product.name} className="h-20 w-20 object-contain rounded-lg border border-slate-700" />
+        ) : (
+          <div className="h-20 w-20 bg-slate-800 rounded-lg border border-slate-700 flex items-center justify-center flex-shrink-0">
+            <i className="fa-solid fa-box text-slate-600 text-2xl" />
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <p className="font-black text-white text-lg leading-tight">{product.sale_name ?? product.name}</p>
+          <p className="text-indigo-400 font-mono text-sm mt-0.5">{product.sku}</p>
+          {product.description && <p className="text-slate-500 text-xs mt-1 line-clamp-2">{product.description}</p>}
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <div className="bg-slate-800/50 rounded-lg p-3 text-center">
+          <p className="text-[10px] text-slate-500 uppercase tracking-wider">Precio</p>
+          <p className="text-xl font-black text-emerald-400 tabular-nums">{formatCurrency(product.price)}</p>
+        </div>
+        <div className="bg-slate-800/50 rounded-lg p-3 text-center">
+          <p className="text-[10px] text-slate-500 uppercase tracking-wider">Existencia</p>
+          <p className={`text-xl font-black tabular-nums ${(product.stock_total ?? 0) > 0 ? 'text-white' : 'text-red-400'}`}>
+            {product.stock_total ?? 0}
+          </p>
+        </div>
+      </div>
+
+      {variantes.length > 1 && (
+        <div className="mt-3 space-y-1 border-t border-slate-700/50 pt-3">
+          {variantes.map((v) => (
+            <div key={v.id} className="flex justify-between text-sm gap-2">
+              <span className="text-slate-300 truncate">{variantDisplayName(v, product.name)}</span>
+              <span className="text-slate-400 tabular-nums shrink-0">
+                {Number(v.stock_total ?? 0)} pz · {formatCurrency(variantPrice(v))}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {product.prices && product.prices.length > 0 && (
+        <div className="mt-3 space-y-1 border-t border-slate-700/50 pt-3">
+          {product.prices.map((tp) => (
+            <div key={tp.id} className="flex justify-between text-sm">
+              <span className="text-slate-500">{tp.price_name} ({tp.min_quantity}+)</span>
+              <span className="text-slate-300 font-semibold">{formatCurrency(tp.unit_price)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-3 space-y-1 border-t border-slate-700/50 pt-3 text-xs text-slate-500">
+        {product.brand_name && <div className="flex gap-2"><i className="fa-solid fa-tag w-4" />{product.brand_name}</div>}
+        {product.department_name && <div className="flex gap-2"><i className="fa-solid fa-layer-group w-4" />{product.department_name}</div>}
+      </div>
+    </DaxCard>
   )
 }
 

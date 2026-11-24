@@ -29,9 +29,9 @@ describe('menú en modo básico', () => {
     )
   })
 
-  it('administradora: exactamente ocho entradas (spec §4.2)', () => {
+  it('administradora: exactamente siete entradas (spec §4.2; Empresa vive en Configuración)', () => {
     expect([...menu('ADMINISTRADOR', 'basico')].sort()).toEqual(
-      ['/cash-history', '/configuracion', '/hq/operations', '/hq/reports-hub', '/organization', '/products', '/sales', '/users'],
+      ['/cash-history', '/configuracion', '/hq/operations', '/hq/reports-hub', '/products', '/sales', '/users'],
     )
   })
 

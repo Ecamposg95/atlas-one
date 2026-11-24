@@ -324,11 +324,11 @@ function Sucursales({ lista, grafica }: { lista: NonNullable<DatosInicio['sucurs
       : c.estado === 'cerrado' ? <span className="text-dax-muted">Turno cerrado</span>
         : <span className="text-dax-faint">Sin turno</span>
   return (
-    <Panel titulo="Cómo va cada sucursal (hoy)" enlace={{ a: '/hq/branches', texto: 'Ver sucursales →' }}>
+    <Panel titulo="Cómo va cada sucursal (hoy)" enlace={{ a: '/configuracion?tab=sucursales', texto: 'Ver sucursales →' }}>
       {grafica && <DaxCard>{grafica}</DaxCard>}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" data-testid="sucursales">
         {lista.map((s) => (
-          <Link key={s.branch_id} to={`/hq/branches/${s.branch_id}`} className="block dax-card p-4 max-md:min-h-[44px]">
+          <Link key={s.branch_id} to={`/configuracion?tab=sucursales&sucursal=${s.branch_id}`} className="block dax-card p-4 max-md:min-h-[44px]">
             <p className="dax-kpi-label">{s.nombre}</p>
             <p className="text-2xl font-light tracking-tight text-dax-text tabular-nums mt-2">{formatCurrency(s.ventas_hoy)}</p>
             <p className="text-xs text-dax-muted mt-1">{ventas(s.tickets_hoy)} · {estadoCorte(s.corte)}</p>

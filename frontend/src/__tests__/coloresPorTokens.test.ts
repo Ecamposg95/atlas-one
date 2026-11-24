@@ -23,7 +23,6 @@ const PENDIENTES = [
   'pages/core/Users.tsx',
   'pages/finance/CashHistory.tsx', 'pages/finance/Expenses.tsx', 'pages/finance/Purchases.tsx',
   'pages/home/GastroHomeDay.tsx', 'pages/home/PresetHome.tsx',
-  'pages/hq/HQBranches.tsx',
   'pages/inventory/Boxes.tsx', 'pages/inventory/Logistics.tsx', 'pages/inventory/Products.tsx',
   'pages/inventory/conteos/BuscadorVariante.tsx', 'pages/inventory/conteos/ConteoReporte.tsx', 'pages/inventory/conteos/avance.ts',
   'pages/inventory/conteos/ConteoSesion.tsx', 'pages/inventory/conteos/Conteos.tsx',
@@ -43,6 +42,8 @@ const LIMPIOS = [
   'components/reports/Heatmap.tsx', 'components/reports/ValorTiendaCard.tsx', 'components/ui/KpiCard.tsx',
   // Fase 3 (fusiones): las pantallas que sobreviven se reescribieron solo con tokens.
   'pages/sales/SalesHistory.tsx', 'pages/sales/Returns.tsx', 'pages/inventory/Inventory.tsx', 'pages/core/catalogActions.ts',
+  // Centro de ajustes: la pestaña Sucursales (une el tablero /hq/branches y el alta de Empresa).
+  'pages/core/Sucursales.tsx',
 ]
 
 function archivos(dir: string): string[] {

@@ -1,5 +1,5 @@
 // frontend/src/components/layout/RedirigirConQuery.tsx
-import { Navigate, useLocation } from 'react-router-dom'
+import { Navigate, useLocation, useParams } from 'react-router-dom'
 
 /**
  * Redirección que conserva la consulta (`?q=…&variant=…`) y el hash. Para las
@@ -8,5 +8,13 @@ import { Navigate, useLocation } from 'react-router-dom'
  */
 export function RedirigirConQuery({ a }: { a: string }) {
   const { search, hash } = useLocation()
-  return <Navigate to={`${a}${search}${hash}`} replace />
+  // El destino puede traer su propia consulta (`/configuracion?tab=…`): la de la URL vieja se le suma.
+  const extra = a.includes('?') ? search.replace(/^\?/, '&') : search
+  return <Navigate to={`${a}${extra}${hash}`} replace />
+}
+
+/** `/hq/branches/:branchId` → la pestaña Sucursales de Configuración con esa sucursal abierta. */
+export function RedirigirASucursal() {
+  const { branchId } = useParams<{ branchId: string }>()
+  return <Navigate to={`/configuracion?tab=sucursales&sucursal=${encodeURIComponent(branchId ?? '')}`} replace />
 }
