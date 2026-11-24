@@ -51,6 +51,27 @@ def create_return(db: Session, return_in: SaleReturnCreate, user_id: int, branch
     if existing_pending:
         raise ValueError("Ya existe una devolución pendiente de aprobación para esta venta")
 
+    # 1c. Forma de la solicitud (auditoría 2026-09-22, M13). Una partida con
+    # cantidad <= 0 o la misma variante dos veces pasaba la validación de
+    # abajo (que compara partida por partida, sin acumular) y dejaba una
+    # devolución PENDING que no se podía aprobar y que, por el guard 1b,
+    # bloqueaba cualquier devolución legítima de esa venta.
+    if not return_in.items:
+        raise ValueError("La devolución no tiene productos: agrega al menos una partida.")
+    variantes_vistas = set()
+    for item_in in return_in.items:
+        if item_in.quantity is None or Decimal(str(item_in.quantity)) <= 0:
+            raise ValueError(
+                f"La cantidad a devolver debe ser mayor a cero (producto {item_in.variant_id}). "
+                "Corrige la cantidad o quita esa partida."
+            )
+        if item_in.variant_id in variantes_vistas:
+            raise ValueError(
+                f"El producto {item_in.variant_id} aparece más de una vez en la solicitud. "
+                "Déjalo en una sola partida con la cantidad total a devolver."
+            )
+        variantes_vistas.add(item_in.variant_id)
+
     # 2. Validar cantidades contra lo disponible
     # Obtener devoluciones previas que fueron aprobadas
     previous_returns = db.query(SaleReturnItem).join(SaleReturn).filter(

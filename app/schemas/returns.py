@@ -24,6 +24,11 @@ class VariantInfo(BaseModel):
 
 class SaleReturnItemBase(BaseModel):
     variant_id: str
+    # Cantidad > 0 y variante sin repetir se validan en
+    # `app/crud/returns.py::create_return` y no aquí con `Field(gt=0)`: desde
+    # el CRUD el rechazo sale como 400 con un `detail` de texto que la pantalla
+    # puede mostrar tal cual; desde Pydantic saldría un 422 con una lista.
+    # Este modelo además se usa para LEER devoluciones ya guardadas.
     quantity: Decimal
     refund_amount: Decimal
     is_inventory_reentry: bool = True
