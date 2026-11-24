@@ -473,10 +473,15 @@ def create_sale(
     pagos_previos = Decimal("0.00")
     deuda_previa = Decimal("0.00")
     if sale_in.id:
+        # Candado al documento (A1): dos cobros simultaneos del mismo PENDING
+        # leian ambos "PENDING" y revertian el stock dos veces. El segundo
+        # espera aqui y relee el estatus ya confirmado por el primero. No-op
+        # en SQLite. Orden global de candados: documento -> existencias (por
+        # id) -> cliente.
         existing_sale = db.query(SalesDocument).filter(
             SalesDocument.id == sale_in.id,
             SalesDocument.organization_id == org_id
-        ).first()
+        ).with_for_update(of=SalesDocument).first()
         
         if existing_sale:
             # El id de una venta PENDING no es una credencial: sin este guard
@@ -490,6 +495,14 @@ def create_sale(
                 raise HTTPException(status_code=400, detail="Solo se pueden modificar ventas con estatus PENDING")
             
             # --- REVERTIR STOCK EXISTENTE ---
+            # Las filas se bloquean juntas y en orden de id antes de tocarlas
+            # (A1); el `.first()` de abajo devuelve esas mismas filas ya
+            # bloqueadas desde el mapa de identidad de la sesion.
+            db.query(StockOnHand).filter(
+                StockOnHand.variant_id.in_([l.variant_id for l in existing_sale.lines]),
+                StockOnHand.branch_id == existing_sale.branch_id,
+                StockOnHand.organization_id == org_id,
+            ).order_by(StockOnHand.id).with_for_update().all()
             for old_line in existing_sale.lines:
                 stock_old = db.query(StockOnHand).filter(
                     StockOnHand.variant_id == old_line.variant_id,
@@ -604,11 +617,20 @@ def create_sale(
             raise HTTPException(status_code=404, detail=f"SKU '{item.sku}' no encontrado")
 
     _all_vids = [v.id for v in variants_list]
+    # Candado de existencias (A1). Sin `FOR UPDATE`, dos cajas leian la misma
+    # ultima pieza, las dos pasaban el guard de "Stock insuficiente" y la
+    # existencia quedaba en negativo. Con el candado la segunda espera a que la
+    # primera confirme y lee la existencia ya descontada. Siempre en orden de
+    # id: dos ventas con los mismos productos en distinto orden no se
+    # interbloquean. No-op en SQLite (regla de oro #7); la prueba real es
+    # `scripts/prueba_concurrencia_ventas.py` contra Postgres.
+    # Ojo: el candado solo garantiza dato fresco en filas que esta sesion no
+    # haya leido antes SIN candado (una fila ya cargada no se refresca).
     _stocks = db.query(StockOnHand).filter(
         StockOnHand.variant_id.in_(_all_vids),
         StockOnHand.branch_id == current_user.branch_id,
         or_(StockOnHand.organization_id == org_id, StockOnHand.organization_id == None),
-    ).all()
+    ).order_by(StockOnHand.id).with_for_update().all()
     stock_by_variant = {s.variant_id: s for s in _stocks}
 
     _pbs_rows = db.query(ProductBranchStatus).filter(
@@ -1506,10 +1528,13 @@ def cancel_sale(
     2. Revertir Stock (Entrada por Cancelación).
     3. Si hubo crédito, revertir deuda del cliente.
     """
+    # Candado al documento (A1): dos cancelaciones simultaneas leian ambas un
+    # estatus distinto de CANCELLED y reponian el stock (y revertian la deuda)
+    # dos veces. La segunda espera aqui y al releer ya ve CANCELLED -> 400.
     sale = db.query(SalesDocument).filter(
         SalesDocument.id == sale_id,
         SalesDocument.organization_id == org_id
-    ).first()
+    ).with_for_update(of=SalesDocument).first()
     if not sale:
         raise HTTPException(status_code=404, detail="Venta no encontrada")
     # Cancelar repone stock y revierte deuda: pesa mas que leer el detalle, que
@@ -1521,6 +1546,14 @@ def cancel_sale(
         raise HTTPException(status_code=400, detail="Esta venta ya está cancelada")
 
     # 1. Revertir Stock
+    # Existencias bloqueadas juntas y en orden de id (mismo orden que el cobro)
+    # para que la reposicion no pise un descuento simultaneo; el `.first()` de
+    # abajo devuelve esas mismas filas ya bloqueadas.
+    db.query(StockOnHand).filter(
+        StockOnHand.variant_id.in_([l.variant_id for l in sale.lines]),
+        StockOnHand.branch_id == sale.branch_id,
+        StockOnHand.organization_id == org_id,
+    ).order_by(StockOnHand.id).with_for_update().all()
     for line in sale.lines:
         variant = db.query(ProductVariant).filter(
             ProductVariant.id == line.variant_id,

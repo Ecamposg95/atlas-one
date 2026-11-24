@@ -422,13 +422,24 @@ def convert_quote_to_sale(
         SalesDocument.id == quote_id,
         SalesDocument.organization_id == org_id,
         SalesDocument.doc_type.in_([DocumentType.QUOTE, DocumentType.ORDER])
-    ).first()
+    ).with_for_update(of=SalesDocument).first()
+    # Candado al documento (A1): un doble clic en "convertir" leia dos veces
+    # "no pagado" y descontaba stock y registraba el pago dos veces. La segunda
+    # peticion espera aqui y al releer ya ve PAID -> 400. No-op en SQLite.
 
     if not quote:
         raise HTTPException(404, "Documento no encontrado")
 
     if quote.status == DocumentStatus.PAID:
         raise HTTPException(400, "Ya fue procesado")
+
+    # Existencias bloqueadas juntas y en orden de id, igual que `create_sale`,
+    # para que dos cobros de la ultima pieza no pasen ambos la validacion. Los
+    # `.first()` de abajo devuelven estas mismas filas ya bloqueadas.
+    db.query(StockOnHand).filter(
+        StockOnHand.variant_id.in_([l.variant_id for l in quote.lines]),
+        StockOnHand.branch_id == current_user.branch_id,
+    ).order_by(StockOnHand.id).with_for_update().all()
 
     # Validar stock al momento de convertir
     for line in quote.lines:
