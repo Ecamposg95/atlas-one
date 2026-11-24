@@ -20,6 +20,7 @@ import { PlatformPageShell } from '../../components/platform/PlatformPageShell'
 import { StatusBadge } from '../../components/platform/StatusBadge'
 import { SideDrawer } from '../../components/platform/SideDrawer'
 import { ConfirmModal } from '../../components/platform/ConfirmModal'
+import { SeccionSuscripcion } from './org/SeccionSuscripcion'
 import { errorDetailText } from '../../utils/errorDetail'
 import { SelectorPerfilUi, PerfilEfectivoHint } from './SelectorPerfilUi'
 import { TablaDesplazable } from '../../components/ui/TablaDesplazable'
@@ -740,6 +741,9 @@ export function PlatformOrgDetail() {
           </div>
         )}
       </section>
+
+      {/* ── Sección Suscripción (cobro de la mensualidad, megaplan F3) ── */}
+      <SeccionSuscripcion orgId={id} plans={plans} onPlanCambiado={load} />
 
       {/* ── Sección Módulos ───────────────────────────────────────────── */}
       <section style={card}>
