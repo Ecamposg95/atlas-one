@@ -94,13 +94,17 @@ def update_organization(org_id: int, org_in: OrganizationUpdate, db: Session = D
 
     update_data = org_in.model_dump(exclude_unset=True)
     applied = {k: v for k, v in update_data.items() if k in _ORG_UPDATE_FIELDS}
-    if "plan" in applied and not plans.es_plan_valido(applied["plan"]):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Plan desconocido {applied['plan']!r}. Válidos: {', '.join(plans.claves_validas())}",
-        )
+    if "plan" in applied:
+        try:
+            plans.asignar_plan(db_org, applied["plan"])
+        except plans.PlanDesconocido as e:
+            raise HTTPException(status_code=400, detail=str(e))
     for field, value in applied.items():
         setattr(db_org, field, value)
+    if "plan" in applied:
+        # La suscripción (megaplan F3) guarda un espejo del plan: que lo siga.
+        from app.modules.suscripciones.services import reflejar_plan_de_org
+        reflejar_plan_de_org(db, db_org)
 
     _audit(db, current_user.id, "UPDATE_ORGANIZATION", "ORGANIZATION", org_id,
            _json.dumps({k: str(v) for k, v in applied.items()}))
@@ -178,6 +182,16 @@ def delete_organization(
                 InventoryCount.organization_id == org_id
             ).delete(synchronize_session=False)
         db.flush()
+
+        # Cobro de suscripciones (megaplan F3): pagos → cargos → suscripción.
+        # Apuntan a la organización y los pagos a users, así que van antes.
+        from app.modules.suscripciones.models import CargoSuscripcion, PagoSuscripcion, Suscripcion
+        for modelo in (PagoSuscripcion, CargoSuscripcion, Suscripcion):
+            if modelo.__tablename__ in existing_tables:
+                deleted[modelo.__tablename__] = db.query(modelo).filter(
+                    modelo.organization_id == org_id
+                ).delete(synchronize_session=False)
+                db.flush()
 
         user_ids_in_org = [r[0] for r in db.query(UserOrganization.user_id).filter(
             UserOrganization.organization_id == org_id
