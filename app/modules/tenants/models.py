@@ -200,7 +200,8 @@ class Organization(Base):
 
     # Conteo ciego del corte de caja (2026-11-21). ENCENDIDO por omision: con el
     # turno abierto la caja no ve el esperado ni su desglose. El dueño puede
-    # apagarlo desde Empresa; es solo de interfaz (viaja en /me/context).
+    # apagarlo desde Empresa. Viaja en /me/context y, encendido, el servidor
+    # tampoco le manda esos importes a la cajera (`ventas_cajero.cajera_a_ciegas`).
     conteo_ciego = Column(Boolean, nullable=False, default=True, server_default="true")
 
     # Precio por sucursal (2026-11-23). APAGADO por omision. Encendido, el precio
