@@ -10,7 +10,7 @@ from typing import Callable, Optional
 
 from pypdf import PasswordType, PdfReader, PdfWriter
 
-from app.modules.ai.cliente_anthropic import ClienteEstructurado
+from app.modules.ai.proveedores import Proveedor
 from app.modules.cargas.lectura_excel import normalizar_numero
 from app.modules.cargas.tipos import RenglonCrudo
 
@@ -158,7 +158,7 @@ def _unir(previo: RenglonCrudo, nuevo: RenglonCrudo) -> None:
         previo.duda = "; ".join(x for x in (previo.duda, nuevo.duda) if x)
 
 
-def extraer_pdf(contenido: bytes, cliente: ClienteEstructurado, instrucciones: str,
+def extraer_pdf(contenido: bytes, cliente: Proveedor, instrucciones: str,
                 al_terminar_bloque: Optional[Callable[[], None]] = None) -> ExtraccionPdf:
     """`al_terminar_bloque` es el latido de la carga: se llama durante el streaming
     de cada bloque (espaciado por el cliente) y al terminarlo."""
@@ -186,7 +186,7 @@ def extraer_pdf(contenido: bytes, cliente: ClienteEstructurado, instrucciones: s
                                              "data": base64.b64encode(datos).decode("ascii")}},
             {"type": "text", "text": texto},
         ]
-        r = cliente.generar(sistema=sistema, contenido=contenido_msg, esquema=ESQUEMA_PDF,
+        r = cliente.generar_json(sistema=sistema, contenido=contenido_msg, esquema=ESQUEMA_PDF,
                             latido=al_terminar_bloque)
         res.tokens_entrada += r.tokens_entrada
         res.tokens_salida += r.tokens_salida

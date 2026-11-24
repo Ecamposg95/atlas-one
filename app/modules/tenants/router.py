@@ -87,7 +87,7 @@ def update_organization(
     # de plan ni reactivarse por aqui. Se descartan siempre; el panel de
     # Organizacion manda el objeto completo de vuelta, asi que solo se avisa
     # cuando el valor de verdad intentaba cambiar.
-    for _campo_plataforma in ("plan", "status", "is_active", "perfil_ui"):
+    for _campo_plataforma in ("plan", "status", "is_active", "perfil_ui", "ai_modelos", "ai_tokens_dia"):
         if _campo_plataforma in data_to_update:
             nuevo = data_to_update.pop(_campo_plataforma)
             if nuevo != getattr(org, _campo_plataforma):

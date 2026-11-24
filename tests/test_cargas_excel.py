@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from openpyxl import Workbook
 
-from app.modules.ai.cliente_anthropic import ClienteEstructuradoFalso
+from app.modules.ai.proveedores import ProveedorFalso
 from app.modules.cargas.lectura_excel import (
     ESQUEMA_MAPA, MapaColumnas, leer_tablas, mapear_columnas, renglones_desde_excel,
 )
@@ -43,7 +43,7 @@ def test_lee_csv_punto_y_coma_latin1():
 
 def test_mapear_usa_solo_20_filas_de_muestra():
     filas = [[f"Art {i}", i, 1, 1] for i in range(50)]
-    falso = ClienteEstructuradoFalso([{
+    falso = ProveedorFalso([{
         "campos": {"descripcion_original": 0, "cantidad": 1}, "columnas_dinero": [2, 3], "texto_libre": []}])
     mapa, _, _ = mapear_columnas(_tabla(filas), falso, "Tienda de bolsos")
     enviado = json.loads(falso.llamadas[0]["contenido"][0]["text"])
@@ -53,7 +53,7 @@ def test_mapear_usa_solo_20_filas_de_muestra():
 
 
 def test_mapear_descarta_indices_fuera_de_rango():
-    falso = ClienteEstructuradoFalso([{
+    falso = ProveedorFalso([{
         "campos": {"descripcion_original": 0, "cantidad": 9, "marca": -1}, "columnas_dinero": [2, 7], "texto_libre": [4]}])
     mapa, _, _ = mapear_columnas(_tabla([["a", 1, 1, 1]]), falso, "")
     assert mapa.campos["cantidad"] is None and mapa.campos["marca"] is None

@@ -13,7 +13,7 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-from app.modules.ai.cliente_anthropic import ClienteEstructurado
+from app.modules.ai.proveedores import Proveedor
 from app.modules.cargas.tipos import RenglonCrudo, TablaCruda
 from app.modules.products.services.comun import celda_decimal, celda_vacia
 
@@ -110,7 +110,7 @@ def leer_tablas(contenido: bytes, archivo_tipo: str) -> list[TablaCruda]:
     raise ValueError(f"Tipo de archivo no soportado: {archivo_tipo}")
 
 
-def mapear_columnas(tabla: TablaCruda, cliente: ClienteEstructurado,
+def mapear_columnas(tabla: TablaCruda, cliente: Proveedor,
                     instrucciones: str) -> tuple[MapaColumnas, int, int]:
     """Pide al modelo qué columna es cuál. Ve encabezados y ≤20 filas de muestra."""
     muestra = [[_texto(c) for c in f] for f in tabla.filas[:MAX_MUESTRA]]
@@ -129,7 +129,7 @@ def mapear_columnas(tabla: TablaCruda, cliente: ClienteEstructurado,
         "encabezados": [{"indice": i, "nombre": n} for i, n in enumerate(tabla.encabezados)],
         "filas_muestra": muestra,
     }
-    resp = cliente.generar(
+    resp = cliente.generar_json(
         sistema=sistema,
         contenido=[{"type": "text", "text": json.dumps(carga, ensure_ascii=False)}],
         esquema=ESQUEMA_MAPA,

@@ -19,9 +19,8 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.crud.products import _is_admin
 from app.models import User
-from app.modules.ai.cliente_anthropic import (
-    ClienteEstructurado, ProveedorNoDisponible, cliente_estructurado_por_defecto,
-)
+from app.modules.ai.proveedores import Proveedor, ProveedorNoDisponible
+from app.modules.ai.tareas import CAPTURA, proveedor_para
 from app.modules.ai.gating import exigir_modulo_ai
 from app.modules.cargas import proceso, vista
 from app.modules.cargas.aplicar import aplicar_carga
@@ -40,9 +39,13 @@ router = APIRouter()
 _TROZO = 1024 * 1024
 
 
-def obtener_cliente_estructurado() -> ClienteEstructurado:
-    """Cliente del modelo; las pruebas lo cambian por `ClienteEstructuradoFalso`."""
-    return cliente_estructurado_por_defecto()
+def obtener_proveedor(
+    org_id: int = Depends(exigir_modulo_ai),
+    db: Session = Depends(get_db),
+) -> Proveedor:
+    """Proveedor de la tarea `captura` para la organización (503 si falta la
+    llave); las pruebas lo cambian por `ProveedorFalso`."""
+    return proveedor_para(db, org_id, CAPTURA)
 
 
 def _oficina(current_user: User = Depends(get_current_user)) -> User:
@@ -88,7 +91,7 @@ async def subir(
     db: Session = Depends(get_db),
     user: User = Depends(_oficina),
     org_id: int = Depends(exigir_modulo_ai),
-    cliente: ClienteEstructurado = Depends(obtener_cliente_estructurado),
+    cliente: Proveedor = Depends(obtener_proveedor),
 ):
     contenido = await _leer_archivo(archivo)
     tipo = proceso.detectar_tipo(archivo.filename, contenido)
@@ -136,7 +139,7 @@ def responder(
     db: Session = Depends(get_db),
     user: User = Depends(_oficina),
     org_id: int = Depends(exigir_modulo_ai),
-    cliente: ClienteEstructurado = Depends(obtener_cliente_estructurado),
+    cliente: Proveedor = Depends(obtener_proveedor),
 ):
     carga = _carga_o_404(db, org_id, carga_id)
     try:
@@ -195,7 +198,7 @@ def reintentar(
     db: Session = Depends(get_db),
     user: User = Depends(_oficina),
     org_id: int = Depends(exigir_modulo_ai),
-    cliente: ClienteEstructurado = Depends(obtener_cliente_estructurado),
+    cliente: Proveedor = Depends(obtener_proveedor),
 ):
     carga = _carga_o_404(db, org_id, carga_id)
     leer = proceso.reintentar(db, carga)

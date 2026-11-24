@@ -1,12 +1,24 @@
 """Uso diario de tokens de IA por organización (día de negocio)."""
 from __future__ import annotations
 
+import os
+
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.fechas import hoy_negocio
-from app.modules.ai.cliente_llm import limite_tokens_dia
 from app.modules.ai.models import AiUsoDiario
+
+TOKENS_DIA_POR_DEFECTO = 200_000
+
+
+def limite_tokens_dia() -> int:
+    """`AI_TOKENS_DIA_ORG` (entrada + salida por organización y día)."""
+    try:
+        valor = int(os.getenv("AI_TOKENS_DIA_ORG") or TOKENS_DIA_POR_DEFECTO)
+    except ValueError:
+        return TOKENS_DIA_POR_DEFECTO
+    return valor if valor > 0 else TOKENS_DIA_POR_DEFECTO
 
 
 def _fila_de_hoy(db: Session, org_id: int):

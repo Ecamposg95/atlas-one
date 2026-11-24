@@ -6,8 +6,8 @@ import pytest
 from fastapi import HTTPException
 from pypdf import PdfWriter
 
-from app.modules.ai.cliente_anthropic import (
-    ClienteEstructuradoFalso, ProveedorNoDisponible, RespuestaEstructurada,
+from app.modules.ai.proveedores import (
+    ProveedorFalso, ProveedorNoDisponible, RespuestaJSON,
 )
 from app.modules.cargas import proceso
 from app.modules.cargas.aplicar import volver_a_plan
@@ -40,12 +40,12 @@ class _ClienteQueEstorba:
         self.db, self.carga_id, self.cambios = db, carga_id, cambios
         self.respuesta, self.error = respuesta, error
 
-    def generar(self, *, sistema, contenido, esquema, max_tokens=64000, latido=None):
+    def generar_json(self, *, sistema, contenido, esquema, max_tokens=64000, latido=None):
         self.db.query(CargaMercancia).filter_by(id=self.carga_id).update(self.cambios)
         self.db.flush()
         if self.error:
             raise self.error
-        return RespuestaEstructurada(datos=self.respuesta, tokens_entrada=5, tokens_salida=3)
+        return RespuestaJSON(datos=self.respuesta, tokens_entrada=5, tokens_salida=3)
 
 
 def _renglones(db, carga):
@@ -99,7 +99,7 @@ def test_hilo_que_falla_con_la_carga_ya_marcada_no_pisa_el_error(db, org, admin_
 
 def test_hilo_vigente_si_escribe(db, org, admin_a):
     carga = _nueva(db, org, admin_a)
-    proceso.procesar_carga(carga.id, ClienteEstructuradoFalso([_resp_pdf([_r()])]), db=db)
+    proceso.procesar_carga(carga.id, ProveedorFalso([_resp_pdf([_r()])]), db=db)
     db.expire_all()
     carga = db.get(CargaMercancia, carga.id)
     assert carga.estado == "plan" and _renglones(db, carga) == 1
@@ -109,7 +109,7 @@ def test_hilo_vigente_si_escribe(db, org, admin_a):
 
 def test_volver_a_plan_sobre_carga_aplicada_409(db, org, admin_a):
     carga = _nueva(db, org, admin_a)
-    proceso.procesar_carga(carga.id, ClienteEstructuradoFalso([_resp_pdf([_r()])]), db=db)
+    proceso.procesar_carga(carga.id, ProveedorFalso([_resp_pdf([_r()])]), db=db)
     db.expire_all()
     carga = db.get(CargaMercancia, carga.id)
     # Una lectura vieja la dejó en `error` después de aplicada (lo que C1 describía).
@@ -162,7 +162,7 @@ def test_el_latido_mueve_updated_at(db, org, admin_a):
 
 def test_extraer_pdf_avisa_al_terminar_cada_bloque():
     avisos = []
-    c = ClienteEstructuradoFalso([_resp_pdf([_r("A")]), _resp_pdf([_r("B")])])
+    c = ProveedorFalso([_resp_pdf([_r("A")]), _resp_pdf([_r("B")])])
     extraer_pdf(_pdf(16), c, "", al_terminar_bloque=lambda: avisos.append(1))
     assert len(avisos) == 2
 
@@ -170,7 +170,7 @@ def test_extraer_pdf_avisa_al_terminar_cada_bloque():
 def test_procesar_carga_late_por_bloque_y_por_tabla(db, org, admin_a):
     latidos = []
     pdf = _nueva(db, org, admin_a, _pdf(16))
-    proceso.procesar_carga(pdf.id, ClienteEstructuradoFalso([_resp_pdf([_r("A")]), _resp_pdf([_r("B")])]),
+    proceso.procesar_carga(pdf.id, ProveedorFalso([_resp_pdf([_r("A")]), _resp_pdf([_r("B")])]),
                            db=db, latido=lambda: latidos.append("pdf"))
     assert latidos == ["pdf", "pdf"]
 
@@ -179,6 +179,6 @@ def test_procesar_carga_late_por_bloque_y_por_tabla(db, org, admin_a):
     mapa = {"campos": {"descripcion_original": 0, "marca": None, "tipo": None, "material": None,
                        "color": None, "talla": None, "cantidad": 1, "observacion": None},
             "columnas_dinero": [], "texto_libre": []}
-    proceso.procesar_carga(xlsx.id, ClienteEstructuradoFalso([mapa]), db=db,
+    proceso.procesar_carga(xlsx.id, ProveedorFalso([mapa]), db=db,
                            latido=lambda: latidos.append("xlsx"))
     assert latidos.count("xlsx") == 1

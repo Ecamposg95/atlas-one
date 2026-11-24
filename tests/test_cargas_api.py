@@ -9,11 +9,11 @@ from pypdf import PdfWriter
 
 from app.models.modules import Module, OrganizationModule
 from app.models.organization import Organization
-from app.modules.ai.cliente_anthropic import ClienteEstructuradoFalso, ProveedorNoDisponible
+from app.modules.ai.proveedores import ProveedorFalso, ProveedorNoDisponible
 from app.modules.ai.uso import registrar_uso
 from app.modules.cargas.models import CargaArchivo, CargaMercancia, CargaRenglon
 from app.modules.cargas.proceso import recuperar_cargas_colgadas
-from app.modules.cargas.router import obtener_cliente_estructurado
+from app.modules.cargas.router import obtener_proveedor
 from tests.conftest import _auth_header, _make_user
 from app.models.users import Role
 from app.modules.products.models import Department
@@ -64,10 +64,10 @@ def _habilitar_ai(db, org):
 @pytest.fixture()
 def falso(app, monkeypatch):
     monkeypatch.setenv("CARGAS_PROCESO_EN_LINEA", "1")
-    cliente = ClienteEstructuradoFalso()
-    app.dependency_overrides[obtener_cliente_estructurado] = lambda: cliente
+    cliente = ProveedorFalso()
+    app.dependency_overrides[obtener_proveedor] = lambda: cliente
     yield cliente
-    app.dependency_overrides.pop(obtener_cliente_estructurado, None)
+    app.dependency_overrides.pop(obtener_proveedor, None)
 
 
 @pytest.fixture()

@@ -6,7 +6,7 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from app.modules.ai.cliente_anthropic import ClienteEstructuradoFalso
+from app.modules.ai.proveedores import ProveedorFalso
 from app.modules.ai.models import AiUsoDiario
 from app.modules.ai.uso import registrar_uso
 from app.modules.cargas.models import CargaDuda, CargaMercancia, CargaRenglon
@@ -61,7 +61,7 @@ def _resolver(numero, opcion="", valor=None):
 
 
 def test_respuesta_numerada_produce_operaciones(db, org, admin_a, carga):
-    falso = ClienteEstructuradoFalso([_respuesta([_resolver(2, valor="350"), _resolver(1, "crear")])])
+    falso = ProveedorFalso([_respuesta([_resolver(2, valor="350"), _resolver(1, "crear")])])
     ops, rechazos, t_in, t_out = interpretar_respuesta(
         db, carga, "el 2 a 350 y la marca sí créala", falso, "")
     assert rechazos == [] and (t_in, t_out) == (0, 0)
@@ -80,7 +80,7 @@ def test_respuesta_numerada_produce_operaciones(db, org, admin_a, carga):
 
 
 def test_no_entendido_vuelve_como_texto(db, carga):
-    falso = ClienteEstructuradoFalso([_respuesta(no_entendido=[
+    falso = ProveedorFalso([_respuesta(no_entendido=[
         {"numero": 4, "texto": "lo del color"}, {"numero": None, "texto": "lo otro"}])])
     ops, rechazos, _, _ = interpretar_respuesta(db, carga, "el 4 en azul y lo otro", falso, "")
     assert ops == []
@@ -89,7 +89,7 @@ def test_no_entendido_vuelve_como_texto(db, carga):
 
 def test_operaciones_inventadas_se_rechazan(db, carga):
     grupo = db.query(CargaRenglon).filter_by(carga_id=carga.id, orden=1).one().grupo
-    falso = ClienteEstructuradoFalso([_respuesta([
+    falso = ProveedorFalso([_respuesta([
         {"op": "fijar_campo", "renglones": [999], "grupo": None, "campo": "precio", "valor": "10"},
         {"op": "usar_existente", "grupo": grupo, "product_id": "no-existe"},
         {"op": "fijar_campo", "renglones": [1], "grupo": None, "campo": "proveedor", "valor": "x"},
@@ -108,7 +108,7 @@ def test_texto_mayor_a_4000_da_422(db, carga):
     with pytest.raises(ValidationError):
         RespuestaTexto(texto="x" * 4001)
     assert RespuestaTexto(texto="x" * 4000).texto == "x" * 4000
-    falso = ClienteEstructuradoFalso([])
+    falso = ProveedorFalso([])
     with pytest.raises(HTTPException) as e:
         interpretar_respuesta(db, carga, "x" * 4001, falso, "")
     assert e.value.status_code == 422
@@ -118,7 +118,7 @@ def test_texto_mayor_a_4000_da_422(db, carga):
 def test_sin_cupo_no_llama_al_modelo(db, org, carga, monkeypatch):
     monkeypatch.setenv("AI_TOKENS_DIA_ORG", "100")
     registrar_uso(db, org.id, 150, 0)
-    falso = ClienteEstructuradoFalso([])
+    falso = ProveedorFalso([])
     with pytest.raises(HTTPException) as e:
         interpretar_respuesta(db, carga, "el 2 a 350", falso, "")
     assert e.value.status_code == 429
@@ -128,7 +128,7 @@ def test_sin_cupo_no_llama_al_modelo(db, org, carga, monkeypatch):
 def test_modelo_solo_ve_resumen_sin_clientes(db, org, admin_a, cajero_a, carga):
     db.add(Customer(name="Cliente Secreto Uno", organization_id=org.id, phone="5550001111"))
     db.flush()
-    falso = ClienteEstructuradoFalso([_respuesta()])
+    falso = ProveedorFalso([_respuesta()])
     interpretar_respuesta(db, carga, "el 2 a 350", falso, "Somos una boutique.")
     llamada = falso.llamadas[0]
     enviado = json.dumps(llamada["contenido"], ensure_ascii=False)
@@ -146,7 +146,7 @@ def test_modelo_solo_ve_resumen_sin_clientes(db, org, admin_a, cajero_a, carga):
 
 def test_solo_ve_dudas_abiertas(db, admin_a, carga):
     aplicar_operaciones(db, carga, admin_a, [_resolver(1, "crear")], None)
-    falso = ClienteEstructuradoFalso([_respuesta()])
+    falso = ProveedorFalso([_respuesta()])
     interpretar_respuesta(db, carga, "ok", falso, "")
     datos = json.loads(falso.llamadas[0]["contenido"][0]["text"])
     assert [d["numero"] for d in datos["dudas_abiertas"]] == [2, 3]
@@ -179,7 +179,7 @@ def _fijar_precio(grupo, valor):
                                              ("ponle $3,000.00", True)])
 def test_monto_que_no_escribio_el_usuario_se_rechaza(db, carga, texto, aceptado):
     grupo = db.query(CargaRenglon).filter_by(carga_id=carga.id, orden=1).one().grupo
-    falso = ClienteEstructuradoFalso([_respuesta([
+    falso = ProveedorFalso([_respuesta([
         _fijar_precio(grupo, "3000"), _resolver(2, valor="3000"),
         {"op": "tipo_cambio", "moneda": "USD", "valor": "18"},
         _resolver(3, valor="Pantalones"),
@@ -198,7 +198,7 @@ def test_monto_que_no_escribio_el_usuario_se_rechaza(db, carga, texto, aceptado)
 
 def test_carga_fuera_de_plan_no_gasta_tokens(db, carga):
     carga.estado = "aplicada"
-    falso = ClienteEstructuradoFalso([])
+    falso = ProveedorFalso([])
     with pytest.raises(HTTPException) as e:
         interpretar_respuesta(db, carga, "el 2 a 350", falso, "")
     assert e.value.status_code == 409
@@ -208,7 +208,7 @@ def test_carga_fuera_de_plan_no_gasta_tokens(db, carga):
 @pytest.mark.parametrize("texto, aceptado", [("el 1 es otra talla", False), ("del 1 son 5 piezas", True)])
 def test_cantidad_que_no_escribio_el_usuario_se_rechaza(db, carga, texto, aceptado):
     """La cantidad es existencia: el modelo tampoco la saca por su cuenta (M2)."""
-    falso = ClienteEstructuradoFalso([_respuesta([
+    falso = ProveedorFalso([_respuesta([
         {"op": "fijar_campo", "renglones": [1], "grupo": None, "campo": "cantidad", "valor": "5"}])])
     ops, rechazos, _, _ = interpretar_respuesta(db, carga, texto, falso, "")
     if aceptado:
@@ -220,14 +220,14 @@ def test_cantidad_que_no_escribio_el_usuario_se_rechaza(db, carga, texto, acepta
 def test_respuesta_con_tope_de_16000_tokens(db, carga):
     from app.modules.cargas import respuestas
     assert respuestas.MAX_TOKENS == 16000
-    falso = ClienteEstructuradoFalso([_respuesta()])
+    falso = ProveedorFalso([_respuesta()])
     interpretar_respuesta(db, carga, "hola", falso, "")
     assert falso.llamadas[0]["max_tokens"] == 16000
 
 
 def test_respuesta_cortada_pide_contestar_en_partes(db, carga):
-    from app.modules.ai.cliente_anthropic import RespuestaIncompleta
-    falso = ClienteEstructuradoFalso([RespuestaIncompleta("cortada")])
+    from app.modules.ai.proveedores import RespuestaIncompleta
+    falso = ProveedorFalso([RespuestaIncompleta("cortada")])
     with pytest.raises(HTTPException) as e:
         interpretar_respuesta(db, carga, "1. a 350 2. a 400", falso, "")
     assert e.value.status_code == 422

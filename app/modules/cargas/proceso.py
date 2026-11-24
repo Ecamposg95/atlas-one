@@ -25,9 +25,8 @@ from sqlalchemy.orm import Session
 
 from app.models import User
 from app.models.organization import Branch
-from app.modules.ai.cliente_anthropic import (
-    ClienteEstructurado, ProveedorNoDisponible, cliente_estructurado_por_defecto,
-)
+from app.modules.ai.proveedores import Proveedor, ProveedorNoDisponible
+from app.modules.ai.tareas import CAPTURA, proveedor_para
 from app.modules.ai.uso import registrar_uso, verificar_cupo
 from app.modules.cargas.aplicar import YA_APLICADA, volver_a_plan
 from app.modules.cargas.extraccion_pdf import extraer_pdf
@@ -137,7 +136,7 @@ def _demasiados(n: int) -> LecturaFallida:
         "Divídelo en partes y súbelas por separado.")
 
 
-def _extraer_pdf(contenido: bytes, cliente: ClienteEstructurado, instrucciones: str,
+def _extraer_pdf(contenido: bytes, cliente: Proveedor, instrucciones: str,
                  tokens: _Tokens, latido: Callable[[], None]):
     """Llama al modelo por bloques. No escribe nada en la base."""
     try:
@@ -162,7 +161,7 @@ def _guardar_pdf(db: Session, carga: CargaMercancia, ext) -> None:
     db.flush()
 
 
-def _mapear_excel(carga: CargaMercancia, contenido: bytes, cliente: ClienteEstructurado,
+def _mapear_excel(carga: CargaMercancia, contenido: bytes, cliente: Proveedor,
                   instrucciones: str, tokens: _Tokens, latido: Callable[[], None]) -> dict:
     """Pide al modelo el mapa de columnas de cada pestaña. No escribe nada en la base."""
     try:
@@ -220,7 +219,7 @@ def _vigente(db: Session, carga_id: str, intento: Optional[str]) -> Optional[Car
     return carga
 
 
-def _extraer(db: Session, carga: CargaMercancia, cliente: Optional[ClienteEstructurado],
+def _extraer(db: Session, carga: CargaMercancia, cliente: Optional[Proveedor],
              tokens: _Tokens, latido: Callable[[], None]) -> dict:
     """Todo lo que pasa por el modelo, sin escribir nada en la base: el latido
     toca la fila desde otra sesión y no debe toparse con un candado de este hilo."""
@@ -228,7 +227,7 @@ def _extraer(db: Session, carga: CargaMercancia, cliente: Optional[ClienteEstruc
     instrucciones = (getattr(org, "ai_instrucciones", None) or "").strip()
     verificar_cupo(db, carga.organization_id)
     if cliente is None:
-        cliente = cliente_estructurado_por_defecto()
+        cliente = proveedor_para(db, carga.organization_id, CAPTURA)
     archivo = (db.query(CargaArchivo)
                .filter(CargaArchivo.organization_id == carga.organization_id,
                        CargaArchivo.carga_id == carga.id)
@@ -292,7 +291,7 @@ def latir(carga_id: str, intento: Optional[str], sesiones=None) -> bool:
         s.close()
 
 
-def procesar_carga(carga_id: str, cliente: Optional[ClienteEstructurado] = None,
+def procesar_carga(carga_id: str, cliente: Optional[Proveedor] = None,
                    db: Optional[Session] = None,
                    latido: Optional[Callable[[], None]] = None) -> None:
     """Lee el archivo y deja el plan (`plan`) o el error (`error`). Nunca lanza.
@@ -357,7 +356,7 @@ def procesar_carga(carga_id: str, cliente: Optional[ClienteEstructurado] = None,
             db.close()
 
 
-def lanzar_proceso(carga_id: str, cliente: Optional[ClienteEstructurado] = None,
+def lanzar_proceso(carga_id: str, cliente: Optional[Proveedor] = None,
                    db: Optional[Session] = None) -> None:
     """En producción, un hilo con su propia sesión y su propio cliente. Con
     `CARGAS_PROCESO_EN_LINEA=1` corre aquí mismo con la sesión y el cliente dados."""

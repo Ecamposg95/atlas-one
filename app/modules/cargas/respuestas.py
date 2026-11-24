@@ -15,7 +15,7 @@ from typing import Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.modules.ai.cliente_anthropic import ClienteEstructurado, RespuestaIncompleta
+from app.modules.ai.proveedores import Proveedor, RespuestaIncompleta
 from app.modules.ai.uso import registrar_uso, verificar_cupo
 from app.modules.cargas.models import CargaDuda, CargaMercancia, CargaRenglon
 from app.modules.cargas.lectura_excel import normalizar_numero
@@ -157,7 +157,7 @@ def _monto_inventado(op, escritos: set[Decimal]) -> Optional[str]:
 
 
 def interpretar_respuesta(
-    db: Session, carga: CargaMercancia, texto: str, cliente: ClienteEstructurado,
+    db: Session, carga: CargaMercancia, texto: str, cliente: Proveedor,
     instrucciones: str,
 ) -> tuple[list[dict], list[str], int, int]:
     """(operaciones válidas, rechazos legibles, tokens de entrada, tokens de salida)."""
@@ -178,7 +178,7 @@ def interpretar_respuesta(
     if (instrucciones or "").strip():
         sistema += "\n\nContexto de la tienda, escrito por su dueño:\n" + instrucciones.strip()
     try:
-        r = cliente.generar(
+        r = cliente.generar_json(
             sistema=sistema,
             contenido=[{"type": "text", "text": json.dumps(datos, ensure_ascii=False)}],
             esquema=ESQUEMA_OPERACIONES, max_tokens=MAX_TOKENS,
