@@ -9,7 +9,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .models import AiConversation, AiMessage, AiPropuesta, AiUsoDiario
+from .models import AiConversation, AiLlamada, AiMessage, AiPropuesta, AiUsoDiario
 from app.modules.cargas.models import (
     CargaArchivo, CargaCambio, CargaDuda, CargaMercancia, CargaRenglon,
 )
@@ -31,6 +31,9 @@ def borrar_datos_ai_de_org(db: Session, org_id: int) -> dict[str, int]:
     borrados["ai_uso_diario"] = db.query(AiUsoDiario).filter(
         AiUsoDiario.organization_id == org_id
     ).delete(synchronize_session=False)
+    # Bitácora de consumo: FK a organization y a users. No entra al diccionario
+    # devuelto (su forma no cambia).
+    db.query(AiLlamada).filter(AiLlamada.organization_id == org_id).delete(synchronize_session=False)
     # Cargar mercancía con IA: hijas primero (todas llevan organization_id).
     # No se suman al diccionario devuelto: su forma no cambia.
     for modelo in (CargaCambio, CargaDuda, CargaRenglon, CargaArchivo, CargaMercancia):

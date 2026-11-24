@@ -144,7 +144,7 @@ def responder(
     carga = _carga_o_404(db, org_id, carga_id)
     try:
         operaciones, rechazos, entrada, salida = interpretar_respuesta(
-            db, carga, body.texto, cliente, _instrucciones(db, org_id))
+            db, carga, body.texto, cliente, _instrucciones(db, org_id), usuario=user)
     except ProveedorNoDisponible as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
     carga.tokens_entrada = (carga.tokens_entrada or 0) + entrada

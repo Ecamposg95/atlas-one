@@ -16,6 +16,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.modules.ai.proveedores import Proveedor, RespuestaIncompleta
+from app.modules.ai.tareas import CAPTURA
 from app.modules.ai.uso import registrar_uso, verificar_cupo
 from app.modules.cargas.models import CargaDuda, CargaMercancia, CargaRenglon
 from app.modules.cargas.lectura_excel import normalizar_numero
@@ -158,9 +159,10 @@ def _monto_inventado(op, escritos: set[Decimal]) -> Optional[str]:
 
 def interpretar_respuesta(
     db: Session, carga: CargaMercancia, texto: str, cliente: Proveedor,
-    instrucciones: str,
+    instrucciones: str, usuario=None,
 ) -> tuple[list[dict], list[str], int, int]:
-    """(operaciones válidas, rechazos legibles, tokens de entrada, tokens de salida)."""
+    """(operaciones válidas, rechazos legibles, tokens de entrada, tokens de salida).
+    `usuario` (quien escribió la respuesta) solo se usa para registrar el consumo."""
     texto = texto or ""
     if len(texto) > LIMITE_RESPUESTA:
         raise HTTPException(status_code=422,
@@ -169,7 +171,7 @@ def interpretar_respuesta(
         raise HTTPException(status_code=422, detail="Escribe tu respuesta.")
     _exigir_plan(carga)  # antes de gastar tokens
     org_id = carga.organization_id
-    verificar_cupo(db, org_id)
+    verificar_cupo(db, org_id, getattr(usuario, "id", None))
 
     grupos, ignorados = _grupos(db, carga)
     datos = {"dudas_abiertas": _dudas_abiertas(db, carga), "grupos": grupos,
@@ -185,7 +187,9 @@ def interpretar_respuesta(
         )
     except RespuestaIncompleta as e:
         raise HTTPException(status_code=422, detail=RESPUESTA_LARGA) from e
-    registrar_uso(db, org_id, r.tokens_entrada, r.tokens_salida)
+    registrar_uso(db, org_id, r.tokens_entrada, r.tokens_salida,
+                  user_id=getattr(usuario, "id", None), rol=getattr(usuario, "role", None),
+                  tarea=CAPTURA, proveedor=r.proveedor, modelo=r.modelo)
 
     escritos = _numeros_del_texto(texto)
     propuestas, inventados = [], []

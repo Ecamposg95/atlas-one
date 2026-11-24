@@ -529,7 +529,8 @@ def test_uso_del_modelo_se_guarda_antes_de_aplicar(client, db, tienda, auth_admi
                     json={"texto": "a 350"})
     assert r.status_code == 409
     assert vistos["commits"] >= 1  # el uso ya estaba confirmado cuando aplicar falló
-    assert db.query(AiUsoDiario).filter_by(organization_id=tienda.id).one().llamadas == 1
+    # Dos llamadas al modelo: la lectura del PDF y la respuesta escrita.
+    assert db.query(AiUsoDiario).filter_by(organization_id=tienda.id).one().llamadas == 2
 
 
 def test_respuesta_toda_rechazada_cuenta_el_uso(client, db, tienda, auth_admin_a, falso):
@@ -542,7 +543,14 @@ def test_respuesta_toda_rechazada_cuenta_el_uso(client, db, tienda, auth_admin_a
                     json={"texto": "eso"})
     assert r.status_code == 200
     assert r.json() == {"cambio": None, "rechazos": ["No entendí: eso"]}
-    assert db.query(AiUsoDiario).filter_by(organization_id=tienda.id).one().llamadas == 1
+    # Dos llamadas al modelo: la lectura del PDF y la respuesta escrita.
+    assert db.query(AiUsoDiario).filter_by(organization_id=tienda.id).one().llamadas == 2
+    # Cada una queda a nombre de quien la pidió, con su rol, la tarea y el modelo.
+    from app.modules.ai.models import AiLlamada
+    filas = db.query(AiLlamada).filter_by(organization_id=tienda.id).order_by(AiLlamada.id).all()
+    assert [(f.rol, f.tarea, f.proveedor, f.modelo) for f in filas] == [
+        ("ADMINISTRADOR", "captura", "falso", "modelo-falso")] * 2
+    assert all(f.user_id is not None for f in filas)
 
 
 # ── etiquetas con prendas que ya existían ─────────────────────────────────

@@ -27,7 +27,7 @@ from app.models import User
 from app.models.organization import Branch
 from app.modules.ai.proveedores import Proveedor, ProveedorNoDisponible
 from app.modules.ai.tareas import CAPTURA, proveedor_para
-from app.modules.ai.uso import registrar_uso, verificar_cupo
+from app.modules.ai.uso import Medidor, registrar_llamadas, verificar_cupo
 from app.modules.cargas.aplicar import YA_APLICADA, volver_a_plan
 from app.modules.cargas.extraccion_pdf import extraer_pdf
 from app.modules.cargas.lectura_excel import leer_tablas, mapear_columnas
@@ -219,15 +219,36 @@ def _vigente(db: Session, carga_id: str, intento: Optional[str]) -> Optional[Car
     return carga
 
 
+class _Medidor(Medidor):
+    """Medidor al que el proveedor se le pone después: el de por omisión se
+    resuelve dentro de `_extraer` (puede dar 503) y el consumo debe sobrevivir
+    a la falla para registrarse."""
+
+    def __init__(self) -> None:
+        super().__init__(None)  # type: ignore[arg-type]
+
+    def usar(self, proveedor: Proveedor) -> None:
+        self._proveedor = proveedor
+
+
+def _registrar_consumo(db: Session, org_id: int, user_id: Optional[int], medidor: Medidor) -> None:
+    """Una fila por llamada al modelo, a nombre de quien subió la carga."""
+    if not medidor.llamadas:
+        return
+    rol = db.query(User.role).filter(User.id == user_id).scalar() if user_id is not None else None
+    registrar_llamadas(db, org_id, medidor.llamadas, user_id=user_id, rol=rol, tarea=CAPTURA)
+
+
 def _extraer(db: Session, carga: CargaMercancia, cliente: Optional[Proveedor],
-             tokens: _Tokens, latido: Callable[[], None]) -> dict:
+             tokens: _Tokens, latido: Callable[[], None], medidor: "_Medidor") -> dict:
     """Todo lo que pasa por el modelo, sin escribir nada en la base: el latido
     toca la fila desde otra sesión y no debe toparse con un candado de este hilo."""
     org = db.get(Organization, carga.organization_id)
     instrucciones = (getattr(org, "ai_instrucciones", None) or "").strip()
-    verificar_cupo(db, carga.organization_id)
-    if cliente is None:
-        cliente = proveedor_para(db, carga.organization_id, CAPTURA)
+    verificar_cupo(db, carga.organization_id, carga.user_id)
+    medidor.usar(cliente if cliente is not None
+                 else proveedor_para(db, carga.organization_id, CAPTURA))
+    cliente = medidor
     archivo = (db.query(CargaArchivo)
                .filter(CargaArchivo.organization_id == carga.organization_id,
                        CargaArchivo.carga_id == carga.id)
@@ -309,6 +330,8 @@ def procesar_carga(carga_id: str, cliente: Optional[Proveedor] = None,
             return
         intento = carga.intento
         org_id = carga.organization_id
+        user_id = carga.user_id
+        medidor = _Medidor()
         if latido is None:
             # En línea (pruebas) no hay otro hilo que pueda tomarla por colgada.
             latido = (lambda: latir(carga_id, intento)) if propia else (lambda: None)
@@ -316,7 +339,7 @@ def procesar_carga(carga_id: str, cliente: Optional[Proveedor] = None,
         fallo: Optional[Exception] = None
         descartada = False
         try:
-            leido = _extraer(db, carga, cliente, tokens, latido)
+            leido = _extraer(db, carga, cliente, tokens, latido, medidor)
             with db.begin_nested():  # todo o nada: una falla no deja renglones a medias
                 carga = _escribir(db, carga_id, intento, leido)
                 carga.estado = "plan"
@@ -337,12 +360,12 @@ def procesar_carga(carga_id: str, cliente: Optional[Proveedor] = None,
         if descartada:
             # Lo escrito quedó dentro del SAVEPOINT revertido; la carga no se toca.
             logger.info("Carga %s: la lectura terminó con la carga ya cambiada; se descarta", carga_id)
-            if tokens.entrada or tokens.salida:  # el gasto del modelo sí ocurrió
-                registrar_uso(db, org_id, tokens.entrada, tokens.salida)
+            # El gasto del modelo sí ocurrió.
+            _registrar_consumo(db, org_id, user_id, medidor)
             db.commit()  # suelta el candado de `_vigente`
             return
+        _registrar_consumo(db, org_id, user_id, medidor)
         if tokens.entrada or tokens.salida:
-            registrar_uso(db, carga.organization_id, tokens.entrada, tokens.salida)
             carga.tokens_entrada = (carga.tokens_entrada or 0) + tokens.entrada
             carga.tokens_salida = (carga.tokens_salida or 0) + tokens.salida
         db.commit()
