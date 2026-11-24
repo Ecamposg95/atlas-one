@@ -146,3 +146,101 @@ def test_el_relleno_hereda_la_caja_del_documento_sin_pisar_atribuciones():
 
     # Repetirlo (cada deploy) no mueve nada.
     assert railway_init.rellenar_payments_cash_session(engine)[0] == 0
+
+
+# ── Indices unicos de dinero ─────────────────────────────────────────────────
+# `uq_sales_org_client_uuid` (cobro doble) y `uq_sale_return_pending_per_sale`
+# (devolucion duplicada) vivian solo en scripts manuales: una base nueva o
+# restaurada arrancaba sin ellos.
+
+def _engine_de_dinero():
+    engine = create_engine("sqlite://")
+    with engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE sales_documents (
+                id VARCHAR(36) PRIMARY KEY, organization_id INTEGER,
+                client_uuid VARCHAR(64), deleted_at DATETIME
+            )
+        """))
+        conn.execute(text("""
+            CREATE TABLE sale_returns (
+                id VARCHAR(36) PRIMARY KEY, sale_id VARCHAR(36),
+                status VARCHAR, deleted_at DATETIME
+            )
+        """))
+    return engine
+
+
+def _indices(engine, tabla):
+    return {ix["name"] for ix in inspect(engine).get_indexes(tabla)}
+
+
+def test_el_arranque_declara_los_indices_unicos_de_dinero():
+    nombres = {n for n, *_ in railway_init.INDICES_UNICOS_DE_DINERO}
+    assert nombres == {"uq_sales_org_client_uuid", "uq_sale_return_pending_per_sale"}
+    assert ("sales_documents", "client_uuid") in {
+        (t, c) for t, c, _ in railway_init.COLUMN_MIGRATIONS}
+
+
+def test_run_migrations_llama_a_los_indices_de_dinero():
+    import inspect as _inspect
+    assert "asegurar_indices_unicos_de_dinero(engine)" in _inspect.getsource(
+        railway_init.run_migrations)
+
+
+def test_indices_de_dinero_se_crean_y_son_idempotentes():
+    engine = _engine_de_dinero()
+    assert railway_init.asegurar_indices_unicos_de_dinero(engine) == []
+    assert railway_init.asegurar_indices_unicos_de_dinero(engine) == []
+    assert "uq_sales_org_client_uuid" in _indices(engine, "sales_documents")
+    assert "uq_sale_return_pending_per_sale" in _indices(engine, "sale_returns")
+
+    with engine.begin() as conn:
+        conn.execute(text(
+            "INSERT INTO sales_documents (id, organization_id, client_uuid) VALUES ('a', 1, 'x')"))
+        # Otra organizacion, sin client_uuid y borrada: no chocan.
+        conn.execute(text(
+            "INSERT INTO sales_documents (id, organization_id, client_uuid) VALUES "
+            "('b', 2, 'x'), ('c', 1, NULL), ('d', 1, NULL)"))
+        conn.execute(text(
+            "INSERT INTO sale_returns (id, sale_id, status) VALUES "
+            "('r1', 'a', 'PENDING'), ('r2', 'a', 'APPROVED'), ('r3', 'a', 'REJECTED')"))
+    from sqlalchemy.exc import IntegrityError
+    with pytest.raises(IntegrityError):
+        with engine.begin() as conn:
+            conn.execute(text(
+                "INSERT INTO sales_documents (id, organization_id, client_uuid) VALUES ('e', 1, 'x')"))
+    with pytest.raises(IntegrityError):
+        with engine.begin() as conn:
+            conn.execute(text(
+                "INSERT INTO sale_returns (id, sale_id, status) VALUES ('r4', 'a', 'PENDING')"))
+
+
+def test_duplicados_preexistentes_avisan_y_no_tumban_el_arranque(capsys, caplog):
+    engine = _engine_de_dinero()
+    with engine.begin() as conn:
+        conn.execute(text(
+            "INSERT INTO sales_documents (id, organization_id, client_uuid) VALUES "
+            "('a', 1, 'repetido'), ('b', 1, 'repetido')"))
+
+    with caplog.at_level("WARNING"):
+        pendientes = railway_init.asegurar_indices_unicos_de_dinero(engine)
+
+    # El que tiene duplicados no se crea; el otro si, y nada revienta.
+    assert pendientes == ["uq_sales_org_client_uuid"]
+    assert "uq_sales_org_client_uuid" not in _indices(engine, "sales_documents")
+    assert "uq_sale_return_pending_per_sale" in _indices(engine, "sale_returns")
+    assert "uq_sales_org_client_uuid NO se creo" in capsys.readouterr().out
+    assert any("uq_sales_org_client_uuid" in r.getMessage() for r in caplog.records)
+
+    # Resueltos los duplicados, el siguiente arranque lo crea.
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM sales_documents WHERE id = 'b'"))
+    assert railway_init.asegurar_indices_unicos_de_dinero(engine) == []
+    assert "uq_sales_org_client_uuid" in _indices(engine, "sales_documents")
+
+
+def test_una_tabla_ausente_tampoco_tumba_el_arranque():
+    engine = create_engine("sqlite://")
+    assert sorted(railway_init.asegurar_indices_unicos_de_dinero(engine)) == [
+        "uq_sale_return_pending_per_sale", "uq_sales_org_client_uuid"]
