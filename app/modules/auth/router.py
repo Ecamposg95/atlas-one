@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
+from app.core.security.cookies import cookie_segura
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import timedelta
@@ -15,6 +16,7 @@ router = APIRouter()
 # Eliminamos LoginRequest y usamos el estándar OAuth2PasswordRequestForm
 @router.post("/login", response_model=TokenWithUser)
 async def login_for_access_token(
+    request: Request,
     response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(), # <--- ESTO CAMBIA TODO
     db: Session = Depends(get_db)
@@ -67,7 +69,7 @@ async def login_for_access_token(
         httponly=True, # Prevent JS access for security
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         samesite="lax",
-        secure=False # Set True in Prod with HTTPS
+        secure=cookie_segura(request),  # COOKIE_SECURE: auto = solo por https
     )
 
     # 5. Resolver organización del usuario via UserOrganization
@@ -114,6 +116,7 @@ async def login_for_access_token(
 
 @router.post("/context/switch")
 async def switch_context(
+    request: Request,
     response: Response,
     branch_id: Optional[int] = None, # None means HQ
     current_user: User = Depends(get_current_user),
@@ -176,7 +179,7 @@ async def switch_context(
         httponly=True,
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         samesite="lax",
-        secure=False
+        secure=cookie_segura(request),
     )
 
     return {"message": "Context switched successfully", "ctx_id": ctx_id, "ctx_type": ctx_type, "access_token": access_token}

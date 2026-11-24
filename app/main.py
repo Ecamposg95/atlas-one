@@ -348,13 +348,15 @@ async def boxes_redirect():
 # personal de plataforma (SUPERADMIN o SUPPORT), y el lector
 # (`app/core/tenant_context.py`) la ignora si quien la trae no lo es.
 @app.post("/api/platform/set-support-context")
-async def set_support_context(payload: dict, _staff=Depends(require_platform_admin)):
+async def set_support_context(request: Request, payload: dict, _staff=Depends(require_platform_admin)):
     try:
         org_id = int(payload.get("organization_id"))
     except (TypeError, ValueError):
         return JSONResponse(status_code=400, content={"detail": "organization_id debe ser un número"})
     response = JSONResponse({"status": "ok"})
-    response.set_cookie(key="support_org_id", value=str(org_id), httponly=True, max_age=14400)
+    from app.core.security.cookies import cookie_segura
+    response.set_cookie(key="support_org_id", value=str(org_id), httponly=True, max_age=14400,
+                        secure=cookie_segura(request))
     return response
 
 @app.post("/api/platform/clear-support-context")
