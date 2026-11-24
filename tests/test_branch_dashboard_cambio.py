@@ -2,6 +2,7 @@
 cambio entregado, igual que el corte (`cash_reconciliation`) y los reportes
 (`metricas_ventas.por_metodo`). Antes sumaba lo que entregó la clienta: un
 ticket de $100 pagado con $150 aparecía como $150 en Efectivo."""
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from tests.cobranza_helpers import _escenario
@@ -14,9 +15,14 @@ def _vender(client, h, sku, pagos):
 
 
 def test_efectivo_de_mi_dia_resta_el_cambio(client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup):
-    h, variante, _ = _escenario(client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup)
+    h, variante, sesion = _escenario(client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup)
     _vender(client, h, variante.sku, [{"method": "CASH", "amount": 150}])
     _vender(client, h, variante.sku, [{"method": "CASH", "amount": 50}, {"method": "CARD", "amount": 50}])
+    # Con el turno abierto la cajera no recibe importes (conteo ciego, 2026-11-17):
+    # el desglose se lee con su turno ya cerrado.
+    sesion.status = "CLOSED"
+    sesion.closed_at = datetime.now(timezone.utc)
+    db.commit()
 
     hoy = client.get("/api/branch/dashboard", headers=h).json()["today"]
     metodos = {k: Decimal(str(v)) for k, v in hoy["payment_methods"].items()}

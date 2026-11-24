@@ -24,10 +24,11 @@ class TopProduct(BaseModel):
 
 
 class DashboardToday(BaseModel):
-    sales_total: Decimal
+    # None = oculto a la cajera con el turno abierto (conteo ciego).
+    sales_total: Optional[Decimal] = None
     sales_count: int
-    avg_ticket: Decimal
-    returns_total: Decimal
+    avg_ticket: Optional[Decimal] = None
+    returns_total: Optional[Decimal] = None
     returns_count: int
     goal: Optional[Decimal] = None
     goal_progress_pct: Optional[float] = None

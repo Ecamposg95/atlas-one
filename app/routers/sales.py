@@ -1206,8 +1206,12 @@ def get_my_last_sale(
     )
     if current_user.branch_id is not None:
         q = q.filter(SalesDocument.branch_id == current_user.branch_id)
+    if es_cajero(current_user):   # la cajera solo reimprime tickets de hoy
+        inicio, fin = rango_hoy_mx()   # en UTC para que también compare bien en SQLite
+        q = q.filter(SalesDocument.created_at >= inicio.astimezone(timezone.utc),
+                     SalesDocument.created_at <= fin.astimezone(timezone.utc))
     sale = q.order_by(SalesDocument.created_at.desc()).first()
-    if sale is None:
+    if sale is None or (es_cajero(current_user) and not venta_visible_para_cajero(sale, current_user)):
         raise HTTPException(status_code=404, detail="No tienes ventas recientes.")
     return SaleRead.model_validate(sale)
 

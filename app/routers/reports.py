@@ -24,7 +24,7 @@ from app.models import (
 )
 from app.core.security import get_current_user
 from app.models import User
-from app.models.users import Role
+from app.models.users import PlatformRole, Role
 from app.models.cash import CashSessionStatus
 from app.models.organization import BranchType
 from app.schemas.reports import AgingReportResponse
@@ -479,6 +479,17 @@ def get_sales_by_waiter(
     }
 
 
+def _ambito_centro_de_mando(user: User, org_id: int) -> "mv.Ambito":
+    """Dueño, administrador y superadmin: toda la organización. Gerente: solo su
+    sucursal (como `/sales/stats`). Los demás roles de piso: 403 — antes un
+    vendedor recibía los totales de todas las sucursales."""
+    if getattr(user, "platform_role", None) == PlatformRole.SUPERADMIN or mv._rol(user) in ("ADMINISTRADOR", "DUEÑO"):
+        return mv.Ambito(org_id, None, True)
+    if mv._rol(user) == "GERENTE":
+        return mv.Ambito(org_id, user.branch_id, False)
+    raise HTTPException(status_code=403, detail="El centro de mando es solo para el dueño, el administrador y el gerente.")
+
+
 @router.get("/command-center/stats")
 def get_command_center_stats(
     start_date: date = None, 
@@ -492,10 +503,8 @@ def get_command_center_stats(
     Provides deep insights for multi-branch management.
     """
     _sin_totales_para_cajero(current_user)
+    ambito = _ambito_centro_de_mando(current_user, org_id)
     periodo = mv.periodo_de_query(start_date, end_date)      # una sola fecha = ese día; invertido = 422
-    # De toda la organización solo para dueño/administrador; el gerente recibe
-    # las mismas llaves acotadas a su sucursal (antes veía la empresa entera).
-    ambito = mv.ambito_sin_eleccion(current_user, org_id)
     sales_filters = mv.filtros_documentos(ambito, periodo)
 
     actual = mv.resumen(db, ambito, periodo)
@@ -511,7 +520,7 @@ def get_command_center_stats(
         sales_growth = 0.0
 
     # Canceladas del periodo (informativo)
-    cancel_q = db.query(
+    cancel_stats = db.query(
         func.count(SalesDocument.id).label("count"),
         func.sum(SalesDocument.total_amount).label("total")
     ).filter(
@@ -519,10 +528,8 @@ def get_command_center_stats(
         mv.dia_mx(SalesDocument.created_at) >= periodo.inicio,
         mv.dia_mx(SalesDocument.created_at) <= periodo.fin,
         SalesDocument.status == DocumentStatus.CANCELLED,
-    )
-    if not ambito.toda_la_org:
-        cancel_q = cancel_q.filter(SalesDocument.branch_id == ambito.branch_id)
-    cancel_stats = cancel_q.first()
+        *([SalesDocument.branch_id == ambito.branch_id] if not ambito.toda_la_org else []),
+    ).first()
     cancel_count = cancel_stats.count or 0
     cancel_total = float(cancel_stats.total or 0)
 
@@ -537,10 +544,10 @@ def get_command_center_stats(
 
     # --- 2. BRANCH BREAKDOWN ---
     # Aggregate queries (no N+1): sales-per-branch, open-sessions, critical-stock.
-    branches_q = db.query(Branch).filter(Branch.organization_id == org_id)
+    _branches_q = db.query(Branch).filter(Branch.organization_id == org_id)
     if not ambito.toda_la_org:
-        branches_q = branches_q.filter(Branch.id == ambito.branch_id)
-    branches_db = branches_q.all()
+        _branches_q = _branches_q.filter(Branch.id == ambito.branch_id)
+    branches_db = _branches_q.all()
 
     por_sucursal = mv.por_sucursal(db, org_id, periodo)
 

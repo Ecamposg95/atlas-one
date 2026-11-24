@@ -30,6 +30,7 @@ from app.models.products import ProductBranchStatus, ProductVariant, Product
 from app.models.returns import SaleReturn
 from app.models.sales import Payment, SalesDocument, SalesLineItem, DocumentStatus, DocumentType
 from app.models.users import User
+from app.services.ventas_cajero import cajera_a_ciegas
 from app.schemas.branch_dashboard import (
     BranchDashboardRead,
     DashboardAlert,
@@ -46,6 +47,7 @@ class BranchDashboardService:
         self.user = user
         self.organization_id = organization_id
         self.branch_id = branch_id
+        self._ciega = None   # se resuelve una vez (`_a_ciegas`)
 
     def build(self) -> BranchDashboardRead:
         return BranchDashboardRead(
@@ -55,6 +57,12 @@ class BranchDashboardService:
             alerts=self._alerts_block(),
             closing_visible=self._closing_visible(),
         )
+
+    def _a_ciegas(self) -> bool:
+        """Cajera de una tienda con el conteo ciego encendido (una consulta por tablero)."""
+        if self._ciega is None:
+            self._ciega = cajera_a_ciegas(self.db, self.user)
+        return self._ciega
 
     # ---- blocks ----
     def _user_block(self) -> DashboardUser:
@@ -115,17 +123,16 @@ class BranchDashboardService:
         )
         if s:
             return s
-        # 2) Cerrado HOY local (cualquier cajero del branch — un turno por día)
-        return (
-            self.db.query(CashSession)
-            .filter(
-                CashSession.branch_id == self.branch_id,
-                CashSession.closed_at.isnot(None),
-                CashSession.closed_at >= today_start,
-            )
-            .order_by(CashSession.closed_at.desc())
-            .first()
+        # 2) Cerrado HOY local (cualquier cajero del branch — un turno por día).
+        # La cajera solo el suyo: el turno de otra trae sus importes.
+        q = self.db.query(CashSession).filter(
+            CashSession.branch_id == self.branch_id,
+            CashSession.closed_at.isnot(None),
+            CashSession.closed_at >= today_start,
         )
+        if self._a_ciegas():
+            q = q.filter(CashSession.user_id == self.user.id)
+        return q.order_by(CashSession.closed_at.desc()).first()
 
     def _session_sales_filter(self, session):
         """Filtro de ventas por sesión: cash_session_id == session.id, con
@@ -199,6 +206,22 @@ class BranchDashboardService:
 
         payment_methods = self._payment_methods_session(session_filter)
         top_products = self._top_products_today()
+
+        if session.closed_at is None and self._a_ciegas():
+            # Conteo ciego: con el turno abierto la cajera no recibe importes del
+            # turno (ventas − tarjeta − transferencia = el efectivo esperado).
+            # El número de tickets se queda.
+            return DashboardToday(
+                sales_total=None,
+                sales_count=sales_count,
+                avg_ticket=None,
+                returns_total=None,
+                returns_count=returns_count,
+                goal=goal,
+                goal_progress_pct=None,
+                payment_methods=None,
+                top_products=top_products,
+            )
 
         return DashboardToday(
             sales_total=sales_total,
@@ -340,6 +363,9 @@ class BranchDashboardService:
             ))
 
         # 3. Cash variance from last CLOSED session at this branch (any cashier).
+        # La cajera no la recibe: es el resultado de cortes (de otras) con monto.
+        if self._a_ciegas():
+            return out
         last_closed = (
             self.db.query(CashSession.id, CashSession.difference)
             .filter(
