@@ -120,15 +120,36 @@ capturan: hoy en el `env_file:` del `docker-compose.yml` del servidor, no en el 
 Railway). Igual que en Railway, `SECRET_KEY` es la que más importa asegurar — ver la
 nota de seguridad en `docs/infra/deployment-map.md`.
 
-### Cargar mercancía con IA
+### Inteligencia artificial (Cargar mercancía y agente)
 
-Variables nuevas en el `env_file:` del servidor (detalle en [`ai/cargar-mercancia.md §6`](ai/cargar-mercancia.md)):
-`ANTHROPIC_API_KEY` (clave del proveedor; sin ella subir un archivo responde 503 y no se crea la carga),
-`AI_MODELO` (por omisión `claude-opus-5-5`), `AI_TOKENS_DIA_ORG` (por omisión `200000`) y `AI_TIMEOUT_SEG`
-(tope por llamada al proveedor, por omisión `300`). `CARGAS_PROCESO_EN_LINEA=1`
-es solo para pruebas. Las dependencias `anthropic` y `pypdf` están en `requirements.txt`, así que la etapa
-`pydeps` de la imagen las instala sola; no hay paso manual. Tras desplegar, `railway_init.py` crea las
-tablas `cargas_*` y la columna `organization.reglas_carga`.
+Todas van en el `env_file:` del servidor. Arquitectura y ejemplos en [`ai/README.md`](ai/README.md);
+operación de Cargar mercancía en [`ai/cargar-mercancia.md`](ai/cargar-mercancia.md).
+
+| Variable | Para qué | Por omisión |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | Llave de Anthropic. Sin ninguna llave útil para la tarea, los endpoints de IA responden 503 "IA no configurada: falta … en el servidor." y no se crea la carga | vacía |
+| `AI_MODELOS_CONSULTA` | Lista ordenada `proveedor:modelo` separada por comas para la tarea `consulta`; si el primero falla por red, 5xx o cuota, se usa el siguiente | `anthropic:claude-haiku-5-5` |
+| `AI_MODELOS_CAPTURA` | Igual, para `captura` (Cargar mercancía, altas) | `anthropic:claude-opus-5-5` |
+| `AI_MODELOS_ANALISIS` | Igual, para `analisis` (reportes) | `anthropic:claude-opus-5-5` |
+| `AI_MODELO` | Heredada: modelo de Anthropic para `captura` cuando `AI_MODELOS_CAPTURA` no está puesta | sin definir |
+| `LLM_API_KEY` | Llave del proveedor `compatible` (API compatible con OpenAI) | vacía |
+| `LLM_BASE_URL` | URL base del proveedor `compatible` | capa compatible de Gemini |
+| `LLM_MODEL` | Modelo de `compatible` cuando la entrada de la lista no lo nombra | `gemini-3.8-flash` |
+| `AI_PROVEEDOR_<NOMBRE>_BASE_URL`, `AI_PROVEEDOR_<NOMBRE>_API_KEY` | Otro servicio compatible con OpenAI, usable en las listas como `<nombre>:<modelo>` (p. ej. `AI_PROVEEDOR_GROQ_…` → `groq:llama-x`) | sin definir |
+| `AI_TOKENS_DIA_ORG` | Si está puesta, tope global de tokens (entrada + salida) por organización y día; tapa el cupo del plan. Una organización con `ai_tokens_dia` propio no la obedece | sin definir (cupo del plan: 2 000 000, provisional) |
+| `AI_TOKENS_DIA_USUARIO` | Tope de tokens por persona y día | sin definir (sin tope por persona) |
+| `AI_TIMEOUT_SEG` | Tope en segundos de cada llamada a Anthropic; el SDK reintenta una sola vez | `300` |
+| `CARGAS_PROCESO_EN_LINEA` | Con `1`, la lectura de una carga corre en el hilo de la petición. Solo para pruebas | sin definir |
+
+Cambio respecto a antes de la fase A0: `AI_TOKENS_DIA_ORG` ya no vale `200000` por omisión; sin la
+variable manda el cupo del plan. La excepción por organización (lista de modelos y cupo) no es variable:
+son las columnas `organization.ai_modelos` y `organization.ai_tokens_dia`, que guarda
+`PUT /api/platform/organizations/{id}`.
+
+Las dependencias `anthropic` y `pypdf` están en `requirements.txt`, así que la etapa `pydeps` de la imagen
+las instala sola; no hay paso manual. Tras desplegar, `railway_init.py` crea las tablas `cargas_*` y
+`ai_llamadas`, y las columnas `organization.reglas_carga`, `organization.ai_modelos` y
+`organization.ai_tokens_dia`.
 
 ## 7. Qué NO cambió
 

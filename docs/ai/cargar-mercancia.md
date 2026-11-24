@@ -120,7 +120,9 @@ No hay una cifra fija; depende de lo que se sube:
 - **Hoja xlsx/csv:** una llamada para mapear los encabezados, sin importar cuántos renglones tenga.
 - **Respuestas:** una llamada por cada respuesta escrita. Contestar con los botones no cuesta.
 - **Tope diario:** cada organización tiene un máximo de tokens (entrada + salida) por día, tabla
-  `ai_uso_diario`, variable `AI_TOKENS_DIA_ORG` (por omisión 200 000). Al alcanzarlo el servidor responde
+  `ai_uso_diario`. El tope sale del plan (hoy 2 000 000, provisional), de `AI_TOKENS_DIA_ORG` si está
+  puesta, o de `organization.ai_tokens_dia` si la plataforma le dio uno propio
+  ([`README.md §4`](README.md)). Al alcanzarlo el servidor responde
   429 "Se alcanzó el límite diario de uso de IA de tu organización. Intenta mañana." Cada carga guarda los
   tokens que gastó (`tokens_entrada`, `tokens_salida`) para revisar el consumo.
 - Límites del archivo: 20 MB y 2 000 renglones por carga.
@@ -132,10 +134,13 @@ Para consultar el precio vigente, usa la lista del proveedor; este documento no 
 | Variable | Para qué | Por omisión |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | Clave del proveedor. Sin ella subir, contestar por escrito y reintentar responden 503 y no se crea carga | vacía |
-| `AI_MODELO` | Modelo que lee y traduce las respuestas | `claude-opus-5-5` |
-| `AI_TOKENS_DIA_ORG` | Tope de tokens por organización y día | `200000` |
+| `AI_MODELOS_CAPTURA` | Lista ordenada `proveedor:modelo` que lee y traduce las respuestas (tarea `captura`); `AI_MODELO` sigue valiendo si esta no está | `anthropic:claude-opus-5-5` |
+| `AI_TOKENS_DIA_ORG` | Tope global de tokens por organización y día; sin ella manda el cupo del plan | sin definir |
 | `AI_TIMEOUT_SEG` | Tope en segundos de cada llamada al proveedor (un bloque de 15 páginas, un mapa de columnas, una respuesta escrita); el SDK reintenta una sola vez | `300` |
 | `CARGAS_PROCESO_EN_LINEA` | Con `1`, la lectura corre en el mismo hilo de la petición en vez de uno de fondo. Solo para pruebas | sin definir (hilo de fondo) |
+
+La lista completa de variables de IA (otros proveedores, respaldo, tope por persona) está en
+[`DEPLOY.md §6`](../DEPLOY.md) y la arquitectura en [`README.md`](README.md).
 
 Se capturan en el `env_file:` del `docker-compose.yml` del servidor ([`DEPLOY.md §6`](../DEPLOY.md)).
 Tras cambiar el `.env`, recrea el contenedor.

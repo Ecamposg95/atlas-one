@@ -127,7 +127,7 @@ mismo orden que ya existía, con el PIN como primer intento.
 
 - `organization.reglas_carga` (JSON, ALTER idempotente en `scripts/railway_init.py`): reglas que aplica el código (ver `app/modules/cargas/reglas.py::ReglasCarga` y `docs/ai/cargar-mercancia.md §3`). `organization.ai_instrucciones` (texto) es la otra mitad: convenciones que van al prompt.
 - Lo aplicado deja `inventory_movements.reference = "carga:<id>"` y `notes = "Carga #<folio> · <archivo>"`; el filtro `carga_id` de Etiquetas se apoya en eso.
-- Tope diario de tokens: `ai_uso_diario` (SP4), variable `AI_TOKENS_DIA_ORG`.
+- Tope diario de tokens: `ai_uso_diario` (SP4), acumulado por organización y día; se suma con UPSERT atómico. Detalle por llamada en `ai_llamadas` (fase A0: `organization_id`, `user_id`, `rol`, `tarea`, `proveedor`, `modelo`, `tokens_entrada`, `tokens_salida`, `fecha`). Cupo y excepciones: `organization.ai_tokens_dia`, `organization.ai_modelos` (JSON, lista de modelos por tarea), ambas con ALTER idempotente; ver `docs/ai/README.md`.
 
 ## Ventas / Caja
 | Tabla | PK | Propósito | Enums |
