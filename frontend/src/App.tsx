@@ -116,6 +116,7 @@ const PlatformMetrics      = lazy(() => import('./pages/platform/PlatformMetrics
 const PlatformHealth       = lazy(() => import('./pages/platform/PlatformHealth').then(m => ({ default: m.PlatformHealth })))
 const PlatformOrganizations= lazy(() => import('./pages/platform/PlatformOrganizations').then(m => ({ default: m.PlatformOrganizations })))
 const PlatformOrgDetail    = lazy(() => import('./pages/platform/PlatformOrgDetail').then(m => ({ default: m.PlatformOrgDetail })))
+const PlatformSuscripciones = lazy(() => import('./pages/platform/PlatformSuscripciones').then(m => ({ default: m.PlatformSuscripciones })))
 const PlatformUsers        = lazy(() => import('./pages/platform/PlatformUsers').then(m => ({ default: m.PlatformUsers })))
 const PlatformBranches     = lazy(() => import('./pages/platform/PlatformBranches').then(m => ({ default: m.PlatformBranches })))
 const PlatformAuditLog     = lazy(() => import('./pages/platform/PlatformAuditLog').then(m => ({ default: m.PlatformAuditLog })))
@@ -427,6 +428,7 @@ export default function App() {
           <Route path="alerts"        element={<Suspense fallback={<PageLoader />}><PlatformAlerts /></Suspense>} />
           <Route path="organizations" element={<Suspense fallback={<PageLoader />}><PlatformOrganizations /></Suspense>} />
           <Route path="organizations/:orgId" element={<Suspense fallback={<PageLoader />}><PlatformOrgDetail /></Suspense>} />
+          <Route path="suscripciones" element={<Suspense fallback={<PageLoader />}><PlatformSuscripciones /></Suspense>} />
           <Route path="users"         element={<Suspense fallback={<PageLoader />}><PlatformUsers /></Suspense>} />
           <Route path="branches"      element={<Suspense fallback={<PageLoader />}><PlatformBranches /></Suspense>} />
           <Route path="presets"       element={<Suspense fallback={<PageLoader />}><PlatformPresets /></Suspense>} />

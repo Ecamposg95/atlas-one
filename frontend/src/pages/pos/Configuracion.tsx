@@ -7,16 +7,17 @@ import { PrinterSettingsCajera } from './PrinterSettingsCajera'
 import { TiendaEnLinea } from '../core/TiendaEnLinea'
 import { Organization } from '../core/Organization'
 import { Sucursales } from '../core/Sucursales'
+import { MiPlanYPagos } from '../core/MiPlanYPagos'
 
 /**
  * `/configuracion`. Tres vistas según el rol:
  *   - administrador y dueño: el centro único de ajustes (empresa, sucursales,
- *     ventas y caja, ticket, impresoras, tienda en línea y accesos). Lo que
+ *     ventas y caja, ticket, impresoras, tienda en línea, plan y pagos, y accesos). Lo que
  *     antes eran `/organization` y `/hq/branches` vive aquí, en `?tab=`;
  *   - gerente: la configuración completa de su sucursal (impresoras, cajón, ticket);
  *   - caja: su impresora, la prueba y el cajón.
  */
-export type PestanaAjustes = 'empresa' | 'sucursales' | 'ventas' | 'ticket' | 'impresoras' | 'tienda' | 'mas'
+export type PestanaAjustes = 'empresa' | 'sucursales' | 'ventas' | 'ticket' | 'impresoras' | 'tienda' | 'plan' | 'mas'
 
 const PESTANAS: { id: PestanaAjustes; icon: string; label: string }[] = [
   { id: 'empresa', icon: 'fa-building', label: 'Empresa' },
@@ -25,6 +26,7 @@ const PESTANAS: { id: PestanaAjustes; icon: string; label: string }[] = [
   { id: 'ticket', icon: 'fa-receipt', label: 'Ticket' },
   { id: 'impresoras', icon: 'fa-print', label: 'Impresoras' },
   { id: 'tienda', icon: 'fa-globe', label: 'Tienda en línea' },
+  { id: 'plan', icon: 'fa-credit-card', label: 'Mi plan y pagos' },
   { id: 'mas', icon: 'fa-ellipsis', label: 'Más' },
 ]
 
@@ -70,6 +72,7 @@ function CentroDeAjustes() {
       {pestana === 'sucursales' && <Sucursales />}
       {pestana === 'impresoras' && <PrinterSettings incrustada />}
       {pestana === 'tienda' && <TiendaEnLinea />}
+      {pestana === 'plan' && <MiPlanYPagos />}
       {pestana === 'mas' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {ACCESOS.map((x) => (

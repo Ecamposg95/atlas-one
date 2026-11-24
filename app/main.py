@@ -277,6 +277,14 @@ app.include_router(kitchen_router,      prefix="/api/kitchen",      tags=["Cocin
 app.include_router(labels_router,       prefix="/api/labels",       tags=["Etiquetas"])
 app.include_router(conteos_router,      prefix="/api/inventory/counts", tags=["Conteos"])
 app.include_router(canal_config_router, prefix="/api/canal",        tags=["Canal tienda en línea"])
+# Cobro de suscripciones (megaplan F3): lo que Atlas le cobra a cada tienda.
+# Plataforma registra a mano; la tienda (admin/dueño) solo lee lo suyo.
+from app.modules.suscripciones.router import (
+    plataforma_router as suscripciones_plataforma_router,
+    tienda_router as suscripciones_tienda_router,
+)
+app.include_router(suscripciones_plataforma_router, prefix="/api/platform", tags=["Suscripciones (plataforma)"])
+app.include_router(suscripciones_tienda_router, prefix="/api/suscripcion", tags=["Suscripción"])
 # API de catálogo de solo lectura para la tienda externa (llave de servidor, sin CORS)
 from app.modules.canal.router import router as canal_api_router
 app.include_router(canal_api_router,    prefix="/api/channel/v1",   tags=["Canal API v1"])

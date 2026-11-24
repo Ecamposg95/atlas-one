@@ -93,6 +93,20 @@ def obtener_plan(clave: Optional[str]) -> Plan:
     return PLANES_POR_CLAVE.get(clave or "", PLANES_POR_CLAVE["FREE"])
 
 
+class PlanDesconocido(ValueError):
+    """La clave no esta en el catalogo de planes."""
+
+
+def asignar_plan(org: Organization, clave: Optional[str]) -> None:
+    """El unico camino que escribe `organization.plan`: valida la clave contra el
+    catalogo. No toca `organization_modules` (nada se apaga al cambiar de plan)."""
+    if not es_plan_valido(clave):
+        raise PlanDesconocido(
+            f"Plan desconocido {clave!r}. Válidos: {', '.join(claves_validas())}"
+        )
+    org.plan = clave
+
+
 def plan_minimo_para(modulo: str) -> Optional[Plan]:
     """El primer plan que incluye el modulo; None si no depende del plan (base o vertical)."""
     if modulo not in MODULOS_CRECIMIENTO:
