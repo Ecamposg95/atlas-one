@@ -16,6 +16,7 @@
 | [`modules/MODULE_GUIDE.md`](modules/MODULE_GUIDE.md) | Cómo crear/mover un módulo (backend + seed + preset + frontend + tests + migración). |
 | [`modules/GASTRO_MESAS_COMANDAS.md`](modules/GASTRO_MESAS_COMANDAS.md) | Feature doc del flujo mesas → comanda → KDS → cuenta → cobro. |
 | [`presets/README.md`](presets/README.md) | Cómo crear un preset de industria nuevo (composición de módulos, datos vs. código, checklist). |
+| [`presets/ESTADO-DE-MODULOS.md`](presets/ESTADO-DE-MODULOS.md) | Qué módulos están construidos (`disponible` / `en_construccion` / `oculto`) con evidencia, qué promete cada plan y cada preset, y la propuesta para ordenarlos. |
 | [`presets/BOUTIQUE.md`](presets/BOUTIQUE.md) | Preset `ATLAS_POS_BOUTIQUE`: estándar de datos de producto, ticket, etiquetas, funciones de cajera, checklist de alta. |
 | [`playbooks/altas-de-clientes.md`](playbooks/altas-de-clientes.md) | Alta de una tienda: organización, usuarios, catálogo según el POS de origen (Eleventa, Data X POS, rmazh, libreta), existencias, mayoreo, verificación, y cómo se convierte en funciones de IA. |
 | [`platform/superadmin-creation.md`](platform/superadmin-creation.md) | Crear SUPERADMINs de plataforma. |

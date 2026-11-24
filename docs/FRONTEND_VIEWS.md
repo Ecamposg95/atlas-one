@@ -77,7 +77,8 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 | `/users`, `/startup` | `core/Users`, `Startup` | Admin | — |
 | `/home`, `/tables`, `/kitchen`, `/meseros`, `/bar/bottles`, `/menu`, `/recipes` | ver §2 Gastro | según preset | tables/kitchen/bar/menu/recipes |
 | `/mobile/*` | `mobile/*` | Vendedor (owner: Dueño/Admin) | — |
-| `/appointments`, `/commissions`, `/memberships`, `/ai`, `/purchasing` | `coming-soon/index` | según módulo | (stubs) |
+| `/appointments`, `/commissions`, `/memberships`, `/ai` | — (`<Navigate to="/">`) | módulo sin construir | redirigen al inicio del rol |
+| `/purchasing` | — (`RedirigirConQuery` → `/purchases`) | — | relleno retirado; Compras es `/purchases` |
 | `/platform/*` | `platform/*` | SUPERADMIN | — |
 | `/__dev__/atlas-one-preview` | `__dev__/AtlasOnePreview` | solo dev | — |
 | `*` | `NotFound` | todos | — |
@@ -610,8 +611,10 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 ### `/__dev__/atlas-one-preview` — Preview del design system
 - **Archivo:** `pages/__dev__/AtlasOnePreview.tsx` (271 líneas). Solo dev. Renderiza todas las primitivas de `components/atlas-one` e itera por los 11 presets. Datos demo hardcodeados; único con `export default`.
 
-### `/appointments`, `/commissions`, `/memberships`, `/ai`, `/purchasing` — "Próximamente"
-- **Archivo:** `pages/coming-soon/index.tsx` (98 líneas). Un `ComingSoon` parametrizado por `ComingSoonMeta`; exporta un wrapper por módulo (Appointments/Commissions/Memberships/AI/Purchasing/Recipes). Estático, categoría por línea de producto.
+### `/appointments`, `/commissions`, `/memberships`, `/ai` — módulos sin construir (ocultos)
+- **Sin pantalla.** Desde el 2026-11-24 no existe la página «Próximamente» (`pages/coming-soon/` y `components/ComingSoon.tsx` se borraron): la ruta es `<Navigate to="/" replace />`, que cae en `RoleHomeRedirect` (el inicio de cada rol). `/purchasing` redirige a `/purchases` (Compras, la pantalla real).
+- **Por qué no se ven:** el estado de cada módulo (`disponible` | `en_construccion` | `oculto`) vive en `app/services/estado_modulos.py` y llega en `/users/me/context.modulos_no_disponibles`; el espejo local es `utils/estadoModulos.ts`. `visibleNavItems` no pinta un ítem cuyo `module` no esté disponible (aunque la organización lo tenga encendido, y también mientras el contexto carga), y `PresetHome` no pinta sus widgets. La plataforma sí los ve, marcados «En construcción» / «No construido».
+- **Guardia:** `__tests__/estadoModulos.test.ts` (espejo = Python; ningún rol ve un módulo no disponible; ninguna ruta sirve un `ComingSoon` para un módulo disponible). Evidencia y propuesta de planes/presets: `docs/presets/ESTADO-DE-MODULOS.md`. Receta para destapar: `CLAUDE.md` §5.
 
 ---
 

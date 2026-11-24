@@ -149,6 +149,14 @@ Playbook completo con reglas, trampas y qué preguntar: [`docs/playbooks/altas-d
 - Menú: `OCULTAS_BASICO_SUCURSAL` / `OCULTAS_BASICO_HQ` en `components/layout/navPerfilBasico.ts`. POS: banderas de `opcionesPorPerfil` (`pages/pos/opcionesPos.ts`). Campos del producto: `OCULTOS_BASICO` en `app/modules/products/campos.py`. Pantalla entera: `<PorPerfil basico completo>` donde una ruta deba cambiar de componente por perfil; hoy ninguna ruta de `App.tsx` lo usa (Inicio y Reportes son una sola pantalla que se adapta). Una sección: `<MasOpciones activo={modoBasico}>`.
 - Siempre render condicional (nunca `hidden`), sin tocar el backend, y lo que ya trae un dato se sigue viendo. Detalle: `docs/modo-basico.md`.
 
+### Destapar un módulo cuando se termina
+Lo que se vende y no está construido se oculta (decisión 2026-11-24). El estado de cada módulo (`disponible` | `en_construccion` | `oculto`) vive en `app/services/estado_modulos.py`; evidencia y pendientes en `docs/presets/ESTADO-DE-MODULOS.md`.
+1. Con backend real **y** pantalla real: en `ESTADO_MODULOS` pasa la clave a `DISPONIBLE` (una línea `"clave": ESTADO,` por módulo: vitest lee ese formato) y bórrala de `NO_DISPONIBLES` en `frontend/src/utils/estadoModulos.ts`.
+2. En `frontend/src/App.tsx` cambia su `<Navigate to="/" replace />` por la pantalla (`<RutaPorRol url="/x"><Suspense…>`). El ítem ya está en `ALL_NAV`, `HQ_NAV_GROUPS` y `ROLE_ROUTES`; si el módulo es nuevo, añádelo ahí con su `module`.
+3. Los widgets de `pages/home/PresetHome.tsx` con ese `module` reaparecen solos; quítales `beta` si ya no aplica.
+4. Corre `tests/test_estado_modulos.py` y `frontend/src/__tests__/estadoModulos.test.ts`, y actualiza el renglón en `docs/presets/ESTADO-DE-MODULOS.md` y `docs/FRONTEND_VIEWS.md`.
+- Un módulo nuevo entra al catálogo como `OCULTO` (la prueba exige declararlo). Ocultar es solo interfaz: no apaga `organization_modules` ni cambia `require_module`; la plataforma lo ve marcado y lo puede encender.
+
 ### Retirar una URL del admin (fusionar dos pantallas)
 1. La pantalla que sobrevive absorbe lo que la otra hacía de más, gateado por rol (`esRolHq` de `frontend/src/utils/rolesHq.ts`) y, si aplica, por "más de una sucursal que vende" (`hooks/useSucursalesVendibles.ts`). `branch_id` solo viaja cuando un rol de oficina elige sucursal: el backend impone la sucursal a la cajera; al gerente según cada endpoint (`/sales/` y `/sales/stats` lo confinan, `/returns/` no: `HQ_ROLES` de `metricas_ventas.py` lo incluye). Revisa el router antes de decidir qué columnas enseñarle.
 2. `git rm` la pantalla vieja y su `lazy()` en `App.tsx`; la ruta vieja pasa a `<RedirigirConQuery a="/nueva" />` (`components/layout/RedirigirConQuery.tsx`: conserva `?…` y `#…`). `app/main.py` no necesita redirect: la SPA sirve la ruta.
