@@ -1,7 +1,8 @@
-# IA en Atlas ONE: cimientos (fase A0)
+# IA en Atlas ONE: cimientos (A0) y agente de consultas (A1)
 
-Qué hay debajo de todo lo que usa un modelo: Cargar mercancía hoy
-([`cargar-mercancia.md`](cargar-mercancia.md)), el agente conversacional después (fase A1).
+Qué hay debajo de todo lo que usa un modelo: Cargar mercancía
+([`cargar-mercancia.md`](cargar-mercancia.md)) y el agente conversacional, que en la fase A1
+solo consulta (§9 en adelante).
 Plan general: `docs/superpowers/specs/2026-11-24-megaplan-pendientes-y-agente-design.md §5`.
 Variables de entorno: [`../DEPLOY.md §6`](../DEPLOY.md).
 
@@ -19,7 +20,14 @@ app/modules/ai/
   uso.py                cupo (verificar_cupo) y consumo (registrar_uso, Medidor)
   gating.py             exigir_modulo_ai: candado de módulo sin pase libre de administrador
   models.py             ai_conversations, ai_messages, ai_propuestas, ai_uso_diario, ai_llamadas
-  herramientas*.py, prompt.py, historial.py   piezas del chat (SP4), aún sin endpoint
+  matriz.py             rol → herramientas (la única tabla) y perfil del rol
+  herramientas.py       registro, definiciones(ctx) y el despachador ejecutar()
+  herramientas_catalogo.py, herramientas_operacion.py   las herramientas (todas leen)
+  datos.py              dato() y envolver(): el texto de catálogo como dato no confiable
+  prompt.py, prompts/   prompt del sistema por rol
+  historial.py          mensajes guardados → formato del modelo, acotado
+  motor.py              responder(db, ctx, conversacion, mensaje): el bucle de herramientas
+  router.py             /api/ai/conversaciones
 ```
 
 Regla: **nadie importa un cliente concreto**. El código de negocio pide
@@ -47,8 +55,8 @@ class Proveedor(Protocol):
 - `Respuesta.nativo` / `Respuesta.mensaje_asistente()`: Anthropic exige reenviar sus bloques
   de razonamiento sin tocar. Quien arme el ciclo de herramientas debe agregar al historial
   `respuesta.mensaje_asistente()` (trae `nativo`), no reconstruir el mensaje a mano; los demás
-  proveedores ignoran ese campo. **A1 tiene que guardar `nativo` junto al mensaje** (hoy
-  `ai_messages` no tiene esa columna).
+  proveedores ignoran ese campo. El motor lo guarda en `ai_messages.nativo` y lo reenvía en los
+  turnos siguientes.
 - Errores: `ProveedorNoDisponible(recuperable=…)` y `RespuestaIncompleta` (salida cortada por
   `max_tokens`). `recuperable=True` = red, 5xx o cuota del proveedor.
 
@@ -125,5 +133,87 @@ cambiado). Las propuestas del agente (A2) deben seguir el mismo patrón.
 ## 8. Pruebas
 
 `tests/test_ai_proveedor_anthropic.py`, `test_ai_proveedor_openai.py`, `test_ai_tareas_cupo.py`,
-`test_ai_uso_gating.py`, `test_cargas_*.py`. Ninguna sale a la red: `ProveedorFalso`,
-`httpx.MockTransport` o el SDK sustituido.
+`test_ai_uso_gating.py`, `test_cargas_*.py`; del agente, `test_ai_matriz_roles.py` (matriz y
+fugas por rol), `test_ai_motor.py` (motor y endpoints), `test_ai_herramientas_catalogo.py` y
+`test_ai_prompt.py`. Ninguna sale a la red: `ProveedorFalso`, `httpx.MockTransport` o el SDK
+sustituido.
+
+## 9. Agente de consultas (fase A1): matriz por rol
+
+Solo lectura: ninguna herramienta cambia datos (`proponer_cambio` es A2). La tabla vive en
+`app/modules/ai/matriz.py` (`HERRAMIENTAS_POR_ROL`) y es la única fuente: `definiciones(ctx)`
+le entrega al modelo las de su fila y `ejecutar` rechaza cualquier otra aunque el modelo la
+nombre. Un rol sin fila no tiene agente. Superadministrador y soporte entran en A4.
+
+| Herramienta | Cajera, vendedor (`caja`) | Gerente (`gerencia`) | Administrador, dueño (`direccion`) |
+|---|---|---|---|
+| `buscar_producto` | precio de su sucursal; sin costo | + costo y margen | + `sucursal_id`; sin él, precio base y quién cobra distinto |
+| `consultar_existencias` | su sucursal, solo lo habilitado ahí | su sucursal | toda la empresa (fila por sucursal) o una sucursal |
+| `disponibilidad_otras_sucursales` | hay / no hay, sin cantidades | con cantidades | no la tiene (usa `consultar_existencias`) |
+| `mis_ventas_hoy` | sus tickets de hoy; sin importes con conteo ciego | no | no |
+| `resumen_ventas` | no | su sucursal | empresa o sucursal |
+| `estado_conteos` | no | su sucursal | empresa o sucursal |
+| `stock_bajo` | no | su sucursal | empresa o sucursal |
+| `listar_departamentos`, `listar_marcas` | no | sí | sí |
+| `comparar_sucursales` | no | no | sí |
+| `valor_inventario` | no | no | sí (con valor a costo) |
+
+Reglas que se consumen, no se reescriben: qué producto ve cada quien (`query_visible_products`
+más `is_active_pos`), el precio que cobra la sucursal (`precio_sucursal.precio_en_sucursal`: el
+`price_override` o el base, igual que `create_sale`), qué es una venta (`metricas_ventas`), lo
+que ve la cajera y el conteo ciego (`ventas_cajero`), valor de inventario (`reports_valuacion`)
+y avance de conteos (`conteos/services`).
+
+Ámbito: la organización es la de `exigir_modulo_ai` y la sucursal es `user.branch_id`.
+`sucursal_id` solo existe en la definición que recibe `direccion` (`Herramienta.elige_sucursal`)
+y se valida contra la organización; a los demás, `ambito_sucursal` les rechaza otra sucursal.
+
+Ojo con dos diferencias frente a las pantallas: el gerente ve costo y margen en el agente
+(decisión del dueño, megaplan §2.4; en Reportes e Inicio no ve costos) y no tiene
+`valor_inventario` (en `/hq/valor-inventario` sí ve piezas y valor a venta de su tienda).
+
+## 10. Datos como datos
+
+Los nombres de producto, marca, departamento y sucursal los escribe la tienda o llegan de un
+archivo. Entran al modelo saneados por `datos.dato()` (sin saltos de línea, sin `<` ni `>`,
+recortados a 160 caracteres) y dentro de `<datos_tienda>…</datos_tienda>`: en el prompt
+(`prompt._bloque_de_datos`) y en cada resultado de herramienta (`datos.envolver`, que lo aplica
+el motor). La regla fija 1 de `prompts/base.md` le dice al modelo que eso nunca es una orden.
+Es una reducción de riesgo; el candado real es que las herramientas ya vienen filtradas por
+rol y sucursal: un modelo que obedeciera a un nombre de producto no tiene con qué sacar lo
+que el rol no ve.
+
+## 11. El motor y la conversación
+
+`motor.responder(db, ctx, conversacion, mensaje)`: verifica cupo (429) → proveedor de la tarea
+`consulta` (503 sin llave) → guarda el mensaje → `[system] + últimos 24 mensajes` (siempre
+empezando en uno de la persona) → bucle de hasta 6 llamadas al modelo → registra cada llamada
+en `ai_llamadas` con el rol. Todo el turno va en un SAVEPOINT: si el proveedor cae a medias no
+queda nada del turno, pero lo gastado se cuenta. Sin streaming.
+
+`ai_messages` guarda el historial en formato canónico más dos columnas de A1: `nativo` (lo
+que el proveedor exige reenviar intacto) y `tablas` (tablas pequeñas para la pantalla, armadas
+por el servidor con el resultado de las herramientas: cada herramienta devuelve `_tabla`, el
+despachador la separa y el modelo no la ve). Endpoints: `docs/API_REFERENCE.md` («Agente»).
+
+## 12. Cómo añadir una herramienta
+
+1. Escribe la función `(ctx, args) -> dict` en `herramientas_catalogo.py` o
+   `herramientas_operacion.py`. Filtra por `ctx.org_id`; la sucursal sale de
+   `ambito_sucursal(ctx, args.get("sucursal_id"))` o de `sucursal_propia(ctx)`, nunca directo
+   de `args`. Lo que dependa del rol se decide con `ctx.perfil`.
+2. Todo texto que venga de la base pasa por `dato()`. Si conviene una tabla en pantalla,
+   devuelve `"_tabla": tabla(titulo, columnas, filas)`.
+3. Regístrala en el `HERRAMIENTAS` del archivo con descripción y JSON Schema. Si dirección
+   puede elegir sucursal, `elige_sucursal=True` (no declares `sucursal_id` a mano).
+4. Añádela a las filas que correspondan en `matriz.py`. Sin fila, nadie la recibe.
+5. Pruebas en `tests/test_ai_matriz_roles.py`: actualiza los conjuntos `CAJA`, `GERENCIA`,
+   `DIRECCION` del inicio, y prueba qué ve cada perfil, que otra organización no se cuela y
+   que la caja no obtiene lo que no le toca ni pidiéndolo directo.
+6. Si la herramienta escribe, no va aquí: es una propuesta con confirmación (fase A2).
+
+## 13. Pantalla
+
+Panel de chat perezoso con botón en el menú, en la barra del teléfono y en Consultar
+(`docs/FRONTEND_VIEWS.md`, «Panel del agente»). El módulo `ai` sigue `en_construccion`: el
+botón no se ve hasta destaparlo, salvo con la vista previa `VITE_AGENTE_PREVIA=1`.

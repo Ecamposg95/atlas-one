@@ -8,6 +8,7 @@ import { Toaster } from '../ui/Toast'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { estiloCajon, cajonEsInerte } from '../../utils/cajonLateral'
 import { routeTitle } from './navConfig'
+import { AnfitrionAgente, BotonAgente } from '../ai/BotonAgente'
 
 export function Layout() {
   const [collapsed, setCollapsed] = useState(false)
@@ -113,10 +114,12 @@ export function Layout() {
             </button>
             <span
               style={{ fontSize: '0.875rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '-0.01em', color: 'var(--dax-text)', lineHeight: 1 }}
-              className="truncate"
+              className="truncate flex-1 min-w-0"
             >
               {pageTitle}
             </span>
+            {/* El agente, a la mano en teléfono; en escritorio vive en el menú lateral. */}
+            <BotonAgente variante="barra" />
           </header>
         )}
 
@@ -138,6 +141,7 @@ export function Layout() {
         </main>
       </div>
 
+      <AnfitrionAgente />
       <Toaster />
     </div>
   )

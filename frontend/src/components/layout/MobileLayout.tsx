@@ -15,6 +15,7 @@ import { Toaster } from '../ui/Toast'
 import { confirm as confirmDialog } from '../ui/ConfirmDialog'
 import { AtlasMark } from '../atlas-one'
 import { navMovilPorRol } from '../../utils/navMovil'
+import { AnfitrionAgente, BotonAgente } from '../ai/BotonAgente'
 
 export function MobileLayout() {
   const navigate = useNavigate()
@@ -56,14 +57,17 @@ export function MobileLayout() {
           <AtlasMark size={22} color="var(--dax-text)" accent="var(--p-accent)" />
           <span className="font-bold text-sm truncate">{org?.name ?? 'Atlas One'}</span>
         </div>
-        <button
-          onClick={handleLogout}
-          aria-label="Cerrar sesión"
-          className="min-h-[44px] min-w-[44px] grid place-items-center rounded-lg"
-          style={{ color: 'var(--dax-text-muted)' }}
-        >
-          <i className="fa-solid fa-arrow-right-from-bracket" />
-        </button>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <BotonAgente variante="barra" />
+          <button
+            onClick={handleLogout}
+            aria-label="Cerrar sesión"
+            className="min-h-[44px] min-w-[44px] grid place-items-center rounded-lg"
+            style={{ color: 'var(--dax-text-muted)' }}
+          >
+            <i className="fa-solid fa-arrow-right-from-bracket" />
+          </button>
+        </div>
       </header>
 
       {/* Contenido */}
@@ -99,6 +103,7 @@ export function MobileLayout() {
         ))}
       </nav>
 
+      <AnfitrionAgente />
       <Toaster />
     </div>
   )

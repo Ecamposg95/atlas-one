@@ -28,13 +28,27 @@ class AplicadaManual(BaseModel):
     producto_id: Optional[str] = Field(default=None, max_length=36)
 
 
+class TablaRead(BaseModel):
+    """Tabla pequeña que arma el servidor con el resultado de una herramienta."""
+    titulo: str
+    columnas: List[str]
+    filas: List[List[Any]]
+    mas: int = 0
+
+
 class MensajeRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
     rol: str
     contenido: Optional[str] = None
+    tablas: List[TablaRead] = Field(default_factory=list)
     created_at: datetime
+
+    @field_validator("tablas", mode="before")
+    @classmethod
+    def _sin_tablas_es_lista(cls, v):
+        return v or []
 
 
 class PropuestaRead(BaseModel):
