@@ -209,6 +209,8 @@ export interface Module {
   description: string | null
   scope: string
   status: string
+  /** disponible | en_construccion | oculto (app/services/estado_modulos.py). */
+  estado?: string
 }
 
 // Alias used by M7 (PlatformModules); matches the contract documented in the
@@ -229,6 +231,8 @@ export interface OrgModule {
   is_enabled: boolean
   plan_minimo: string | null
   permitido_por_plan: boolean
+  /** disponible | en_construccion | oculto: la plataforma lo ve marcado, la tienda no lo ve. */
+  estado?: string
 }
 
 export interface Plan {
@@ -240,6 +244,8 @@ export interface Plan {
   max_usuarios: number | null
   max_sucursales_venta: number | null
   modulos_crecimiento: string[]
+  /** De `modulos_crecimiento`, los que aún no están construidos y por eso no se ofrecen. */
+  modulos_no_disponibles?: string[]
   permite_todo: boolean
 }
 

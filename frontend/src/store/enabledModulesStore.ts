@@ -3,6 +3,7 @@ import client from '../api/client'
 import { puede } from '../utils/capacidades'
 import type { PerfilUi, PlanOrg } from '../types/auth'
 import { leerCamposProducto, TODO_VISIBLE, type CamposProducto } from '../components/products/camposProducto'
+import { leerNoDisponibles, NO_DISPONIBLES, type ModulosNoDisponibles } from '../utils/estadoModulos'
 
 /**
  * Apply or clear the `data-preset` attribute on <html>.
@@ -26,6 +27,7 @@ interface ContextResponse {
   campos_producto?: unknown
   perfil_ui?: unknown
   conteo_ciego?: unknown
+  modulos_no_disponibles?: unknown
   // (other fields present in /me/context but not needed here)
 }
 
@@ -57,6 +59,8 @@ interface EnabledModulesStore {
   perfilUi: PerfilUi
   /** Conteo ciego del corte; encendido mientras no carga, si falló o si el servidor no lo manda. */
   conteoCiego: boolean
+  /** Módulos sin construir que no se muestran; el espejo local mientras no carga o si el servidor no lo manda. */
+  noDisponibles: ModulosNoDisponibles
   loaded: boolean
   loading: boolean
   load: () => Promise<void>
@@ -78,6 +82,7 @@ export const useEnabledModulesStore = create<EnabledModulesStore>((set, get) => 
   camposProducto: TODO_VISIBLE,
   perfilUi: 'completo',
   conteoCiego: true,
+  noDisponibles: NO_DISPONIBLES,
   loaded: false,
   loading: false,
 
@@ -98,6 +103,7 @@ export const useEnabledModulesStore = create<EnabledModulesStore>((set, get) => 
         camposProducto: leerCamposProducto(r.data?.campos_producto),
         perfilUi: leerPerfilUi(r.data?.perfil_ui),
         conteoCiego: leerConteoCiego(r.data?.conteo_ciego),
+        noDisponibles: leerNoDisponibles(r.data?.modulos_no_disponibles),
         loaded: true,
         loading: false,
       })
@@ -108,13 +114,13 @@ export const useEnabledModulesStore = create<EnabledModulesStore>((set, get) => 
       // Las capacidades NO siguen esta política: fallan cerradas (lista
       // vacía), igual que cuando el servidor sí responde pero la tienda no
       // tiene ninguna encendida.
-      set({ enabledModules: [], preset: null, capacidades: [], plan: null, camposProducto: TODO_VISIBLE, perfilUi: 'completo', conteoCiego: true, loaded: true, loading: false })
+      set({ enabledModules: [], preset: null, capacidades: [], plan: null, camposProducto: TODO_VISIBLE, perfilUi: 'completo', conteoCiego: true, noDisponibles: NO_DISPONIBLES, loaded: true, loading: false })
       applyPresetAttribute(null)
     }
   },
 
   reset: () => {
-    set({ enabledModules: [], preset: null, capacidades: [], plan: null, camposProducto: TODO_VISIBLE, perfilUi: 'completo', conteoCiego: true, loaded: false, loading: false })
+    set({ enabledModules: [], preset: null, capacidades: [], plan: null, camposProducto: TODO_VISIBLE, perfilUi: 'completo', conteoCiego: true, noDisponibles: NO_DISPONIBLES, loaded: false, loading: false })
     applyPresetAttribute(null)
   },
 }))
@@ -130,3 +136,7 @@ export const useCamposProducto = (): CamposProducto =>
 /** `true` cuando la organización ve la interfaz corta (modo básico). */
 export const useModoBasico = (): boolean =>
   useEnabledModulesStore((s) => s.perfilUi === 'basico')
+
+/** Módulos sin construir que la interfaz esconde (`moduloDisponible(clave, mapa)`). */
+export const useModulosNoDisponibles = (): ModulosNoDisponibles =>
+  useEnabledModulesStore((s) => s.noDisponibles)

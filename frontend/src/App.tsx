@@ -93,13 +93,6 @@ const MobileOwnerDashboard = lazy(() => import('./pages/mobile/MobileOwnerDashbo
 // Atlas One preset-aware home (2026-05-14)
 const PresetHome = lazy(() => import('./pages/home/PresetHome').then(m => ({ default: m.PresetHome })))
 
-// Atlas One stub modules (Beta — Coming Soon pages, 2026-05-14)
-const AppointmentsComingSoon = lazy(() => import('./pages/coming-soon').then(m => ({ default: m.AppointmentsComingSoon })))
-const CommissionsComingSoon  = lazy(() => import('./pages/coming-soon').then(m => ({ default: m.CommissionsComingSoon })))
-const MembershipsComingSoon  = lazy(() => import('./pages/coming-soon').then(m => ({ default: m.MembershipsComingSoon })))
-const AIComingSoon           = lazy(() => import('./pages/coming-soon').then(m => ({ default: m.AIComingSoon })))
-const PurchasingComingSoon   = lazy(() => import('./pages/coming-soon').then(m => ({ default: m.PurchasingComingSoon })))
-
 // Gastro modules (2026-06-22) — Mesas, Cocina/KDS, Recetas
 const FloorPlan       = lazy(() => import('./pages/tables/FloorPlan').then(m => ({ default: m.FloorPlan })))
 const KDS             = lazy(() => import('./pages/kitchen/KDS').then(m => ({ default: m.KDS })))
@@ -351,11 +344,13 @@ export default function App() {
           <Route path="hr"         element={<RutaPorRol url="/hr"><Suspense fallback={<PageLoader />}><HR /></Suspense></RutaPorRol>} />
           <Route path="hr/me"      element={<RutaPorRol url="/hr/me"><Suspense fallback={<PageLoader />}><HRMe /></Suspense></RutaPorRol>} />
 
-          {/* Atlas One preset home + stub modules */}
+          {/* Atlas One preset home */}
           <Route path="home"         element={<Suspense fallback={<PageLoader />}><PresetHome /></Suspense>} />
-          <Route path="appointments" element={<RutaPorRol url="/appointments"><Suspense fallback={<PageLoader />}><AppointmentsComingSoon /></Suspense></RutaPorRol>} />
-          <Route path="commissions"  element={<RutaPorRol url="/commissions"><Suspense fallback={<PageLoader />}><CommissionsComingSoon /></Suspense></RutaPorRol>} />
-          <Route path="memberships"  element={<RutaPorRol url="/memberships"><Suspense fallback={<PageLoader />}><MembershipsComingSoon /></Suspense></RutaPorRol>} />
+          {/* Módulos sin construir (utils/estadoModulos.ts): la URL manda al inicio de cada rol
+              en vez de pintar "Próximamente". Al terminarlos, aquí va su pantalla real. */}
+          <Route path="appointments" element={<Navigate to="/" replace />} />
+          <Route path="commissions"  element={<Navigate to="/" replace />} />
+          <Route path="memberships"  element={<Navigate to="/" replace />} />
           {/* Gastro — Recetas (real), Mesas, Cocina/KDS */}
           <Route path="recipes"      element={<RutaPorRol url="/recipes"><Suspense fallback={<PageLoader />}><Recipes /></Suspense></RutaPorRol>} />
           <Route path="recipes/new"  element={<RutaPorRol url="/recipes"><Suspense fallback={<PageLoader />}><RecipeForm /></Suspense></RutaPorRol>} />
@@ -365,8 +360,9 @@ export default function App() {
           <Route path="meseros"      element={<RutaPorRol url="/meseros"><Suspense fallback={<PageLoader />}><Meseros /></Suspense></RutaPorRol>} />
           <Route path="bar/bottles"  element={<RutaPorRol url="/bar/bottles"><Suspense fallback={<PageLoader />}><Botellas /></Suspense></RutaPorRol>} />
           <Route path="menu"         element={<RutaPorRol url="/menu"><Suspense fallback={<PageLoader />}><MenuVisual /></Suspense></RutaPorRol>} />
-          <Route path="ai"           element={<RutaPorRol url="/ai"><Suspense fallback={<PageLoader />}><AIComingSoon /></Suspense></RutaPorRol>} />
-          <Route path="purchasing"   element={<RutaPorRol url="/purchasing"><Suspense fallback={<PageLoader />}><PurchasingComingSoon /></Suspense></RutaPorRol>} />
+          <Route path="ai"           element={<Navigate to="/" replace />} />
+          {/* Compras es una sola pantalla (/purchases); la de "Pedidos compras" nunca existió. */}
+          <Route path="purchasing"   element={<RedirigirConQuery a="/purchases" />} />
 
           {/* POS */}
           <Route path="pos"             element={<RutaPorRol url="/pos"><Suspense fallback={<PageLoader />}><POS /></Suspense></RutaPorRol>} />
