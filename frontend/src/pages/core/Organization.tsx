@@ -1,11 +1,12 @@
 import { useEffect, useState, useRef } from 'react'
-import { organizationApi, type Organization, type ExchangeRateInfo } from '../../api/organization'
+import { organizationApi, type Organization, type ExchangeRateInfo, type Branch } from '../../api/organization'
 import { DaxCard } from '../../components/ui/DaxCard'
 import { Spinner } from '../../components/ui/Spinner'
 import { toast } from '../../store/toastStore'
 import client from '../../api/client'
 import { errorDetailText } from '../../utils/errorDetail'
 import { MasOpciones } from '../../components/ui/MasOpciones'
+import { ReglasCarga } from './ReglasCarga'
 import { useEnabledModulesStore, useModoBasico } from '../../store/enabledModulesStore'
 
 // Vista previa del renglón del ticket (panel de Empresa).
@@ -54,11 +55,17 @@ export function Organization({ seccion }: { seccion?: SeccionEmpresa } = {}) {
   const [fxRefreshing, setFxRefreshing] = useState(false)
   // Modo básico: logo, dólares, comisión y lo boutique del ticket van plegados.
   const modoBasico = useModoBasico()
+  const tieneIA = useEnabledModulesStore((s) => s.enabledModules.includes('ai'))
+  const [instrucciones, setInstrucciones] = useState('')
+  const [guardandoIA, setGuardandoIA] = useState(false)
+  const [branches, setBranches] = useState<Branch[]>([])
 
   useEffect(() => {
     setLoading(true)
     Promise.all([
-      organizationApi.getOrg().then((o) => { setOrg(o); setOrgForm(o) }),
+      organizationApi.getOrg().then((o) => { setOrg(o); setOrgForm(o); setInstrucciones(o.ai_instrucciones ?? '') }),
+      // Las sucursales solo se usan en las reglas de carga (módulo de IA).
+      organizationApi.getBranches().then(setBranches).catch(() => {}),
       organizationApi.getExchangeRate().then(setFxInfo).catch(() => {}),
     ]).catch(() => {}).finally(() => setLoading(false))
   }, [])
@@ -89,6 +96,17 @@ export function Organization({ seccion }: { seccion?: SeccionEmpresa } = {}) {
       // capturar un tipo de cambio mayor que cero.").
       toast.error(errorDetailText(e?.response?.data?.detail, 'Error al guardar la organización'))
     } finally { setSaving(false) }
+  }
+
+  const saveInstrucciones = async () => {
+    setGuardandoIA(true)
+    try {
+      const updated = await organizationApi.updateOrg({ ai_instrucciones: instrucciones })
+      setOrg((prev) => (prev ? { ...prev, ai_instrucciones: updated.ai_instrucciones } : prev))
+      toast.success('Instrucciones guardadas')
+    } catch (e: any) {
+      toast.error(errorDetailText(e?.response?.data?.detail, 'No se pudieron guardar las instrucciones'))
+    } finally { setGuardandoIA(false) }
   }
 
   const refreshFx = async () => {
@@ -560,6 +578,25 @@ export function Organization({ seccion }: { seccion?: SeccionEmpresa } = {}) {
                 </div>
               </div>
             </DaxCard>
+          )}
+
+          {tieneIA && ve('empresa') && (
+            <>
+              <DaxCard>
+                <p className="text-[10px] font-bold text-dax-faint uppercase tracking-widest mb-4">Instrucciones para la IA</p>
+                <label htmlFor="ai-instrucciones" className="dax-label">Instrucciones para la IA</label>
+                <textarea id="ai-instrucciones" value={instrucciones} onChange={(e) => setInstrucciones(e.target.value)}
+                  maxLength={4000} rows={5} className="dax-input w-full"
+                  placeholder="Ej.: nuestras tallas, cómo nombramos los productos, qué marcas vendemos…" />
+                <p className="text-[10px] mt-1 text-dax-faint">Texto libre que la IA lee en cada carga. Máx. 4000 caracteres.</p>
+                <div className="flex justify-end mt-3">
+                  <button type="button" onClick={saveInstrucciones} disabled={guardandoIA} className="dax-btn-primary disabled:opacity-40">
+                    {guardandoIA ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Guardar instrucciones</>}
+                  </button>
+                </div>
+              </DaxCard>
+              <ReglasCarga org={org} branches={branches} onGuardado={(o) => setOrg((prev) => (prev ? { ...prev, reglas_carga: o.reglas_carga } : prev))} />
+            </>
           )}
         </div>
       )}

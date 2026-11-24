@@ -102,6 +102,12 @@ describe('usarExistencia', () => {
     expect(usarExistencia(items, { a: 1, b: 1 }, new Set(['b']))).toEqual({ a: 1, b: 5 })
   })
 
+  it('dentro de una carga sigue usando la existencia, no las piezas de la carga', () => {
+    const deCarga = [fila({ variant_id: 'a', copies_default: 5, piezas_carga: 3 })]
+    expect(usarExistencia(deCarga, { a: 3 }, SIN_SELECCION)).toEqual({ a: 5 })
+    expect(copiasIniciales(deCarga)).toEqual({ a: 3 })
+  })
+
   it('no muta el mapa que recibe', () => {
     const antes = { a: 1, b: 1 }
     usarExistencia(items, antes, SIN_SELECCION)

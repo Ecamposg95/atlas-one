@@ -116,6 +116,19 @@ mismo orden que ya existía, con el PIN como primer intento.
 - **`qty_sistema` está congelada al cerrar:** es NULL mientras el conteo está ABIERTO (el reporte lee la existencia viva de `stock_on_hand`) y se llena con la existencia de la sucursal en `close`. `resumen` guarda el JSON del reporte congelado en ese momento.
 - Fase 2: `inventory_count_lines.ajustada_at`, `inventory_counts.aplicado_at` y `inventory_counts.aplicado_por_user_id` (ALTER idempotentes en `scripts/railway_init.py`). Ajustar escribe `stock_on_hand` e `inventory_movements` (`reference="Conteo"`) solo por `/ajustar` y `/apply`; el resto del conteo no los toca. Tablas nuevas: las crea `create_all`.
 
+## Cargar mercancía (`modules/cargas/models.py`, PK UUID `String(36)`, todas con `TenantMixin`)
+| Tabla | Propósito |
+|---|---|
+| `cargas_mercancia` | Una carga: `folio` (entero por org, el "#N"), `user_id`, `proposito` (`entrada`/`migracion`), `estado` (`leyendo`/`plan`/`aplicando`/`aplicada`/`error`/`descartada`, String), `archivo_nombre`, `archivo_sha256` (indexado; detecta el mismo archivo), `archivo_tipo`, `sucursal_destino_id`, `monedas` JSON (tipo de cambio por moneda, NULL si falta), `totales` JSON, `lectura` JSON, `error` Text, `intento` String(36) (uuid de la lectura vigente: lo renuevan la subida y cada reintento; un hilo con otro intento descarta lo leído), `aplicada_por`, `aplicada_at`, `tokens_entrada`, `tokens_salida` |
+| `cargas_archivos` | El archivo original (`contenido` LargeBinary) como evidencia, 1 por carga |
+| `cargas_renglones` | Un renglón del plan: `carga_id`, `orden`, `crudo` JSON (lo extraído), `normalizado` JSON, `clase` (`EXISTE`/`SUMA`/`NUEVO`/`YA_CARGADO`/`IGNORADO`), `grupo` (llave del producto destino), `product_id`/`variant_id` (`String(36)`, NULL), `sku`, `cantidad` `Numeric(12,3)`, `precio`/`costo` `Numeric(12,2)`, `resultado` JSON (qué se creó al aplicar) |
+| `cargas_dudas` | `carga_id`, `numero`, `tipo`, `texto`, `opciones` JSON `[{clave, etiqueta}]`, `recomendada`, `renglones` JSON, `clave`, `contexto` JSON, `estado` (`abierta`/`resuelta`), `respuesta`, `resuelta_por` |
+| `cargas_cambios` | Bitácora de cada tanda de respuestas: `secuencia`, `texto`, `operaciones` JSON validadas, `antes`/`despues` JSON, `deshecho` |
+
+- `organization.reglas_carga` (JSON, ALTER idempotente en `scripts/railway_init.py`): reglas que aplica el código (ver `app/modules/cargas/reglas.py::ReglasCarga` y `docs/ai/cargar-mercancia.md §3`). `organization.ai_instrucciones` (texto) es la otra mitad: convenciones que van al prompt.
+- Lo aplicado deja `inventory_movements.reference = "carga:<id>"` y `notes = "Carga #<folio> · <archivo>"`; el filtro `carga_id` de Etiquetas se apoya en eso.
+- Tope diario de tokens: `ai_uso_diario` (SP4), acumulado por organización y día; se suma con UPSERT atómico. Detalle por llamada en `ai_llamadas` (fase A0: `organization_id`, `user_id`, `rol`, `tarea`, `proveedor`, `modelo`, `tokens_entrada`, `tokens_salida`, `fecha`). Cupo y excepciones: `organization.ai_tokens_dia`, `organization.ai_modelos` (JSON, lista de modelos por tarea), ambas con ALTER idempotente; ver `docs/ai/README.md`.
+
 ## Ventas / Caja
 | Tabla | PK | Propósito | Enums |
 |---|---|---|---|

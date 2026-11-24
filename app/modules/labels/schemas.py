@@ -35,6 +35,8 @@ class LabelCandidate(BaseModel):
     stock: float = 0.0
     # Copias sugeridas = existencia, topada en MAX_COPIAS.
     copies_default: int = 0
+    # Con `?carga_id=`: piezas que entraron en esa carga (copias por omisión).
+    piezas_carga: Optional[int] = None
     printable: bool = True
     # Por qué NO se puede imprimir. `None` cuando `printable` es True.
     reason: Optional[str] = None

@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from app.models.organization import IndustryType
 from app.services.perfil_ui import normalizar_perfil_ui
+from app.modules.cargas.reglas import ReglasCarga
 
 # Tope de los terminos de compra. El mismo numero vive en el `maxLength` del
 # panel de Empresa: API y pantalla tienen que coincidir o el dueño escribe un
@@ -147,6 +148,18 @@ class OrganizationUpdate(BaseModel):
     # Instrucciones para el asistente IA (SP4). Caen FUERA de la whitelist de
     # no-admins del router: solo ADMINISTRADOR/DUEÑO las cambia.
     ai_instrucciones: Optional[str] = Field(default=None, max_length=AI_INSTRUCCIONES_MAX)
+    # Reglas de Cargar mercancía con IA; solo admin (fuera de la whitelist del router).
+    reglas_carga: Optional[ReglasCarga] = None
+    # IA, fase A0. Las dos son de PLATAFORMA (el PUT de tenant las descarta como
+    # a `plan`): lista de modelos por tarea y cupo diario propio de la organización.
+    ai_modelos: Optional[dict] = None
+    ai_tokens_dia: Optional[int] = Field(default=None, ge=1)
+
+    @field_validator("ai_modelos")
+    @classmethod
+    def _ai_modelos_validos(cls, v):
+        from app.modules.ai.tareas import validar_ai_modelos
+        return validar_ai_modelos(v)
 
     _estilo_valido = field_validator("ticket_line_style")(_valida_estilo_de_linea)
     _perfil_valido = field_validator("perfil_ui")(normalizar_perfil_ui)
@@ -179,6 +192,10 @@ class OrganizationRead(OrganizationBase):
     umbral_poca_existencia: Optional[int] = None
     # Instrucciones para el asistente IA; el panel de Empresa las edita.
     ai_instrucciones: Optional[str] = None
+    reglas_carga: Optional[ReglasCarga] = None
+    # IA: la plataforma lee la excepción de modelos y el cupo propio.
+    ai_modelos: Optional[dict] = None
+    ai_tokens_dia: Optional[int] = None
 
     class Config:
         from_attributes = True

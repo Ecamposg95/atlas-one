@@ -85,9 +85,18 @@ async def startup_event():
     registrar_listener()
     from app.core.database import SessionLocal
     from app.services.capabilities_service import seed_global_modules
+    from app.modules.cargas.proceso import recuperar_cargas_colgadas
     db = SessionLocal()
     try:
         seed_global_modules(db)
+        # Lecturas de cargas que un reinicio dejó a medias: quedan en `error`
+        # para que el usuario las reintente. En un proceso recién arrancado
+        # ninguna sigue viva, así que se marcan todas (minutos=0).
+        try:
+            recuperar_cargas_colgadas(db, minutos=0)
+        except Exception:
+            db.rollback()
+            logging.getLogger(__name__).exception("No se pudieron recuperar las cargas colgadas")
     finally:
         db.close()
     # Worker del outbox transaccional: reintenta la entrega de eventos que la
@@ -252,6 +261,8 @@ from app.modules.kitchen.router      import router as kitchen_router
 from app.modules.labels.router       import router as labels_router
 # Conteo físico con escáner (2026-10-22) — sesiones por departamento, solo reporte
 from app.modules.conteos.router      import router as conteos_router
+# Cargar mercancía con IA (2026-11-14) — PDF/planilla → plan → catálogo
+from app.modules.cargas.router       import router as cargas_router
 # Canal «Tienda en línea» (2026-11) — configuración del canal
 from app.modules.canal.config_router import router as canal_config_router
 from app.modules.canal.leads_router import router as canal_leads_router
@@ -276,6 +287,7 @@ app.include_router(bar_router,          prefix="/api/bar",          tags=["Bar l
 app.include_router(kitchen_router,      prefix="/api/kitchen",      tags=["Cocina / KDS"])
 app.include_router(labels_router,       prefix="/api/labels",       tags=["Etiquetas"])
 app.include_router(conteos_router,      prefix="/api/inventory/counts", tags=["Conteos"])
+app.include_router(cargas_router,       prefix="/api/cargas",       tags=["Cargas de mercancía"])
 app.include_router(canal_config_router, prefix="/api/canal",        tags=["Canal tienda en línea"])
 # Cobro de suscripciones (megaplan F3): lo que Atlas le cobra a cada tienda.
 # Plataforma registra a mano; la tienda (admin/dueño) solo lee lo suyo.

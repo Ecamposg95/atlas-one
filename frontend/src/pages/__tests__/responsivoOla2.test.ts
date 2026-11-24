@@ -5,11 +5,11 @@ import { resolve } from 'node:path'
 /** Pantallas de la ola 2 del responsivo (catálogo y personas) y, desde SP6, todo el grupo HQ; desde la Fase 2 del admin, Reportes. */
 export const PAGINAS = [
   'core/Brands.tsx', 'core/Departments.tsx', 'core/Users.tsx', 'crm/Customers.tsx', 'crm/Cobranza.tsx', 'inventory/Inventory.tsx',
-  'inventory/Products.tsx', 'hq/Inicio.tsx',
+  'inventory/Products.tsx', 'inventory/cargas/Cargas.tsx', 'inventory/cargas/CargaPlan.tsx', 'hq/Inicio.tsx',
   'reports/Reportes.tsx', 'sales/SalesHistory.tsx', 'sales/Returns.tsx', 'core/Sucursales.tsx', 'hq/HQValorInventario.tsx',
 ]
 /** Tienen tarjetas propias y no usan TarjetaFila (HQValorInventario las delega en `components/reports/DistribucionValor`). */
-export const SIN_TARJETA_FILA: string[] = ['hq/HQValorInventario.tsx']
+export const SIN_TARJETA_FILA: string[] = ['hq/HQValorInventario.tsx', 'inventory/cargas/CargaPlan.tsx']
 
 const fuente = (p: string) => readFileSync(resolve(__dirname, '..', p), 'utf8')
 // `grid-cols-3` o más sin prefijo sm:/md:/lg:/max-*: (1 y 2 columnas sí caben en 390 px).

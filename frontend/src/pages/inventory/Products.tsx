@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState, useCallback, useRef, type ReactNode } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { productsApi } from '../../api/products'
 import { useAuthStore } from '../../store/authStore'
 import { useBranchCountStore, esTiendaUnica } from '../../store/branchCountStore'
@@ -424,6 +424,7 @@ export function Products() {
 // no puede convivir con hooks en el mismo componente.
 function ProductsHQView() {
   const location = useLocation()
+  const navigate = useNavigate()
   const { user } = useAuthStore()
   const isHQ = HQ_ROLES.includes(user?.role ?? '')
   const unaSolaSucursal = esTiendaUnica(useBranchCountStore((s) => s.count))
@@ -443,6 +444,7 @@ function ProductsHQView() {
   // vale 'completo' por defecto: sin esperar, un FREE en básico pediría marcas y cifras al
   // montar y se corregiría después.
   const perfilListo = useEnabledModulesStore((s) => s.loaded)
+  const tieneIA = useEnabledModulesStore((s) => s.enabledModules.includes('ai'))
   const catalogo = isHQ && perfilListo && !modoBasico
   const [brands, setBrands] = useState<Brand[]>([])
   const [brandId, setBrandId] = useState('')
@@ -772,6 +774,15 @@ function ProductsHQView() {
                     <i className={`fa-solid ${descargandoEtiquetas ? 'fa-spinner fa-spin' : 'fa-tags'}`} />{' '}
                     <span className="hidden sm:inline">Etiquetas CSV</span>
                   </button>
+                  {tieneIA && (
+                    <button
+                      onClick={() => navigate('/inventory/cargas')}
+                      aria-label="Cargar mercancía"
+                      className="dax-btn-secondary dax-btn-icon text-xs flex items-center gap-1.5 whitespace-nowrap"
+                    >
+                      <i className="fa-solid fa-file-import" /> <span className="hidden sm:inline">Cargar mercancía</span>
+                    </button>
+                  )}
                   {isHQ && codigosFaltantes > 0 && (
                     <button
                       onClick={generarCodigos}
