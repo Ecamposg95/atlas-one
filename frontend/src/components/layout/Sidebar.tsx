@@ -7,7 +7,6 @@ import { returnsApi } from '../../api/returns'
 import { confirm } from '../ui/ConfirmDialog'
 import { useTheme } from '../../context/ThemeContext'
 import { AtlasMark } from '../atlas-one'
-import { BranchSwitcher } from './BranchSwitcher'
 import type { Role } from '../../types/auth'
 import { BRANCH_ROLES, urlActiva, visibleNavItems, type NavItem } from './navVisibility'
 import { ALL_NAV, ROLE_ROUTES, HQ_NAV_GROUPS, BRANCH_NAV_GROUPS, GASTRO_PRESETS } from './navConfig'
@@ -131,9 +130,6 @@ function HQNav({ items, pendingReturns }: { items: NavItem[]; pendingReturns: nu
   return <ListaNav secciones={grouped} activa={activa} pendingReturns={pendingReturns} />
 }
 
-// Quién puede saltar de una sucursal a otra desde el menú.
-const ROLES_CAMBIAN_SUCURSAL: Role[] = ['ADMINISTRADOR', 'DUEÑO']
-
 // Contraer / expandir el menú (solo escritorio; en teléfono el menú es un cajón).
 function BotonContraer({ contraido, onClick }: { contraido: boolean; onClick: () => void }) {
   const rotulo = contraido ? 'Expandir menú' : 'Contraer menú'
@@ -231,11 +227,6 @@ function MatrixSidebar({ items, logout, isBranchRole, onToggle }: { items: NavIt
             </p>
           </div>
         </div>
-
-        {/* Cambio de sucursal: solo quien puede moverse entre sucursales. */}
-        {ROLES_CAMBIAN_SUCURSAL.includes(role) && (
-          <div style={{ marginTop: '8px' }}><BranchSwitcher enMenu /></div>
-        )}
       </div>
 
 
