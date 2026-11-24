@@ -531,6 +531,7 @@ def register_customer_payment(
     antes/después (spec 2026-10-29 §4.2).
     """
     from app.models import SalesDocument
+    from app.models.sales import DocumentStatus
     
     customer = db.query(Customer).filter(Customer.id == customer_id, Customer.organization_id == org_id).first()
     if not customer:
@@ -539,8 +540,13 @@ def register_customer_payment(
     if payment_in.amount <= 0:
         raise HTTPException(400, "El monto del pago debe ser mayor a cero")
 
-    from app.modules.customers.services import aplicar_abono, saldo_documento
+    from app.modules.customers.services import aplicar_abono, cliente_con_candado, saldo_documento
 
+    # Candados (auditoría 2026-09-22, M12). Sin ellos, dos abonos simultáneos
+    # al mismo ticket leían el mismo saldo, pasaban los dos el guard de
+    # sobrepago y el ticket se cobraba dos veces. Se toman en el orden global
+    # (documento de venta → cliente, el mismo de cobrar y cancelar una venta)
+    # para no interbloquearse con esas rutas. No-op en SQLite.
     # Validate document if provided
     doc = None
     if payment_in.sales_document_id:
@@ -548,11 +554,27 @@ def register_customer_payment(
             SalesDocument.id == payment_in.sales_document_id,
             SalesDocument.customer_id == customer_id,
             SalesDocument.organization_id == org_id
-        ).first()
+        ).with_for_update(of=SalesDocument).first()
 
         if not doc:
             raise HTTPException(404, "Documento de venta no encontrado o no pertenece al cliente")
+    else:
+        # Abono libre: se reparte entre los tickets PENDING del cliente y los
+        # va cerrando; se bloquean todos, en orden de id, antes que al cliente.
+        db.query(SalesDocument.id).filter(
+            SalesDocument.customer_id == customer_id,
+            SalesDocument.organization_id == org_id,
+            SalesDocument.status == DocumentStatus.PENDING,
+        ).order_by(SalesDocument.id).with_for_update().all()
 
+    # La fila del cliente: a partir de aquí el saldo y el ledger que se leen
+    # ya no los puede mover otra petición hasta el commit. El segundo abono
+    # espera aquí y, al entrar, ve lo que asentó el primero.
+    customer = cliente_con_candado(db, org_id=org_id, customer_id=customer_id)
+    if customer is None:
+        raise HTTPException(404, "Cliente no encontrado")
+
+    if doc is not None:
         # ATS-37: el abono a un ticket no puede exceder lo que ESE ticket debe.
         # Antes se comparaba contra el saldo total del cliente, así que con dos
         # tickets fiados se podía "abonar" a uno más de lo que valía. Los
@@ -714,7 +736,8 @@ def cargar_deuda_anterior_endpoint(
     from app.modules.customers.services import DeudaAnteriorInvalida, cargar_deuda_anterior
     from app.services.audit_service import write_audit
 
-    customer = db.query(Customer).filter(Customer.id == customer_id, Customer.organization_id == org_id).first()
+    from app.modules.customers.services import cliente_con_candado
+    customer = cliente_con_candado(db, org_id=org_id, customer_id=customer_id)
     if not customer:
         raise HTTPException(404, "Cliente no encontrado")
     try:
@@ -744,7 +767,8 @@ def quitar_deuda_anterior_endpoint(
     from app.modules.customers.services import DeudaAnteriorConAbonos, quitar_deuda_anterior
     from app.services.audit_service import write_audit
 
-    customer = db.query(Customer).filter(Customer.id == customer_id, Customer.organization_id == org_id).first()
+    from app.modules.customers.services import cliente_con_candado
+    customer = cliente_con_candado(db, org_id=org_id, customer_id=customer_id)
     if not customer:
         raise HTTPException(404, "Cliente no encontrado")
     try:

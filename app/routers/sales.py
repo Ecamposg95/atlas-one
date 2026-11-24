@@ -1030,7 +1030,10 @@ def create_sale(
     # refleje que ese cliente ya fió.
     ajuste_deuda = remaining_debt - deuda_previa
     if sale_in.customer_id and ajuste_deuda != Decimal("0.00"):
-        customer = db.query(Customer).filter(Customer.id == sale_in.customer_id, Customer.organization_id == org_id).first()
+        # Fila del cliente bloqueada (M12): el cargo de una venta fiada y un
+        # abono simultaneo leian el mismo saldo y uno pisaba al otro.
+        from app.modules.customers.services import cliente_con_candado
+        customer = cliente_con_candado(db, org_id=org_id, customer_id=sale_in.customer_id)
         if customer:
             if ajuste_deuda > 0 and not customer.has_credit:
                 customer.has_credit = True
