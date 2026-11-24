@@ -60,9 +60,7 @@ class TestModulosConPlan:
         assert por_clave["pos"]["plan_minimo"] is None and por_clave["pos"]["permitido_por_plan"] is True
         assert por_clave["quotes"]["plan_minimo"] == "START" and por_clave["quotes"]["permitido_por_plan"] is False
         assert por_clave["tables"]["plan_minimo"] is None and por_clave["tables"]["permitido_por_plan"] is False
-        assert por_clave["ai"]["plan_minimo"] is None
-        assert por_clave["ai"]["complemento"] is True and por_clave["ai"]["permitido_por_plan"] is True
-        assert por_clave["quotes"]["complemento"] is False
+        assert por_clave["ai"]["plan_minimo"] == "SCALE"
 
     def test_en_ultra_plus_todo_permitido(self, client, auth_superadmin, db, org):
         org.industry_type = IndustryType.ATLAS_POS; org.plan = "ULTRA_PLUS"; db.commit()

@@ -59,7 +59,7 @@ class TestCatalogo:
         assert c["START"] == {"quotes", "promotions"}
         assert c["PRO"] == c["START"] | {"purchasing", "warehouse", "logistics", "invoicing"}
         assert c["BUSINESS"] == c["PRO"] | {"finance", "hr", "commissions", "memberships", "customer_portal"}
-        assert c["SCALE"] == c["BUSINESS"]  # la IA es complemento aparte, no la da ningún plan
+        assert c["SCALE"] == c["BUSINESS"] | {"ai"}
         assert c["ULTRA_PLUS"] == c["SCALE"] and plans.PLANES_POR_CLAVE["ULTRA_PLUS"].permite_todo
         assert plans.MODULOS_CRECIMIENTO == frozenset(c["SCALE"])
 
@@ -120,7 +120,7 @@ class TestModulosPermitidos:
         assert plans.plan_minimo_para("quotes").clave == "START"
         assert plans.plan_minimo_para("purchasing").clave == "PRO"
         assert plans.plan_minimo_para("hr").clave == "BUSINESS"
-        assert plans.plan_minimo_para("ai") is None
+        assert plans.plan_minimo_para("ai").clave == "SCALE"
         assert plans.plan_minimo_para("pos") is None
         assert plans.plan_minimo_para("tables") is None
 
@@ -206,33 +206,3 @@ class TestVerificaciones:
             db.add(OrganizationModule(organization_id=org.id, module_key=k, is_enabled=True))
         db.add(OrganizationModule(organization_id=org.id, module_key="ai", is_enabled=False)); db.flush()
         assert plans.modulos_fuera_de_plan(db, org) == ["hr", "quotes"]
-
-
-class TestComplementoIA:
-    """La IA es un complemento aparte (decisión 2026-11-14): ningún plan la da,
-    la plataforma la enciende a mano en cualquier plan, incluso FREE."""
-
-    def test_ningun_plan_de_paga_incluye_ai(self):
-        for p in plans.PLANES:
-            assert "ai" not in p.modulos_crecimiento
-
-    def test_scale_no_permite_ai_pero_ultra_plus_si(self, db, org):
-        _sembrar_catalogo(db)
-        org.industry_type = IndustryType.ATLAS_POS; org.plan = "SCALE"; db.flush()
-        assert "ai" not in plans.modulos_permitidos(db, org)
-        org.plan = "ULTRA_PLUS"; db.flush()
-        assert "ai" in plans.modulos_permitidos(db, org)
-
-    def test_plataforma_enciende_ai_en_free(self, db, org):
-        org.industry_type = IndustryType.ATLAS_POS; org.plan = "FREE"; db.flush()
-        plans.verificar_activar_modulo(db, org, "ai")  # no lanza
-
-    def test_complemento_encendido_no_sale_como_fuera_de_plan(self, db, org):
-        _sembrar_catalogo(db)
-        if not db.query(Module).filter_by(key="tienda_en_linea").first():
-            db.add(Module(key="tienda_en_linea", name="Tienda en línea")); db.flush()
-        org.industry_type = IndustryType.ATLAS_POS; org.plan = "FREE"; db.flush()
-        for k in ("ai", "tienda_en_linea", "quotes"):
-            db.add(OrganizationModule(organization_id=org.id, module_key=k, is_enabled=True))
-        db.flush()
-        assert plans.modulos_fuera_de_plan(db, org) == ["quotes"]

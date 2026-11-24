@@ -787,7 +787,6 @@ export function PlatformOrgDetail() {
                       </span>
                       {isBeta && <StatusBadge status="beta" />}
                       {isStable && <StatusBadge status="stable" />}
-                      {m.complemento && <StatusBadge status="beta" label="Complemento aparte" />}
                       {!m.permitido_por_plan && !m.is_enabled && m.plan_minimo && (
                         <StatusBadge status="beta" label={`Requiere ${nombrePlan(m.plan_minimo)}`} />
                       )}

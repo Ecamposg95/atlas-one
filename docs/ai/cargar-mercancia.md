@@ -38,10 +38,8 @@ La tabla del plan enseña, debajo de cada renglón, la descripción original y d
 
 ## 2. Activar el módulo `ai` en una organización
 
-1. **Complemento aparte.** Desde el 2026-11-14 ningún plan incluye el módulo `ai` (salvo ULTRA+, que
-   permite todo): es un complemento que se contrata por separado y la plataforma enciende en cualquier
-   plan, FREE incluido (`MODULOS_FUERA_DE_PLAN` en `app/services/plans.py`). Sin el módulo, el servidor
-   responde 403 diciendo que es un complemento aparte.
+1. **Plan.** El módulo `ai` entra desde el plan SCALE (`_SCALE = _BUSINESS | {"ai"}` en
+   `app/services/plans.py`). En un plan menor, el servidor responde 403 con el plan mínimo.
 2. **Encender el módulo.** En `/platform/organizations/{id}` activa el módulo `ai` para la organización
    (tabla `organization_modules`). El gate (`exigir_modulo_ai`) es estricto: ADMINISTRADOR/DUEÑO tampoco
    lo saltan.

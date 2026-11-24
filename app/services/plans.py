@@ -41,15 +41,7 @@ MODULOS_BASE: FrozenSet[str] = frozenset({
 _START = frozenset({"quotes", "promotions"})
 _PRO = _START | {"purchasing", "warehouse", "logistics", "invoicing"}
 _BUSINESS = _PRO | {"finance", "hr", "commissions", "memberships", "customer_portal"}
-# SCALE no suma módulos: la IA (`ai`) dejó de venir en el plan el 2026-11-14 y
-# es un complemento aparte (ver MODULOS_FUERA_DE_PLAN).
-_SCALE = _BUSINESS
-
-# Complementos: la plataforma los enciende por org en cualquier plan (contrato
-# aparte), nunca los da un plan ni salen como "Fuera de plan". `tienda_en_linea`
-# debe coincidir con MODULO_CANAL de app/core/security/channel_keys.py; `ai`
-# incluye el asistente y Cargar mercancía.
-MODULOS_FUERA_DE_PLAN: FrozenSet[str] = frozenset({"tienda_en_linea", "ai"})
+_SCALE = _BUSINESS | {"ai"}
 
 # Todo lo que depende del plan. Lo que no esta aqui ni en MODULOS_BASE es
 # vertical: lo decide el preset (o ULTRA+, que permite todo el catalogo).
@@ -145,9 +137,8 @@ def modulos_permitidos(db: Session, org: Organization) -> Set[str]:
 
 
 def modulos_fuera_de_plan(db: Session, org: Organization) -> List[str]:
-    """Encendidos que el plan actual no cubre: heredados, siguen funcionando.
-    Los complementos no cuentan: se contratan aparte del plan."""
-    permitidos = modulos_permitidos(db, org) | MODULOS_FUERA_DE_PLAN
+    """Encendidos que el plan actual no cubre: heredados, siguen funcionando."""
+    permitidos = modulos_permitidos(db, org)
     encendidos = {
         m.module_key
         for m in db.query(OrganizationModule).filter(
@@ -220,6 +211,11 @@ def verificar_alta_sucursal(db: Session, org: Organization) -> None:
         raise LimitePlanAlcanzado(
             f"Tu plan {plan.nombre} permite {cuantas}. Para abrir otra, sube a {minimo.nombre}."
         )
+
+
+# Módulos que la plataforma enciende por org fuera de los planes (contrato
+# aparte). Debe coincidir con MODULO_CANAL de app/core/security/channel_keys.py.
+MODULOS_FUERA_DE_PLAN: FrozenSet[str] = frozenset({"tienda_en_linea"})
 
 
 def verificar_activar_modulo(db: Session, org: Organization, modulo: str, nombre_modulo: Optional[str] = None) -> None:
