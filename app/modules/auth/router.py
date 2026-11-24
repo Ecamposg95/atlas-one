@@ -128,7 +128,8 @@ async def switch_context(
         # Check if user has explicit Admin role in an org
         is_org_admin = db.query(UserOrganization).filter(
             UserOrganization.user_id == current_user.id,
-            UserOrganization.org_role == "ADMIN"
+            UserOrganization.org_role == "ADMIN",
+            UserOrganization.is_active == True,  # noqa: E712
         ).first()
         if not is_org_admin:
             raise HTTPException(status_code=403, detail="No tienes permisos para cambiar de contexto")
@@ -141,8 +142,17 @@ async def switch_context(
         branch = db.query(Branch).filter(Branch.id == branch_id).first()
         if not branch:
             raise HTTPException(status_code=404, detail="Sucursal no encontrada")
-        # In a real multi-tenant system, verify user has access to this branch's org
-        # For now, we assume simple validation.
+        # La sucursal debe ser de una organización donde el usuario tiene
+        # membresía activa (el SUPERADMIN entra a cualquiera). Se responde 404,
+        # igual que si no existiera, para no confirmar ids de otras empresas.
+        if current_user.platform_role != PlatformRole.SUPERADMIN:
+            tiene_acceso = db.query(UserOrganization).filter(
+                UserOrganization.user_id == current_user.id,
+                UserOrganization.organization_id == branch.organization_id,
+                UserOrganization.is_active == True,  # noqa: E712
+            ).first()
+            if not tiene_acceso:
+                raise HTTPException(status_code=404, detail="Sucursal no encontrada")
         ctx_id = branch.id
         ctx_type = branch.branch_type.value if hasattr(branch.branch_type, 'value') else str(branch.branch_type)
 
