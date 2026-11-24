@@ -16,6 +16,7 @@ def guardar_mensaje(
     db: Session, conv: AiConversation, rol: str, contenido: Optional[str], *,
     tool_calls: Optional[list] = None, tool_call_id: Optional[str] = None,
     tokens_entrada: int = 0, tokens_salida: int = 0,
+    nativo: Optional[dict] = None, tablas: Optional[list] = None,
 ) -> AiMessage:
     """Agrega un mensaje al final de la conversación. Hace `flush`."""
     ultimo = db.query(func.max(AiMessage.orden)).filter(AiMessage.conversation_id == conv.id).scalar() or 0
@@ -29,6 +30,8 @@ def guardar_mensaje(
         tool_call_id=tool_call_id,
         tokens_entrada=tokens_entrada,
         tokens_salida=tokens_salida,
+        nativo=nativo,
+        tablas=tablas,
     )
     db.add(mensaje)
     db.flush()
@@ -45,10 +48,11 @@ def mensajes_de(db: Session, conv: AiConversation) -> list[AiMessage]:
 
 
 def recortar_historial(mensajes: list[AiMessage], tope: int = TOPE_HISTORIAL) -> list[AiMessage]:
-    """Los últimos `tope`, sin empezar en un `tool` huérfano (sin el
-    `assistant` que lo pidió el proveedor rechaza la petición)."""
+    """Los últimos `tope`, empezando siempre en un mensaje de la persona: un
+    `tool` sin el `assistant` que lo pidió, o un `assistant` al inicio, hacen
+    que el proveedor rechace la petición."""
     recorte = list(mensajes[-tope:]) if tope > 0 else []
-    while recorte and recorte[0].rol == "tool":
+    while recorte and recorte[0].rol not in ("user", "evento"):
         recorte.pop(0)
     return recorte
 
@@ -60,6 +64,8 @@ def a_formato_llm(m: AiMessage) -> dict:
         salida = {"role": "assistant", "content": m.contenido or ""}
         if m.tool_calls:
             salida["tool_calls"] = m.tool_calls
+        if m.nativo:
+            salida["nativo"] = m.nativo
         return salida
     if m.rol == "evento":
         return {"role": "user", "content": f"[Aviso del sistema] {m.contenido or ''}"}

@@ -44,6 +44,12 @@ class AiMessage(Base, UUIDMixin, AuditMixin, TenantMixin):
     # Formato OpenAI: [{"id", "type": "function", "function": {"name", "arguments"}}]
     tool_calls = Column(JSON, nullable=True)
     tool_call_id = Column(String(80), nullable=True)
+    # Lo que el proveedor exige reenviar intacto (`Respuesta.nativo`: los bloques
+    # de razonamiento de Anthropic). Solo lo entiende el proveedor que lo produjo.
+    nativo = Column(JSON, nullable=True)
+    # Tablas pequeñas para la pantalla, armadas por el servidor con los
+    # resultados de las herramientas del turno (nunca por el modelo).
+    tablas = Column(JSON, nullable=True)
     tokens_entrada = Column(Integer, nullable=False, default=0)
     tokens_salida = Column(Integer, nullable=False, default=0)
 
