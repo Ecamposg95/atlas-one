@@ -32,7 +32,11 @@ def get_current_active_organization(
     """
     from app.models.organization import Organization
 
-    resolved_org_id = x_organization_id or request.cookies.get("support_org_id")
+    # La cookie de soporte solo cuenta para el personal de plataforma; en
+    # cualquier otro usuario se ignora (no se confía en quién la puso).
+    es_plataforma = current_user.platform_role in (PlatformRole.SUPERADMIN, PlatformRole.SUPPORT)
+    cookie_soporte = request.cookies.get("support_org_id") if es_plataforma else None
+    resolved_org_id = x_organization_id or cookie_soporte
 
     if resolved_org_id:
         try:

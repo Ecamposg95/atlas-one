@@ -344,15 +344,21 @@ async def boxes_redirect():
     return RedirectResponse(url="/brands?tab=empaques", status_code=302)
 
 # ── Platform support context cookies (usados por impersonation) ───────────────
+# Antes no pedían sesión: cualquiera podía plantarse la cookie. Ahora solo el
+# personal de plataforma (SUPERADMIN o SUPPORT), y el lector
+# (`app/core/tenant_context.py`) la ignora si quien la trae no lo es.
 @app.post("/api/platform/set-support-context")
-async def set_support_context(payload: dict):
-    org_id = payload.get("organization_id")
+async def set_support_context(payload: dict, _staff=Depends(require_platform_admin)):
+    try:
+        org_id = int(payload.get("organization_id"))
+    except (TypeError, ValueError):
+        return JSONResponse(status_code=400, content={"detail": "organization_id debe ser un número"})
     response = JSONResponse({"status": "ok"})
     response.set_cookie(key="support_org_id", value=str(org_id), httponly=True, max_age=14400)
     return response
 
 @app.post("/api/platform/clear-support-context")
-async def clear_support_context():
+async def clear_support_context(_staff=Depends(require_platform_admin)):
     response = JSONResponse({"status": "ok"})
     response.delete_cookie("support_org_id")
     return response
