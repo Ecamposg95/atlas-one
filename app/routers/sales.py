@@ -1552,6 +1552,29 @@ def cancel_sale(
     if sale.status == DocumentStatus.CANCELLED:
         raise HTTPException(status_code=400, detail="Esta venta ya está cancelada")
 
+    # Una venta con devolución APROBADA ya no se cancela: la devolución ya
+    # reingresó esas piezas, ya sacó el dinero (salida de caja o baja de la
+    # deuda) y ya neteó `total_amount`. Cancelar encima reponía TODAS las
+    # líneas otra vez (existencias dobles), sacaba la venta de la venta bruta
+    # mientras la devolución seguía restando (neta negativa) y dejaba la salida
+    # de efectivo sin el cobro que la respaldaba. Es el espejo del R-0 de
+    # `approve_return` (una venta cancelada no admite devolución): cancelación
+    # y devolución son vías excluyentes. Lo que falte se devuelve por
+    # Devoluciones, que sí lleva la cuenta de lo ya devuelto.
+    tiene_devolucion_aprobada = db.query(SaleReturn.id).filter(
+        SaleReturn.sale_id == sale.id,
+        SaleReturn.status == "APPROVED",
+    ).first()
+    if tiene_devolucion_aprobada:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Esta venta ya tiene una devolución aprobada y no se puede cancelar. "
+                "Para regresar el resto de los productos registra otra devolución "
+                "desde Devoluciones."
+            ),
+        )
+
     # 1. Revertir Stock
     # Existencias bloqueadas juntas y en orden de id (mismo orden que el cobro)
     # para que la reposicion no pise un descuento simultaneo; el `.first()` de

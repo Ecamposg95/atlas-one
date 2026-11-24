@@ -24,6 +24,10 @@ from ._shared import (
 
 router = APIRouter()
 
+# Campos de `PUT /organizations/{id}` que solo cambia SUPERADMIN. `ai_modelos`
+# y `ai_tokens_dia` quedan reservados desde ya para cuando el schema los traiga.
+_SOLO_SUPERADMIN = {"plan", "ai_modelos", "ai_tokens_dia"}
+
 
 # --- Organizations CRUD ---
 
@@ -94,6 +98,20 @@ def update_organization(org_id: int, org_in: OrganizationUpdate, db: Session = D
         raise HTTPException(status_code=404, detail="Organization not found")
 
     update_data = org_in.model_dump(exclude_unset=True)
+    # El plan es dinero: mueve topes, módulos de crecimiento y la suscripción.
+    # SUPPORT sigue editando lo demás; estos campos son solo de SUPERADMIN. Se
+    # rechaza la petición entera (no se descarta el campo en silencio) para
+    # que quien la mandó sepa que el plan no cambió.
+    from app.models.users import PlatformRole
+    reservados = sorted(_SOLO_SUPERADMIN & update_data.keys())
+    if reservados and current_user.platform_role != PlatformRole.SUPERADMIN:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"Solo SUPERADMIN puede cambiar: {', '.join(reservados)}. "
+                "Quita esos campos para guardar el resto o pídeselo a un SUPERADMIN."
+            ),
+        )
     applied = {k: v for k, v in update_data.items() if k in _ORG_UPDATE_FIELDS}
     if "plan" in applied:
         try:

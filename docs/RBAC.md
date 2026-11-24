@@ -59,8 +59,8 @@ username + password(=PIN)
   → verify_pin ; 401 si falla
   → contexto inicial: ADMIN/DUEÑO/SUPERADMIN → HQ (ctx_id=None) ; resto → su branch
   → create_access_token(sub=username, role, ctx_id, ctx_type)   [claims: sub, role, ctx_id, ctx_type, exp]
-  → Set-Cookie access_token="Bearer <jwt>" (httponly, samesite=lax, secure=False)
-  → resuelve org = PRIMER UserOrganization del user
+  → Set-Cookie access_token="Bearer <jwt>" (httponly, samesite=lax, secure según COOKIE_SECURE)
+  → resuelve org = primera membresía ACTIVA del user (orden fijo)
   → devuelve { access_token, user, organization, branch }
 ```
 
@@ -101,17 +101,17 @@ Dependencia que exige que `key` esté habilitado (`OrganizationModule.is_enabled
 
 ## 5. ⚠️ Huecos de seguridad conocidos
 
-Priorizados. Estos NO están resueltos — son hallazgos de la auditoría para el backlog.
+Priorizados; la numeración es la de la auditoría original y no se recicla. Cada hueco dice su estado: **ABIERTO**, **PARCIAL** o **RESUELTO** (con fecha). Resumen al 2026-11-24: resueltos 3, 4, 8 y 12; parcial 10; abiertos 1, 2, 5, 6, 7, 9 y 11.
 
-1. **SECRET_KEY con fallback hardcodeado** (`security/config.py`) — si no se setea la env var, los JWT son firmables por cualquiera que lea el repo. Solo emite warning. **Setear SECRET_KEY en todos los entornos.**
-2. **Branch scoping no enforced** — `ctx_id`/`ctx_type` del token no se aplican a queries; `tenant_query` solo filtra por org. Fuga cross-sucursal posible en endpoints que confían en un `branch_id` de query param.
-3. **`set-support-context` sin guard de auth en la firma** (`main.py:268`) — puede fijar la cookie de tenant activo (4h); con un SUPERADMIN, fija tenant sin pasar por el flujo `/impersonate` auditado.
-4. **`context/switch` no valida** que la sucursal pertenezca a la org del usuario (comentario lo admite).
-5. **SUPERADMIN + `X-Organization-ID` sin verificación de membresía** (por diseño) — amplifica el impacto de un token superadmin comprometido; sin marca de impersonación en las acciones de datos.
-6. **Cobertura baja de helpers de tenancy** — el resto filtra a mano; `TenantMixin.organization_id` es nullable → filas sin org pueden filtrarse mal.
-7. **Bypass de gating por módulo para ADMIN/DUEÑO** + solo 3 routers con `require_module` → el gating por módulo es casi inefectivo como control de seguridad (sirve como feature-flag, no como candado).
-8. **Login resuelve org con el PRIMER `UserOrganization` sin filtrar `is_active`** e ignorando multi-org — inconsistente con los resolvers que sí filtran.
-9. **Impersonación real es un stub** — sin claim `impersonator_id`; acciones durante impersonación se atribuyen al SUPERADMIN sin marca de "actuando como".
-10. **Platform: gating inconsistente** — varios endpoints mutantes/sensibles solo tienen el guard router-level (`require_platform_admin` = SUPERADMIN **o SUPPORT**) sin revalidar SUPERADMIN: `bootstrap_organization` (crea sucursales), `assign_org_admin`, `export_organization_data`, `audit/logs`. SUPPORT (read-only por convención) podría mutar.
-11. **`users` core sin control de rol** — crear/editar/borrar usuarios solo exige auth + pertenencia a la org, no rol admin.
-12. **Cookies `secure=False`** hardcoded en auth (nota "poner True en prod").
+1. **ABIERTO — SECRET_KEY con fallback hardcodeado** (`security/config.py`) — si no se setea la env var, los JWT son firmables por cualquiera que lea el repo. Solo emite warning. **Setear SECRET_KEY en todos los entornos.**
+2. **ABIERTO — Branch scoping no enforced** — `ctx_id`/`ctx_type` del token no se aplican a queries; `tenant_query` solo filtra por org. Fuga cross-sucursal posible en endpoints que confían en un `branch_id` de query param. Se cierra endpoint por endpoint, no a nivel framework: el 2026-11-24 `/reports/audit/discrepancies` y `/reports/command-center/stats` pasaron a respetar el ámbito por rol (`metricas_ventas.ambito_sin_eleccion`: dueño/administrador/superadmin ven la organización; el gerente, solo su sucursal; detalle por rol en `docs/API_REFERENCE.md`).
+3. **RESUELTO 2026-11-24 — `set-support-context` sin guard de auth.** `POST /api/platform/set-support-context` y `clear-support-context` (`app/main.py`) exigen `require_platform_admin` (SUPERADMIN o SUPPORT), y el lector de la cookie (`app/core/tenant_context.py`) la ignora si quien la trae no es personal de plataforma. Sigue abierto lo que describe el hueco 9: fijar el tenant por esta cookie no pasa por el flujo `/impersonate` auditado.
+4. **RESUELTO 2026-11-24 — `context/switch` no validaba la sucursal.** Ahora la sucursal debe ser de una organización donde el usuario tiene membresía activa (el SUPERADMIN entra a cualquiera); si no, 404.
+5. **ABIERTO — SUPERADMIN + `X-Organization-ID` sin verificación de membresía** (por diseño) — amplifica el impacto de un token superadmin comprometido; sin marca de impersonación en las acciones de datos.
+6. **ABIERTO — Cobertura baja de helpers de tenancy** — el resto filtra a mano; `TenantMixin.organization_id` es nullable → filas sin org pueden filtrarse mal.
+7. **ABIERTO — Bypass de gating por módulo para ADMIN/DUEÑO** + solo 3 routers con `require_module` → el gating por módulo es casi inefectivo como control de seguridad (sirve como feature-flag, no como candado).
+8. **RESUELTO 2026-11-24 — Login resolvía la org con el PRIMER `UserOrganization` sin filtrar `is_active`.** El login (y el acceso a cortes) solo considera membresías activas, en orden fijo. Un usuario multi-org sigue entrando a la primera de ese orden y cambia con `X-Organization-ID`.
+9. **ABIERTO — Impersonación real es un stub** — sin claim `impersonator_id`; acciones durante impersonación se atribuyen al SUPERADMIN sin marca de "actuando como".
+10. **PARCIAL — Platform: gating inconsistente.** Resuelto el 2026-11-24: `bootstrap_organization`, `assign_org_admin` y `export_organization_data` exigen `require_superadmin`, y `PUT /organizations/{id}` responde 403 a SUPPORT si el cuerpo trae `plan` (el plan mueve la suscripción; lista en `_SOLO_SUPERADMIN` de `app/routers/platform/organizations.py`). **Sigue abierto:** SUPPORT (read-only por convención) conserva escrituras con solo el guard `require_platform_admin` — crear organización (`POST /organizations`), editar el resto de la ficha (incluye `status`, `is_active`, `industry_type`, `perfil_ui`), archivar/desarchivar, suspender/activar, cambiar giro (`PATCH …/industry`), aplicar/restablecer preset y encender/apagar módulos (`PATCH …/modules/{key}`) — y lee `audit/logs`.
+11. **ABIERTO — `users` core sin control de rol** — crear/editar/borrar usuarios solo exige auth + pertenencia a la org, no rol admin.
+12. **RESUELTO 2026-11-24 — Cookies `secure=False`.** `access_token` y `support_org_id` salen con `Secure` según `COOKIE_SECURE` (`app/core/security/cookies.py`): `auto` (por omisión) = solo si la petición llegó por https (`X-Forwarded-Proto`), `true` = siempre, `false` = nunca.
