@@ -30,8 +30,9 @@ import {
  * más de una sucursal) y `/reports` fijado a la sucursal del usuario (el
  * backend la impone a cajera y gerente por `resolver_ambito`). Datos:
  * `/reports/dashboard` en una llamada y, solo con selector,
- * `/reports/command-center/stats` para la comparativa de sucursales (es de
- * toda la organización y no tiene guardia de rol: una cajera no lo pide).
+ * `/reports/command-center/stats` para la comparativa de sucursales (el
+ * backend lo acota por rol: toda la organización solo para dueño,
+ * administrador y superadmin; el gerente recibe su sucursal y la cajera 403).
  * Sustituye a `finance/Reports.tsx` y `hq/HQReportsHub.tsx`; sin velocímetro,
  * conteo animado ni sondeo cada 30 s. Solo tokens `dax-*`.
  */
