@@ -99,3 +99,29 @@ describe('LoginPage', () => {
     expect(clave.getAttribute('type')).toBe('password')
   })
 })
+
+describe('LoginPage: animación al entrar', () => {
+  it('mientras verifica gira el aro; al entrar el botón dice Bienvenido y la escena amanece', async () => {
+    let resolver: (v: unknown) => void = () => {}
+    login.mockReturnValue(new Promise((r) => { resolver = r }))
+    const { container } = pintar()
+    entrar('caja', 'secreta')
+    expect(await screen.findByText('Verificando…')).toBeTruthy()
+    expect(container.querySelector('.login-boton__giro')).not.toBeNull()
+    expect(container.querySelector('.login.is-success')).toBeNull()
+    resolver({ access_token: 't', organization: null, branch: null, user: { id: 1, username: 'caja', role: 'CAJERO', platform_role: null } })
+    expect(await screen.findByText('Bienvenido')).toBeTruthy()
+    expect(container.querySelector('.login.is-success .login-amanecer')).not.toBeNull()
+    expect(container.querySelector('.login-boton__giro')).toBeNull()
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/atlas-pos'), { timeout: 2000 })
+  })
+
+  it('con contraseña mala no hay animación de entrada y el botón vuelve a Entrar', async () => {
+    login.mockRejectedValue(new Error('401'))
+    const { container } = pintar()
+    entrar('caja', 'mala')
+    expect(await screen.findByRole('alert')).toBeTruthy()
+    expect(container.querySelector('.login.is-success')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Entrar' })).toBeTruthy()
+  })
+})

@@ -106,7 +106,7 @@ export function LoginPage() {
         // Admin/Dueño → raíz: RoleHomeRedirect enruta por preset (gastro → /home
         // con el Home del día; sin preset Atlas One → /hq/operations).
         else navigate('/')
-      }, 600)
+      }, 750)
     } catch {
       setError('Usuario o contraseña incorrectos. Intenta de nuevo.')
       setIsLoading(false)
@@ -116,6 +116,8 @@ export function LoginPage() {
   return (
     <div className={`login${isSuccess ? ' is-success' : ''}`}>
       <Paisaje />
+      {/* Al entrar amanece: la luz del horizonte crece mientras el panel se va. Decorativo. */}
+      <div className="login-amanecer" aria-hidden="true" />
 
       <div className="login-panel">
         {/* Va primero en el DOM (lleva el h1) y a la derecha en escritorio (grid-area). */}
@@ -191,8 +193,19 @@ export function LoginPage() {
 
               {error && <p className="login-error" role="alert">{error}</p>}
 
-              <button type="submit" className="login-boton" disabled={isLoading}>
-                {isLoading ? 'Verificando…' : 'Entrar'}
+              <button
+                type="submit"
+                className={`login-boton${isSuccess ? ' is-listo' : ''}`}
+                disabled={isLoading}
+                aria-busy={isLoading && !isSuccess}
+              >
+                {isLoading && !isSuccess && <span className="login-boton__giro" aria-hidden="true" />}
+                {isSuccess && (
+                  <svg className="login-boton__palomita" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M5 12.5l4.5 4.5L19 7.5" />
+                  </svg>
+                )}
+                {isSuccess ? 'Bienvenido' : isLoading ? 'Verificando…' : 'Entrar'}
               </button>
             </form>
 

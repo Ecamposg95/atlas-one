@@ -103,10 +103,31 @@
   -webkit-backdrop-filter: blur(2px);
   backdrop-filter: blur(2px);
   box-shadow: 0 40px 120px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .12);
-  transition: opacity .4s ease;
+  transition: opacity .55s ease, transform .55s cubic-bezier(.2, .7, .2, 1);
 }
 
-.login.is-success .login-panel { opacity: .55; }
+/* ── Entrada: el panel se va hacia arriba y amanece en el horizonte ── */
+.login.is-success .login-panel {
+  opacity: 0;
+  transform: translateY(-14px) scale(.985);
+  pointer-events: none;
+}
+
+.login-amanecer {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(.6);
+  transform-origin: 80% 62%;
+  background: radial-gradient(55% 50% at 80% 62%, rgba(255, 211, 168, .95), rgba(255, 161, 74, .7) 28%, rgba(255, 106, 31, .35) 55%, rgba(255, 106, 31, 0) 78%);
+  transition: opacity .7s ease, transform .9s cubic-bezier(.2, .7, .2, 1);
+}
+.login.is-success .login-amanecer {
+  opacity: 1;
+  transform: scale(1.5);
+}
 
 /* ── Columna del formulario ─────────────────────────────────── */
 .login-columna {
@@ -242,9 +263,41 @@
   cursor: pointer;
   transition: transform .12s, background .15s, opacity .15s;
 }
+.login-boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
 .login-boton:hover:not(:disabled) { background: #FFFFFF; }
 .login-boton:active:not(:disabled) { transform: scale(.985); }
 .login-boton:disabled { opacity: .6; cursor: wait; }
+
+/* Verificando: un aro que gira. Listo: el botón se enciende en ember. */
+.login-boton__giro {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(5, 5, 5, .25);
+  border-top-color: var(--lg-negro);
+  animation: login-giro .7s linear infinite;
+}
+.login-boton__palomita {
+  width: 18px;
+  height: 18px;
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+  animation: login-palomita .35s ease-out .05s forwards;
+}
+.login-boton.is-listo,
+.login-boton.is-listo:disabled {
+  opacity: 1;
+  color: #FFF4EA;
+  background: linear-gradient(120deg, #FFA14A 0%, #FF6A1F 55%, #C2410C 100%);
+  box-shadow: 0 0 34px rgba(255, 106, 31, .55);
+}
+@keyframes login-giro { to { transform: rotate(360deg); } }
+@keyframes login-palomita { to { stroke-dashoffset: 0; } }
 
 .login-ayuda {
   margin: 0;
@@ -396,6 +449,11 @@
 
 @media (prefers-reduced-motion: reduce) {
   .login-panel,
+  .login-amanecer,
   .login-campo input,
   .login-boton { transition: none; }
+  .login.is-success .login-panel { transform: none; }
+  .login.is-success .login-amanecer { transform: none; opacity: 0; }
+  .login-boton__giro { animation-duration: 2s; }
+  .login-boton__palomita { animation: none; stroke-dashoffset: 0; }
 }
