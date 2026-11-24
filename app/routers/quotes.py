@@ -496,12 +496,25 @@ def convert_quote_to_sale(
     quote.cash_session_id = sesion_activa.id if sesion_activa else None
     quote.seller_id = current_user.id
 
+    # La venta queda en la sucursal que la COBRA. Las existencias, la caja y
+    # el folio ya salían de la sucursal de quien cobra, pero el documento
+    # conservaba la de quien cotizó: los subscribers de `SalesDocumentCreated`
+    # (insumos de receta) y `cancel_sale` leen `branch_id` del documento, así
+    # que descontaban insumos y reponían existencias en la sucursal equivocada.
+    cambia_sucursal = bool(current_user.branch_id) and quote.branch_id != current_user.branch_id
+
     # Mantener serie P (o asignar si era cotización Q)
-    # Si ya era ORDER (P), conserva P. Si era QUOTE (Q), cambia a P.
-    if quote.series == "Q":
+    # Si ya era ORDER (P), conserva P. Si era QUOTE (Q), cambia a P. Si cambia
+    # de sucursal, toma folio de la nueva: el índice único es por
+    # (sucursal, serie, folio) y el folio viejo puede estar ocupado ahí. El
+    # folio se pide ANTES de mover el documento para que el autoflush no lo
+    # escriba en la sucursal nueva con su folio anterior.
+    if quote.series == "Q" or cambia_sucursal:
+        nuevo_folio = get_next_folio(db, branch_id=current_user.branch_id, series="P")
+        quote.branch_id = current_user.branch_id
         quote.series = "P"
-        quote.folio = get_next_folio(db, branch_id=current_user.branch_id, series="P")
-        # Si ya era P, mantenemos el folio actual, solo cambia estado a PAID.
+        quote.folio = nuevo_folio
+        # Si ya era P de esta sucursal, mantenemos el folio actual, solo cambia estado a PAID.
 
     # Registrar Pago y Movimientos de Stock
     # El pago nace atribuido a la caja de quien cobra, igual que en
