@@ -15,6 +15,9 @@ class PlanRead(BaseModel):
     max_usuarios: Optional[int]
     max_sucursales_venta: Optional[int]
     modulos_crecimiento: List[str]
+    # De `modulos_crecimiento`, los que aún no están construidos: el plan los
+    # nombra pero no se ofrecen (app/services/estado_modulos.py).
+    modulos_no_disponibles: List[str] = []
     permite_todo: bool
 
 

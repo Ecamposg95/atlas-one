@@ -9,6 +9,7 @@ from app.core.database import get_db
 from app.models.organization import Organization
 from app.models.users import User, PlatformRole
 from app.modules.platform.dependencies import require_platform_admin
+from app.services.estado_modulos import estado_de
 
 router = APIRouter()
 
@@ -30,6 +31,7 @@ def get_module_catalog(
             "description": m.description,
             "scope": (m.scope.value if hasattr(m.scope, "value") else (m.scope or "GLOBAL")),
             "status": (m.status.value if hasattr(m.status, "value") else (m.status or "STABLE")),
+            "estado": estado_de(m.key),
         }
         for m in mods
     ]
