@@ -93,6 +93,12 @@ describe('el menú no enseña módulos sin construir', () => {
   })
 })
 
+// Pantallas reales cuyo módulo sigue `en_construccion`: la ruta existe (el
+// servidor la candadea con su módulo) pero el menú no la ofrece hasta que el
+// módulo se estrene. Cargar mercancía cuelga de `ai`, que se destapa cuando el
+// agente se pruebe contra un proveedor real.
+const CONSTRUIDAS_SIN_ESTRENAR = ['/inventory/cargas']
+
 describe('App.tsx no pinta "Próximamente"', () => {
   const rutas = rutasDeApp()
   const moduloDeUrl = new Map(ALL_NAV.filter((n) => n.module).map((n) => [n.url, n.module as string]))
@@ -115,9 +121,20 @@ describe('App.tsx no pinta "Próximamente"', () => {
   it('las rutas de módulos sin construir mandan al inicio del rol', () => {
     for (const [url, modulo] of moduloDeUrl) {
       if (moduloDisponible(modulo)) continue
+      if (CONSTRUIDAS_SIN_ESTRENAR.includes(url)) continue
       const r = rutas.find((x) => '/' + x.path === url)
       expect(r, url).toBeTruthy()
       expect(r!.elemento.trim(), url).toBe('<Navigate to="/" replace />')
+    }
+  })
+
+  it('una pantalla construida sin estrenar existe pero no sale en el menú', () => {
+    for (const url of CONSTRUIDAS_SIN_ESTRENAR) {
+      const modulo = moduloDeUrl.get(url)
+      expect(modulo, url).toBeTruthy()
+      // Cuando su módulo pase a `disponible`, la URL sale de esta lista.
+      expect(moduloDisponible(modulo!), `${url} ya está disponible: sácala de CONSTRUIDAS_SIN_ESTRENAR`).toBe(false)
+      expect(rutas.find((x) => '/' + x.path === url), url).toBeTruthy()
     }
   })
 

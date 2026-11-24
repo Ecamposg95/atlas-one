@@ -28,12 +28,15 @@ describe('el menú de la boutique', () => {
     expect(HQ_NAV_GROUPS.find((g) => g.header === 'Inventario')?.urls).toContain('/inventory/conteos')
   })
 
-  it('Cargar mercancía entra al menú del admin, dueño y gerente solo con el módulo ai', () => {
+  it('Cargar mercancía cuelga del módulo ai, es de admin, dueño y gerente, y no sale mientras ai no se estrene', () => {
+    expect(ALL_NAV.find((n) => n.url === '/inventory/cargas')?.module).toBe('ai')
     for (const rol of ['ADMINISTRADOR', 'DUEÑO', 'GERENTE'] as const) {
-      expect(menu(rol, [...BOUTIQUE, 'ai'])).toContain('/inventory/cargas')
+      expect(ROLE_ROUTES[rol]).toContain('/inventory/cargas')
+      // `ai` está en construcción (utils/estadoModulos): ni encendido se pinta.
+      expect(menu(rol, [...BOUTIQUE, 'ai'])).not.toContain('/inventory/cargas')
       expect(menu(rol, BOUTIQUE)).not.toContain('/inventory/cargas')
     }
-    expect(menu('CAJERO', [...BOUTIQUE, 'ai'])).not.toContain('/inventory/cargas')
+    expect(ROLE_ROUTES.CAJERO).not.toContain('/inventory/cargas')
     expect(HQ_NAV_GROUPS.find((g) => g.header === 'Inventario')?.urls).toContain('/inventory/cargas')
   })
 
