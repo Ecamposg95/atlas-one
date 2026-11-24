@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { organizationApi } from '../../api/organization'
 import { productsApi } from '../../api/products'
+import { BotonAgente } from '../../components/ai/BotonAgente'
 import { DaxCard } from '../../components/ui/DaxCard'
 import { Spinner } from '../../components/ui/Spinner'
 import { useAuthStore } from '../../store/authStore'
@@ -287,6 +288,10 @@ export function StoreScanner() {
             />
             <button type="submit" className="dax-btn-secondary">Buscar</button>
           </form>
+
+          {/* La búsqueda también acepta una pregunta: el agente abre con lo
+              escrito. Solo aparece con el módulo `ai` (utils/agenteVisible.ts). */}
+          <BotonAgente variante="texto" borrador={code} className="w-full justify-center" />
 
           {/* El <video> queda montado aunque la cámara esté apagada (el
               arranque le asigna el stream); solo ocupa lugar encendida. */}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
+import { BotonAgente } from '../ai/BotonAgente'
 import { useEnabledModulesStore } from '../../store/enabledModulesStore'
 import { useBranchCountStore, esTiendaUnica } from '../../store/branchCountStore'
 import { returnsApi } from '../../api/returns'
@@ -266,6 +267,9 @@ function MatrixSidebar({ items, logout, isBranchRole, onToggle }: { items: NavIt
         )}
 
 
+        {/* Agente: oculto mientras el módulo `ai` no esté disponible (utils/agenteVisible.ts) */}
+        <BotonAgente variante="menu" className="mb-2" />
+
         {/* Theme toggle — mini cielo animado */}
         <button
           onClick={toggleTheme}
@@ -389,6 +393,7 @@ function IconRail({ items, logout, onToggle }: { items: NavItem[]; logout: () =>
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
       }}>
         <Avatar inicial={initial} titulo={`${user?.full_name || user?.username} · ${user?.role}`} />
+        <BotonAgente variante="riel" />
         <button
           onClick={logout}
           title="Cerrar sesión"
