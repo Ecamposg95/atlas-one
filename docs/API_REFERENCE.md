@@ -248,6 +248,21 @@ Subir, leer, contestar dudas y descartar: roles de oficina; **autorizar solo ADM
 
 Estados: `leyendo` → `plan` → `aplicando` → `aplicada`; también `error` y `descartada`. Clases de renglón: `EXISTE`, `SUMA`, `NUEVO`, `YA_CARGADO`, `IGNORADO`; los `YA_CARGADO` siempre traen una duda `ya_cargado` (saltar \| cargar) por carga previa. Dudas que aceptan texto (`acepta_texto`): `tipo_cambio`, `precio_faltante`, `sin_costo`, `marca_nueva`, `precio_fuera_familia`, `sin_tipo`, `sin_marca`; además `moneda` (PDF con costo sin moneda) y `departamento`. La lectura corre en un hilo de fondo: la pantalla consulta `GET /api/cargas/{id}` hasta que sale de `leyendo`. `autorizar` aplica todo en una transacción (kardex `reference="carga:<id>"`, auditoría `CARGA_APLICADA`); si falla, revierte y deja la carga en `error`. Tope diario de tokens por org (`AI_TOKENS_DIA_ORG`): 429. Cada llamada al proveedor tiene tope de `AI_TIMEOUT_SEG` segundos (300) y un reintento; la lectura marca su avance tras cada bloque y descarta lo leído si la carga cambió de intento o de estado mientras leía.
 
+## Agente · `/api/ai` `[module:ai]` (gate estricto: ni ADMIN/DUEÑO lo saltan)
+
+Fase A1: consultas por rol, sin escrituras y sin streaming. Roles con agente: CAJERO, VENDEDOR, GERENTE, ADMINISTRADOR, DUEÑO (`app/modules/ai/matriz.py`); cualquier otro rol, y SUPERADMIN/SUPPORT (fase A4), reciben **403**. Una conversación es de una persona en una organización: la de otro usuario o de otra empresa responde **404**. Guía: `docs/ai/README.md`.
+
+| Endpoint | Body | Respuesta |
+|---|---|---|
+| `POST /api/ai/conversaciones` | `{titulo?}` | 201 `{id, titulo, created_at, updated_at}` |
+| `GET /api/ai/conversaciones` | — | las propias, la más reciente primero (máx. 50) |
+| `GET /api/ai/conversaciones/{id}` | — | `{…, mensajes: [{id, rol, contenido, tablas, created_at}]}`: solo lo que escribió la persona y lo que contestó el agente (los pasos de herramientas no viajan) |
+| `POST /api/ai/conversaciones/{id}/mensajes` | `{texto}` (1 a 4000) | `{mensaje}` con la respuesta y `tablas: [{titulo, columnas, filas, mas}]` (las arma el servidor con el resultado de las herramientas, máx. 3 tablas de 12 filas). **429** cupo diario de la organización o de la persona agotado; **503** sin llave del proveedor (`IA no configurada: falta …`) o proveedor caído (el turno no se guarda; lo gastado sí se cuenta) |
+| `DELETE /api/ai/conversaciones/{id}` | — | 204; borra la conversación y sus mensajes |
+| `GET /api/ai/health` | — | `{module, status, ready}` (solo sesión) |
+
+El modelo solo recibe las herramientas del rol y el servidor rechaza cualquier otra. Organización y sucursal salen de la sesión; solo ADMINISTRADOR y DUEÑO pueden nombrar una sucursal. Cada llamada al modelo deja fila en `ai_llamadas` (rol, tarea `consulta`, modelo, tokens).
+
 ## Conteos — `/api/inventory/counts`
 Conteo físico de una sucursal (y opcionalmente un departamento) con escáner. Solo ADMINISTRADOR/DUEÑO (403 al resto); el módulo `inventory` solo decide si el ítem Conteo aparece en el menú. Todo se filtra por organización: un conteo o línea de otra org da **404**. El conteo **nunca toca `stock_on_hand`**: lee la existencia y la congela al cerrar. Tablas en [`DATA_MODEL.md`](DATA_MODEL.md). Diseño: `docs/superpowers/specs/2026-10-22-conteo-inventario-design.md`.
 
@@ -342,7 +357,7 @@ Lo que **Atlas le cobra a cada tienda**. No es CRM Cobranza (`/api/customers/…
 ---
 
 ## Stubs / Beta (solo `GET /health`, `ready:false`)
-`/api/commissions`, `/api/memberships`, `/api/ai`, `/api/purchasing`. (Nota: compras REAL vive en `/api/purchases`; `/api/purchasing` es el placeholder del rediseño modular.)
+`/api/commissions`, `/api/memberships`, `/api/purchasing`. (Nota: compras REAL vive en `/api/purchases`; `/api/purchasing` es el placeholder del rediseño modular.)
 
 ---
 

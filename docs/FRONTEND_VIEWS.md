@@ -481,6 +481,15 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Propósito:** una sola pantalla para piso: teclear busca por nombre/SKU/código (`productsApi.search`, debounce 350 ms) y la cámara o «Buscar» hacen la búsqueda exacta (`productsApi.scanExact`). Muestra precio y existencia por talla.
 - **Quién la ve:** todos (pestaña «Consultar» del armazón móvil y entrada «Consultar» del menú). Admin, dueño, gerente y cajero además corrigen precio y escalones, cuentan existencia (`POST /inventory/adjust`) y ligan un código a un producto; vendedor y soporte ven la ficha de solo lectura (`PUEDEN_EDITAR`).
 - **Datos/API:** `productsApi.search/scanExact/getById/update/updateVariant/adjustStock`, `organizationApi.getBranches` (admin sin sucursal elige dónde cuenta).
+- **Agente:** bajo el buscador, «Preguntar al agente» (`BotonAgente variante="texto"`) abre el panel del agente con lo escrito. Solo se pinta cuando `agenteVisible` lo permite (ver «Panel del agente»).
+
+### Panel del agente (sin ruta: se abre encima de cualquier pantalla)
+- **Archivos:** `components/ai/BotonAgente.tsx` (`BotonAgente`, `AnfitrionAgente`, `useAgenteVisible`), `components/ai/PanelAgente.tsx` (baja con `lazy()` al abrirse la primera vez: 5.9 kB fuera de la ruta crítica), `store/agenteStore.ts` (`abrirAgente(texto)`), `utils/agenteVisible.ts`, `api/ai.ts`.
+- **Propósito:** chat de consultas (fase A1). Texto simple y, debajo de cada respuesta, las tablas que manda el servidor (en teléfono se pintan como lista, `useEsTelefono`). 429 y 503 se muestran con el texto del servidor y la pregunta vuelve a la caja. Vive sobre `ui/Modal` (hoja inferior en teléfono).
+- **Dónde está el botón:** pie del menú lateral (abierto y contraído), barra del teléfono de `Layout`, cabecera de `MobileLayout` y Consultar. `AnfitrionAgente` se monta una vez en cada armazón.
+- **Quién lo ve:** CAJERO, VENDEDOR, GERENTE, ADMINISTRADOR y DUEÑO con el módulo `ai` encendido **y** disponible. Hoy `ai` está `en_construccion`, así que **no se ve**. Vista previa para desarrollo y pruebas (salta solo esa última condición): `VITE_AGENTE_PREVIA=1` al compilar o al correr `npm run dev`, o, solo en `npm run dev`, `localStorage.setItem('atlas.agente.previa', '1')`.
+- **Datos/API:** `/api/ai/conversaciones` (crear, leer, enviar mensaje). Lo que cada rol puede consultar lo decide el servidor (`docs/ai/README.md §9`).
+- **Guardias:** `utils/__tests__/agenteVisible.test.ts`, `components/ai/__tests__/PanelAgente.test.tsx`, y el caso del agente en `pages/scanner/__tests__/Consultar.test.tsx`.
 
 ### `/mobile/sales` — Cotización móvil
 - **Archivo:** `pages/mobile/MobileSales.tsx` (243 líneas)
