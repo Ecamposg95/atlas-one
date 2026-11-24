@@ -71,7 +71,9 @@ async def login_for_access_token(
     )
 
     # 5. Resolver organización del usuario via UserOrganization
-    user_org = db.query(UserOrganization).filter(UserOrganization.user_id == user.id).first()
+    # Solo membresías activas y en orden fijo (misma regla que el contexto).
+    from app.core.tenant_context import membresia_principal
+    user_org = membresia_principal(db, user.id)
     org = None
     org_id = None
     if user_org:
