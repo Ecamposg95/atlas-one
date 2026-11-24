@@ -28,6 +28,20 @@ class CashSessionClosedError(ValueError):
 # pathological cases (e.g. session 65: $104,400 single-line refund).
 LARGE_CASH_REFUND_THRESHOLD = Decimal("10000")
 
+def _lineas_por_variante(db: Session, sale_id: str) -> dict:
+    """Líneas de la venta agrupadas por variante (una variante puede ocupar
+    varias líneas), en orden estable."""
+    grupos: dict = {}
+    for linea in (
+        db.query(SalesLineItem)
+        .filter(SalesLineItem.document_id == sale_id)
+        .order_by(SalesLineItem.id)
+        .all()
+    ):
+        grupos.setdefault(linea.variant_id, []).append(linea)
+    return grupos
+
+
 def create_return(db: Session, return_in: SaleReturnCreate, user_id: int, branch_id: int, organization_id: int = None):
     # 1. Obtener la venta original — defense-in-depth: filtrar por org_id
     # aunque el router también lo verifique. Cualquier caller futuro del CRUD
@@ -83,20 +97,24 @@ def create_return(db: Session, return_in: SaleReturnCreate, user_id: int, branch
     for pr in previous_returns:
         returned_totals[pr.variant_id] = returned_totals.get(pr.variant_id, 0) + pr.quantity
 
+    # La misma variante puede venir en VARIAS líneas de la venta (escaneada dos
+    # veces sin agrupar, o una con descuento y otra sin él). Antes se miraba
+    # solo la primera línea (`.first()`): de 2 + 3 piezas solo dejaba devolver
+    # 2. Lo vendido —y lo cobrado— de una variante es la suma de sus líneas.
+    lineas_por_variante = _lineas_por_variante(db, sale.id)
+
     for item_in in return_in.items:
-        sale_line = db.query(SalesLineItem).filter(
-            SalesLineItem.document_id == sale.id,
-            SalesLineItem.variant_id == item_in.variant_id
-        ).first()
-        
-        if not sale_line:
+        lineas = lineas_por_variante.get(item_in.variant_id)
+
+        if not lineas:
             raise ValueError(f"Producto {item_in.variant_id} no pertenece a esta venta")
-            
-        already_returned = returned_totals.get(item_in.variant_id, Decimal("0"))
-        available = Decimal(str(sale_line.quantity)) - already_returned
-        
+
+        vendido = sum((Decimal(str(l.quantity or 0)) for l in lineas), Decimal("0"))
+        already_returned = Decimal(str(returned_totals.get(item_in.variant_id, 0)))
+        available = vendido - already_returned
+
         if item_in.quantity > available:
-            raise ValueError(f"Cantidad a devolver ({item_in.quantity}) excede lo disponible ({available}) para el producto {sale_line.description}")
+            raise ValueError(f"Cantidad a devolver ({item_in.quantity}) excede lo disponible ({available}) para el producto {lineas[0].description}")
 
     # 3. Crear el registro de devolución
     db_return = SaleReturn(
@@ -118,18 +136,18 @@ def create_return(db: Session, return_in: SaleReturnCreate, user_id: int, branch
     db_items = []
     for item_in in return_in.items:
         # Recompute refund_amount from source line price (don't trust client)
-        line_item = db.query(SalesLineItem).filter(
-            SalesLineItem.variant_id == item_in.variant_id,
-            SalesLineItem.document_id == sale.id
-        ).first()
-        if line_item:
+        lineas = lineas_por_variante.get(item_in.variant_id)
+        if lineas:
             # Se prorratea `total_line` (lo que el cliente pagó de verdad por
             # esa partida), no `unit_price`, que es PRE-descuento: 2 piezas de
             # $100 con 50% de descuento se cobran $100 en total, y devolver
             # una reembolsaba $100 — el doble de lo pagado por esa pieza.
-            # Auditoría C-6.
-            qty_linea = Decimal(str(line_item.quantity or 0))
-            total_linea = Decimal(str(line_item.total_line or 0))
+            # Auditoría C-6. Con la variante en varias líneas se prorratea
+            # sobre la suma de todas (precio promedio pagado): devolverlas
+            # todas reembolsa exactamente lo cobrado por ellas.
+            line_item = lineas[0]
+            qty_linea = sum((Decimal(str(l.quantity or 0)) for l in lineas), Decimal("0"))
+            total_linea = sum((Decimal(str(l.total_line or 0)) for l in lineas), Decimal("0"))
             qty_dev = Decimal(str(item_in.quantity))
             if qty_linea > 0:
                 item_refund = (total_linea * qty_dev / qty_linea).quantize(Decimal("0.01"))
@@ -328,11 +346,19 @@ def approve_return(db: Session, return_id: str, supervisor_id: int,
     fully_refunded = True
     any_refunded = False
     
+    # Por variante, no por línea: con la misma variante en dos líneas (1 + 1),
+    # devolver UNA pieza igualaba la cantidad de cada línea y la venta quedaba
+    # como devuelta por completo.
+    vendido_por_variante = {}
     for line in sale.lines:
-        qty_returned = returned_totals.get(line.variant_id, Decimal("0"))
+        vendido_por_variante[line.variant_id] = (
+            vendido_por_variante.get(line.variant_id, Decimal("0")) + Decimal(str(line.quantity or 0))
+        )
+    for variant_id, qty_vendida in vendido_por_variante.items():
+        qty_returned = Decimal(str(returned_totals.get(variant_id, 0)))
         if qty_returned > 0:
             any_refunded = True
-        if qty_returned < Decimal(str(line.quantity)):
+        if qty_returned < qty_vendida:
             fully_refunded = False
             
     if fully_refunded:
