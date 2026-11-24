@@ -542,7 +542,37 @@ def convert_quote_to_sale(
             organization_id=org_id,
         ))
 
+    # Outbox transaccional, igual que `create_sale` (app/routers/sales.py):
+    # convertir un pedido en venta tambien es una venta, y sin el evento no se
+    # descontaban los insumos de receta ni se revisaba el reabasto. Se encola
+    # DENTRO de la misma transaccion (se confirma o se revierte junto con el
+    # cobro); si el enqueue falla, la conversion NO se bloquea. Los
+    # subscribers son idempotentes por venta, asi que reprocesar despues este
+    # documento por el checkout no descuenta dos veces.
+    import logging
+    from app.core.events import EventBus, SalesDocumentCreated
+    from app.routers.sales import _safe_sale_items
+    outbox_id = None
+    try:
+        with db.begin_nested():
+            outbox_id = EventBus.enqueue(db, SalesDocumentCreated(
+                sales_document_id=str(quote.id),
+                items=_safe_sale_items(quote),
+            ))
+    except Exception:
+        logging.getLogger(__name__).exception("OUTBOX_ENQUEUE_FAILED quote=%s", quote.id)
+
     db.commit()
+
+    # Entrega inmediata del evento ya confirmado; el worker del outbox
+    # reintenta lo que quede pendiente. No lanza al request.
+    if outbox_id:
+        try:
+            from app.core.outbox import drain_now
+            drain_now([outbox_id])
+        except Exception:
+            logging.getLogger(__name__).exception("OUTBOX_DRAIN_FAILED quote=%s", quote.id)
+
     return {"status": "success", "new_folio": f"{quote.series}-{quote.folio}"}
 
 @router.get("/stats/kpi")
