@@ -199,6 +199,19 @@ crédito con abono parcial no debe inflar "ventas totales" con la deuda aún no 
 ## Platform / SaaS (`app/models/platform.py`, PK Int)
 `platform_audit_log`, `platform_alert`, `platform_announcement`, `feature_flag`, `org_feature_override` (UNIQUE org+flag), `platform_incident`, `api_key` (SHA-256 hash + prefix). Ver [`API_REFERENCE.md`](API_REFERENCE.md) §platform.
 
+## Suscripciones (`modules/suscripciones/models.py`, PK Int)
+Lo que Atlas le cobra a cada tienda (megaplan F3). No es el crédito de la tienda a sus clientes (`customer_ledger_entries`). Las tres llevan `organization_id` **NOT NULL**; dinero en `Numeric(12,2)`; estados y métodos como `String` con constantes Python. Las crea `create_all` (sin ALTER en `railway_init.py`).
+
+| Tabla | Columnas clave |
+|---|---|
+| `suscripciones` | Una por organización (`uq_suscripcion_org`): `plan` (espejo de `organization.plan`), `precio_mxn` (pactado, por periodo), `periodicidad` (`mensual`/`anual`), `dia_corte` (1–28), `fecha_inicio`, `proxima_renovacion`, `estado` (`al_corriente`/`por_vencer`/`vencida`/`suspendida`/`cortesia`), `notas` (internas), `rfc`, `razon_social`, `correo_facturacion` (para un CFDI futuro), `created_at`, `updated_at` |
+| `suscripcion_cargos` | Un cargo por organización y periodo (`uq_suscripcion_cargo_periodo` sobre `organization_id, periodo_desde`): `suscripcion_id`, `periodo_desde`, `periodo_hasta` (inclusive), `importe`, `vence_el`, `estado` (`pendiente`/`pagado`/`cancelado`), `pagado_at`, `cancelado_at`, `motivo_cancelacion` |
+| `suscripcion_pagos` | Pagos contra un cargo: `cargo_id`, `importe`, `fecha_pago`, `metodo` (`transferencia`/`deposito`/`efectivo`/`tarjeta`/`otro`), `referencia`, `notas`, `registrado_por_user_id` → `users.id`, `origen` (`manual`), `id_externo`; `uq_suscripcion_pago_externo` sobre `(origen, id_externo)` |
+
+- **`suscripciones.estado` es una foto**, no la verdad: se refresca en cada escritura, pero el paso del tiempo no la mueve. Lo que se muestra sale de `services.calcular_estado` al leer; lo guardado solo manda cuando es manual (`suspendida`, `cortesia`). No filtres por esa columna en SQL para saber quién está vencido.
+- `origen` e `id_externo` no se usan todavía: son para que el webhook de la pasarela (segunda versión) sea idempotente sin migrar.
+- El borrado forzado de la organización los elimina en orden pagos → cargos → suscripción.
+
 ## Outbox / Eventos
 `event_outbox` (UUID, `status` String OutboxStatus{PENDING,PROCESSED,FAILED}, ml de reintento/backoff). Índice `ix_event_outbox_due (status, available_at)`. Ver [`ARCHITECTURE.md`](ARCHITECTURE.md) §3.
 

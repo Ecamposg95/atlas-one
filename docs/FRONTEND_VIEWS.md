@@ -190,7 +190,7 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 
 ### `/configuracion` — Configuración
 - **Archivo:** `pages/pos/Configuracion.tsx` elige por rol (`utils/vistaDeConfiguracion.ts`): administrador y dueño ven el **centro de ajustes** (`esCentroDeAjustes`), el gerente `PrinterSettings.tsx` y la caja `PrinterSettingsCajera.tsx`. `/printer-settings` redirige a `?tab=impresoras`; `/organization` y `/hq/branches` redirigen aquí.
-- **Centro de ajustes (admin/dueño), pestañas en `?tab=`:** `empresa` (datos y logo), `sucursales` (`core/Sucursales.tsx`), `ventas` (tipo de cambio, comisión de tarjeta, conteo ciego, precio por sucursal, aviso de poca existencia en básico), `ticket` (encabezado, pie, términos, redes), `impresoras` (`PrinterSettings incrustada`), `tienda` (si el canal está encendido) y `mas` (accesos a Usuarios, Departamentos y Marcas). Las de empresa/ventas/ticket son `core/Organization.tsx` con `seccion`.
+- **Centro de ajustes (admin/dueño), pestañas en `?tab=`:** `empresa` (datos y logo), `sucursales` (`core/Sucursales.tsx`), `ventas` (tipo de cambio, comisión de tarjeta, conteo ciego, precio por sucursal, aviso de poca existencia en básico), `ticket` (encabezado, pie, términos, redes), `impresoras` (`PrinterSettings incrustada`), `tienda` (si el canal está encendido), `plan` (`core/MiPlanYPagos.tsx`, «Mi plan y pagos») y `mas``impresoras` (`PrinterSettings incrustada`), `tienda` (si el canal está encendido) y `mas` (accesos a Usuarios, Departamentos y Marcas). Las de empresa/ventas/ticket son `core/Organization.tsx` con `seccion`.
 - **Propósito:** impresoras, cajón de dinero y ticket. Gerente, admin y dueño tienen pestañas **Impresoras** (agente por sistema, Bluetooth, instalar impresora), **Cajón** (`components/pos/CajonCard`: abrir ahora y si abre solo al cobrar, guarda al momento) y **Ticket** (papel, logo, editor con vista previa). La cajera elige la impresora de su PC, prueba y abre el cajón; nada de su pantalla escribe en la sucursal, y en teléfono solo se explica que eso se hace desde la PC.
 - **Quién la ve:** todos los roles de tienda — módulo `pos`.
 - **Datos/API:** `client.get/put('/branches/:id')`, logo `post/delete`, `client.get('/organization/')`, `printerApi.*` (`abrirCajonManual` abre por el agente y registra `DRAWER_OPENED_MANUAL` con `POST /printer/drawer-opened`), Web Bluetooth API.
@@ -266,6 +266,12 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Archivo:** `pages/core/Sucursales.tsx` (une el tablero que era `/hq/branches` y el alta/edición que vivía en Empresa).
 - **Propósito:** rejilla de tarjetas (abierta/cerrada por `status === 'ONLINE'` del backend, ventas hoy, turnos abiertos, se está acabando) con lápiz y bote por sucursal y «Nueva sucursal»; al tocar una (o con `&sucursal=ID`), su detalle de hoy debajo. El modal de edición también cambia **Vende** y **Activa**; solo manda lo que cambió (`cambiosDeSucursal`): mandar el tipo de la matriz sin `can_sell` le apagaba la venta.
 - **Datos/API:** `organizationApi.getBranches/createBranch/updateBranch/deleteBranch`, `reportsApi.commandCenterStats`, `reportsApi.dashboard({ branch_id })`. Si las cifras de hoy fallan, la lista se sigue pudiendo administrar.
+
+### `/configuracion?tab=plan` — Mi plan y pagos 📱
+- **Archivo:** `pages/core/MiPlanYPagos.tsx` (pestaña del centro de ajustes; solo administrador y dueño).
+- **Propósito:** solo lectura de lo que Atlas le cobra a la tienda: plan, precio pactado, próxima renovación, estado (al corriente, por vencer, vencida, suspendida, cortesía), uso contra los topes del plan (usuarios activos, sucursales que venden), datos de facturación si los hay, e historial de cargos con sus pagos. No tiene botones ni campos. No es Cobranza (`/crm/cobranza`).
+- **Datos/API:** `suscripcionesApi.mia()` → `GET /api/suscripcion/mia`. Importes como cadena: `num()` de `api/suscripciones.ts`.
+- **Responsivo:** `useEsTelefono()` → `ListaTarjetas`/`TarjetaFila` en teléfono, `dax-table` en escritorio. Solo tokens `dax-*`.
 
 ---
 
@@ -503,6 +509,12 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Propósito:** Vista 360: editar, gestionar módulos (toggle), upsell, aplicar/resetear preset, sucursales/usuarios (tabs), impersonar, zona peligrosa.
 - **Datos/API:** carga paralela `getOrg/getOrgModules/getUsers/getBranches/getPresets/getModulesCatalog/getUpsellRecommendations`; acciones `toggleModule/updateOrg/setIndustry/applyPreset/resetPreset/archiveOrg/deleteOrg/impersonate`. `useImpersonationStore`.
 - **Notas:** Toggle de módulos optimista con rollback. Impersonación registra en AuditLog → `/hq/operations`. "Reset config" es placeholder sin backend. Tema v1.
+
+### `/platform/suscripciones` — Suscripciones
+- **Archivo:** `pages/platform/PlatformSuscripciones.tsx`
+- **Propósito:** cartera de lo que Atlas le cobra a cada tienda (megaplan F3). KPIs arriba (ingreso mensual recurrente, cartera vencida, por vencer, organizaciones sin suscripción), filtro por estado con conteos y tabla (`DataTable`, CSV); la fila abre la ficha de la organización.
+- **Datos/API:** `suscripcionesApi.listar({ estado })` → `GET /api/platform/suscripciones`. Los totales son de toda la cartera aunque haya filtro.
+- **En la ficha de la organización** (`/platform/organizations/:orgId`): `pages/platform/org/SeccionSuscripcion.tsx`, debajo de «Plan y uso». Alta/edición (plan, precio pactado, periodicidad, día de corte, fechas, estado manual, datos fiscales, notas), «Generar cargo», y por cargo «Registrar pago» y «Cancelar», en `ui/Modal`. Cambiar el plan ahí recarga la ficha (mueve `organization.plan`). Los botones solo salen para SUPERADMIN.
 
 ### `/platform/users` — Usuarios cross-tenant
 - **Archivo:** `pages/platform/PlatformUsers.tsx` (910 líneas)

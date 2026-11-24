@@ -122,6 +122,7 @@ Edita `scripts/init_presets_v2.py` (seed de `industry_presets`) y/o el fallback 
 ### Cambiar el plan de una organización
 - Desde `/platform/organizations/{id}` (selector "Plan y uso") o `PUT /api/platform/organizations/{id}` con `{"plan": "PRO"}`. Claves válidas en `app/services/plans.py::claves_validas()`.
 - Cambiar de plan NO toca `organization_modules`: los módulos encendidos se heredan y la pantalla los marca "Fuera de plan". Los topes (usuarios activos, sucursales que venden) solo frenan altas nuevas con un 403 cuyo `detail` nombra el plan mínimo.
+- `plans.asignar_plan(org, clave)` es el único que escribe `organization.plan`. Si la organización tiene suscripción (`app/modules/suscripciones/`, cobro de la mensualidad: `/platform/suscripciones` y la sección «Suscripción» de la ficha), el plan se mueve junto en los dos sentidos; el precio pactado no cambia solo. Ese módulo es de registro manual y su estado `suspendida` no bloquea nada.
 - Módulos permitidos = base ∪ preset del giro ∪ crecimiento del plan. Para añadir un módulo a un plan, edita `_START/_PRO/_BUSINESS/_SCALE` en `plans.py` y corre `tests/test_planes.py`.
 
 ### Dar de alta una tienda (cualquier origen)

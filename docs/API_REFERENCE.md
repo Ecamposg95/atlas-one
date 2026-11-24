@@ -286,6 +286,7 @@ CRUD `/stations`, `/routes` (dept→estación) · `POST /tickets` (fire) · `GET
 | stats | /stats/* | KPIs cross-tenant (global, trends, top-tenants, cohort, heatmap…) — caché TTL |
 | control_tower | /control-tower/* | Dashboard tiempo-real (sales-now, active-sessions, deltas) |
 | organizations | /organizations | **CRUD de tenants** + plan (cambio vía selector); módulos/preset por org; `apply-preset`, `modules/{key}` toggle, `industry`, `bootstrap`, `reset-preset`, `{id}/plan-uso`, delete `?force=` (cascade ~30 tablas) `[SUPERADMIN]` |
+| suscripciones | /suscripciones, /organizations/{id}/suscripcion | Cobro de la mensualidad a cada tienda (suscripción, cargos, pagos manuales). Ver abajo |
 | plans | /plans | Catálogo de planes (FREE, START, PRO, BUSINESS, SCALE, ULTRA_PLUS); topes y módulos por plan |
 | branches | /branches | Sucursales cross-tenant (CRUD, archive) |
 | users | /users | Usuarios cross-tenant (CRUD, reset-password, `role` `[SUPERADMIN]`) |
@@ -303,6 +304,22 @@ CRUD `/stations`, `/routes` (dept→estación) · `POST /tickets` (fire) · `GET
 | impersonation | /impersonate[/exit] | ⚠️ **Stub**: audita pero no emite JWT scoped |
 
 - `PUT /api/platform/organizations/{id}` acepta `perfil_ui` (`auto`\|`basico`\|`completo`, 422 si es otro); el `PUT /api/organization/` de tenant lo descarta como a `plan`. `OrganizationRead` expone `perfil_ui` y `umbral_poca_existencia` (este sí lo guarda la dueña).
+
+### Suscripciones · `/api/platform/suscripciones` y `/api/suscripcion` (megaplan F3)
+Lo que **Atlas le cobra a cada tienda**. No es CRM Cobranza (`/api/customers/…`, crédito de la tienda a sus clientes). Módulo `app/modules/suscripciones/`, montado aparte en `app/main.py` con `require_platform_admin`. Primera versión de **registro manual**: sin pasarela, sin CFDI y sin suspensión automática; `suspendida` es informativa y **no bloquea ningún acceso**. Importes como cadena decimal (`"499.00"`). Toda escritura deja fila en `platform_audit_log` (`entity_type = SUSCRIPCION`, `entity_id` = id de la organización; acciones `SUSCRIPCION_ALTA`, `_EDICION`, `_CAMBIO_PLAN`, `_CARGO`, `_PAGO`, `_CARGO_CANCELADO`). Tablas en [`DATA_MODEL.md`](DATA_MODEL.md). Plan: `docs/superpowers/plans/2026-11-24-f3-cobro-de-suscripciones.md`.
+
+| Método | Ruta | Quién | Qué hace |
+|---|---|---|---|
+| GET | `/api/platform/suscripciones?estado=&q=` | SUPERADMIN, SUPPORT | `{totales, items}`. `totales`: `cartera_vencida` (saldo de cargos pendientes ya vencidos), `por_vencer` (saldo de pendientes que aún no vencen), `ingreso_mensual_recurrente` (precios pactados llevados a mes de las `al_corriente` y `por_vencer`), `por_estado`, `sin_suscripcion`. Los filtros recortan `items`, no los totales. `estado` desconocido → 400 |
+| GET | `/api/platform/organizations/{org_id}/suscripcion` | SUPERADMIN, SUPPORT | `{organizacion, plan_organizacion, suscripcion \| null, cargos[]}` con los pagos de cada cargo (incluye notas internas y quién registró) |
+| PUT | `/api/platform/organizations/{org_id}/suscripcion` | SUPERADMIN | Alta o edición (solo aplica lo que viene): `plan`, `precio_mxn`, `periodicidad` (`mensual`\|`anual`), `dia_corte` (1–28), `fecha_inicio`, `proxima_renovacion`, `estado`, `notas`, `rfc`, `razon_social`, `correo_facturacion`. En el alta el precio por omisión es el de lista del plan. **Cambiar `plan` cambia también `organization.plan`** (`plans.asignar_plan`); plan desconocido → 400. `estado` solo se guarda si es manual (`suspendida`, `cortesia`); mandar uno automático quita el manual y se recalcula |
+| POST | `/api/platform/organizations/{org_id}/suscripcion/cargos` | SUPERADMIN | Cargo del periodo. Body opcional `{periodo_desde, importe, vence_el}`; por omisión el periodo que empieza en `proxima_renovacion`, importe = precio pactado, vence el primer día. **Idempotente**: 201 `{creado: true}` la primera vez, 200 `{creado: false}` con el mismo cargo si ya existía. Sin suscripción → 409; precio 0 → 422 |
+| POST | `/api/platform/suscripciones/cargos/{cargo_id}/pagos` | SUPERADMIN | `{importe, metodo, fecha_pago?, referencia?, notas?}`; `metodo` ∈ `transferencia`, `deposito`, `efectivo`, `tarjeta`, `otro`. Parcial o total; mayor al saldo, cero, método desconocido o fecha futura → 422; cargo pagado o cancelado → 409. Al cubrir el importe el cargo queda `pagado` y `proxima_renovacion` avanza al día siguiente del fin del periodo (nunca retrocede). Devuelve el detalle |
+| POST | `/api/platform/suscripciones/cargos/{cargo_id}/cancelar` | SUPERADMIN | `{motivo?}`. Solo cargos sin pagos (409 si los tiene). Generar de nuevo ese periodo lo reabre |
+| GET | `/api/suscripcion/mia` | ADMINISTRADOR, DUEÑO | Solo lectura, de la organización activa: `{plan (nombre, precio de lista, topes), uso (usuarios activos, sucursales que venden), suscripcion \| null, cargos[]}`. Sin notas internas ni quién registró. Cajera, gerente y demás roles → 403 |
+
+- **Estado** (`services.calcular_estado`, día de México): se calcula al leer. Manual gana → precio 0 es `al_corriente` → cargo pendiente vencido es `vencida` → cargo pendiente que vence en ≤ 7 días es `por_vencer` → sin cargos pendientes manda `proxima_renovacion` (pasada = `vencida`, en ≤ 7 días = `por_vencer`).
+- `PUT /api/platform/organizations/{id}` con `plan` refleja el plan en la suscripción (el precio pactado no se toca).
 
 ---
 
