@@ -126,7 +126,8 @@ def vista_previa(
         par = encontradas.get(body.variant_id)
         if par is None:
             raise HTTPException(status_code=404, detail="Variante no encontrada")
-        datos = services.datos_de_variante(*par)
+        precios = services.precios_de_sucursal(db, current_user, org_id, [body.variant_id])
+        datos = services.datos_de_variante(*par, precios.get(body.variant_id))
     else:
         precio, precio_texto = parse_price(body.price or "")
         datos = DatosEtiqueta(
@@ -177,6 +178,8 @@ def crear_trabajo(
         db, current_user, org_id, [item.variant_id for item in body.items]
     )
 
+    precios = services.precios_de_sucursal(db, current_user, org_id, list(encontradas))
+
     lote: List[tuple] = []
     omitidas: List[dict] = []
     impresas = 0
@@ -187,7 +190,7 @@ def crear_trabajo(
                 "variant_id": item.variant_id, "sku": "", "reason": services.NO_VISIBLE,
             })
             continue
-        datos = services.datos_de_variante(*par)
+        datos = services.datos_de_variante(*par, precios.get(item.variant_id))
         motivo = services.motivo_no_imprimible(datos)
         if motivo:
             omitidas.append({
