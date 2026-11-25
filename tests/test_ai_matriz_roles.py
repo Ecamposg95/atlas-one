@@ -301,9 +301,15 @@ class TestVentasDeLaCajera:
         assert "120" not in texto and "200" not in texto and "80.0" not in texto
         assert "conteo ciego" in r["importes"]
 
-    def test_vendedor_ve_sus_importes(self, db, org, branch_a):
+    def test_vendedor_sigue_la_regla_de_la_cajera(self, db, org, branch_a):
+        # Desde 2026-11-20 el vendedor es rol de mostrador con la misma regla de
+        # ventas que la cajera (`ventas_cajero.es_cajero`): con el conteo ciego
+        # encendido no ve importes; apagado, ve los suyos.
         vendedor = _make_user(db, org, branch_a, "vendedor_a", Role.VENDEDOR)
         _venta(db, org, branch_a, vendedor, "50.00", 1)
+        assert "total" not in ejecutar("mis_ventas_hoy", {}, _ctx(db, org, vendedor))
+        org.conteo_ciego = False
+        db.flush()
         assert ejecutar("mis_ventas_hoy", {}, _ctx(db, org, vendedor))["total"] == 50.0
 
 
