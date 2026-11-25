@@ -100,7 +100,7 @@ export const ALL_NAV: NavItem[] = [
   // al escritorio desde la pestaña «Más» del móvil se queda sin camino de
   // regreso salvo escribiendo la URL (admin-findings I-10).
   { label: 'Dashboard móvil',   short: 'DSH', icon: 'fa-mobile-screen',       url: '/mobile/dashboard', group: 'mob',  sort: 0 },
-  { label: 'Consultar',         short: 'QRY', icon: 'fa-barcode',             url: '/mobile/query',     group: 'mob',  sort: 1, module: 'catalog' },
+  { label: 'Consultar',         short: 'QRY', icon: 'fa-barcode',             url: '/mobile/query',     group: 'mob',  sort: 1, module: 'catalog', soloMovil: true },
   // La "cotización móvil" crea cotizaciones (POST /api/quotes): es el módulo quotes.
   { label: 'Cotización móvil',  short: 'COT', icon: 'fa-file-invoice',        url: '/mobile/sales',     group: 'mob',  sort: 2, module: 'quotes' },
   { label: 'Perfil móvil',      short: 'PRF', icon: 'fa-user-circle',         url: '/mobile/profile',   group: 'mob',  sort: 3  },

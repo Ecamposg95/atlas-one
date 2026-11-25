@@ -122,3 +122,20 @@ describe('recortarPorPlan', () => {
     expect(urls).toEqual(esperado)
   })
 })
+
+describe('Consultar solo en teléfono y tablet', () => {
+  const urls = (escritorio: boolean) =>
+    visibleNavItems(ALL_NAV, { role: 'GERENTE', allowed: ROLE_ROUTES.GERENTE, enabledModules: [], isGastro: false, escritorio })
+      .map((n) => n.url)
+
+  it('en escritorio no sale en el menú; en móvil sí; sin dato de pantalla tampoco se esconde', () => {
+    expect(urls(true)).not.toContain('/mobile/query')
+    expect(urls(false)).toContain('/mobile/query')
+    expect(visibleNavItems(ALL_NAV, { role: 'GERENTE', allowed: ROLE_ROUTES.GERENTE, enabledModules: [], isGastro: false }).map((n) => n.url))
+      .toContain('/mobile/query')
+  })
+
+  it('lo demás del menú no cambia entre escritorio y móvil', () => {
+    expect(urls(true)).toEqual(urls(false).filter((u) => u !== '/mobile/query'))
+  })
+})

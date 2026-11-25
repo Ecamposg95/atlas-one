@@ -20,6 +20,9 @@ export interface NavItem {
   branchModule?: string
   /** Hide this item for gastro presets (retail-only concept). See GASTRO_PRESETS. */
   hideForGastro?: boolean
+  /** Solo en teléfono y tablet (< 1024 px): en escritorio no sale en el menú.
+   *  Es para pantallas pensadas para la cámara y la mano, como Consultar. */
+  soloMovil?: boolean
 }
 
 /**
@@ -50,6 +53,8 @@ export interface NavVisibilityOptions {
   perfilUi?: PerfilUi | null
   /** Módulos sin construir (`/me/context`). Sin dato, el espejo local: esto NO falla abierto. */
   noDisponibles?: ModulosNoDisponibles
+  /** `true` con el armazón de escritorio (≥ 1024 px): esconde lo `soloMovil`. Sin dato no esconde nada. */
+  escritorio?: boolean
 }
 
 /**
@@ -67,7 +72,7 @@ export interface NavVisibilityOptions {
  * (utils/estadoModulos.ts). Esconde el enlace; la base no se toca.
  */
 export function visibleNavItems(items: NavItem[], opts: NavVisibilityOptions): NavItem[] {
-  const { role, allowed, enabledModules, isGastro, plan, perfilUi, noDisponibles = NO_DISPONIBLES } = opts
+  const { role, allowed, enabledModules, isGastro, plan, perfilUi, noDisponibles = NO_DISPONIBLES, escritorio = false } = opts
   const modulesLoaded = enabledModules.length > 0
   const hasModule = (key: string | undefined) => !key || !modulesLoaded || enabledModules.includes(key)
   const isBranchRole = BRANCH_ROLES.includes(role)
@@ -77,6 +82,7 @@ export function visibleNavItems(items: NavItem[], opts: NavVisibilityOptions): N
     .filter((n) => hasModule(n.module))
     .filter((n) => !isBranchRole || hasModule(n.branchModule))
     .filter((n) => !(n.hideForGastro && isGastro))
+    .filter((n) => !(n.soloMovil && escritorio))
   // Plan y perfil van al final: solo esconden entre lo que ya pasó rol y módulo.
   const porPlan = recortarPorPlan(porModulo, plan)
   return recortarPorPerfil(porPlan, perfilUi, isBranchRole).sort((a, b) => a.sort - b.sort)

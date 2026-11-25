@@ -12,6 +12,7 @@ const _savedTheme = localStorage.getItem('atlas_theme') ?? 'dark'
 document.documentElement.classList.add(_savedTheme)
 import { Layout } from './components/layout/Layout'
 import { RequireRole, RutaPorRol } from './components/layout/RequireRole'
+import { SoloMovil } from './components/layout/SoloMovil'
 import { RedirigirConQuery, RedirigirASucursal } from './components/layout/RedirigirConQuery'
 
 import { LoginPage } from './pages/Login'
@@ -383,7 +384,7 @@ export default function App() {
           }
         >
           <Route path="dashboard" element={<Suspense fallback={<PageLoader />}><MobileDashboard /></Suspense>} />
-          <Route path="query"     element={<Suspense fallback={<PageLoader />}><MobileQuery /></Suspense>} />
+          <Route path="query"     element={<SoloMovil enEscritorio="/products"><Suspense fallback={<PageLoader />}><MobileQuery /></Suspense></SoloMovil>} />
           <Route path="sales"     element={<Suspense fallback={<PageLoader />}><MobileSales /></Suspense>} />
           <Route path="profile"   element={<Suspense fallback={<PageLoader />}><MobileProfile /></Suspense>} />
           <Route path="comanda"          element={<Suspense fallback={<PageLoader />}><ComandaTables /></Suspense>} />
