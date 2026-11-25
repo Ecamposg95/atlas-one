@@ -4,6 +4,7 @@ import { salesApi, type SalesStats } from '../../api/sales'
 import { printerApi } from '../../api/printer'
 import { usePOSStore } from '../../store/posStore'
 import { useAuthStore } from '../../store/authStore'
+import { useEnabledModulesStore } from '../../store/enabledModulesStore'
 import { DaxCard } from '../../components/ui/DaxCard'
 import { Modal } from '../../components/ui/Modal'
 import { TablaDesplazable } from '../../components/ui/TablaDesplazable'
@@ -81,10 +82,19 @@ export function SalesHistory() {
   const printerName = usePOSStore((s) => s.printerName)
   const rol = useAuthStore((s) => s.user?.role)
   const esHq = esRolHq(rol)
-  // La cajera ve solo las ventas de hoy de su sucursal, sin totales (el backend lo impone).
+  // La cajera ve las ventas de su sucursal dentro del plazo de la tienda, sin totales
+  // (el backend lo impone). Con plazo 0 solo ve hoy y no hay fechas que elegir.
   const esCajera = esRolCaja(rol)
-  // La cajera solo ve hoy: su lista vacía no es "del periodo".
-  const textoSinVentas = esCajera ? 'Sin ventas hoy' : 'Sin ventas en este periodo'
+  const diasCaja = useEnabledModulesStore((s) => s.diasVentasCaja)
+  const cajaConPasadas = esCajera && diasCaja > 0
+  const cajaSoloHoy = esCajera && diasCaja === 0
+  // Primer día que la caja puede consultar (el servidor recorta igual).
+  const minCaja = useMemo(() => {
+    const d = new Date(`${rangoPreset('hoy').inicio}T12:00:00`)
+    d.setDate(d.getDate() - diasCaja)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }, [diasCaja])
+  const textoSinVentas = cajaSoloHoy ? 'Sin ventas hoy' : 'Sin ventas en este periodo'
   const esTelefono = useEsTelefono()
   // Solo los roles de oficina piden la lista; el selector sale con más de una sucursal que vende.
   const sucursales = useSucursalesVendibles(esHq)
@@ -106,6 +116,14 @@ export function SalesHistory() {
   const [page, setPage] = useState(0)
   const [total, setTotal] = useState(0)
   const [busqueda, setBusqueda] = useState('')
+  // La caja busca en el servidor (folio, cliente o producto) sobre todo su plazo;
+  // se espera a que deje de teclear.
+  const [busquedaServidor, setBusquedaServidor] = useState('')
+  useEffect(() => {
+    if (!esCajera) return
+    const t = setTimeout(() => { setBusquedaServidor(busqueda.trim()); setPage(0) }, 350)
+    return () => clearTimeout(t)
+  }, [busqueda, esCajera])
   // HQ veía PENDING/DRAFT por defecto (HQSalesLog); la cajera no (SalesHistory). Cada rol conserva su costumbre.
   const [includeOpenStates, setIncludeOpenStates] = useState(esHq && !esCajera)
   const [selected, setSel] = useState<SalesDocument | null>(null)
@@ -158,7 +176,11 @@ export function SalesHistory() {
     setError(null)
     try {
       const params: Record<string, unknown> = { limit: LIMIT, skip: pg * LIMIT }
-      if (!esCajera) { params.start_date = r.inicio; params.end_date = r.fin }
+      if (esCajera && busquedaServidor) {
+        // Buscando, la caja recorre todo su plazo: un folio (540, a-540) o texto libre.
+        if (/^[a-z]*-?\d+$/i.test(busquedaServidor)) params.folio_search = busquedaServidor
+        else params.search = busquedaServidor
+      } else if (!cajaSoloHoy) { params.start_date = r.inicio; params.end_date = r.fin }
       // Se manda por si el backend lo respeta; el filtro de abajo (en cliente) siempre aplica.
       if (!includeOpenStates) params.statuses = ESTADOS_CERRADOS
       // `branch_id` solo cuando un rol de oficina eligió sucursal. Sin él, el backend
@@ -186,7 +208,7 @@ export function SalesHistory() {
     } finally {
       if (mio === reqId.current) setLoading(false)
     }
-  }, [includeOpenStates, esCajera])
+  }, [includeOpenStates, esCajera, cajaSoloHoy, busquedaServidor])
 
   useEffect(() => { load(rango, page, sucursal) }, [load, rango, page, sucursal])
 
@@ -203,9 +225,9 @@ export function SalesHistory() {
   // Buscador de folio/cliente sobre la página cargada (venía de la pantalla HQ; sirve a todos).
   const visibles = useMemo(() => {
     const q = busqueda.trim().toLowerCase()
-    if (!q) return sales
+    if (!q || esCajera) return sales        // a la caja ya se lo filtró el servidor
     return sales.filter((s) => saleLabel(s).toLowerCase().includes(q) || (s.customer_name ?? '').toLowerCase().includes(q))
-  }, [sales, busqueda])
+  }, [sales, busqueda, esCajera])
   const pages = Math.ceil(total / LIMIT)
   const metodoTop = useMemo(
     () => Object.entries(stats?.payment_methods ?? {}).sort((a, b) => b[1] - a[1])[0]?.[0],
@@ -272,10 +294,15 @@ export function SalesHistory() {
         titulo={
           <div>
             <h1 className="dax-titulo-pagina">
-              {esCajera
+              {cajaSoloHoy
                 ? `Ventas de hoy · ${new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'short' })}`
                 : 'Ventas'}
             </h1>
+            {cajaConPasadas && (
+              <p className="text-xs text-dax-muted mt-1">
+                Tu sucursal, últimos {diasCaja} días. Busca por folio, cliente o producto.
+              </p>
+            )}
           </div>
         }
       />
@@ -291,11 +318,11 @@ export function SalesHistory() {
         </div>
       )}
 
-      {/* Cajera: solo el buscador; periodo, fechas, sucursal y abiertas no aplican. */}
+      {/* Cajera: fechas dentro de su plazo y el buscador; periodo, sucursal y abiertas no aplican. */}
       {/* `!items-center` conserva la alineación de hoy (BarraFiltros trae items-end). */}
       <BarraFiltros
         className="!items-center"
-        accion={esCajera ? undefined : (
+        accion={cajaSoloHoy ? undefined : (
           <button type="button" onClick={aplicarFechas} className="dax-btn-primary text-xs">
             <i className="fa-solid fa-search" aria-hidden="true" /> Filtrar
           </button>
@@ -314,9 +341,9 @@ export function SalesHistory() {
             </button>
           ))}
         </div>}
-        {!esCajera && <ParFechas>
-          <input type="date" aria-label="Desde" value={desde} onChange={(e) => setDesde(e.target.value)} className="dax-input w-36 text-xs" />
-          <input type="date" aria-label="Hasta" value={hasta} onChange={(e) => setHasta(e.target.value)} className="dax-input w-36 text-xs" />
+        {!cajaSoloHoy && <ParFechas>
+          <input type="date" aria-label="Desde" value={desde} min={esCajera ? minCaja : undefined} max={esCajera ? rangoPreset('hoy').fin : undefined} onChange={(e) => setDesde(e.target.value)} className="dax-input w-36 text-xs" />
+          <input type="date" aria-label="Hasta" value={hasta} min={esCajera ? minCaja : undefined} max={esCajera ? rangoPreset('hoy').fin : undefined} onChange={(e) => setHasta(e.target.value)} className="dax-input w-36 text-xs" />
         </ParFechas>}
         {conSucursales && (
           <select
@@ -331,11 +358,11 @@ export function SalesHistory() {
         )}
         <input
           type="search"
-          aria-label="Buscar folio o cliente"
-          placeholder="Buscar folio o cliente..."
+          aria-label={esCajera ? 'Buscar folio, cliente o producto' : 'Buscar folio o cliente'}
+          placeholder={esCajera ? 'Folio, cliente o producto...' : 'Buscar folio o cliente...'}
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
-          className="dax-input text-xs w-44"
+          className={`dax-input text-xs ${esCajera ? 'w-56' : 'w-44'}`}
         />
         {!esCajera && <label className="flex items-center gap-1.5 text-[10px] text-dax-muted cursor-pointer max-md:min-h-[44px]">
           <input type="checkbox" checked={includeOpenStates} onChange={(e) => { setIncludeOpenStates(e.target.checked); setPage(0) }} className="rounded" />

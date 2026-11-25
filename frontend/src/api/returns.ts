@@ -36,10 +36,16 @@ export interface ReturnDocument {
   total_refunded: number
   refund_method: string
   status: ReturnStatus
+  /** Motivo de catálogo; null en devoluciones anteriores al 2026-11-24. */
+  reason_code?: string | null
+  /** POLITICA (la caja sola) | PIN (gerente en la caja) | SUPERVISOR (aprobada después). */
+  autorizacion?: string | null
   branch_id: number | null
   branch: ReturnBranch | null
   user: ReturnUser | null
   supervisor: ReturnUser | null
+  /** Ticket de origen (serie y folio), para mostrarlo sin otra consulta. */
+  sale?: { id: string; series?: string | null; folio?: number | null; customer_name?: string | null } | null
   created_at: string
   items: ReturnLineItem[]
 }
@@ -58,9 +64,49 @@ export function returnBranchName(r: Pick<ReturnDocument, 'branch'>): string | nu
   return r.branch?.name ?? null
 }
 
+export interface MotivoDevolucion {
+  code: string
+  label: string
+  regresa_a_stock: boolean
+}
+
+/** Respaldo del catálogo del servidor (`app/services/devoluciones.py::MOTIVOS`). */
+export const MOTIVOS_DEVOLUCION: MotivoDevolucion[] = [
+  { code: 'DEFECTO', label: 'Defecto', regresa_a_stock: false },
+  { code: 'TALLA', label: 'Talla o medida', regresa_a_stock: true },
+  { code: 'NO_GUSTO', label: 'No le gustó', regresa_a_stock: true },
+  { code: 'ERROR_COBRO', label: 'Error de cobro', regresa_a_stock: true },
+  { code: 'OTRO', label: 'Otro', regresa_a_stock: true },
+]
+
+export interface PiezaDevolvible {
+  variant_id: string
+  descripcion: string | null
+  sku: string | null
+  vendido: number | string
+  devuelto: number | string
+  en_tramite: number | string
+  disponible: number | string
+  /** Lo que el cliente pagó por pieza (ya con descuentos): es lo que se reembolsa. */
+  precio_pagado: number | string
+}
+
+/** GET /returns/sale/{id}/piezas */
+export interface PiezasDelTicket {
+  piezas: PiezaDevolvible[]
+  /** Métodos por los que se pagó el ticket: la caja reembolsa solo por esos. */
+  metodos: string[]
+  pendiente: { id: string; total: number | string } | null
+  motivos: MotivoDevolucion[]
+  /** Monto que la caja devuelve sin gerente; null si a este rol no le aplica tope. */
+  monto_libre: number | string | null
+  es_caja: boolean
+}
+
 export interface CreateReturnPayload {
   sale_id: string
   reason: string
+  reason_code?: string
   total_refunded: number
   refund_method?: string   // CASH | CARD | TRANSFER | OTHER — default CASH en el backend
   cash_session_id?: number | null
@@ -105,6 +151,18 @@ export const returnsApi = {
 
   reject: async (id: string, reason?: string): Promise<ReturnDocument> => {
     const { data } = await client.post<ReturnDocument>(`/returns/${id}/reject`, { reason })
+    return data
+  },
+
+  /** Qué queda por devolver de un ticket, por dónde y con qué reglas. */
+  piezas: async (saleId: string): Promise<PiezasDelTicket> => {
+    const { data } = await client.get<PiezasDelTicket>(`/returns/sale/${saleId}/piezas`)
+    return data
+  },
+
+  /** Un gerente autoriza la devolución pendiente tecleando su PIN en la caja. */
+  autorizar: async (id: string, pin: string): Promise<ReturnDocument> => {
+    const { data } = await client.post<ReturnDocument>(`/returns/${id}/autorizar`, { pin })
     return data
   },
 

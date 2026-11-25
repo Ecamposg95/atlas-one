@@ -73,12 +73,17 @@ export function Organization({ seccion }: { seccion?: SeccionEmpresa } = {}) {
       // vacío = sin ajuste / sin comisión.
       const margen = orgForm.usd_rate_margin
       const comision = orgForm.card_surcharge_pct
+      // Igual con los dos ajustes de caja: vacío = el valor por omisión.
+      const dias = orgForm.dias_ventas_caja
+      const libre = orgForm.devolucion_libre_hasta
       // `perfil_ui` lo cambia solo la plataforma: no viaja en el PUT de tenant.
       const { perfil_ui: _perfil, ...datos } = orgForm
       const updated = await organizationApi.updateOrg({
         ...datos,
         usd_rate_margin: margen === '' || margen == null ? 0 : margen,
         card_surcharge_pct: comision === '' || comision == null ? 0 : comision,
+        dias_ventas_caja: dias === '' || dias == null ? 30 : Math.max(0, Math.floor(Number(dias))),
+        devolucion_libre_hasta: libre === '' || libre == null ? 0 : libre,
       })
       setOrg(updated); setOrgForm(updated)
       // El conteo ciego viaja en /me/context: se relee para que esta sesión lo tome ya.
@@ -332,6 +337,46 @@ export function Organization({ seccion }: { seccion?: SeccionEmpresa } = {}) {
                     <>La comisión está apagada: el punto de venta y el ticket no muestran nada.</>
                   )}
                 </p>
+              </div>
+            </div>
+            <div className="flex justify-end mt-4">
+              <button onClick={saveOrg} disabled={saving || nameInvalido} className="dax-btn-primary text-xs disabled:opacity-40">
+                {saving ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-check" /> Guardar</>}
+              </button>
+            </div>
+          </DaxCard>
+
+          {/* Ventas pasadas y devoluciones de la caja */}
+          <DaxCard>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">
+              <i className="fa-solid fa-rotate-left mr-1.5" />Ventas y devoluciones en caja
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="dias-ventas-caja" className="block text-xs text-slate-300 mb-1">Plazo de devolución (días)</label>
+                <input
+                  id="dias-ventas-caja" type="number" min={0} max={3650} step={1} inputMode="numeric"
+                  className="dax-input w-32 text-xs"
+                  value={orgForm.dias_ventas_caja ?? 30}
+                  onChange={(e) => setOrgForm((p) => ({ ...p, dias_ventas_caja: e.target.value }))}
+                />
+                <span className="block text-[10px] text-slate-600 mt-1">
+                  Quien cobra consulta, reimprime y devuelve las ventas de su sucursal de estos días hacia atrás,
+                  sin ver totales. Con 0 solo ve las de hoy. Las más viejas las resuelve el gerente.
+                </span>
+              </div>
+              <div>
+                <label htmlFor="devolucion-libre" className="block text-xs text-slate-300 mb-1">Devuelve sin autorización hasta ($)</label>
+                <input
+                  id="devolucion-libre" type="number" min={0} step="0.01" inputMode="decimal"
+                  className="dax-input w-32 text-xs"
+                  value={orgForm.devolucion_libre_hasta ?? 0}
+                  onChange={(e) => setOrgForm((p) => ({ ...p, devolucion_libre_hasta: e.target.value }))}
+                />
+                <span className="block text-[10px] text-slate-600 mt-1">
+                  Hasta este monto la caja devuelve sola. Arriba de eso un gerente autoriza con su PIN
+                  en la misma caja. Con 0 toda devolución pide gerente.
+                </span>
               </div>
             </div>
             <div className="flex justify-end mt-4">

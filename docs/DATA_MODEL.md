@@ -46,6 +46,8 @@ ninguna organización existente cambia de comportamiento sin configurarlas):
 | `perfil_ui` | `String(12)` | `NULL` | Modo básico (2026-10): `NULL`/`auto` = se deriva del plan (solo `FREE` explícito → básico; NULL, vacío, desconocido o de paga → completo), `basico`/`completo` = forzado por la plataforma. Solo decide qué muestra la interfaz (`app/services/perfil_ui.py`) |
 | `umbral_poca_existencia` | `Integer` | `NULL` | Tope en piezas de "Se está acabando" del Inicio básico; `NULL` = 3. Lo guarda la dueña en Empresa |
 | `conteo_ciego` | `Boolean` | `true` | Corte de caja a ciegas: con el turno abierto la caja no ve el esperado ni su desglose. Viaja en `/users/me/context` (`frontend/src/utils/blindCash.ts`) y, encendido, el servidor tampoco le manda a la cajera lo que la pantalla esconde (`app/services/ventas_cajero.py::cajera_a_ciegas`). Lo apaga ADMINISTRADOR/DUEÑO en Empresa → Corte de caja |
+| `dias_ventas_caja` | `Integer` | `30` | Días hacia atrás que la caja (cajera, vendedor) consulta, reimprime y devuelve ventas de su sucursal; 0 = solo hoy. Regla en `app/services/ventas_cajero.py`. Viaja en `/users/me/context`. Empresa → Ventas y devoluciones en caja |
+| `devolucion_libre_hasta` | `Numeric(10,2)` | `0` | Monto hasta el que la caja aprueba sola una devolución; 0 = toda devolución pide gerente (PIN en la caja o aprobación después). `app/services/devoluciones.py` |
 | `precio_por_sucursal` | `Boolean` | `false` | Cada sucursal con su precio: encendido, el precio que edita alguien con sucursal (ficha o talla) se guarda en `product_branch_status.price_override` de su sucursal y no toca el base; la ficha le muestra ese precio. ADMINISTRADOR/DUEÑO (y quien no tiene sucursal) editan el base y fijan el de cada sucursal en la matriz de la ficha; escalones y empaques no se tocan desde una sucursal. `app/modules/products/services/precio_sucursal.py`. Lo enciende ADMINISTRADOR/DUEÑO en Empresa → Precios |
 
 **Columnas en `branches`** (`app/modules/tenants/models.py`):
@@ -183,7 +185,7 @@ crédito con abono parcial no debe inflar "ventas totales" con la deuda aún no 
 | `purchase_recommendations` | UUID | Reorden por bajo stock (abasto) | `status`=RecommendationStatus |
 
 ## Devoluciones (`app/models/returns.py`, PK UUID)
-`sale_returns` (refund_method=PaymentMethod, status String), `sale_return_items` (reentrada a stock o merma).
+`sale_returns` (refund_method=PaymentMethod, status String; `reason_code` = motivo de catálogo y `autorizacion` = POLITICA \| PIN \| SUPERVISOR, ambos String NULL en filas anteriores al 2026-11-24), `sale_return_items` (reentrada a stock o merma).
 
 ## Logística (`app/models/logistics.py`, PK Int)
 `container_types`, `box_types`, `product_packagings`, `container_load_calcs`, `inbound_shipments` (status String), `shipment_items`, `transfer_orders` (`TransferStatus`), `transfer_order_lines`, `transfer_fulfillments` (`FulfillmentStatus`), `transfer_fulfillment_lines`.
