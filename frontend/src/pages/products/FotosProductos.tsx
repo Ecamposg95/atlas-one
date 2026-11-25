@@ -125,7 +125,7 @@ export function FotosProductos() {
 }
 
 function FichaFotos({ producto, onVolver }: { producto: Product; onVolver: () => void }) {
-  const { activo: canalActivo, puedePublicar } = useCanalTienda()
+  const { activo: canalActivo, puedePublicarUno: puedePublicar } = useCanalTienda()
   const [publicado, setPublicado] = useState(!!producto.web_published)
   const [subiendo, setSubiendo] = useState<{ hecho: number; total: number } | null>(null)
   const [publicando, setPublicando] = useState(false)

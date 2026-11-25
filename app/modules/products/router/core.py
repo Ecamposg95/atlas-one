@@ -43,7 +43,7 @@ from app.modules.products.sale_name import sku_sugerido
 from app.modules.products.services import actualizar_producto, crear_producto, duplicar_producto
 from app.modules.products.services import web as web_svc
 
-from ._shared import _PRODUCT_ADVANCED_ROLES, _compute_product_read
+from ._shared import _PRODUCT_ADVANCED_ROLES, _ROLES_FOTOS, _compute_product_read
 
 logger = logging.getLogger(__name__)
 
@@ -573,7 +573,7 @@ async def upload_product_image(
     URL CDN se persiste en `Product.image_url`. Sin esa env var, fallback a
     `app/static/product_images/<id>.<ext>` (legacy).
     """
-    if current_user.role not in _PRODUCT_ADVANCED_ROLES:
+    if current_user.role not in _ROLES_FOTOS:
         raise HTTPException(status_code=403, detail="Sin permiso para subir imágenes")
 
     product = (
@@ -616,7 +616,7 @@ def delete_product_image(
     org_id: int = Depends(get_current_active_organization),
 ):
     """Remove the product image and clear ``Product.image_url``."""
-    if current_user.role not in _PRODUCT_ADVANCED_ROLES:
+    if current_user.role not in _ROLES_FOTOS:
         raise HTTPException(status_code=403, detail="Sin permiso para eliminar imágenes")
 
     product = (
@@ -659,7 +659,7 @@ class OrdenImagenes(BaseModel):
 
 
 def _producto_para_galeria(db: Session, product_id: str, org_id: int, current_user: User, escribe: bool) -> Product:
-    if escribe and current_user.role not in _PRODUCT_ADVANCED_ROLES:
+    if escribe and current_user.role not in _ROLES_FOTOS:
         raise HTTPException(status_code=403, detail="Sin permiso para administrar imágenes")
     product = (
         db.query(Product)

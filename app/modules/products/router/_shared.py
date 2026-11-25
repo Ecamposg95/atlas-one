@@ -60,6 +60,7 @@ logger = logging.getLogger(__name__)
 from app.modules.products.services.comun import (  # noqa: E402
     MANAGER_ROLES as _MANAGER_ROLES,
     PRODUCT_ADVANCED_ROLES as _PRODUCT_ADVANCED_ROLES,
+    ROLES_FOTOS as _ROLES_FOTOS,
     celda_decimal as _safe_decimal,
     celda_texto as _safe_str,
     celda_vacia as _is_na,

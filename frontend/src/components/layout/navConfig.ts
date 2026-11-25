@@ -121,8 +121,9 @@ export const ROLE_ROUTES: Record<Role, string[]> = {
   GERENTE:          ['/mobile/query','/fotos','/labels','/configuracion','/cash-history','/reports','/hq/valor-inventario','/hr/me','/products','/pos','/sales','/customers','/customers/cobranza','/returns','/atlas-pos','/tables','/kitchen','/recipes','/meseros','/bar/bottles','/menu','/mobile/comanda'],
   CAJERO:           ['/mobile/query','/fotos','/labels','/pos','/cash-history','/hr/me','/products','/configuracion','/sales','/customers','/returns','/atlas-pos','/tables','/kitchen','/bar/bottles','/menu','/mobile/comanda'],
   // Vendedor (2026-11-20): rol de mostrador con menú corto. Usa el mismo armazón
-  // responsivo que la cajera, ya no el móvil de cotizaciones. No edita catálogo.
-  VENDEDOR:         ['/atlas-pos','/pos','/sales','/cash-history','/customers','/products'],
+  // responsivo que la cajera, ya no el móvil de cotizaciones. No edita catálogo,
+  // pero sí toma fotos y publica producto por producto desde /fotos.
+  VENDEDOR:         ['/fotos','/atlas-pos','/pos','/sales','/cash-history','/customers','/products'],
   SOPORTE_OPERATIVO:['/mobile/dashboard','/mobile/query','/mobile/profile','/hr/me','/atlas-pos'],
   CLIENTE:          ['/portal'],
 }
