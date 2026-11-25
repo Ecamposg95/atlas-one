@@ -10,6 +10,9 @@ vi.mock('../../../api/organization', () => ({ organizationApi: { getBranches: vi
 
 import { StoreScanner } from '../StoreScanner'
 import { useAuthStore } from '../../../store/authStore'
+import { useAgenteStore } from '../../../store/agenteStore'
+import { useEnabledModulesStore } from '../../../store/enabledModulesStore'
+import { NO_DISPONIBLES } from '../../../utils/estadoModulos'
 
 const PLAYERA = {
   id: 'p-1', name: 'Playera', sale_name: 'Playera', sku: 'PLY', barcode: '750', price: 1500, stock_total: 4,
@@ -73,5 +76,22 @@ describe('Consultar: buscador de precios y escáner en una pantalla', () => {
     teclear('999')
     fireEvent.click(screen.getByText('Buscar'))
     expect(await screen.findByText('¿Se lo asignamos a un producto?')).toBeTruthy()
+  })
+
+  it('Preguntar al agente abre el panel con lo escrito; oculto mientras `ai` esté en construcción', () => {
+    como('CAJERO')
+    useAgenteStore.getState().reset()
+    // Hoy: módulo encendido pero en construcción → sin botón.
+    useEnabledModulesStore.setState({ enabledModules: ['ai'], noDisponibles: NO_DISPONIBLES, loaded: true })
+    const { unmount } = render(<StoreScanner />)
+    expect(screen.queryByText('Preguntar al agente')).toBeNull()
+    unmount()
+    // Destapado: el botón manda al agente lo que hay en el buscador.
+    useEnabledModulesStore.setState({ enabledModules: ['ai'], noDisponibles: {}, loaded: true })
+    render(<StoreScanner />)
+    teclear('¿hay playera negra en otra sucursal?')
+    fireEvent.click(screen.getByText('Preguntar al agente'))
+    expect(useAgenteStore.getState()).toMatchObject({ abierto: true, borrador: '¿hay playera negra en otra sucursal?' })
+    useEnabledModulesStore.getState().reset()
   })
 })

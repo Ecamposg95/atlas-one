@@ -71,6 +71,16 @@ PLANES: List[Plan] = [
 ]
 PLANES_POR_CLAVE: Dict[str, Plan] = {p.clave: p for p in PLANES}
 
+# Cupo de IA por plan: tokens (entrada + salida) por organización y día de
+# negocio. PROVISIONAL: es un valor alto a propósito, igual para todos los
+# planes. La cifra final por plan está por definir; saldrá de medir el consumo
+# real por rol en la fase A1 (tabla `ai_llamadas`). Tener `ai` encendido no
+# depende de esto: un plan sin IA igual trae cupo por si la plataforma se la
+# enciende. Lo consume `app/modules/ai/uso.py` (ahí están las excepciones por
+# organización y la variable global).
+CUPO_IA_TOKENS_DIA_PROVISIONAL = 2_000_000
+CUPO_IA_TOKENS_DIA: Dict[str, int] = {p.clave: CUPO_IA_TOKENS_DIA_PROVISIONAL for p in PLANES}
+
 
 class LimitePlanAlcanzado(ValueError):
     """La organizacion ya llego al tope de su plan para esta alta."""
@@ -105,6 +115,11 @@ def asignar_plan(org: Organization, clave: Optional[str]) -> None:
             f"Plan desconocido {clave!r}. Válidos: {', '.join(claves_validas())}"
         )
     org.plan = clave
+
+
+def cupo_ia_tokens_dia(clave: Optional[str]) -> int:
+    """Tokens de IA por día que da el plan (NULL o desconocido = FREE)."""
+    return CUPO_IA_TOKENS_DIA[obtener_plan(clave).clave]
 
 
 def plan_minimo_para(modulo: str) -> Optional[Plan]:

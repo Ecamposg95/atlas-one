@@ -234,7 +234,40 @@ curl -H "Authorization: Bearer $KEY" "https://app.atlasone.com.mx/api/channel/v1
 ```
 
 ## Etiquetas · `/api/labels` `[module:labels]`
-`GET /candidates` (filtros `search`, `department_id`, `brand_id`, `gender`, `only_with_stock`, `product_id`, `created_after` ISO 8601 = solo tallas dadas de alta desde ese instante; la pantalla manda la medianoche local) devuelve una fila por variante visible con sus campos de etiqueta, `created_at` (alta de la talla, UTC) y `copies_default` = existencia (admin/dueño suman la organización, el resto su sucursal; tope 99). Las no imprimibles NO se esconden: llegan con `printable:false` y su `reason`. `POST /preview` (`{variant_id}` o datos sueltos) devuelve el layout en dots sobre un lienzo 408×200 —`elements` con textos y el código de barras en `bits`— más el ZPL crudo, para que la pantalla dibuje exactamente lo que va a salir. `POST /jobs` (`{items:[{variant_id, copies}]}`, copias 1..99, tope de 500 etiquetas por lote) devuelve `{content_base64, labels, skipped}`; un renglón sin código de barras cae en `skipped` sin tumbar el trabajo. `GET /test` da la etiqueta de calibración. **El server no imprime**: entrega ZPL en base64 y el navegador lo manda al agente local (`POST https://localhost:9100/print`), igual que el ticket. El layout está portado byte a byte de `atlas_labels/` del repositorio del agente (51 × 25 mm a 203 dpi, Zebra GX420t) y un test lo congela contra un literal.
+`GET /candidates` (filtros `search`, `department_id`, `brand_id`, `gender`, `only_with_stock`, `product_id`, `created_after` ISO 8601 = solo tallas dadas de alta desde ese instante; la pantalla manda la medianoche local; `carga_id` = solo las variantes que recibieron piezas de esa carga —movimientos con `reference="carga:<id>"`— y `copies_default` y `piezas_carga` salen de lo que entró, no de la existencia) devuelve una fila por variante visible con sus campos de etiqueta, `created_at` (alta de la talla, UTC) y `copies_default` = existencia (admin/dueño suman la organización, el resto su sucursal; tope 99). Las no imprimibles NO se esconden: llegan con `printable:false` y su `reason`. `POST /preview` (`{variant_id}` o datos sueltos) devuelve el layout en dots sobre un lienzo 408×200 —`elements` con textos y el código de barras en `bits`— más el ZPL crudo, para que la pantalla dibuje exactamente lo que va a salir. `POST /jobs` (`{items:[{variant_id, copies}]}`, copias 1..99, tope de 500 etiquetas por lote) devuelve `{content_base64, labels, skipped}`; un renglón sin código de barras cae en `skipped` sin tumbar el trabajo. `GET /test` da la etiqueta de calibración. **El server no imprime**: entrega ZPL en base64 y el navegador lo manda al agente local (`POST https://localhost:9100/print`), igual que el ticket. El layout está portado byte a byte de `atlas_labels/` del repositorio del agente (51 × 25 mm a 203 dpi, Zebra GX420t) y un test lo congela contra un literal.
+
+## Cargar mercancía · `/api/cargas` `[module:ai]` (gate estricto: ni ADMIN/DUEÑO lo saltan)
+Subir, leer, contestar dudas y descartar: roles de oficina; **autorizar solo ADMINISTRADOR/DUEÑO**. Decimales viajan como string (`"1500.00"`); errores `{"detail": "<frase en español>"}`. Todo filtra `organization_id`; una carga de otra org da 404. Guía de operación: [`ai/cargar-mercancia.md`](ai/cargar-mercancia.md).
+
+| Método y ruta | Entrada | Respuesta |
+|---|---|---|
+| `POST /api/cargas` | multipart: `archivo`, `proposito` (`entrada`\|`migracion`), `sucursal_id?` | 202 `{id, folio, estado}`; 413 si pasa de 20 MB; 415 tipo no soportado (pdf, xlsx, csv); 503 sin `ANTHROPIC_API_KEY` (no se crea la carga) |
+| `GET /api/cargas` | — | `[CargaResumen]`, la más reciente primero |
+| `GET /api/cargas/{id}` | — | `CargaDetalle`: `carga`, `contadores` por clase, `dudas`, `grupos` (renglones del plan, cada uno con `descripcion` original y `origen`), `cambios`, `ultimos_conteos`, `puede_autorizar` |
+| `POST /api/cargas/{id}/respuestas` | `{texto}` (≤ 4000) | `{cambio, rechazos}`: la IA traduce el texto a operaciones, el código las valida y recalcula; `rechazos` = lo que no entendió (también un precio, costo o cantidad que no escribió); 422 si la respuesta del modelo se cortó ("contesta en partes") |
+| `POST /api/cargas/{id}/dudas/{numero}` | `{opcion, valor?}` | `{cambio, rechazos}`; botón = clave de la opción; respuesta escrita (solo dudas con `acepta_texto`) = `{opcion: "", valor}` |
+| `POST /api/cargas/{id}/cambios/{cambio_id}/deshacer` | — | `CargaDetalle` |
+| `POST /api/cargas/{id}/reintentar` | — | `{id, folio, estado}`; relee si falló la lectura (con un intento nuevo), regresa al plan si falló la aplicación; **409** si la carga ya se aplicó alguna vez (`aplicada_at`) |
+| `POST /api/cargas/{id}/autorizar` | — | `ResumenAplicacion` (`productos_nuevos`, `variantes_nuevas`, `piezas`, `valor_costo`, `etiquetas`); **403** si no es ADMINISTRADOR/DUEÑO, **409** con dudas abiertas |
+| `POST /api/cargas/{id}/descartar` | — | `{id, folio, estado}` |
+| `GET /api/cargas/{id}/etiquetas` | — | `[Etiqueta]` (marca, producto, sku, talla, barcode, piezas, precio) |
+
+Estados: `leyendo` → `plan` → `aplicando` → `aplicada`; también `error` y `descartada`. Clases de renglón: `EXISTE`, `SUMA`, `NUEVO`, `YA_CARGADO`, `IGNORADO`; los `YA_CARGADO` siempre traen una duda `ya_cargado` (saltar \| cargar) por carga previa. Dudas que aceptan texto (`acepta_texto`): `tipo_cambio`, `precio_faltante`, `sin_costo`, `marca_nueva`, `precio_fuera_familia`, `sin_tipo`, `sin_marca`; además `moneda` (PDF con costo sin moneda) y `departamento`. La lectura corre en un hilo de fondo: la pantalla consulta `GET /api/cargas/{id}` hasta que sale de `leyendo`. `autorizar` aplica todo en una transacción (kardex `reference="carga:<id>"`, auditoría `CARGA_APLICADA`); si falla, revierte y deja la carga en `error`. Tope diario de tokens por org (`AI_TOKENS_DIA_ORG`): 429. Cada llamada al proveedor tiene tope de `AI_TIMEOUT_SEG` segundos (300) y un reintento; la lectura marca su avance tras cada bloque y descarta lo leído si la carga cambió de intento o de estado mientras leía.
+
+## Agente · `/api/ai` `[module:ai]` (gate estricto: ni ADMIN/DUEÑO lo saltan)
+
+Fase A1: consultas por rol, sin escrituras y sin streaming. Roles con agente: CAJERO, VENDEDOR, GERENTE, ADMINISTRADOR, DUEÑO (`app/modules/ai/matriz.py`); cualquier otro rol, y SUPERADMIN/SUPPORT (fase A4), reciben **403**. Una conversación es de una persona en una organización: la de otro usuario o de otra empresa responde **404**. Guía: `docs/ai/README.md`.
+
+| Endpoint | Body | Respuesta |
+|---|---|---|
+| `POST /api/ai/conversaciones` | `{titulo?}` | 201 `{id, titulo, created_at, updated_at}` |
+| `GET /api/ai/conversaciones` | — | las propias, la más reciente primero (máx. 50) |
+| `GET /api/ai/conversaciones/{id}` | — | `{…, mensajes: [{id, rol, contenido, tablas, created_at}]}`: solo lo que escribió la persona y lo que contestó el agente (los pasos de herramientas no viajan) |
+| `POST /api/ai/conversaciones/{id}/mensajes` | `{texto}` (1 a 4000) | `{mensaje}` con la respuesta y `tablas: [{titulo, columnas, filas, mas}]` (las arma el servidor con el resultado de las herramientas, máx. 3 tablas de 12 filas). **429** cupo diario de la organización o de la persona agotado; **503** sin llave del proveedor (`IA no configurada: falta …`) o proveedor caído (el turno no se guarda; lo gastado sí se cuenta) |
+| `DELETE /api/ai/conversaciones/{id}` | — | 204; borra la conversación y sus mensajes |
+| `GET /api/ai/health` | — | `{module, status, ready}` (solo sesión) |
+
+El modelo solo recibe las herramientas del rol y el servidor rechaza cualquier otra. Organización y sucursal salen de la sesión; solo ADMINISTRADOR y DUEÑO pueden nombrar una sucursal. Cada llamada al modelo deja fila en `ai_llamadas` (rol, tarea `consulta`, modelo, tokens).
 
 ## Conteos — `/api/inventory/counts`
 Conteo físico de una sucursal (y opcionalmente un departamento) con escáner. Solo ADMINISTRADOR/DUEÑO (403 al resto); el módulo `inventory` solo decide si el ítem Conteo aparece en el menú. Todo se filtra por organización: un conteo o línea de otra org da **404**. El conteo **nunca toca `stock_on_hand`**: lee la existencia y la congela al cerrar. Tablas en [`DATA_MODEL.md`](DATA_MODEL.md). Diseño: `docs/superpowers/specs/2026-10-22-conteo-inventario-design.md`.
@@ -330,7 +363,7 @@ Lo que **Atlas le cobra a cada tienda**. No es CRM Cobranza (`/api/customers/…
 ---
 
 ## Stubs / Beta (solo `GET /health`, `ready:false`)
-`/api/commissions`, `/api/memberships`, `/api/ai`, `/api/purchasing`. (Nota: compras REAL vive en `/api/purchases`; `/api/purchasing` es el placeholder del rediseño modular.)
+`/api/commissions`, `/api/memberships`, `/api/purchasing`. (Nota: compras REAL vive en `/api/purchases`; `/api/purchasing` es el placeholder del rediseño modular.)
 
 ---
 

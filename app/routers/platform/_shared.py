@@ -89,6 +89,7 @@ _ORG_UPDATE_FIELDS = {
     "tax_id", "tax_regime", "website", "timezone",
     "ticket_header", "ticket_footer", "printer_name",
     "industry_type", "status", "plan", "branding_config", "is_active", "perfil_ui",
+    "ai_modelos", "ai_tokens_dia",
     "latitude", "longitude", "maps_url",
 }
 _BRANCH_UPDATE_FIELDS = {

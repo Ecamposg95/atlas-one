@@ -35,7 +35,7 @@ export const HQ_NAV_GROUPS: { header: string; urls: string[] }[] = [
   { header: 'Operación',    urls: ['/hq/operations', '/hq/reports-hub', '/hq/valor-inventario'] },
   { header: 'Ventas',       urls: ['/sales', '/returns', '/cash-history', '/quotes', '/quotes/new', '/seguimiento'] },
   { header: 'Catálogo',     urls: ['/products', '/fotos', '/departments', '/brands', '/labels'] },
-  { header: 'Inventario',   urls: ['/inventory', '/inventory/conteos', '/mobile/query', '/logistics', '/boxes'] },
+  { header: 'Inventario',   urls: ['/inventory', '/inventory/conteos', '/inventory/cargas', '/mobile/query', '/logistics', '/boxes'] },
   { header: 'Compras',      urls: ['/purchases', '/expenses'] },
   { header: 'Clientes',     urls: ['/customers', '/appointments', '/commissions', '/memberships'] },
   { header: 'Restaurante',  urls: ['/menu', '/tables', '/mobile/comanda', '/kitchen', '/recipes', '/meseros', '/bar/bottles'] },
@@ -63,6 +63,7 @@ export const ALL_NAV: NavItem[] = [
   { label: 'Gastos',            short: 'GST', icon: 'fa-money-bill-wave',     url: '/expenses',         group: 'hq',   sort: 12, module: 'finance' },
   { label: 'Inventario',        short: 'INV', icon: 'fa-boxes',               url: '/inventory',        group: 'hq',   sort: 13, module: 'inventory' },
   { label: 'Conteo',            short: 'CNT', icon: 'fa-list-check',           url: '/inventory/conteos', group: 'hq',   sort: 13.6, module: 'inventory' },
+  { label: 'Cargar mercancía',  short: 'CRG', icon: 'fa-file-import',         url: '/inventory/cargas', group: 'hq',   sort: 13.55, module: 'ai' },
   // Fotos desde el teléfono para la tienda en línea: solo donde el canal está encendido.
   { label: 'Fotos',             short: 'FOT', icon: 'fa-camera',              url: '/fotos',            group: 'hq',   sort: 3.5, module: 'tienda_en_linea' },
   { label: 'Etiquetas',         short: 'ETQ', icon: 'fa-tag',                 url: '/labels',           group: 'hq',   sort: 13.6, module: 'labels' },
@@ -116,9 +117,9 @@ export const ROLE_ROUTES: Record<Role, string[]> = {
   // admin, no en la de quien está en el mostrador, y hubo que mover ventas a
   // mano por eso. El backend sigue aceptando al admin en `create_sale` (se usa
   // para capturar ventas históricas por API); esto es solo la navegación.
-  ADMINISTRADOR:    ['/mobile/query','/fotos','/sales','/returns','/products','/inventory','/configuracion','/labels','/mobile/owner','/cash-history','/hq/operations','/hq/reports-hub','/hq/valor-inventario','/inventory/conteos','/departments','/users','/customers','/customers/cobranza','/brands','/hr','/hr/me','/logistics','/boxes','/quotes','/quotes/new','/seguimiento','/purchases','/expenses','/appointments','/commissions','/memberships','/recipes','/ai','/tables','/kitchen','/meseros','/bar/bottles','/menu','/mobile/comanda'],
-  DUEÑO:            ['/mobile/query','/fotos','/pos','/sales','/returns','/products','/inventory','/configuracion','/labels','/mobile/owner','/cash-history','/hq/operations','/hq/reports-hub','/hq/valor-inventario','/inventory/conteos','/customers','/customers/cobranza','/hr/me','/logistics','/boxes','/quotes','/quotes/new','/seguimiento','/purchases','/expenses','/appointments','/commissions','/memberships','/recipes','/ai','/tables','/kitchen','/meseros','/bar/bottles','/menu','/mobile/comanda'],
-  GERENTE:          ['/mobile/query','/fotos','/labels','/configuracion','/cash-history','/reports','/hq/valor-inventario','/hr/me','/products','/pos','/sales','/customers','/customers/cobranza','/returns','/atlas-pos','/tables','/kitchen','/recipes','/meseros','/bar/bottles','/menu','/mobile/comanda'],
+  ADMINISTRADOR:    ['/mobile/query','/fotos','/sales','/returns','/products','/inventory','/inventory/cargas','/configuracion','/labels','/mobile/owner','/cash-history','/hq/operations','/hq/reports-hub','/hq/valor-inventario','/inventory/conteos','/departments','/users','/customers','/customers/cobranza','/brands','/hr','/hr/me','/logistics','/boxes','/quotes','/quotes/new','/seguimiento','/purchases','/expenses','/appointments','/commissions','/memberships','/recipes','/ai','/tables','/kitchen','/meseros','/bar/bottles','/menu','/mobile/comanda'],
+  DUEÑO:            ['/mobile/query','/fotos','/pos','/sales','/returns','/products','/inventory','/inventory/cargas','/configuracion','/labels','/mobile/owner','/cash-history','/hq/operations','/hq/reports-hub','/hq/valor-inventario','/inventory/conteos','/customers','/customers/cobranza','/hr/me','/logistics','/boxes','/quotes','/quotes/new','/seguimiento','/purchases','/expenses','/appointments','/commissions','/memberships','/recipes','/ai','/tables','/kitchen','/meseros','/bar/bottles','/menu','/mobile/comanda'],
+  GERENTE:          ['/mobile/query','/fotos','/labels','/inventory/cargas','/configuracion','/cash-history','/reports','/hq/valor-inventario','/hr/me','/products','/pos','/sales','/customers','/customers/cobranza','/returns','/atlas-pos','/tables','/kitchen','/recipes','/meseros','/bar/bottles','/menu','/mobile/comanda'],
   CAJERO:           ['/mobile/query','/fotos','/labels','/pos','/cash-history','/hr/me','/products','/configuracion','/sales','/customers','/returns','/atlas-pos','/tables','/kitchen','/bar/bottles','/menu','/mobile/comanda'],
   // Vendedor (2026-11-20): rol de mostrador con menú corto. Usa el mismo armazón
   // responsivo que la cajera, ya no el móvil de cotizaciones. No edita catálogo,

@@ -16,14 +16,14 @@ import { coincideUrl } from './navPerfilPlan'
 /** Cajera y gerente: Cobrar · Ventas · Corte · Productos · Configuración · Mi día. */
 export const OCULTAS_BASICO_SUCURSAL: readonly string[] = [
   '/returns',             // se llega desde el ticket en Ventas y desde el POS
-  '/labels', '/mobile/query', '/customers', '/hr/me',
+  '/labels', '/mobile/query', '/customers', '/hr/me', '/inventory/cargas',
   '/reports', '/hq/valor-inventario',   // gerente
 ]
 
 /** Dueña: Inicio · Ventas · Corte · Productos · Reportes · Usuarios · Configuración. */
 export const OCULTAS_BASICO_HQ: readonly string[] = [
   '/departments', '/brands', '/labels', '/mobile/query',
-  '/customers', '/customers/cobranza', '/inventory', '/inventory/conteos',
+  '/customers', '/customers/cobranza', '/inventory', '/inventory/conteos', '/inventory/cargas',
   '/returns',                          // Ventas (/sales) devuelve por ticket; Productos (/products) ya se ve en básico
   '/hq/valor-inventario',              // entra como tarjeta en el Inicio básico
   '/hr/me', '/ai',

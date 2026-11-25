@@ -164,7 +164,7 @@ valida y escribe, el humano confirma.**
 |---|---|---|---|---|
 | Crear organización | nombre, giro, plan | Sugerir giro por la descripción del negocio | `onboard_org` | Sí (crea cuenta) |
 | Crear usuario | nombre, rol | — | `POST /api/users/` con topes del plan | Sí |
-| Leer exportación de otro POS | xlsx/csv | Mapear columnas, detectar relleno, inferir departamentos, corregir nombres, marcar dudas | Validar tipos, SKU únicos, precios > 0 | Revisar el resumen |
+| Leer exportación de otro POS | xlsx/csv | Mapear columnas, detectar relleno, inferir departamentos, corregir nombres, marcar dudas. **En la app solo en parte: Cargar mercancía** (`/inventory/cargas`, propósito migración) mapea columnas, pero una exportación con una sola columna de descripción todavía no se interpreta sola (cada renglón pregunta marca y prenda) y no conserva los SKU ni los códigos de barras del sistema de origen: **para migrar un catálogo completo usa el importador existente** (ver [`../ai/cargar-mercancia.md`](../ai/cargar-mercancia.md) §1) | Validar tipos, SKU únicos, precios > 0 | Revisar el resumen |
 | Transcribir foto de libreta | imagen | Visión: modelo/piezas/precio, marcar ilegibles | Mismo CSV que `import_products` | Revisar la transcripción |
 | Cargar catálogo | CSV normalizado | — | Ensayo → resumen → carga en una transacción | Sí, tras el ensayo |
 | Ajustar existencias / conteo | conteo | Señalar diferencias raras | Movimientos de inventario con referencia | Sí |

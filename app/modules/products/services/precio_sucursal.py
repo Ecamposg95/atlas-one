@@ -77,3 +77,30 @@ def fijar_precio_de_sucursal(db: Session, org_id: int, branch_id: int,
         estado.price_override = precio
         cambiadas += 1
     return cambiadas
+
+
+# ── Lectura: el precio que COBRA una sucursal ────────────────────────────────
+
+def precios_de_sucursal(db: Session, org_id: int, branch_id: Optional[int],
+                        variant_ids: Iterable[str]) -> dict[str, Decimal]:
+    """Precio propio (`price_override`) de cada talla en la sucursal.
+
+    Solo trae las tallas que lo tienen; las demás cobran el precio base. Es la
+    misma regla de `create_sale`, que cobra el `price_override` siempre que
+    exista (con o sin `organization.precio_por_sucursal`)."""
+    ids = list(variant_ids)
+    if not branch_id or not ids:
+        return {}
+    filas = db.query(ProductBranchStatus.variant_id, ProductBranchStatus.price_override).filter(
+        ProductBranchStatus.organization_id == org_id,
+        ProductBranchStatus.branch_id == branch_id,
+        ProductBranchStatus.variant_id.in_(ids),
+        ProductBranchStatus.price_override.isnot(None),
+    ).all()
+    return {variant_id: precio for variant_id, precio in filas}
+
+
+def precio_en_sucursal(variante: ProductVariant, propios: dict[str, Decimal]) -> Decimal:
+    """Lo que cobra la sucursal por la talla: su precio propio o, sin él, el base."""
+    propio = propios.get(variante.id)
+    return propio if propio is not None else (variante.price or Decimal(0))

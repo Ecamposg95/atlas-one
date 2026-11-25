@@ -5,6 +5,7 @@ from app.models import Brand, Department
 from app.models.organization import Branch, BranchType, Organization
 from app.modules.ai.contexto import Contexto
 from app.modules.ai.herramientas import definiciones, ejecutar
+from app.modules.ai.herramientas_catalogo import sugerir_sku
 from app.modules.ai.models import AiConversation
 
 
@@ -26,18 +27,18 @@ def _otra_org(db):
 
 
 class TestRegistro:
-    def test_definiciones_en_formato_openai(self):
-        defs = definiciones()
+    def test_definiciones_en_formato_openai(self, db, org, admin_user):
+        defs = definiciones(_ctx(db, org, admin_user))
         nombres = {d["function"]["name"] for d in defs}
-        assert {"listar_departamentos", "listar_marcas", "buscar_producto", "sugerir_sku",
-                "consultar_existencias"} <= nombres
+        assert {"listar_departamentos", "listar_marcas", "buscar_producto", "consultar_existencias"} <= nombres
+        assert "sugerir_sku" not in nombres   # altas: fase A2
         for d in defs:
             assert d["type"] == "function"
             assert d["function"]["parameters"]["type"] == "object"
             assert d["function"]["description"]
 
     def test_herramienta_desconocida(self, db, org, admin_user):
-        assert ejecutar("borrar_todo", {}, _ctx(db, org, admin_user)) == {"error": "Herramienta desconocida: borrar_todo"}
+        assert ejecutar("borrar_todo", {}, _ctx(db, org, admin_user)) == {"error": "Herramienta no disponible: borrar_todo"}
 
     def test_argumentos_que_no_son_objeto(self, db, org, admin_user):
         assert "objeto" in ejecutar("buscar_producto", ["x"], _ctx(db, org, admin_user))["error"]
@@ -67,7 +68,8 @@ class TestCatalogo:
         assert [x["nombre"] for x in r["productos"]] == ["Playera cuello redondo"]
         assert r["productos"][0]["marca"] == "Versace"
         assert r["productos"][0]["variantes"] == [
-            {"id": v.id, "sku": "VER-PLAY-CR-NEG-M", "color": "Negro", "talla": "M", "precio": 1200.0},
+            {"sku": "VER-PLAY-CR-NEG-M", "color": "Negro", "talla": "M", "precio": 1200.0,
+             "costo": 720.0, "margen_pct": 40.0},
         ]
 
     def test_cajero_no_ve_lo_de_otra_sucursal(self, db, org, admin_user, cajero_a, products_setup):
@@ -82,9 +84,11 @@ class TestCatalogo:
     def test_sugerir_sku_y_alternativa(self, db, org, admin_user, branch_a):
         args = {"nombre": "Playera cuello redondo", "marca": "Versace", "color": "Negro", "talla": "M"}
         ctx = _ctx(db, org, admin_user)
-        assert ejecutar("sugerir_sku", args, ctx) == {"sku": "VER-PLAY-CR-NEG-M", "disponible": True}
+        # Ningún rol la recibe en A1 (es de altas): se prueba la función.
+        assert "no disponible" in ejecutar("sugerir_sku", args, ctx)["error"]
+        assert sugerir_sku(ctx, args) == {"sku": "VER-PLAY-CR-NEG-M", "disponible": True}
         _make_product(db, org, "Playera", "VER-PLAY-CR-NEG-M", 1200, [(branch_a.id, True)])
-        assert ejecutar("sugerir_sku", args, ctx) == {
+        assert sugerir_sku(ctx, args) == {
             "sku": "VER-PLAY-CR-NEG-M", "disponible": False, "alternativa": "VER-PLAY-CR-NEG-M-2",
         }
 
@@ -119,8 +123,7 @@ class TestAislamiento:
         p_aj, v_aj = _make_product(db, otra, "Playera Cruce", "CRU-PLAY-M-AJ", 100, [(ajena.id, True)])
         ctx = _ctx(db, org, admin_user)
         r = ejecutar("buscar_producto", {"q": "Cruce"}, ctx)
-        assert [x["id"] for x in r["productos"]] == [v_propia.product_id]
-        assert [v["id"] for x in r["productos"] for v in x["variantes"]] == [v_propia.id]
+        assert [v["sku"] for x in r["productos"] for v in x["variantes"]] == ["CRU-PLAY-M"]
         e = ejecutar("consultar_existencias", {"q": "Cruce"}, ctx)
         assert [f["sku"] for f in e["filas"]] == ["CRU-PLAY-M"]
         assert all(f["sucursal_id"] != ajena.id for f in e["filas"])

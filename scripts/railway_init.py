@@ -198,6 +198,16 @@ COLUMN_MIGRATIONS = [
     # Asistente IA (SP4, 2026-10): instrucciones del dueño. NULL para todas
     # las organizaciones vivas; las tablas ai_* las crea `create_all`.
     ("organization", "ai_instrucciones", "ALTER TABLE organization ADD COLUMN ai_instrucciones TEXT;"),
+    # Cargar mercancia con IA (2026-11): reglas por organizacion. Las tablas cargas_* las crea create_all.
+    ("organization", "reglas_carga", "ALTER TABLE organization ADD COLUMN reglas_carga JSON;"),
+    # IA, fase A0 (2026-11): excepcion de modelos por tarea y cupo diario propio.
+    # NULL para todas = lista global y cupo del plan. `ai_llamadas` la crea create_all.
+    ("organization", "ai_modelos", "ALTER TABLE organization ADD COLUMN ai_modelos JSON;"),
+    ("organization", "ai_tokens_dia", "ALTER TABLE organization ADD COLUMN ai_tokens_dia INTEGER;"),
+    # Agente, fase A1 (2026-11): lo que el proveedor exige reenviar intacto y las
+    # tablas que la pantalla muestra junto a la respuesta. NULL en lo ya guardado.
+    ("ai_messages", "nativo", "ALTER TABLE ai_messages ADD COLUMN nativo JSON;"),
+    ("ai_messages", "tablas", "ALTER TABLE ai_messages ADD COLUMN tablas JSON;"),
     # Atribucion por pago (2026-09-02) — ver los bloques de arriba.
     *MIGRACIONES_PAYMENTS_CASH_SESSION,
     *MIGRACIONES_CASH_MOVEMENT_AUTHOR,

@@ -11,7 +11,8 @@ Estados y roles son cadenas con constantes de Python, no enums de Postgres
 """
 from __future__ import annotations
 
-from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import Column, Date, DateTime, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy.sql import func
 
 from app.core.database import Base
 from app.models.mixins import AuditMixin, TenantMixin, UUIDMixin
@@ -43,6 +44,12 @@ class AiMessage(Base, UUIDMixin, AuditMixin, TenantMixin):
     # Formato OpenAI: [{"id", "type": "function", "function": {"name", "arguments"}}]
     tool_calls = Column(JSON, nullable=True)
     tool_call_id = Column(String(80), nullable=True)
+    # Lo que el proveedor exige reenviar intacto (`Respuesta.nativo`: los bloques
+    # de razonamiento de Anthropic). Solo lo entiende el proveedor que lo produjo.
+    nativo = Column(JSON, nullable=True)
+    # Tablas pequeñas para la pantalla, armadas por el servidor con los
+    # resultados de las herramientas del turno (nunca por el modelo).
+    tablas = Column(JSON, nullable=True)
     tokens_entrada = Column(Integer, nullable=False, default=0)
     tokens_salida = Column(Integer, nullable=False, default=0)
 
@@ -73,3 +80,28 @@ class AiUsoDiario(Base):
     tokens_entrada = Column(Integer, nullable=False, default=0)
     tokens_salida = Column(Integer, nullable=False, default=0)
     llamadas = Column(Integer, nullable=False, default=0)
+
+
+class AiLlamada(Base):
+    """Una fila por llamada al modelo: quién, para qué y cuánto costó.
+
+    Es la bitácora de consumo (fase A0): con ella se mide el gasto real por rol
+    y por tarea antes de fijar el cupo definitivo. `ai_uso_diario` es el
+    acumulado que se consulta en cada petición; esto, el detalle."""
+    __tablename__ = "ai_llamadas"
+    __table_args__ = (
+        Index("ix_ai_llamadas_org_fecha", "organization_id", "fecha"),
+        Index("ix_ai_llamadas_org_usuario_fecha", "organization_id", "user_id", "fecha"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    organization_id = Column(Integer, ForeignKey("organization.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # NULL = proceso sin persona
+    rol = Column(String(30), nullable=True)        # rol de la persona en ese momento
+    tarea = Column(String(20), nullable=True)      # consulta | captura | analisis
+    proveedor = Column(String(40), nullable=True)  # quien contestó de verdad
+    modelo = Column(String(80), nullable=True)
+    tokens_entrada = Column(Integer, nullable=False, default=0)
+    tokens_salida = Column(Integer, nullable=False, default=0)
+    fecha = Column(Date, nullable=False)  # día del negocio (app/core/fechas.py)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 
 import { labelsApi, type LabelCandidate, type LabelPreview } from '../../api/labels'
 import { productsApi } from '../../api/products'
@@ -39,6 +40,18 @@ const COLA_KEY = 'atlas_labels_printer'
 
 export function Labels() {
   const esTelefono = useEsTelefono()
+
+  // `?carga=<id>` (y `?folio=N`) llegan desde Cargar mercancía: la lista se
+  // limita a lo que entró en esa carga y las copias salen de sus piezas.
+  const [params, setParams] = useSearchParams()
+  const cargaId = params.get('carga') || undefined
+  const folio = params.get('folio')
+  const quitarCarga = () => {
+    const next = new URLSearchParams(params)
+    next.delete('carga')
+    next.delete('folio')
+    setParams(next, { replace: true })
+  }
 
   const [filtros, setFiltros] = useState<EstadoFiltros>(FILTROS_VACIOS)
   // La búsqueda libre se APLICA al enviar (Enter o el botón); los selectores y
@@ -103,6 +116,7 @@ export function Labels() {
         gender: filtros.gender,
         only_with_stock: filtros.only_with_stock,
         created_after: instanteLocalISO(filtros.created_after),
+        carga_id: cargaId,
       })
       // Con el filtro de fecha la tienda quiere ver primero la tanda recién capturada.
       setCargados(filtros.created_after ? masRecientesPrimero(res.items) : res.items)
@@ -125,7 +139,7 @@ export function Labels() {
     } finally {
       setCargando(false)
     }
-  }, [busqueda, filtros.department_id, filtros.brand_id, filtros.gender, filtros.only_with_stock, filtros.created_after])
+  }, [busqueda, filtros.department_id, filtros.brand_id, filtros.gender, filtros.only_with_stock, filtros.created_after, cargaId])
 
   useEffect(() => { void cargar() }, [cargar])
 
@@ -300,6 +314,27 @@ export function Labels() {
           <i className="fa-solid fa-vial" /> Etiqueta de prueba
         </button>
       </div>
+
+      {cargaId && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            data-testid="chip-carga"
+            className="inline-flex items-center gap-2 rounded-full border border-dax-border bg-dax-surface px-3 py-1 text-xs font-semibold text-dax-text"
+          >
+            <i className="fa-solid fa-box-open" />
+            {folio ? `Carga #${folio}` : 'Carga'}
+            <button
+              type="button"
+              className="dax-btn-icon"
+              aria-label="Quitar filtro de carga"
+              title="Quitar filtro de carga"
+              onClick={quitarCarga}
+            >
+              <i className="fa-solid fa-xmark" />
+            </button>
+          </span>
+        </div>
+      )}
 
       <DaxCard>
         <FiltrosEtiquetas

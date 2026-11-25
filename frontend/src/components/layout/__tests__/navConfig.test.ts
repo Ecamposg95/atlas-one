@@ -28,6 +28,18 @@ describe('el menú de la boutique', () => {
     expect(HQ_NAV_GROUPS.find((g) => g.header === 'Inventario')?.urls).toContain('/inventory/conteos')
   })
 
+  it('Cargar mercancía cuelga del módulo ai, es de admin, dueño y gerente, y no sale mientras ai no se estrene', () => {
+    expect(ALL_NAV.find((n) => n.url === '/inventory/cargas')?.module).toBe('ai')
+    for (const rol of ['ADMINISTRADOR', 'DUEÑO', 'GERENTE'] as const) {
+      expect(ROLE_ROUTES[rol]).toContain('/inventory/cargas')
+      // `ai` está en construcción (utils/estadoModulos): ni encendido se pinta.
+      expect(menu(rol, [...BOUTIQUE, 'ai'])).not.toContain('/inventory/cargas')
+      expect(menu(rol, BOUTIQUE)).not.toContain('/inventory/cargas')
+    }
+    expect(ROLE_ROUTES.CAJERO).not.toContain('/inventory/cargas')
+    expect(HQ_NAV_GROUPS.find((g) => g.header === 'Inventario')?.urls).toContain('/inventory/cargas')
+  })
+
   it('le da a la administradora camino para reimprimir, etiquetar y configurar la impresora', () => {
     const urls = menu('ADMINISTRADOR', BOUTIQUE)
     expect(urls).toEqual(expect.arrayContaining([
@@ -83,7 +95,7 @@ describe('los grupos del menú', () => {
     expect(grupo('Operación')).toEqual(['/hq/operations', '/hq/reports-hub', '/hq/valor-inventario'])
     expect(grupo('Ventas')).toEqual(['/sales', '/returns', '/cash-history', '/quotes', '/quotes/new', '/seguimiento'])
     expect(grupo('Catálogo')).toEqual(['/products', '/fotos', '/departments', '/brands', '/labels'])
-    expect(grupo('Inventario')).toEqual(['/inventory', '/inventory/conteos', '/mobile/query', '/logistics', '/boxes'])
+    expect(grupo('Inventario')).toEqual(['/inventory', '/inventory/conteos', '/inventory/cargas', '/mobile/query', '/logistics', '/boxes'])
     expect(grupo('Compras')).toEqual(['/purchases', '/expenses'])
     expect(grupo('Clientes')).toEqual(['/customers', '/appointments', '/commissions', '/memberships'])
     expect(grupo('Restaurante')).toEqual(['/menu', '/tables', '/mobile/comanda', '/kitchen', '/recipes', '/meseros', '/bar/bottles'])

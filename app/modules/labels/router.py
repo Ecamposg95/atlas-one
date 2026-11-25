@@ -82,6 +82,7 @@ def listar_candidatos(
     only_with_stock: bool = False,
     product_id: Optional[str] = None,
     created_after: Optional[datetime] = None,
+    carga_id: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization),
@@ -91,6 +92,9 @@ def listar_candidatos(
     `created_after` (ISO 8601) deja solo las tallas dadas de alta desde ese
     momento: es como la tienda etiqueta el lote que acaba de capturar sin
     pescar entre el catálogo viejo.
+
+    `carga_id` deja solo las variantes que recibieron piezas de esa carga y
+    trae en `piezas_carga` lo que entró.
 
     Las que no se pueden imprimir vienen con `printable=false` y su `reason`:
     esconderlas dejaría a la tienda buscando una prenda que nunca aparece.
@@ -105,6 +109,7 @@ def listar_candidatos(
         search=(search or None), product_id=product_id,
         department_id=department_id, brand_id=brand_id, gender=genero,
         only_with_stock=only_with_stock, created_after=created_after,
+        carga_id=(carga_id or None),
     )
     return {"items": filas, "total": len(filas)}
 

@@ -216,6 +216,7 @@ Lo que se vende y no está construido se oculta (decisión 2026-11-24). El estad
 | Una vista del frontend (ruta→archivo→API) | [`docs/FRONTEND_VIEWS.md`](docs/FRONTEND_VIEWS.md) |
 | Crear/mover un módulo (proceso completo) | [`docs/modules/MODULE_GUIDE.md`](docs/modules/MODULE_GUIDE.md) |
 | Deploy y ramas | [`docs/DEPLOY.md`](docs/DEPLOY.md) · [`docs/branching-strategy.md`](docs/branching-strategy.md) · [`RAILWAY_DEPLOY.md`](RAILWAY_DEPLOY.md) (histórico, ya no describe producción) |
+| Cargar mercancía con IA (PDF/xlsx → plan → autorizar), reglas de carga, cargas en `error` | [`docs/ai/cargar-mercancia.md`](docs/ai/cargar-mercancia.md) |
 | Auditoría funcional del día (qué se corrigió, qué queda abierto) | [`docs/AUDITORIA-2026-09-22.md`](docs/AUDITORIA-2026-09-22.md) |
 
 Índice completo: [`docs/README.md`](docs/README.md).

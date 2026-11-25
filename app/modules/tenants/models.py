@@ -18,6 +18,7 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     Integer,
+    JSON,
     Numeric,
     String,
     Text,
@@ -271,6 +272,14 @@ class Organization(Base):
     # tallas, abreviaturas de marca en el SKU, departamentos. NULL = solo las
     # convenciones del preset (app/modules/ai/prompts/).
     ai_instrucciones = Column(Text, nullable=True)
+    # Reglas de Cargar mercancía con IA (app/modules/cargas/reglas.py::ReglasCarga).
+    reglas_carga = Column(JSON, nullable=True)
+    # IA, fase A0 (2026-11). Las dos son de PLATAFORMA y nacen NULL.
+    # `ai_modelos`: excepción a la lista global de modelos por tarea,
+    # {"consulta": ["anthropic:claude-haiku-5-5", …]} (app/modules/ai/tareas.py).
+    # `ai_tokens_dia`: cupo diario propio; NULL = el del plan (app/modules/ai/uso.py).
+    ai_modelos = Column(JSON, nullable=True)
+    ai_tokens_dia = Column(Integer, nullable=True)
 
     # SaaS
     status = Column(String, default="ACTIVE", index=True)  # ACTIVE, SUSPENDED

@@ -75,8 +75,10 @@ class TestHistorial:
         guardar_mensaje(db, c, "tool", '{"marcas": []}', tool_call_id="c1")
         guardar_mensaje(db, c, "assistant", "No hay marcas.")
         todos = db.query(AiMessage).filter(AiMessage.conversation_id == c.id).order_by(AiMessage.orden).all()
-        # Los dos últimos son tool + assistant: el tool quedaría huérfano.
-        assert [m.rol for m in recortar_historial(todos, tope=2)] == ["assistant"]
+        # Los dos últimos son tool + assistant: el tool quedaría huérfano y un
+        # historial tampoco puede empezar en el asistente (A1: empieza en la persona).
+        assert [m.rol for m in recortar_historial(todos, tope=2)] == []
+        assert [m.rol for m in recortar_historial(todos, tope=3)] == []
         assert [m.rol for m in recortar_historial(todos, tope=30)] == ["user", "assistant", "tool", "assistant"]
 
     def test_formato_llm(self, db, org, admin_user):
