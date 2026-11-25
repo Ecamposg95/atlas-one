@@ -55,6 +55,18 @@ class SaleReturnBase(BaseModel):
     # Motivo de catálogo (`app/services/devoluciones.py::MOTIVOS`); opcional
     # para las pantallas que todavía mandan solo texto.
     reason_code: Optional[str] = None
+    # DINERO (omisión) | VALE | CAMBIO — ver `sale_returns.destino`.
+    destino: Optional[str] = None
+
+class ValeInfo(BaseModel):
+    id: str
+    code: str
+    balance: Decimal
+    initial_amount: Decimal
+    status: str
+
+    class Config:
+        from_attributes = True
 
 class SaleReturnCreate(SaleReturnBase):
     items: List[SaleReturnItemCreate]
@@ -79,6 +91,7 @@ class SaleReturn(SaleReturnBase):
     status: str
     # POLITICA | PIN | SUPERVISOR; None en pendientes y en devoluciones viejas.
     autorizacion: Optional[str] = None
+    vale: Optional[ValeInfo] = None
     sale: Optional[SaleReturnSaleInfo] = None
     user: Optional[UserRead] = None
     supervisor: Optional[UserRead] = None

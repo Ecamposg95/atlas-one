@@ -1116,6 +1116,15 @@ def create_sale(
                 cash_session_id=cash_session_id_value,
             ))
 
+    # Vale de tienda (2026-11-24): un pago OTHER con referencia `VALE:<código>`
+    # baja el saldo del vale dentro de esta misma transacción. Sin pagos con
+    # vale no hace nada; si al vale no le alcanza, 400 y no se cobra.
+    from app.services.vales import aplicar_vales_en_venta
+    aplicar_vales_en_venta(
+        db, org_id=org_id, sales_document_id=sales_doc.id,
+        payments=sale_in.payments, user_id=current_user.id,
+    )
+
     # --- M-3: Mark parked ticket as CONVERTED (atómico con la venta) ---
     # Si la venta proviene de un ticket pausado, marcamos el parked CONVERTED y
     # guardamos el FK al sale para trazabilidad. Esto evita que un doble-click o
@@ -1651,6 +1660,10 @@ def cancel_sale(
         db, org_id=org_id, documento=sale,
         descripcion=f"Cancelación Venta #{sale.folio}",
     )
+
+    # Lo que esta venta se cobró con vale de tienda regresa al vale.
+    from app.services.vales import restituir_vales_de_venta
+    restituir_vales_de_venta(db, org_id=org_id, sales_document_id=sale.id, user_id=current_user.id)
 
     # 3. Marcar Cancelado
     prev_status = sale.status.value if hasattr(sale.status, "value") else str(sale.status)

@@ -642,6 +642,7 @@ def print_return_endpoint(
             folio_devolucion=f"DEV-{dev.id[-6:].upper()}", fecha=dev.created_at,
             motivo=dev.reason or "", metodo=str(getattr(dev.refund_method, "value", dev.refund_method)),
             piezas=piezas, total=float(dev.total_refunded or 0), autorizo=autorizo,
+            vale=({"code": dev.vale.code, "balance": dev.vale.balance} if dev.vale is not None else None),
             estado=dev.status, customer_name=venta.customer_name if venta is not None else None,
         )
     except Exception as e:

@@ -259,6 +259,15 @@ def create_customer(
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization)
 ):
+    from app.modules.customers import crm
+    from app.services.ventas_cajero import es_cajero
+    if es_cajero(current_user):
+        # Alta rápida del mostrador: nombre y teléfono (más correo y nota). El
+        # crédito, lo fiscal, el tipo y los campos propios son de la gerencia.
+        customer_in = CustomerCreate(**{k: getattr(customer_in, k) for k in crm.CAMPOS_DE_CAJA})
+    tipo_cliente = crm.normalizar_tipo(customer_in.tipo)
+    campos_propios = crm.limpiar_valores(db, org_id, customer_in.campos)
+
     # Validar RFC único (si no es nulo y no es el genérico XAXX010101000)
     if customer_in.tax_id and len(customer_in.tax_id) > 10: 
         exists = db.query(Customer).filter(
@@ -301,6 +310,10 @@ def create_customer(
         credit_limit=customer_in.credit_limit,
         credit_days=customer_in.credit_days,
         notes=customer_in.notes,
+        tipo=tipo_cliente,
+        birthday=customer_in.birthday,
+        company=customer_in.company,
+        campos=campos_propios or None,
         current_balance=0, # Empieza en cero
         organization_id=org_id
     )
@@ -363,6 +376,22 @@ def update_customer(
     
     # Actualizamos campos dinámicamente
     update_data = customer_in.dict(exclude_unset=True)
+    from app.modules.customers import crm
+    from app.services.ventas_cajero import es_cajero
+    if es_cajero(current_user):
+        # La caja corrige nombre, teléfono, correo y nota; lo demás (crédito,
+        # fiscal, tipo, campos propios, portal) es de la gerencia.
+        fuera = [k for k in update_data if k not in crm.CAMPOS_DE_CAJA]
+        if fuera:
+            raise HTTPException(
+                status_code=403,
+                detail="Desde la caja solo se corrigen nombre, teléfono, correo y nota. Lo demás lo edita el gerente.",
+            )
+    if "tipo" in update_data:
+        update_data["tipo"] = crm.normalizar_tipo(update_data["tipo"])
+    if "campos" in update_data:
+        # Se mezclan sobre lo guardado: un campo retirado conserva su valor.
+        update_data["campos"] = {**(customer.campos or {}), **crm.limpiar_valores(db, org_id, update_data["campos"])}
     for field, value in update_data.items():
         if hasattr(customer, field):
             setattr(customer, field, value)
@@ -371,7 +400,7 @@ def update_customer(
     db.refresh(customer)
 
     # PORTAL ACCESS LOGIC (Update/Enable)
-    if (customer_in.enable_portal or customer_in.password) and customer.email:
+    if (customer_in.enable_portal or customer_in.password) and customer.email and not es_cajero(current_user):
         from app.models.users import User, Role
         from app.core.security import get_password_hash
         

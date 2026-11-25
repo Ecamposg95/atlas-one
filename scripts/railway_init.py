@@ -167,6 +167,13 @@ COLUMN_MIGRATIONS = [
     # Motivo de catalogo y como se autorizo cada devolucion (POLITICA | PIN | SUPERVISOR).
     ("sale_returns", "reason_code", "ALTER TABLE sale_returns ADD COLUMN reason_code VARCHAR;"),
     ("sale_returns", "autorizacion", "ALTER TABLE sale_returns ADD COLUMN autorizacion VARCHAR;"),
+    ("sale_returns", "destino", "ALTER TABLE sale_returns ADD COLUMN destino VARCHAR;"),
+    ("sale_returns", "vale_id", "ALTER TABLE sale_returns ADD COLUMN vale_id VARCHAR(36);"),
+    # CRM (2026-11-24): tipo de cliente, cumpleaños, negocio y campos propios.
+    ("customers", "tipo", "ALTER TABLE customers ADD COLUMN tipo VARCHAR NOT NULL DEFAULT 'MENUDEO';"),
+    ("customers", "birthday", "ALTER TABLE customers ADD COLUMN birthday DATE;"),
+    ("customers", "company", "ALTER TABLE customers ADD COLUMN company VARCHAR;"),
+    ("customers", "campos", "ALTER TABLE customers ADD COLUMN campos JSON;"),
     # Precio por sucursal 2026-11-23. Nace FALSE: ninguna tienda cambia de
     # comportamiento hasta que se encienda (Eleven Fashion lo pidio).
     ("organization", "precio_por_sucursal", "ALTER TABLE organization ADD COLUMN precio_por_sucursal BOOLEAN NOT NULL DEFAULT FALSE;"),

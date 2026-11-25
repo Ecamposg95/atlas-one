@@ -3,7 +3,7 @@
 Phase 2 / S2: moved from app/schemas/customers.py.
 """
 from pydantic import BaseModel, EmailStr, Field
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from decimal import Decimal
 from datetime import date, datetime
 
@@ -25,6 +25,12 @@ class CustomerBase(BaseModel):
     
     is_active: bool = True
     notes: Optional[str] = None
+
+    # CRM (2026-11-24)
+    tipo: Optional[str] = None                 # MENUDEO | MAYOREO (omisión MENUDEO)
+    birthday: Optional[date] = None
+    company: Optional[str] = None
+    campos: Optional[Dict[str, Any]] = None    # valores de los campos propios
 
 # --- CREACIÓN ---
 class CustomerCreate(CustomerBase):
@@ -130,3 +136,35 @@ class CustomerRead(CustomerBase):
 
     class Config:
         from_attributes = True
+
+
+# --- CRM: campos propios y seguimiento (2026-11-24) ---
+class CampoPropioIn(BaseModel):
+    label: str = Field(min_length=1, max_length=60)
+    tipo: str = "TEXTO"
+    opciones: Optional[List[str]] = None
+    orden: Optional[int] = None
+
+
+class CampoPropioOut(BaseModel):
+    id: int
+    key: str
+    label: str
+    tipo: str
+    opciones: Optional[List[str]] = None
+    orden: int = 0
+
+    class Config:
+        from_attributes = True
+
+
+class SeguimientoIn(BaseModel):
+    customer_id: int
+    tipo: str = "LLAMADA"
+    nota: Optional[str] = Field(default=None, max_length=300)
+    due_date: date
+    assigned_user_id: Optional[int] = None
+
+
+class SeguimientoHecho(BaseModel):
+    resultado: Optional[str] = Field(default=None, max_length=300)

@@ -126,6 +126,7 @@ def create_return(db: Session, return_in: SaleReturnCreate, user_id: int, branch
         refund_method=return_in.refund_method,
         reason=return_in.reason,
         reason_code=getattr(return_in, "reason_code", None),
+        destino=getattr(return_in, "destino", None),
         status="PENDING",
         supervisor_id=return_in.supervisor_id,
         organization_id=organization_id,
@@ -331,6 +332,16 @@ def approve_return(db: Session, return_id: str, supervisor_id: int,
     )
     a_entregar = refund_amount - aplicado_a_saldo
     db.flush()
+    # Vale de tienda / cambio de producto: lo que tocaría entregar no sale en
+    # dinero, queda como saldo a favor para otra compra.
+    if db_return.destino in ("VALE", "CAMBIO") and a_entregar > Decimal("0") and not db_return.vale_id:
+        from app.services.vales import emitir_vale
+        vale = emitir_vale(
+            db, org_id=db_return.organization_id, amount=a_entregar,
+            branch_id=db_return.branch_id, customer_id=sale.customer_id,
+            customer_name=sale.customer_name, return_id=db_return.id, user_id=supervisor_id,
+        )
+        db_return.vale_id = vale.id
     # Con el estado de ANTES de esta devolución: un ticket que ya estaba PAID
     # no vuelve a quedar por cobrar aunque su cargo no tenga abono enlazado.
     sigue_debiendo = bool(sale.customer_id) and deuda_viva_del_documento(

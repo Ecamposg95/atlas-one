@@ -93,9 +93,23 @@ def create_new_return(
         return_in.reason = dev.texto_motivo(return_in.reason_code, return_in.reason)
 
     mi_turno = dev.sesion_abierta_de(db, current_user.id, current_user.branch_id)
-    if de_caja:
+    destino = (return_in.destino or dev.DESTINO_DINERO).upper()
+    if destino not in dev.DESTINOS:
+        raise HTTPException(status_code=400, detail="Destino de la devolución desconocido.")
+    return_in.destino = destino
+    if destino != dev.DESTINO_DINERO:
+        # Vale o cambio: no sale dinero de ninguna caja.
+        from app.models.sales import PaymentMethod
+        return_in.refund_method = PaymentMethod.OTHER
+        return_in.cash_session_id = mi_turno
+    elif de_caja:
         # El dinero regresa por donde entró: efectivo solo si se pagó en efectivo.
         permitidos = dev.metodos_de_reembolso(sale)
+        if not permitidos:
+            raise HTTPException(
+                status_code=400,
+                detail="Este ticket se pagó con vale de tienda: la devolución regresa como vale.",
+            )
         if str(return_in.refund_method.value) not in permitidos:
             raise HTTPException(
                 status_code=400,

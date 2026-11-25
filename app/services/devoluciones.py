@@ -26,6 +26,12 @@ AUT_POLITICA = "POLITICA"      # la caja, dentro del monto libre de la tienda
 AUT_PIN = "PIN"                # un gerente tecleó su PIN en la caja
 AUT_SUPERVISOR = "SUPERVISOR"  # aprobada después desde Devoluciones
 
+# Qué recibe el cliente (`sale_returns.destino`).
+DESTINO_DINERO = "DINERO"   # por `refund_method`
+DESTINO_VALE = "VALE"       # vale de tienda para otra compra
+DESTINO_CAMBIO = "CAMBIO"   # vale que la caja usa enseguida en la venta del cambio
+DESTINOS = (DESTINO_DINERO, DESTINO_VALE, DESTINO_CAMBIO)
+
 
 def catalogo_motivos() -> list[dict]:
     return [{"code": c, "label": t, "regresa_a_stock": s} for c, (t, s) in MOTIVOS.items()]
@@ -49,13 +55,21 @@ def metodos_de_reembolso(sale: SalesDocument) -> list[str]:
     """Métodos por los que se puede regresar el dinero: los mismos con los que
     se pagó el ticket (efectivo solo si se pagó en efectivo). Una venta sin
     pagos (fiada) no entrega dinero: lo devuelto baja la deuda; se deja
-    efectivo como etiqueta por si queda un excedente."""
+    efectivo como etiqueta por si queda un excedente.
+    Lo pagado con vale de tienda no regresa en dinero: si todo el ticket se
+    pagó con vale, la lista sale vacía (solo procede otro vale)."""
+    from app.services.vales import codigo_de_referencia
     vistos: list[str] = []
-    for p in sale.payments or []:
+    pagos = list(sale.payments or [])
+    for p in pagos:
+        if codigo_de_referencia(getattr(p, "reference", None)):
+            continue
         m = _valor(p.method)
         if m not in vistos:
             vistos.append(m)
-    return vistos or [PaymentMethod.CASH.value]
+    if vistos or pagos:
+        return vistos
+    return [PaymentMethod.CASH.value]
 
 
 def piezas_del_ticket(db: Session, sale: SalesDocument) -> list[dict]:

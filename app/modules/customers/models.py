@@ -6,7 +6,7 @@ STATUS: Stable
 Phase 2 / S2: moved from app/models/crm.py. The legacy path is now a
 reverse-shim that re-exports from here.
 """
-from sqlalchemy import Column, Integer, String, Boolean, Numeric, ForeignKey, DateTime, Enum, JSON
+from sqlalchemy import Column, Integer, String, Boolean, Numeric, ForeignKey, DateTime, Date, Enum, JSON
 import enum
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -32,6 +32,14 @@ class Customer(Base, TenantMixin):
     notes = Column(String, nullable=True)
     
     is_active = Column(Boolean, default=True)
+
+    # --- CRM (2026-11-24) ---
+    # MENUDEO (cliente de mostrador) | MAYOREO (compra por volumen / a crédito).
+    tipo = Column(String, nullable=False, default="MENUDEO", server_default="MENUDEO")
+    birthday = Column(Date, nullable=True)
+    company = Column(String, nullable=True)      # negocio o razón social (mayoreo)
+    # Valores de los campos propios de la tienda: {clave del campo: valor}.
+    campos = Column(JSON, nullable=True)
 
     # --- Campos de Crédito ---
     has_credit = Column(Boolean, default=False)
@@ -70,3 +78,40 @@ class CustomerLedgerEntry(Base, TenantMixin):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     customer = relationship("Customer", back_populates="ledger_entries")
+
+
+class CustomerFieldDef(Base, TenantMixin):
+    """Campo propio de la tienda para la ficha del cliente (tope
+    `MAX_CAMPOS_PROPIOS` activos). El valor vive en `customers.campos[key]`."""
+    __tablename__ = "customer_field_defs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String(40), nullable=False)
+    label = Column(String(60), nullable=False)
+    tipo = Column(String(12), nullable=False, default="TEXTO")   # TEXTO | NUMERO | FECHA | LISTA | SI_NO
+    opciones = Column(JSON, nullable=True)                       # solo LISTA
+    orden = Column(Integer, nullable=False, default=0)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class CustomerFollowUp(Base, TenantMixin):
+    """Seguimiento de un cliente: una tarea con fecha (llamar, avisar que llegó
+    mercancía, cobrar) que alguien del equipo marca como hecha."""
+    __tablename__ = "customer_followups"
+
+    id = Column(Integer, primary_key=True, index=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False, index=True)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
+    tipo = Column(String(12), nullable=False, default="LLAMADA")  # LLAMADA | WHATSAPP | VISITA | COBRANZA | OTRO
+    nota = Column(String(300), nullable=True)
+    due_date = Column(Date, nullable=False, index=True)
+    status = Column(String(12), nullable=False, default="PENDIENTE")  # PENDIENTE | HECHO
+    resultado = Column(String(300), nullable=True)
+    assigned_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    done_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    done_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    customer = relationship("Customer")

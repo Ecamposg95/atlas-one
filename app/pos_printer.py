@@ -1185,6 +1185,7 @@ class PosPrinter:
     def build_devolucion_bytes(self, *, organization, branch, cashier: str, folio_venta: str,
                                folio_devolucion: str, fecha: datetime, motivo: str, metodo: str,
                                piezas: list, total: float, autorizo: Optional[str] = None,
+                               vale: Optional[dict] = None,
                                estado: str = "APPROVED", customer_name: Optional[str] = None) -> bytes:
         """Comprobante de devolución (2026-11-24). Sin apertura de cajón: el
         efectivo sale con el movimiento de caja, el papel solo lo documenta.
@@ -1216,7 +1217,15 @@ class PosPrinter:
         raw += self.CMD["BOLD_ON"] + self._rline("Total devuelto", float(total)) + self.CMD["BOLD_OFF"]
         etiqueta = {"CASH": "Efectivo", "CARD": "Tarjeta", "TRANSFER": "Transferencia",
                     "STORE_CREDIT": "Vale de tienda"}.get(str(metodo).upper(), str(metodo))
-        raw += linea(f"Reembolso: {etiqueta}")
+        if vale:
+            # Vale de tienda: el código es lo que el cliente trae para cobrarlo.
+            raw += linea("Reembolso: Vale de tienda")
+            raw += self.CMD["CENTER"] + self.CMD["BOLD_ON"] + linea(f"VALE {vale['code']}")
+            raw += linea(f"Saldo {self._format_currency(float(vale['balance']))}")
+            raw += self.CMD["BOLD_OFF"] + self.CMD["LEFT"]
+            raw += linea("Presentalo en caja en tu proxima compra.")
+        else:
+            raw += linea(f"Reembolso: {etiqueta}")
         raw += linea(f"Motivo: {motivo}")
         raw += sep + linea(f"Le atendio: {cashier}")
         if autorizo:

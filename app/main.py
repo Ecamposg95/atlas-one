@@ -208,7 +208,13 @@ app.include_router(sales.router,            prefix="/api/sales",            tags
 app.include_router(cash.router,             prefix="/api/cash",             tags=["Caja"])
 app.include_router(returns.router,          prefix="/api/returns",          tags=["Devoluciones"])
 app.include_router(quotes.router,           prefix="/api/quotes",           tags=["Cotizaciones"])
+# Antes del router de clientes: sus rutas fijas (`/campos`, `/seguimiento`) no
+# deben caer en `/{customer_id}`.
+from app.modules.customers.router_crm import router as customers_crm_router
+app.include_router(customers_crm_router,    prefix="/api/customers",        tags=["Clientes"])
 app.include_router(customers.router,        prefix="/api/customers",        tags=["Clientes"])
+from app.routers import vales as vales_router
+app.include_router(vales_router.router,     prefix="/api/vales",            tags=["Vales de tienda"])
 # documents.router eliminado en Sprint 4: estaba broken (template pdf/statement.html
 # nunca existió + import faltante de datetime). PDF de estados de cuenta se genera
 # via app/modules/customers/router.py (GET /{customer_id}/pdf-statement) →

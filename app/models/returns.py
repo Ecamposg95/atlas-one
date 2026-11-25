@@ -24,6 +24,12 @@ class SaleReturn(Base, UUIDMixin, AuditMixin, TenantMixin):
     # Cómo se autorizó: POLITICA (la caja, dentro del monto libre de la tienda),
     # PIN (un gerente tecleó su PIN en la caja) o SUPERVISOR (aprobada después).
     autorizacion = Column(String, nullable=True)
+    # Qué recibe el cliente (2026-11-24): DINERO (por `refund_method`), VALE
+    # (vale de tienda) o CAMBIO (vale que se usa enseguida en otra venta).
+    # NULL = DINERO. Con VALE/CAMBIO `refund_method` queda en OTHER y no sale
+    # efectivo; al aprobar se emite el vale y se guarda en `vale_id`.
+    destino = Column(String, nullable=True)
+    vale_id = Column(String(36), nullable=True)
     
     # Relaciones
     sale = relationship("SalesDocument")
@@ -32,6 +38,8 @@ class SaleReturn(Base, UUIDMixin, AuditMixin, TenantMixin):
     branch = relationship("Branch")
     cash_session = relationship("CashSession")
     items = relationship("SaleReturnItem", back_populates="parent_return", cascade="all, delete-orphan")
+    vale = relationship("StoreVoucher", primaryjoin="foreign(SaleReturn.vale_id) == StoreVoucher.id",
+                        viewonly=True, uselist=False)
 
 class SaleReturnItem(Base, UUIDMixin, AuditMixin, TenantMixin):
     __tablename__ = "sale_return_items"

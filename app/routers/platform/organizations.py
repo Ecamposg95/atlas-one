@@ -254,6 +254,24 @@ def delete_organization(
             ).delete(synchronize_session=False)
             db.flush()
 
+        # Vales de tienda y CRM (2026-11-24): cuelgan de ventas, devoluciones y
+        # clientes, así que se van antes que ellos.
+        from app.models.vales import StoreVoucher, StoreVoucherMovement
+        from app.modules.customers.models import CustomerFieldDef, CustomerFollowUp
+        deleted["store_voucher_movements"] = db.query(StoreVoucherMovement).filter(
+            StoreVoucherMovement.organization_id == org_id
+        ).delete(synchronize_session=False)
+        deleted["store_vouchers"] = db.query(StoreVoucher).filter(
+            StoreVoucher.organization_id == org_id
+        ).delete(synchronize_session=False)
+        deleted["customer_followups"] = db.query(CustomerFollowUp).filter(
+            CustomerFollowUp.organization_id == org_id
+        ).delete(synchronize_session=False)
+        deleted["customer_field_defs"] = db.query(CustomerFieldDef).filter(
+            CustomerFieldDef.organization_id == org_id
+        ).delete(synchronize_session=False)
+        db.flush()
+
         sale_ids = [r[0] for r in db.query(SalesDocument.id).filter(
             SalesDocument.organization_id == org_id
         ).all()]
