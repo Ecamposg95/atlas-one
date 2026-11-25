@@ -234,10 +234,30 @@ def test_galeria_toca_producto_y_aisla_orgs(client, db, org, auth_admin):
     assert client.get(f"/api/products/{ajeno.id}/images", headers=auth_admin).status_code == 404
 
 
-def test_galeria_rol_sin_permiso_403(client, db, org, auth_vendedor_sin_sucursal):
-    # Mismos roles que `/{id}/image` (el cajero sí puede; un vendedor no).
+def test_galeria_rol_sin_permiso_403(client, db, org):
+    # Mismos roles que `/{id}/image`: soporte operativo no administra fotos.
+    from conftest import _auth_header, _make_user
+    from app.models.users import Role
+    h = _auth_header(_make_user(db, org, None, "soporte_fotos", Role.SOPORTE_OPERATIVO))
     p = _producto(db, org)
-    assert _subir(client, p, auth_vendedor_sin_sucursal).status_code == 403
+    assert _subir(client, p, h).status_code == 403
+
+
+def test_vendedor_sube_fotos_y_publica_uno_por_uno(client, db, org, auth_vendedor_sin_sucursal):
+    """El vendedor toma fotos desde /fotos y publica ese producto; el resto del
+    catálogo (editar, publicar en bloque) sigue cerrado para su rol."""
+    h = auth_vendedor_sin_sucursal
+    _encender(db, org)
+    p = _producto(db, org)
+    r = _subir(client, p, h)
+    assert r.status_code == 200, r.text
+    assert client.post(f"/api/products/{p.id}/image", files=_png(), headers=h).status_code == 200
+    r = client.post("/api/products/web-publish", json={"ids": [p.id], "published": True}, headers=h)
+    assert r.status_code == 200, r.text
+    db.refresh(p)
+    assert p.web_published is True
+    r = client.post("/api/products/web-publish", json={"filtro": {}, "published": True}, headers=h)
+    assert r.status_code == 403
 
 
 def test_order_con_ids_ajenos_422(client, db, org, auth_admin):

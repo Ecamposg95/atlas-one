@@ -99,9 +99,13 @@ def web_publish(
 ):
     """Publica o despublica productos en la tienda en línea, por `ids` o por
     `filtro` (mismas reglas que `GET /api/products/`: search/marca/departamento,
-    solo productos activos de la org). Solo ADMINISTRADOR/DUEÑO."""
-    if not _is_admin(current_user):
+    solo productos activos de la org). Solo ADMINISTRADOR/DUEÑO; el VENDEDOR
+    publica producto por producto (`ids`, desde /fotos), nunca por `filtro`."""
+    es_vendedor = current_user.role == "VENDEDOR"
+    if not _is_admin(current_user) and not es_vendedor:
         raise HTTPException(status_code=403, detail="Solo administración puede publicar en la tienda en línea")
+    if es_vendedor and req.ids is None:
+        raise HTTPException(status_code=403, detail="Publicar en bloque es solo para administración")
     if not canal_activo(db, org_id):
         raise HTTPException(status_code=404, detail="El canal Tienda en línea no está activo")
 
