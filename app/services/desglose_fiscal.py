@@ -11,6 +11,10 @@ Este módulo NO cambia lo que se cobra ni las columnas de siempre
 fotografía fiscal y la guarda en columnas propias (`iva_*` del documento y del
 renglón). Las de siempre siguen alimentando ticket, corte y reportes.
 
+También es la única fuente de la tasa de IVA de un producto
+(`iva_efectivo`): el checkout le pide aquí qué tasa sumar con factura y el
+desglose qué tasa declarar, así que no pueden contradecirse.
+
 Regla (una sola, explícita):
 
 1. **Lo cobrado ya trae el IVA.** Para el SAT, el importe que pagó el cliente
@@ -179,6 +183,125 @@ def tratamiento_de(
     return Tratamiento(IVA_16, "Tasa", TASAS[IVA_16], inferido=True)
 
 
+# --- Tasa de IVA efectiva: UNA sola fuente para el cobro y el desglose ---
+#
+# Un producto tiene dos lugares donde alguien pudo decir su IVA: la
+# clasificación fiscal del producto (`iva_tratamiento`, y `sat_objeto_imp` =
+# "01" no objeto) y las banderas de cobro de la variante (`has_iva` y
+# `tax_rate`, que `compute_line_tax` usa para sumar el IVA con factura).
+# `iva_efectivo` es la única que decide:
+#
+# * Con clasificación fiscal capturada, ella manda para el cobro y para el
+#   desglose.
+# * Sin clasificación, el cobro sigue las banderas de la variante, igual que
+#   siempre, y el desglose infiere la tasa (`tratamiento_de`).
+#
+# `discrepancia_iva` impide guardar un producto cuya clasificación cobraría
+# distinto de lo que cobran sus banderas. Con eso, para todo producto que se
+# puede guardar el cobro es idéntico al histórico: o no hay clasificación (y
+# mandan las banderas) o la hay y coincide con ellas.
+
+@dataclass(frozen=True)
+class IvaEfectivo:
+    """Lo que hay que saber del IVA de un renglón.
+
+    `cobra_iva` y `tasa_pct` son exactamente lo que el checkout le pasa a
+    `app/services/tax.py::compute_line_tax` (`has_iva` y `tax_rate`, este en
+    porcentaje: 16, no 0.16). `tratamiento` es la clasificación para el
+    desglose fiscal. `clasificado` = el producto trae su clasificación fiscal
+    y por eso manda sobre las banderas de la variante."""
+    tratamiento: Tratamiento
+    cobra_iva: bool
+    tasa_pct: Decimal
+    clasificado: bool
+
+
+def _cobro_de_banderas(has_iva, tax_rate) -> tuple[bool, Decimal]:
+    return bool(has_iva), Decimal(str(tax_rate)) if tax_rate is not None else Decimal("0")
+
+
+def _cobro_de_tratamiento(tratamiento: Tratamiento) -> tuple[bool, Decimal]:
+    if tratamiento.tasa is None or tratamiento.tasa == 0:
+        return False, Decimal("0")
+    return True, tratamiento.tasa * 100
+
+
+def _tasa_que_suma(cobra_iva: bool, tasa_pct: Decimal) -> Optional[Decimal]:
+    """La tasa que `compute_line_tax` suma con factura, o None si no suma IVA.
+    Es lo único de las banderas que mueve el cobro."""
+    return tasa_pct if (cobra_iva and tasa_pct > 0) else None
+
+
+def _esta_clasificado(iva_tratamiento: Optional[str], objeto_imp: Optional[str]) -> bool:
+    return iva_tratamiento in TRATAMIENTOS_IVA or objeto_imp == OBJETO_NO_OBJETO
+
+
+def iva_efectivo(
+    iva_tratamiento: Optional[str],
+    objeto_imp: Optional[str],
+    has_iva: Optional[bool],
+    tax_rate,
+) -> IvaEfectivo:
+    """Tasa de IVA efectiva de un producto (ver el bloque de arriba)."""
+    tratamiento = tratamiento_de(iva_tratamiento, objeto_imp, has_iva, tax_rate)
+    if _esta_clasificado(iva_tratamiento, objeto_imp):
+        cobra, tasa = _cobro_de_tratamiento(tratamiento)
+        return IvaEfectivo(tratamiento, cobra, tasa, clasificado=True)
+    cobra, tasa = _cobro_de_banderas(has_iva, tax_rate)
+    return IvaEfectivo(tratamiento, cobra, tasa, clasificado=False)
+
+
+def _fmt_pct(tasa: Decimal) -> str:
+    return format(tasa.normalize(), "f")
+
+
+def _nombre_clasificacion(iva_tratamiento: Optional[str], objeto_imp: Optional[str]) -> str:
+    if objeto_imp == OBJETO_NO_OBJETO:
+        return "«No objeto de impuesto»"
+    return {
+        IVA_16: "«IVA 16 %»", IVA_8: "«IVA 8 %»", IVA_0: "«IVA 0 %»", IVA_EXENTO: "«Exento de IVA»",
+    }[iva_tratamiento]
+
+
+def discrepancia_iva(
+    iva_tratamiento: Optional[str],
+    objeto_imp: Optional[str],
+    has_iva: Optional[bool],
+    tax_rate,
+    *,
+    variante: Optional[str] = None,
+) -> Optional[str]:
+    """None si la clasificación fiscal y las banderas de cobro dicen lo mismo
+    (o no hay clasificación); si no, el mensaje en español que dice qué
+    ajustar. `variante` = etiqueta de la talla cuando no es la principal."""
+    if not _esta_clasificado(iva_tratamiento, objeto_imp):
+        return None
+    tratamiento = tratamiento_de(iva_tratamiento, objeto_imp, has_iva, tax_rate)
+    esperada = _tasa_que_suma(*_cobro_de_tratamiento(tratamiento))
+    actual = _tasa_que_suma(*_cobro_de_banderas(has_iva, tax_rate))
+    if esperada == actual:
+        return None
+    fiscal = _nombre_clasificacion(iva_tratamiento, objeto_imp)
+    donde = f"la variante {variante} tiene" if variante else "en precios está"
+    if esperada is None:
+        return (
+            f"Los datos fiscales dicen {fiscal}, pero {donde} «Aplica IVA» encendido "
+            f"con {_fmt_pct(actual)} %: con factura se le sumaría IVA al cliente. "
+            "Apaga «Aplica IVA» o cambia la tasa de IVA de los datos fiscales."
+        )
+    if actual is None:
+        estado = "apagado" if not has_iva else "con tasa 0 %"
+        return (
+            f"Los datos fiscales dicen {fiscal}, pero {donde} «Aplica IVA» {estado}. "
+            f"Enciende «Aplica IVA» con tasa {_fmt_pct(esperada)} o cambia la tasa de IVA "
+            "de los datos fiscales."
+        )
+    return (
+        f"Los datos fiscales dicen {fiscal}, pero {donde} «Tasa IVA (%)» en {_fmt_pct(actual)}. "
+        f"Pon {_fmt_pct(esperada)} en «Tasa IVA (%)» o cambia la tasa de IVA de los datos fiscales."
+    )
+
+
 # --- Cálculo ---
 
 @dataclass(frozen=True)
@@ -289,14 +412,37 @@ def desglosar_venta(
 
 # --- Persistencia sobre los modelos ---
 
-def tratamiento_de_variante(variant) -> Tratamiento:
+def iva_efectivo_de_variante(variant) -> IvaEfectivo:
+    """`iva_efectivo` de una variante del catálogo (producto + banderas). Lo
+    usan el checkout (`create_sale`) y el desglose: una sola lectura."""
     producto = getattr(variant, "product", None)
-    return tratamiento_de(
+    return iva_efectivo(
         getattr(producto, "iva_tratamiento", None),
         getattr(producto, "sat_objeto_imp", None),
         getattr(variant, "has_iva", None),
         getattr(variant, "tax_rate", None),
     )
+
+
+def discrepancia_de_producto(producto, variantes: Sequence) -> Optional[str]:
+    """Primera discrepancia entre la clasificación fiscal del producto y las
+    banderas de cobro de sus variantes vivas; None si todas cuadran."""
+    for i, v in enumerate(variantes):
+        etiqueta = None if i == 0 else (
+            f"«{v.variant_name}» ({v.sku})" if getattr(v, "variant_name", None) else f"{v.sku}"
+        )
+        mensaje = discrepancia_iva(
+            getattr(producto, "iva_tratamiento", None),
+            getattr(producto, "sat_objeto_imp", None),
+            v.has_iva, v.tax_rate, variante=etiqueta,
+        )
+        if mensaje:
+            return mensaje
+    return None
+
+
+def tratamiento_de_variante(variant) -> Tratamiento:
+    return iva_efectivo_de_variante(variant).tratamiento
 
 
 def lugar_de_expedicion(branch, organization) -> Optional[str]:

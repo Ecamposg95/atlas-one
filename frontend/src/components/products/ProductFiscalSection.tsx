@@ -52,7 +52,8 @@ const tieneAlgo = (v: ProductFormValue) =>
 /**
  * Datos fiscales del producto para facturar. Opcionales: una venta sin ellos
  * se cobra igual; el IVA de la venta se calcula con la tasa de aquí o, si no
- * está, con la tasa general (y queda marcada como deducida).
+ * está, con la tasa general (y queda marcada como deducida). La tasa de aquí
+ * manda también en el cobro, por eso debe coincidir con «Aplica IVA».
  */
 export function ProductFiscalSection({ value, onChange, errors, campos = TODO_VISIBLE }: Props) {
   if (!campoVisible(campos, 'datos_sat', tieneAlgo(value) ? 'si' : null)) return null
@@ -70,6 +71,7 @@ export function ProductFiscalSection({ value, onChange, errors, campos = TODO_VI
             <option value="">— Sin definir (se usa 16 %) —</option>
             {TRATAMIENTOS_IVA.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
           </select>
+          {errors.iva_tratamiento && <span className="text-rose-400 text-[11px]">{errors.iva_tratamiento}</span>}
         </label>
         <label className="text-xs text-slate-400 space-y-1">
           Objeto de impuesto

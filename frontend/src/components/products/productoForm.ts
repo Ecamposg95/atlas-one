@@ -49,7 +49,29 @@ export function erroresFiscales(form: ProductFormValue): ProductErrors {
   if (prod && !/^\d{8}$/.test(prod)) errores.sat_clave_prod_serv = 'Son 8 dígitos, por ejemplo 01010101'
   const unidad = form.sat_clave_unidad.trim()
   if (unidad && !/^[A-Za-z0-9]{1,3}$/.test(unidad)) errores.sat_clave_unidad = 'De 1 a 3 letras o números, por ejemplo H87'
+  const iva = discrepanciaIva(form)
+  if (iva) errores.iva_tratamiento = iva
   return errores
+}
+
+/**
+ * Espejo de `discrepancia_iva` (`app/services/desglose_fiscal.py`): la tasa de
+ * IVA de los datos fiscales manda en el cobro, así que debe cobrar lo mismo
+ * que «Aplica IVA» y «Tasa IVA (%)». El backend responde 422 si no; aquí se
+ * avisa antes de mandar. Sin tasa capturada (y sin «No objeto») no hay nada
+ * que comparar.
+ */
+export function discrepanciaIva(form: ProductFormValue): string | null {
+  const tratamiento = form.iva_tratamiento
+  const noObjeto = form.sat_objeto_imp === '01'
+  if (!tratamiento && !noObjeto) return null
+  const esperada = noObjeto ? 0 : tratamiento === '16' ? 16 : tratamiento === '8' ? 8 : 0
+  const tasa = Number(form.tax_rate)
+  const actual = form.has_iva && Number.isFinite(tasa) && tasa > 0 ? tasa : 0
+  if (esperada === actual) return null
+  if (esperada === 0) return 'Con esta tasa apaga «Aplica IVA»: con factura se le sumaría IVA al cliente'
+  if (actual === 0) return `Enciende «Aplica IVA» con tasa ${esperada} o cambia esta tasa`
+  return `Pon ${esperada} en «Tasa IVA (%)» o cambia esta tasa`
 }
 
 export function validarProducto(e: EntradaFormulario): ProductErrors {

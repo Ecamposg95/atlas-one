@@ -79,7 +79,8 @@ class Product(Base, UUIDMixin, AuditMixin, TenantMixin):
     sat_objeto_imp = Column(String(2), nullable=True)        # c_ObjetoImp
     # Tasa de IVA para el SAT: '16' | '8' | '0' | 'EXENTO'. NULL = sin
     # clasificar (se infiere la tasa general y el renglon queda marcado).
-    # NO cambia lo que se cobra: el cobro sigue leyendo has_iva/tax_rate.
+    # Capturada, manda tambien en el cobro (`desglose_fiscal.iva_efectivo`); el
+    # alta la rechaza si cobraria distinto que has_iva/tax_rate de la variante.
     iva_tratamiento = Column(String(8), nullable=True)
 
     has_variants = Column(Boolean, default=False)

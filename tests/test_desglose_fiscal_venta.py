@@ -143,7 +143,7 @@ def test_alta_y_edicion_de_producto_con_claves_sat(client, db, org, branch_a, au
     headers = {**auth_admin, "X-Organization-ID": str(org.id)}
     resp = client.post("/api/products/", headers=headers, json={
         "name": "Refresco", "sku": "SAT-1", "price": "20", "cost": "10",
-        "target_branch_ids": [branch_a.id],
+        "has_iva": True, "tax_rate": "16", "target_branch_ids": [branch_a.id],
         "sat_clave_prod_serv": "50202306", "sat_clave_unidad": "h87",
         "sat_objeto_imp": "02", "iva_tratamiento": "16",
     })
@@ -151,7 +151,9 @@ def test_alta_y_edicion_de_producto_con_claves_sat(client, db, org, branch_a, au
     pid = resp.json()["id"]
     assert resp.json()["sat_clave_unidad"] == "H87"
 
-    resp = client.put(f"/api/products/{pid}", headers=headers, json={"iva_tratamiento": "exento"})
+    resp = client.put(f"/api/products/{pid}", headers=headers, json={
+        "iva_tratamiento": "exento", "has_iva": False, "tax_rate": "0",
+    })
     assert resp.status_code == 200, resp.text
     assert resp.json()["iva_tratamiento"] == "EXENTO"
     assert resp.json()["sat_clave_prod_serv"] == "50202306"   # lo no enviado no se toca

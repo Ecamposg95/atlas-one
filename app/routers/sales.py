@@ -60,6 +60,7 @@ from app.core.events import EventBus, SalesDocumentCreated # [NEW] Event Bus Int
 from app.core.tenant_context import get_current_active_organization
 from app.models.organization import Organization
 from app.services.tax import compute_line_tax, quantize_amount, quantize_totals, resolve_org_tax_mode
+from app.services.desglose_fiscal import iva_efectivo_de_variante
 from app.services.card_surcharge import calcular_comision, pct_de_organizacion
 from app.models.users import Role
 from app.services import metricas_ventas as mv
@@ -742,10 +743,16 @@ def create_sale(
         # redondeos intermedios— y la validación de pagos de esta misma función
         # solo tolera un centavo: un carrito de cuatro renglones con descuento
         # rebotaba con 422 al cobrar con tarjeta.
+        #
+        # La tasa sale de `iva_efectivo_de_variante`, la misma que usa el
+        # desglose fiscal: la clasificación fiscal del producto si la tiene
+        # (y entonces coincide con `has_iva`/`tax_rate`, el alta lo valida),
+        # si no las banderas de la variante, como siempre.
+        iva = iva_efectivo_de_variante(variant)
         desglose = compute_line_tax(
             line_gross=line_total,
-            tax_rate=variant.tax_rate,
-            has_iva=bool(variant.has_iva),
+            tax_rate=iva.tasa_pct,
+            has_iva=iva.cobra_iva,
             price_includes_tax=price_includes_tax,
             requires_invoice=bool(sale_in.requires_invoice),
             quantize=False,

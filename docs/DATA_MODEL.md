@@ -170,8 +170,12 @@ opcional y manual en `scripts/backfill_desglose_fiscal.py`). No sustituyen a
   `Numeric(6,4)` (fracción), `iva_base`, `iva_importe` `Numeric(12,2)` (base + IVA = lo
   cobrado por el renglón), `iva_inferido` (el producto no tenía tasa capturada).
 - `products`: `sat_clave_prod_serv` (8 dígitos), `sat_clave_unidad` (1-3), `sat_objeto_imp`
-  (`01`-`08`), `iva_tratamiento` (`16`|`8`|`0`|`EXENTO`). No mueven el cobro, que sigue
-  leyendo `has_iva`/`tax_rate` de la variante.
+  (`01`-`08`), `iva_tratamiento` (`16`|`8`|`0`|`EXENTO`). La tasa efectiva de cobro y
+  desglose sale de `desglose_fiscal.iva_efectivo`: con `iva_tratamiento` (u objeto `01`)
+  manda la clasificación; sin ella, `has_iva`/`tax_rate` de la variante. El alta, la
+  edición y la importación rechazan (422) una clasificación que cobraría distinto que
+  `has_iva`/`tax_rate`, así que el cobro no cambia. Pendientes por sucursal:
+  `GET /api/products/revision-fiscal`.
 - `organization.codigo_postal_fiscal` `String(5)`.
 
 **Columnas 2026-09-22 — atribución del efectivo por pago** (fusión

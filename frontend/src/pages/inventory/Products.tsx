@@ -22,6 +22,7 @@ import { Modal } from '../../components/ui/Modal'
 import { FormularioProducto } from '../../components/products/FormularioProducto'
 import { DialogoPublicarWeb } from '../../components/products/DialogoPublicarWeb'
 import { BarraPublicacionWeb } from '../../components/products/BarraPublicacionWeb'
+import { RevisionFiscalModal } from '../../components/products/RevisionFiscalModal'
 import { useCanalTienda } from '../../hooks/useCanalTienda'
 import { expandVariantRows, grupoDeVariantes, nombreDeVariante, priceRange, sumStock } from './variantRows'
 import { cerrarImportacion, debeCerrarSolo } from './importacion'
@@ -540,6 +541,7 @@ function ProductsHQView() {
   const [codigosFaltantes, setCodigosFaltantes] = useState(0)
   const [generandoCodigos, setGenerandoCodigos] = useState(false)
   const [descargandoEtiquetas, setDescargandoEtiquetas] = useState(false)
+  const [revisionFiscalAbierta, setRevisionFiscalAbierta] = useState(false)
 
   const LIMIT = 50
 
@@ -829,6 +831,15 @@ function ProductsHQView() {
                   >
                     <i className={`fa-solid ${descargandoEtiquetas ? 'fa-spinner fa-spin' : 'fa-tags'}`} />{' '}
                     <span className="hidden sm:inline">Etiquetas CSV</span>
+                  </button>
+                  <button
+                    onClick={() => setRevisionFiscalAbierta(true)}
+                    className="dax-btn-secondary dax-btn-icon text-xs flex items-center gap-1.5 whitespace-nowrap"
+                    title="Productos sin tasa de IVA o con discrepancia, por sucursal"
+                    aria-label="Revisión fiscal"
+                  >
+                    <i className="fa-solid fa-file-invoice" />{' '}
+                    <span className="hidden sm:inline">Revisión fiscal</span>
                   </button>
                   {tieneIA && (
                     <button
@@ -1147,6 +1158,8 @@ function ProductsHQView() {
       </Marco>
 
       {/* Modales */}
+      <RevisionFiscalModal open={revisionFiscalAbierta} onClose={() => setRevisionFiscalAbierta(false)} />
+
       {showImport && (
         <ImportModal
           isHQ={isHQ}
