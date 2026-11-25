@@ -57,7 +57,7 @@ describe('Productos y tienda web', () => {
     useEnabledModulesStore.setState({ loaded: true, perfilUi: 'completo', enabledModules: ['tienda_en_linea'] } as never)
     pintar()
     await screen.findByText('Prod 1')
-    fireEvent.click(screen.getByLabelText('Vista lista'))   // la columna «Web» es de la lista; las casillas van en ambas vistas
+    fireEvent.click(screen.getByLabelText('Ver en lista'))   // la columna «Web» es de la lista; las casillas van en ambas vistas
     expect(screen.getByText('Web')).toBeTruthy()
     fireEvent.click(screen.getByLabelText('Seleccionar Prod 1'))
     fireEvent.click(screen.getByLabelText('Seleccionar Prod 3'))

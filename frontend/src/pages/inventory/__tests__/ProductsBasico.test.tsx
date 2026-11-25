@@ -39,7 +39,7 @@ describe('Productos HQ', () => {
     expect(await screen.findByLabelText('Generar códigos de barras faltantes (4)')).toBeTruthy()
     expect(screen.getByLabelText('Importar productos')).toBeTruthy()
     expect(screen.getByLabelText('Descargar etiquetas CSV')).toBeTruthy()
-    expect(screen.getByLabelText('Vista cuadrícula')).toBeTruthy()
+    expect(screen.getByLabelText('Ver en tarjetas')).toBeTruthy()
   })
 
   it('básico: solo Nuevo producto (no se montan los demás)', async () => {
@@ -53,7 +53,7 @@ describe('Productos HQ', () => {
     expect(screen.queryByLabelText('Importar productos')).toBeNull()
     expect(screen.queryByLabelText('Descargar etiquetas CSV')).toBeNull()
     expect(screen.queryByLabelText(/Generar códigos/)).toBeNull()
-    expect(screen.queryByLabelText('Vista cuadrícula')).toBeNull()
+    expect(screen.queryByLabelText('Ver en tarjetas')).toBeNull()
   })
 })
 

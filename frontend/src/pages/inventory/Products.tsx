@@ -12,7 +12,7 @@ import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
 import { BarraFiltros } from '../../components/ui/BarraFiltros'
 import { ListaTarjetas } from '../../components/ui/ListaTarjetas'
 import { TarjetaFila } from '../../components/ui/TarjetaFila'
-import { useEsTelefono } from '../../hooks/useIsMobile'
+import { useEsTelefono, useIsMobile } from '../../hooks/useIsMobile'
 import { useModoBasico, useEnabledModulesStore } from '../../store/enabledModulesStore'
 import type { Product, Department, Brand } from '../../types/products'
 import { formatCurrency } from '../../utils/currency'
@@ -25,6 +25,9 @@ import { BarraPublicacionWeb } from '../../components/products/BarraPublicacionW
 import { useCanalTienda } from '../../hooks/useCanalTienda'
 import { expandVariantRows, grupoDeVariantes, nombreDeVariante, priceRange, sumStock } from './variantRows'
 import { cerrarImportacion, debeCerrarSolo } from './importacion'
+import { useVistaProductos } from './useVistaProductos'
+import { ConmutadorVista } from './ConmutadorVista'
+import { TarjetaProducto, REJILLA_PRODUCTOS } from './TarjetaProducto'
 import { CatalogKpis } from '../../components/catalog/CatalogKpis'
 import { ProductBranchMatrix } from '../../components/catalog/ProductBranchMatrix'
 import { ProductAuditDrawer } from '../../components/catalog/ProductAuditDrawer'
@@ -286,6 +289,60 @@ function ExistenciaDeFila({ p, abierto, onToggle, className = '' }: { p: Product
   )
 }
 
+/** Precio de la tarjeta: con precio de sucursal (override) manda el override,
+ *  igual que en la lista; el rango por talla solo se muestra sin override. */
+function PrecioDeTarjeta({ p }: { p: Product }) {
+  const { user } = useAuthStore()
+  const override = user?.branch_id
+    ? p.branch_statuses?.find(s => s.branch_id === user.branch_id)?.price_override
+    : null
+  const rango = priceRange(p.variants ?? [])
+  const mostrarRango = override == null && rango != null && !rango.uniforme
+  return (
+    <span className={`text-dax-text font-light tracking-tight ${mostrarRango ? 'text-sm' : 'text-lg'}`}>
+      {mostrarRango
+        ? `${formatCurrency(rango!.min)} – ${formatCurrency(rango!.max)}`
+        : formatCurrency(override ?? p.price ?? 0)}
+    </span>
+  )
+}
+
+/** Existencia de la tarjeta: la misma cuenta que la lista (suma de tallas; la
+ *  de su sucursal para quien no es de oficina). Con tallas, lleva al desglose. */
+function ExistenciaDeTarjeta({ p, onVerDesglose }: { p: Product; onVerDesglose: () => void }) {
+  const { user } = useAuthStore()
+  const isHQ = HQ_ROLES.includes(user?.role ?? '')
+  const variantCount = p.variants?.length ?? 0
+  const qty = variantCount > 1
+    ? sumStock(p)
+    : (!isHQ && user?.branch_id && p.stock_levels?.length)
+      ? (p.stock_levels.find(s => s.branch_id === user.branch_id)?.qty_on_hand ?? p.stock ?? 0)
+      : (p.stock_total ?? p.stock ?? 0)
+  if (variantCount <= 1) {
+    return (
+      <span className={`dax-badge ${qty > 0 ? 'dax-badge-green' : 'dax-badge-red'}`} title="Existencia">
+        {qty}
+      </span>
+    )
+  }
+  const grupo = grupoDeVariantes(p.variants ?? [])
+  return (
+    <button
+      type="button"
+      onClick={onVerDesglose}
+      title={`Ver la existencia por ${SINGULAR_GRUPO[grupo]}`}
+      className="flex flex-col items-end group/tallas"
+    >
+      <span className={`dax-badge ${qty > 0 ? 'dax-badge-green' : 'dax-badge-red'}`}>
+        {qty}
+      </span>
+      <span className="text-dax-faint text-[10px] mt-1 group-hover/tallas:text-dax-accent-text">
+        de {variantCount} {grupo}
+      </span>
+    </button>
+  )
+}
+
 /** Celda Estado: sucursales activas (HQ) o POS activo/inactivo (sucursal). */
 function EstadoDeFila({ p }: { p: Product }) {
   const { user } = useAuthStore()
@@ -408,11 +465,6 @@ function Marco({ rejilla, children }: { rejilla: boolean; children: ReactNode })
     : <DaxCard padding={false}>{children}</DaxCard>
 }
 
-const CLAVE_VISTA = 'atlas_vista_productos'
-function leerVista(): 'list' | 'grid' {
-  try { return localStorage.getItem(CLAVE_VISTA) === 'list' ? 'list' : 'grid' } catch { return 'grid' }
-}
-
 export function Products() {
   // Roles de sucursal (CAJERO/GERENTE) ven la vista simplificada por renglón;
   // HQ conserva la matriz multi-sucursal. Ambas editan con FormularioProducto en un Modal.
@@ -463,14 +515,18 @@ function ProductsHQView() {
   const [search, setSearch] = useState('')
   const [deptId, setDeptId] = useState<string>('')
   const [loading, setLoading] = useState(true)
-  // Tarjetas por omisión; la elección se recuerda en este navegador. En modo
-  // básico no hay selector de vista, así que ahí se queda la lista.
-  const [vistaElegida, setVistaElegida] = useState<'list' | 'grid'>(leerVista)
-  const viewMode: 'list' | 'grid' = modoBasico ? 'list' : vistaElegida
-  const setViewMode = (v: 'list' | 'grid') => {
-    setVistaElegida(v)
-    try { localStorage.setItem(CLAVE_VISTA, v) } catch { /* sin almacenamiento: vale solo esta visita */ }
-  }
+  // Tarjetas por omisión; la elección se recuerda por usuario en este navegador.
+  // En modo básico no hay conmutador, así que ahí se queda la lista.
+  const [vistaElegida, setViewMode] = useVistaProductos(user?.id)
+  const viewMode = modoBasico ? 'lista' : vistaElegida
+  // Escritorio: la búsqueda toma el foco al entrar, para consultar precio con el
+  // lector USB sin dar clic. En teléfono/tablet no: abriría el teclado.
+  const esMovil = useIsMobile()
+  const busquedaRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (!esMovil) busquedaRef.current?.focus()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Formulario único (components/products/FormularioProducto) dentro de un Modal.
@@ -807,21 +863,7 @@ function ProductsHQView() {
                 </>
               )}
               {!modoBasico && (
-              <div className="flex items-center rounded-full border border-dax-border-dim bg-dax-card p-0.5" role="group" aria-label="Vista">
-                {([['grid', 'fa-grip', 'Vista cuadrícula'], ['list', 'fa-list', 'Vista lista']] as const).map(([v, icono, rotulo]) => (
-                  <button
-                    key={v}
-                    type="button"
-                    onClick={() => setViewMode(v)}
-                    aria-pressed={viewMode === v}
-                    className={`dax-btn-icon w-8 h-8 rounded-full flex items-center justify-center transition-colors ${viewMode === v ? 'bg-dax-accent-soft text-dax-accent-text' : 'text-dax-faint hover:text-dax-text'}`}
-                    title={rotulo}
-                    aria-label={rotulo}
-                  >
-                    <i className={`fa-solid ${icono} text-xs`} aria-hidden="true" />
-                  </button>
-                ))}
-              </div>
+              <ConmutadorVista vista={viewMode} onCambiar={setViewMode} />
               )}
             </div>
           </>
@@ -841,9 +883,12 @@ function ProductsHQView() {
       <BarraFiltros className="gap-3 !items-stretch">
         <input
           type="text"
+          ref={busquedaRef}
           placeholder="Buscar por nombre o SKU..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          // El lector termina con Enter: se selecciona lo escrito para que el siguiente escaneo lo reemplace.
+          onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.select() }}
           className="dax-input max-w-xs"
         />
         <select
@@ -906,8 +951,8 @@ function ProductsHQView() {
       )}
 
       {/* Productos: rejilla de tarjetas (por omisión) o lista */}
-      <Marco rejilla={viewMode === 'grid'}>
-        {esTelefono && viewMode === 'list' ? (
+      <Marco rejilla={viewMode === 'tarjetas'}>
+        {esTelefono && viewMode === 'lista' ? (
           // Teléfono: la lista pasa a tarjetas (la cuadrícula no cambia).
           <ListaTarjetas cargando={loading} vacio={products.length === 0} textoVacio="Sin resultados" className="p-3">
             {products.map((p) => {
@@ -950,85 +995,30 @@ function ProductsHQView() {
           <Spinner text="Cargando productos..." />
         ) : products.length === 0 ? (
           <div className="p-12 text-center text-slate-600">Sin resultados</div>
-        ) : viewMode === 'grid' ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+        ) : viewMode === 'tarjetas' ? (
+          <div className={REJILLA_PRODUCTOS}>
             {products.map((p) => (
-              <article key={p.id} className="dax-card p-3 flex flex-col gap-3 group relative">
-                {p.image_url ? (
-                  <img src={p.image_url} alt={p.name} loading="lazy" className="w-full aspect-square object-contain rounded-2xl bg-dax-elevated p-2" />
-                ) : (
-                  <div className="w-full aspect-square rounded-2xl bg-dax-elevated flex items-center justify-center">
-                    <i className="fa-solid fa-box text-dax-faint text-2xl" aria-hidden="true" />
-                  </div>
-                )}
-                <div className="flex-1 min-w-0 px-1">
-                  <p className="text-dax-text text-sm font-medium line-clamp-2 leading-snug">{p.sale_name ?? p.name}</p>
-                  <p className="text-dax-faint text-[11px] font-mono mt-1 truncate">{p.sku}</p>
-                  {p.department_name && <p className="text-dax-muted text-[11px] mt-0.5 truncate">{p.department_name}</p>}
-                </div>
-                <div className="flex items-end justify-between gap-2 px-1 pb-1">
-                  {(() => {
-                    // Con precio de sucursal (override) manda el override, igual
-                    // que en la lista: el rango solo se muestra sin override.
-                    const override = user?.branch_id
-                      ? p.branch_statuses?.find(s => s.branch_id === user.branch_id)?.price_override
-                      : null
-                    const rango = priceRange(p.variants ?? [])
-                    const mostrarRango = override == null && rango != null && !rango.uniforme
-                    return (
-                      <span className={`text-dax-text font-light tracking-tight ${mostrarRango ? 'text-sm' : 'text-lg'}`}>
-                        {mostrarRango
-                          ? `${formatCurrency(rango!.min)} – ${formatCurrency(rango!.max)}`
-                          : formatCurrency(override ?? p.price ?? 0)}
-                      </span>
-                    )
-                  })()}
-                  {(() => {
-                    const variantCount = p.variants?.length ?? 0
-                    const qty = variantCount > 1
-                      ? sumStock(p)
-                      : (!isHQ && user?.branch_id && p.stock_levels?.length)
-                        ? (p.stock_levels.find(s => s.branch_id === user.branch_id)?.qty_on_hand ?? p.stock ?? 0)
-                        : (p.stock_total ?? p.stock ?? 0)
-                    if (variantCount <= 1) {
-                      return (
-                        <span className={`dax-badge ${qty > 0 ? 'dax-badge-green' : 'dax-badge-red'}`} title="Existencia">
-                          {qty}
-                        </span>
-                      )
-                    }
-                    const grupo = grupoDeVariantes(p.variants ?? [])
-                    return (
-                      <button
-                        type="button"
-                        // La cuadrícula no tiene dónde desplegar el desglose:
-                        // se salta a la lista con ese producto ya abierto.
-                        onClick={() => { setViewMode('list'); setExpandedVariantsId(p.id) }}
-                        title={`Ver la existencia por ${SINGULAR_GRUPO[grupo]}`}
-                        className="flex flex-col items-end group/tallas"
-                      >
-                        <span className={`dax-badge ${qty > 0 ? 'dax-badge-green' : 'dax-badge-red'}`}>
-                          {qty}
-                        </span>
-                        <span className="text-dax-faint text-[10px] mt-1 group-hover/tallas:text-dax-accent-text">
-                          de {variantCount} {grupo}
-                        </span>
-                      </button>
-                    )
-                  })()}
-                </div>
-                {/* Lo mismo que ofrece la lista: casilla de la tienda web y las
-                    acciones del producto, siempre a la vista (en teléfono no hay hover). */}
-                {(puedePublicar || canEdit) && (
-                  <div className="flex items-center gap-2 border-t border-dax-border-dim pt-2">
+              <TarjetaProducto
+                key={p.id}
+                nombre={p.sale_name ?? p.name}
+                imagen={p.image_url}
+                codigo={p.sku}
+                codigoBarras={p.barcode}
+                detalle={p.department_name}
+                precio={<PrecioDeTarjeta p={p} />}
+                // La rejilla no tiene dónde desplegar el desglose: se salta a la
+                // lista con ese producto ya abierto.
+                existencia={<ExistenciaDeTarjeta p={p} onVerDesglose={() => { setViewMode('lista'); setExpandedVariantsId(p.id) }} />}
+                insignia={catalogo && (!p.is_active || (p.approval_status && p.approval_status !== 'APPROVED')) ? <EstadoAprobacion p={p} /> : undefined}
+                // Lo mismo que ofrece la lista: casilla de la tienda web y las
+                // acciones del producto, siempre a la vista (en teléfono no hay hover).
+                pie={(puedePublicar || canEdit) ? (
+                  <>
                     {puedePublicar && <CasillaWeb p={p} marcada={seleccion.has(p.id)} onToggle={alternarSeleccion} />}
                     {canEdit && <div className="ml-auto"><AccionesDeFila p={p} onEditar={openEdit} catalogo={catalogo} onAccion={correrAccion} ocupado={accionEnCurso} envolver /></div>}
-                  </div>
-                )}
-                {catalogo && (!p.is_active || (p.approval_status && p.approval_status !== 'APPROVED')) && (
-                  <div className="absolute top-5 left-5"><EstadoAprobacion p={p} /></div>
-                )}
-              </article>
+                  </>
+                ) : undefined}
+              />
             ))}
           </div>
         ) : (

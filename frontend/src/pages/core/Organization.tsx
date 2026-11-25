@@ -7,6 +7,7 @@ import client from '../../api/client'
 import { errorDetailText } from '../../utils/errorDetail'
 import { MasOpciones } from '../../components/ui/MasOpciones'
 import { useEnabledModulesStore, useModoBasico } from '../../store/enabledModulesStore'
+import { REJILLA_AJUSTES } from '../../utils/vistaDeConfiguracion'
 
 // Vista previa del renglón del ticket (panel de Empresa).
 //
@@ -148,7 +149,7 @@ export function Organization({ seccion }: { seccion?: SeccionEmpresa } = {}) {
   return (
     <div className="space-y-5">
       {org && (
-        <div className="space-y-4">
+        <div className={seccion === 'ticket' ? 'space-y-4' : REJILLA_AJUSTES}>
           {ve('empresa') && <DaxCard>
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">Información de la Empresa</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

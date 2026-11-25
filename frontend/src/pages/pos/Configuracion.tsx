@@ -1,6 +1,7 @@
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
 import { useCanalTienda } from '../../hooks/useCanalTienda'
+import { useIsMobile } from '../../hooks/useIsMobile'
 import { esCentroDeAjustes, vistaDeConfiguracion } from '../../utils/vistaDeConfiguracion'
 import { PrinterSettings } from './PrinterSettings'
 import { PrinterSettingsCajera } from './PrinterSettingsCajera'
@@ -46,43 +47,84 @@ function CentroDeAjustes() {
   // Cambiar de pestaña suelta lo que era de la anterior (`?sucursal=`).
   const ir = (id: PestanaAjustes) => setParams({ tab: id }, { replace: true })
 
-  return (
-    <div className="space-y-5">
-      <div className="flex items-center gap-3">
-        <i className="fa-solid fa-gear text-dax-accent-text text-xl" aria-hidden="true" />
-        <h1 className="text-2xl font-black text-dax-text">Configuración</h1>
-      </div>
+  // Escritorio (≥ 1024): pestañas en columna fija a la izquierda y el contenido
+  // con todo el ancho. Teléfono y tablet: pestañas horizontales arriba.
+  const angosta = useIsMobile()
 
-      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Secciones de configuración">
-        {visibles.map((p) => (
+  const titulo = (
+    <div className="flex items-center gap-3">
+      <i className="fa-solid fa-gear text-dax-accent-text text-xl" aria-hidden="true" />
+      <h1 className="text-2xl font-black text-dax-text">Configuración</h1>
+    </div>
+  )
+
+  const pestanas = (
+    <div
+      role="tablist"
+      aria-label="Secciones de configuración"
+      aria-orientation={angosta ? 'horizontal' : 'vertical'}
+      className={angosta ? 'flex flex-wrap gap-2' : 'flex flex-col gap-1'}
+    >
+      {visibles.map((p) => {
+        const activa = pestana === p.id
+        return (
           <button
             key={p.id}
             type="button"
             role="tab"
-            aria-selected={pestana === p.id}
+            aria-selected={activa}
+            aria-current={activa ? 'page' : undefined}
             onClick={() => ir(p.id)}
-            className={`${pestana === p.id ? 'dax-btn-primary' : 'dax-btn-secondary'} text-xs max-sm:min-h-[44px]`}
+            className={angosta
+              ? `${activa ? 'dax-btn-primary' : 'dax-btn-secondary'} text-xs max-sm:min-h-[44px]`
+              : `${activa ? 'dax-btn-primary' : 'dax-btn-ghost'} text-sm w-full justify-start text-left`}
           >
-            <i className={`fa-solid ${p.icon}`} aria-hidden="true" /> {p.label}
+            <i className={`fa-solid ${p.icon}${angosta ? '' : ' w-5 text-center'}`} aria-hidden="true" /> {p.label}
           </button>
+        )
+      })}
+    </div>
+  )
+
+  const contenido = (<>
+    {(pestana === 'empresa' || pestana === 'ventas' || pestana === 'ticket') && <Organization key={pestana} seccion={pestana} />}
+    {pestana === 'sucursales' && <Sucursales />}
+    {pestana === 'impresoras' && <PrinterSettings incrustada />}
+    {pestana === 'tienda' && <TiendaEnLinea />}
+    {pestana === 'plan' && <MiPlanYPagos />}
+    {pestana === 'mas' && (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {ACCESOS.map((x) => (
+          <Link key={x.a} to={x.a} className="block dax-card p-4 max-md:min-h-[44px] hover:opacity-90 transition-opacity">
+            <p className="text-sm font-black text-dax-text"><i className={`fa-solid ${x.icon} mr-2 text-dax-accent-text`} aria-hidden="true" />{x.titulo}</p>
+            <p className="text-xs text-dax-muted mt-1">{x.texto}</p>
+          </Link>
         ))}
       </div>
+    )}
+  </>)
 
-      {(pestana === 'empresa' || pestana === 'ventas' || pestana === 'ticket') && <Organization key={pestana} seccion={pestana} />}
-      {pestana === 'sucursales' && <Sucursales />}
-      {pestana === 'impresoras' && <PrinterSettings incrustada />}
-      {pestana === 'tienda' && <TiendaEnLinea />}
-      {pestana === 'plan' && <MiPlanYPagos />}
-      {pestana === 'mas' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {ACCESOS.map((x) => (
-            <Link key={x.a} to={x.a} className="block dax-card p-4 max-md:min-h-[44px] hover:opacity-90 transition-opacity">
-              <p className="text-sm font-black text-dax-text"><i className={`fa-solid ${x.icon} mr-2 text-dax-accent-text`} aria-hidden="true" />{x.titulo}</p>
-              <p className="text-xs text-dax-muted mt-1">{x.texto}</p>
-            </Link>
-          ))}
+  if (angosta) {
+    return (
+      <div className="space-y-5">
+        {titulo}
+        {pestanas}
+        {contenido}
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-5">
+      {titulo}
+      <div className="flex items-start gap-6">
+        <aside className="w-56 shrink-0 sticky top-4 self-start dax-card p-2" data-testid="pestanas-laterales">
+          {pestanas}
+        </aside>
+        <div className="flex-1 min-w-0" role="tabpanel" aria-label={visibles.find((p) => p.id === pestana)?.label}>
+          {contenido}
         </div>
-      )}
+      </div>
     </div>
   )
 }
