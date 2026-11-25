@@ -3,7 +3,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { CustomerFormModal } from '../CustomerFormModal'
 
-vi.mock('../../../api/customers', () => ({ customersApi: { create: vi.fn(), update: vi.fn() } }))
+vi.mock('../../../api/customers', () => ({ customersApi: { create: vi.fn(), update: vi.fn(), campos: vi.fn().mockResolvedValue([]) } }))
 
 afterEach(cleanup)
 

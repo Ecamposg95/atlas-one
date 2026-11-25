@@ -112,6 +112,8 @@ export function ProductsBranchView() {
   const modoBasico = useModoBasico()
   // El vendedor consulta el catálogo: sin alta, edición, importación ni ajuste (el backend también lo niega).
   const soloLectura = useAuthStore((s) => s.user?.role) === 'VENDEDOR'
+  const rolActual = useAuthStore((s) => s.user?.role)
+  const esDeCaja = rolActual === 'CAJERO' || rolActual === 'VENDEDOR'
   const [fichaTarget, setFichaTarget] = useState<ProductRow | null>(null)
   // Tarjetas por omisión; cada quien recuerda su elección en este navegador.
   const [vista, setVista] = useVistaProductos(user?.id)
@@ -378,6 +380,7 @@ export function ProductsBranchView() {
       {fichaTarget && (
         <ProductFichaModal
           product={fichaTarget}
+          verCosto={!esDeCaja}
           onClose={() => setFichaTarget(null)}
           onEdit={soloLectura ? undefined : () => { const p = fichaTarget; setFichaTarget(null); openEdit(p) }}
           onAdjustStock={soloLectura ? undefined : () => { const p = fichaTarget; setFichaTarget(null); setStockTarget(p) }}
@@ -522,9 +525,11 @@ interface FichaProps {
   onClose: () => void
   onEdit?: () => void
   onAdjustStock?: () => void
+  /** La caja (cajera / vendedor) consulta precio y existencia, no el costo. */
+  verCosto?: boolean
 }
 
-function ProductFichaModal({ product: p, onClose, onEdit, onAdjustStock }: FichaProps) {
+function ProductFichaModal({ product: p, onClose, onEdit, onAdjustStock, verCosto = true }: FichaProps) {
   const stock = Number(p.stock_total ?? p.stock ?? 0)
   return (
     <Modal title="Detalle del producto" onClose={onClose} size="xl">
@@ -556,7 +561,7 @@ function ProductFichaModal({ product: p, onClose, onEdit, onAdjustStock }: Ficha
             <span className={ui.muted}>Base:</span>
             <span className="font-bold ml-2 tabular-nums">{fmtMoney(String(p.price ?? 0))}</span>
           </div>
-          {p.cost != null && (
+          {verCosto && p.cost != null && (
             <div className="text-sm">
               <span className={ui.muted}>Costo:</span>
               <span className="font-bold ml-2 tabular-nums">{fmtMoney(String(p.cost))}</span>

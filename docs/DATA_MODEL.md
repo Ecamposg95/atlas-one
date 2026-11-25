@@ -185,7 +185,7 @@ crédito con abono parcial no debe inflar "ventas totales" con la deuda aún no 
 | `purchase_recommendations` | UUID | Reorden por bajo stock (abasto) | `status`=RecommendationStatus |
 
 ## Devoluciones (`app/models/returns.py`, PK UUID)
-`sale_returns` (refund_method=PaymentMethod, status String; `reason_code` = motivo de catálogo y `autorizacion` = POLITICA \| PIN \| SUPERVISOR, ambos String NULL en filas anteriores al 2026-11-24), `sale_return_items` (reentrada a stock o merma).
+`sale_returns` (refund_method=PaymentMethod, status String; `reason_code` = motivo de catálogo y `autorizacion` = POLITICA \| PIN \| SUPERVISOR, ambos String NULL en filas anteriores al 2026-11-24; `destino` = DINERO \| VALE \| CAMBIO (NULL = dinero) y `vale_id` String(36) del vale emitido), `sale_return_items` (reentrada a stock o merma). `store_vouchers` (vale de tienda: `code` único por organización, `initial_amount`, `balance`, `status` ACTIVO \| AGOTADO \| CANCELADO, `return_id`, `customer_id`) y `store_voucher_movements` (EMISION, USO, RESTITUCION, CANCELACION; `sales_document_id` String(36)). CRM (2026-11-24): `customers.tipo` (MENUDEO \| MAYOREO), `birthday`, `company`, `campos` (JSON con los valores de los campos propios); `customer_field_defs` (campos propios por tienda, tope 10 activos) y `customer_followups` (seguimiento: tipo, nota, `due_date`, PENDIENTE \| HECHO).
 
 ## Logística (`app/models/logistics.py`, PK Int)
 `container_types`, `box_types`, `product_packagings`, `container_load_calcs`, `inbound_shipments` (status String), `shipment_items`, `transfer_orders` (`TransferStatus`), `transfer_order_lines`, `transfer_fulfillments` (`FulfillmentStatus`), `transfer_fulfillment_lines`.

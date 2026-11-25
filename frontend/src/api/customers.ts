@@ -14,6 +14,69 @@ export interface Customer {
   current_balance: number
   credit_limit: number | null
   portal_active?: boolean
+  /** MENUDEO (mostrador) | MAYOREO (volumen / crédito). */
+  tipo?: TipoCliente
+  birthday?: string | null
+  company?: string | null
+  /** Valores de los campos propios de la tienda, por clave. */
+  campos?: Record<string, unknown> | null
+}
+
+export type TipoCliente = 'MENUDEO' | 'MAYOREO'
+
+export type TipoCampo = 'TEXTO' | 'NUMERO' | 'FECHA' | 'LISTA' | 'SI_NO'
+/** Campo propio de la tienda para la ficha del cliente (tope 10). */
+export interface CampoPropio {
+  id: number
+  key: string
+  label: string
+  tipo: TipoCampo
+  opciones?: string[] | null
+  orden: number
+}
+export const MAX_CAMPOS_PROPIOS = 10
+
+export type TipoSeguimiento = 'LLAMADA' | 'WHATSAPP' | 'VISITA' | 'COBRANZA' | 'OTRO'
+export const TIPOS_SEGUIMIENTO: { clave: TipoSeguimiento; label: string; icon: string }[] = [
+  { clave: 'LLAMADA', label: 'Llamar', icon: 'fa-phone' },
+  { clave: 'WHATSAPP', label: 'WhatsApp', icon: 'fa-comment' },
+  { clave: 'VISITA', label: 'Visita', icon: 'fa-store' },
+  { clave: 'COBRANZA', label: 'Cobrar', icon: 'fa-hand-holding-dollar' },
+  { clave: 'OTRO', label: 'Otro', icon: 'fa-thumbtack' },
+]
+export interface Seguimiento {
+  id: number
+  customer_id: number
+  customer_name: string | null
+  customer_phone: string | null
+  tipo: TipoSeguimiento
+  nota: string | null
+  due_date: string
+  status: 'PENDIENTE' | 'HECHO'
+  resultado: string | null
+  assigned_user_id: number | null
+  assigned_name?: string | null
+  done_at: string | null
+}
+
+/** GET /customers/{id}/ficha — todo lo que la tienda sabe del cliente. */
+export interface FichaCliente {
+  /** La caja no recibe acumulados de por vida (`resumen` null, `productos` vacío). */
+  limitado: boolean
+  customer: Customer
+  saldo: number
+  credito_disponible: number
+  resumen: {
+    total_comprado: number; tickets: number; ticket_promedio: number
+    primera_compra: string | null; ultima_compra: string | null
+    dias_sin_comprar: number | null; devoluciones: number
+  } | null
+  compras: { id: string; series: string | null; folio: number | null; created_at: string; total: number; status: string }[]
+  productos: { descripcion: string | null; piezas: number; importe: number }[]
+  vales: { code: string; balance: number; created_at: string }[]
+  vales_saldo: number
+  seguimiento: Seguimiento[]
+  campos: CampoPropio[]
 }
 
 export interface CustomerPayload {
@@ -27,6 +90,10 @@ export interface CustomerPayload {
   has_credit?: boolean
   credit_limit?: number
   credit_days?: number
+  tipo?: TipoCliente
+  birthday?: string | null
+  company?: string | null
+  campos?: Record<string, unknown>
 }
 
 export interface CustomerStats {
@@ -107,6 +174,40 @@ export interface CustomerListResponse {
 }
 
 export const customersApi = {
+  ficha: async (id: number): Promise<FichaCliente> => {
+    const { data } = await client.get<FichaCliente>(`/customers/${id}/ficha`)
+    return data
+  },
+  campos: async (): Promise<CampoPropio[]> => {
+    const { data } = await client.get<CampoPropio[]>('/customers/campos')
+    return Array.isArray(data) ? data : []
+  },
+  crearCampo: async (payload: { label: string; tipo: TipoCampo; opciones?: string[] }): Promise<CampoPropio> => {
+    const { data } = await client.post<CampoPropio>('/customers/campos', payload)
+    return data
+  },
+  editarCampo: async (id: number, payload: { label: string; tipo: TipoCampo; opciones?: string[] }): Promise<CampoPropio> => {
+    const { data } = await client.put<CampoPropio>(`/customers/campos/${id}`, payload)
+    return data
+  },
+  quitarCampo: async (id: number): Promise<void> => {
+    await client.delete(`/customers/campos/${id}`)
+  },
+  seguimiento: async (params?: { estado?: 'PENDIENTE' | 'HECHO' | 'TODOS'; customer_id?: number; hasta?: string }): Promise<{ items: Seguimiento[]; hoy: string }> => {
+    const { data } = await client.get<{ items: Seguimiento[]; hoy: string }>('/customers/seguimiento', { params })
+    return data
+  },
+  crearSeguimiento: async (payload: { customer_id: number; tipo: TipoSeguimiento; nota?: string; due_date: string }): Promise<Seguimiento> => {
+    const { data } = await client.post<Seguimiento>('/customers/seguimiento', payload)
+    return data
+  },
+  cerrarSeguimiento: async (id: number, resultado?: string): Promise<Seguimiento> => {
+    const { data } = await client.post<Seguimiento>(`/customers/seguimiento/${id}/hecho`, { resultado })
+    return data
+  },
+  borrarSeguimiento: async (id: number): Promise<void> => {
+    await client.delete(`/customers/seguimiento/${id}`)
+  },
   search: async (q: string, limit = 10): Promise<Customer[]> => {
     // El backend filtra con `search`, no `q`: con `q` FastAPI lo ignoraba y
     // devolvía los primeros `limit` clientes en orden alfabético, así que el
