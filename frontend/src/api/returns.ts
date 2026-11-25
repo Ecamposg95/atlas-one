@@ -40,6 +40,10 @@ export interface ReturnDocument {
   reason_code?: string | null
   /** POLITICA (la caja sola) | PIN (gerente en la caja) | SUPERVISOR (aprobada después). */
   autorizacion?: string | null
+  /** DINERO (omisión) | VALE | CAMBIO. */
+  destino?: string | null
+  /** Vale emitido al aprobar una devolución con destino VALE o CAMBIO. */
+  vale?: { id: string; code: string; balance: number | string; initial_amount: number | string; status: string } | null
   branch_id: number | null
   branch: ReturnBranch | null
   user: ReturnUser | null
@@ -108,6 +112,7 @@ export interface CreateReturnPayload {
   reason: string
   reason_code?: string
   total_refunded: number
+  destino?: 'DINERO' | 'VALE' | 'CAMBIO'
   refund_method?: string   // CASH | CARD | TRANSFER | OTHER — default CASH en el backend
   cash_session_id?: number | null
   items: {

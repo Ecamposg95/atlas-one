@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { useValeStore } from '../../../store/valeStore'
 import { salesApi } from '../../../api/sales'
 import { returnsApi, returnLabel, MOTIVOS_DEVOLUCION } from '../../../api/returns'
-import type { PiezasDelTicket } from '../../../api/returns'
+import type { PiezasDelTicket, ReturnDocument } from '../../../api/returns'
 import { printerApi } from '../../../api/printer'
 import { usePOSStore } from '../../../store/posStore'
 import { useEnabledModulesStore } from '../../../store/enabledModulesStore'
@@ -37,7 +39,23 @@ interface Props {
 type RefundMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'OTHER'
 
 /** Resultado de registrar: lo mínimo para autorizar con PIN e imprimir. */
-interface Registrada { id: string; status: string; total: number }
+interface Registrada { id: string; status: string; total: number; destino: Destino; vale?: { code: string; balance: number } | null }
+
+/** Qué recibe el cliente: su dinero, un vale para después, o un vale que se usa ya en el cambio. */
+type Destino = 'DINERO' | 'VALE' | 'CAMBIO'
+const DESTINOS: { clave: Destino; label: string; icon: string }[] = [
+  { clave: 'DINERO', label: 'Dinero', icon: 'fa-money-bill' },
+  { clave: 'VALE', label: 'Vale de tienda', icon: 'fa-ticket' },
+  { clave: 'CAMBIO', label: 'Cambio de producto', icon: 'fa-right-left' },
+]
+
+function registrada(r: ReturnDocument, destino: Destino): Registrada {
+  return {
+    id: r.id, status: r.status, total: Number(r.total_refunded),
+    destino: (r.destino as Destino | null | undefined) ?? destino,
+    vale: r.vale ? { code: r.vale.code, balance: Number(r.vale.balance) } : null,
+  }
+}
 
 const REFUND_METHOD_LABELS: Record<RefundMethod, { label: string; icon: string }> = {
   CASH: { label: 'Efectivo', icon: 'fa-money-bill' },
@@ -79,6 +97,8 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
     initialSale ? defaultRefundMethod(initialSale) : 'CASH'
   )
   const [reason, setReason] = useState('')
+  const [destino, setDestino] = useState<Destino>('DINERO')
+  const usarVale = useValeStore((st) => st.usar)
   // Motivo de catálogo (obligatorio); `reason` queda como nota opcional.
   const [motivo, setMotivo] = useState('')
   // Qué queda por devolver del ticket y con qué reglas (servidor).
@@ -175,6 +195,11 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
     ? info.metodos
     : Object.keys(REFUND_METHOD_LABELS)
   const montoLibre = info?.es_caja ? Number(info.monto_libre ?? 0) : null
+  // Ticket pagado por completo con vale: a la caja solo le queda devolver en vale.
+  const soloVale = !!info?.es_caja && info.metodos.length === 0
+  useEffect(() => { if (soloVale) setDestino((d) => (d === 'DINERO' ? 'VALE' : d)) }, [soloVale])
+  const navigate = useNavigate()
+  const enCobro = useLocation().pathname.startsWith('/pos')
 
   const pickSale = (s: SalesDocument) => {
     setSale(s)
@@ -243,6 +268,7 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
         reason_code: motivo,
         total_refunded: totalRefund,
         refund_method: refundMethod,
+        destino,
         cash_session_id: activeSessionId ?? null,
         items: selectedLines.map((l) => ({
           variant_id: l.variant_id,
@@ -254,7 +280,7 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
       // La caja se queda en el modal: aprobada → comprobante; pendiente → PIN del
       // gerente aquí mismo. Los demás roles la aprueban desde Devoluciones, como siempre.
       if (esCajera && creada?.id) {
-        setHecha({ id: creada.id, status: creada.status, total: Number(creada.total_refunded) })
+        setHecha(registrada(creada, destino))
       } else {
         onSuccess()
       }
@@ -272,7 +298,7 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
     setError(null)
     try {
       const r = await returnsApi.autorizar(hecha.id, pin)
-      setHecha({ id: r.id, status: r.status, total: Number(r.total_refunded) })
+      setHecha(registrada(r, hecha.destino))
     } catch (err: any) {
       setError(pinBloqueado(err)
         ? errorDetailText(err?.response?.data?.detail, 'Demasiados intentos. Espera unos minutos.')
@@ -321,10 +347,28 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
               </div>
             </div>
             {hecha.status === 'APPROVED' ? (
+              hecha.vale ? (
+                <div className="mb-4" data-testid="vale-emitido">
+                  <div className="rounded-xl p-3 mb-2 text-center" style={{ background: 'var(--dax-elevated)', border: '1px solid var(--dax-border-dim)' }}>
+                    <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--dax-text-muted)' }}>Vale de tienda</p>
+                    <p className="font-mono text-xl font-black tracking-widest" style={{ color: 'var(--dax-text)' }}>{hecha.vale.code}</p>
+                    <p className="text-sm" style={{ color: 'var(--dax-text)' }}>Saldo {formatCurrency(hecha.vale.balance)}</p>
+                  </div>
+                  <p className="text-sm" style={{ color: 'var(--dax-success)' }}>
+                    <i className="fa-solid fa-circle-check mr-1.5" aria-hidden="true" />
+                    {hecha.destino === 'CAMBIO'
+                      ? 'Devolución aprobada. Usa el vale para cobrar los productos del cambio.'
+                      : 'Devolución aprobada. Imprime el comprobante: trae el código del vale.'}
+                  </p>
+                </div>
+              ) : (
               <p className="text-sm mb-4" style={{ color: 'var(--dax-success)' }}>
                 <i className="fa-solid fa-circle-check mr-1.5" aria-hidden="true" />
-                Devolución aprobada. Entrega el reembolso al cliente.
+                {hecha.destino === 'DINERO'
+                  ? 'Devolución aprobada. Entrega el reembolso al cliente.'
+                  : 'Devolución aprobada. Lo devuelto bajó la deuda del cliente; no quedó saldo para un vale.'}
               </p>
+              )
             ) : (
               <div className="mb-4">
                 <p className="text-sm mb-3" style={{ color: 'var(--dax-text)' }}>
@@ -356,9 +400,18 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
               >
                 {imprimiendo ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-print" /> Comprobante</>}
               </button>
+              {hecha.status === 'APPROVED' && hecha.destino === 'CAMBIO' && hecha.vale ? (
+                <button
+                  type="button" className="dax-btn-primary flex-1 justify-center"
+                  onClick={() => { usarVale(hecha.vale!); onSuccess(); if (!enCobro) navigate('/pos') }}
+                >
+                  <i className="fa-solid fa-right-left" aria-hidden="true" /> Cobrar el cambio
+                </button>
+              ) : (
               <button type="button" onClick={onSuccess} className="dax-btn-primary flex-1 justify-center">
                 {hecha.status === 'APPROVED' ? 'Listo' : 'Dejar pendiente'}
               </button>
+              )}
             </div>
           </div>
         )}
@@ -458,7 +511,7 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
             </p>
             <button
               type="button"
-              onClick={() => setHecha({ id: info.pendiente!.id, status: 'PENDING', total: Number(info.pendiente!.total) })}
+              onClick={() => setHecha({ id: info.pendiente!.id, status: 'PENDING', total: Number(info.pendiente!.total), destino: 'DINERO' })}
               className="dax-btn-secondary text-xs"
             >
               <i className="fa-solid fa-key" /> Autorizar con PIN del gerente
@@ -478,7 +531,31 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
               </div>
             </div>
 
+            {/* Qué recibe el cliente */}
+            <div className="mb-4">
+              <p className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">El cliente recibe</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2" role="radiogroup" aria-label="El cliente recibe">
+                {DESTINOS.filter((d) => d.clave !== 'DINERO' || !soloVale).map((d) => (
+                  <button
+                    key={d.clave} type="button" role="radio" aria-checked={destino === d.clave}
+                    onClick={() => setDestino(d.clave)}
+                    className={`${destino === d.clave ? 'dax-btn-primary' : 'dax-btn-secondary'} justify-center text-xs`}
+                  >
+                    <i className={`fa-solid ${d.icon}`} aria-hidden="true" /> {d.label}
+                  </button>
+                ))}
+              </div>
+              {destino !== 'DINERO' && (
+                <p className="text-[10px] mt-1" style={{ color: 'var(--dax-text-muted)' }}>
+                  {destino === 'VALE'
+                    ? 'No sale dinero de la caja: se entrega un vale con código para otra compra.'
+                    : 'No sale dinero de la caja: el valor de lo devuelto se usa enseguida para cobrar los productos del cambio. Si sobra, queda en el vale.'}
+                </p>
+              )}
+            </div>
+
             {/* Método de reembolso — por defecto el mismo con el que pagó el cliente */}
+            {destino === 'DINERO' && (
             <div className="mb-4">
               <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                 Método de reembolso
@@ -498,6 +575,7 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
                 </p>
               )}
             </div>
+            )}
 
             {/* Items */}
             <div className="flex items-center justify-between mb-2">

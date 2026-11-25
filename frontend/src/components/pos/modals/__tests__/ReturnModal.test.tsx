@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
+import { render as renderBase, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
+import type { ReactElement } from 'react'
+import { useValeStore } from '../../../../store/valeStore'
+
+const render = (ui: ReactElement) => renderBase(<MemoryRouter initialEntries={['/pos']}>{ui}</MemoryRouter>)
 
 const { list, create, piezas, autorizar, getDevolucionBase64, printViaAgent } = vi.hoisted(() => ({
   list: vi.fn(), create: vi.fn(), piezas: vi.fn(), autorizar: vi.fn(),
@@ -184,5 +189,38 @@ describe('ReturnModal', () => {
     await llenar()
     fireEvent.click(screen.getByRole('button', { name: /Registrar/ }))
     expect(await screen.findByText(detail)).toBeTruthy()
+  })
+
+  it('con vale de tienda no pide método y manda destino VALE; aprobada muestra el código', async () => {
+    usuario('CAJERO')
+    useValeStore.getState().quitar()
+    await llenar()
+    create.mockResolvedValue({
+      id: 'dev-000001', status: 'APPROVED', total_refunded: 125, destino: 'VALE',
+      vale: { id: 'v1', code: 'ABCD2345', balance: '125', initial_amount: '125', status: 'ACTIVO' },
+    })
+    fireEvent.click(screen.getByRole('radio', { name: /Vale de tienda/ }))
+    expect(screen.queryByText('Método de reembolso')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Registrar/ }))
+    await waitFor(() => expect(create).toHaveBeenCalled())
+    expect(create.mock.calls.at(-1)![0].destino).toBe('VALE')
+    expect((await screen.findByTestId('vale-emitido')).textContent).toContain('ABCD2345')
+    expect(useValeStore.getState().vale).toBeNull()
+  })
+
+  it('cambio de producto: deja el vale cargado en el cobro', async () => {
+    usuario('CAJERO')
+    useValeStore.getState().quitar()
+    const onSuccess = vi.fn()
+    await llenar(onSuccess)
+    create.mockResolvedValue({
+      id: 'dev-000002', status: 'APPROVED', total_refunded: 125, destino: 'CAMBIO',
+      vale: { id: 'v2', code: 'WXYZ6789', balance: '125', initial_amount: '125', status: 'ACTIVO' },
+    })
+    fireEvent.click(screen.getByRole('radio', { name: /Cambio de producto/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Registrar/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Cobrar el cambio/ }))
+    expect(useValeStore.getState().vale).toEqual({ code: 'WXYZ6789', balance: 125 })
+    expect(onSuccess).toHaveBeenCalled()
   })
 })
