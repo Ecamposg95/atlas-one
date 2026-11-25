@@ -24,6 +24,7 @@ const anchoDePantalla = (telefono: boolean) => {
 const pintar = () => render(<MemoryRouter><LoginPage /></MemoryRouter>)
 
 const entrar = (usuario: string, clave: string) => {
+  fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
   fireEvent.change(screen.getByLabelText('Usuario'), { target: { value: usuario } })
   fireEvent.change(screen.getByLabelText('Contraseña'), { target: { value: clave } })
   fireEvent.click(screen.getByRole('button', { name: 'Entrar' }))
@@ -37,7 +38,22 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('LoginPage', () => {
-  it('muestra el formulario sin interacción', () => {
+  it('abre con la portada; «Iniciar sesión» trae el formulario y un clic fuera regresa', () => {
+    const { container } = pintar()
+    const raiz = container.querySelector('.login')!
+    expect(raiz.classList.contains('is-revealed')).toBe(false)
+    expect(container.querySelector('.login-panel')!.hasAttribute('inert')).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
+    expect(raiz.classList.contains('is-revealed')).toBe(true)
+    expect(container.querySelector('.login-panel')!.hasAttribute('inert')).toBe(false)
+    expect(container.querySelector('.login-portada')!.hasAttribute('inert')).toBe(true)
+    fireEvent.click(screen.getByLabelText('Usuario'))
+    expect(raiz.classList.contains('is-revealed')).toBe(true)
+    fireEvent.click(raiz)
+    expect(raiz.classList.contains('is-revealed')).toBe(false)
+  })
+
+  it('el formulario está montado desde el inicio (autocompletado del navegador)', () => {
     pintar()
     expect(screen.getByLabelText('Usuario')).toBeTruthy()
     expect(screen.getByLabelText('Contraseña')).toBeTruthy()

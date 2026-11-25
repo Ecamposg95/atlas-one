@@ -103,7 +103,89 @@
   -webkit-backdrop-filter: blur(2px);
   backdrop-filter: blur(2px);
   box-shadow: 0 40px 120px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .12);
-  transition: opacity .55s ease, transform .55s cubic-bezier(.2, .7, .2, 1);
+  /* Oculta hasta «Iniciar sesión»: llega desde la derecha y crece. */
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(30vw) scale(.62);
+  transition: opacity .7s ease, transform 1.1s cubic-bezier(.19, 1, .22, 1);
+}
+.login.is-revealed .login-panel {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+
+/* ── Portada (antes del formulario) ─────────────────────────── */
+.login-portada {
+  position: absolute;
+  z-index: 1;
+  left: 8%;
+  top: 50%;
+  width: min(620px, 84vw);
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
+  transition: opacity .6s ease, transform 1.1s cubic-bezier(.19, 1, .22, 1), filter .6s ease;
+}
+.login.is-revealed .login-portada {
+  opacity: 0;
+  transform: translate(-40px, -50%);
+  filter: blur(14px);
+  pointer-events: none;
+}
+.login-portada__marca {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -.01em;
+  margin-bottom: 14px;
+}
+.login-portada__marca svg { height: 28px; color: var(--lg-ember); }
+.login-portada__marca span { font-weight: 300; color: var(--lg-tenue); }
+.login-portada__cejilla {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  color: var(--lg-tenue);
+}
+.login-portada__titular {
+  margin: 0;
+  font-size: clamp(44px, 7vw, 96px);
+  font-weight: 300;
+  letter-spacing: -.035em;
+  line-height: 1;
+}
+.login-portada__titular em { font-style: normal; color: var(--lg-ember); white-space: nowrap; }
+.login-portada__bajada {
+  margin: 0;
+  max-width: 36ch;
+  font-size: clamp(16px, 1.5vw, 20px);
+  color: var(--lg-tenue);
+}
+.login-portada__boton {
+  margin-top: 14px;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--lg-negro);
+  background: var(--lg-tinta);
+  border: 0;
+  border-radius: 999px;
+  padding: 18px 44px;
+  min-height: 44px;
+  cursor: pointer;
+  transition: transform .3s, box-shadow .3s, background .3s;
+}
+.login-portada__boton:hover {
+  transform: translateY(-3px);
+  background: var(--lg-ambar);
+  box-shadow: 0 15px 45px rgba(255, 106, 31, .4);
 }
 
 /* ── Entrada: el panel se va hacia arriba y amanece en el horizonte ── */
@@ -448,10 +530,14 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .login-portada,
+  .login-portada__boton,
   .login-panel,
   .login-amanecer,
   .login-campo input,
   .login-boton { transition: none; }
+  .login-panel { transform: none; }
+  .login.is-revealed .login-portada { transform: translateY(-50%); filter: none; }
   .login.is-success .login-panel { transform: none; }
   .login.is-success .login-amanecer { transform: none; opacity: 0; }
   .login-boton__giro { animation-duration: 2s; }

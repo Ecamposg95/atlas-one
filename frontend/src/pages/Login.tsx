@@ -1,4 +1,4 @@
-import { useState, useEffect, FormEvent } from 'react'
+import { useState, useEffect, useRef, FormEvent, MouseEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authApi } from '../api/auth'
 import { useAuthStore } from '../store/authStore'
@@ -76,6 +76,10 @@ function TerminalEncendida() {
 export function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
+  // Portada primero: el formulario entra al oprimir «Iniciar sesión».
+  const [isRevealed, setIsRevealed] = useState(false)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const usuarioRef = useRef<HTMLInputElement>(null)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -85,6 +89,18 @@ export function LoginPage() {
   const setAuth = useAuthStore((s) => s.setAuth)
   const setBranch = useAuthStore((s) => s.setBranch)
   useFuenteLogin()
+
+  const revelar = () => {
+    setIsRevealed(true)
+    // El foco entra cuando la tarjeta ya viene llegando (preventScroll: sigue en transición).
+    setTimeout(() => usuarioRef.current?.focus({ preventScroll: true }), 350)
+  }
+
+  // Clic fuera de la tarjeta: de vuelta a la portada (salvo a media entrada).
+  const alTocarFondo = (e: MouseEvent) => {
+    if (!isRevealed || isLoading || isSuccess) return
+    if (panelRef.current && !panelRef.current.contains(e.target as Node)) setIsRevealed(false)
+  }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -114,12 +130,30 @@ export function LoginPage() {
   }
 
   return (
-    <div className={`login${isSuccess ? ' is-success' : ''}`}>
+    <div className={`login${isRevealed ? ' is-revealed' : ''}${isSuccess ? ' is-success' : ''}`} onClick={alTocarFondo}>
       <Paisaje />
       {/* Al entrar amanece: la luz del horizonte crece mientras el panel se va. Decorativo. */}
       <div className="login-amanecer" aria-hidden="true" />
 
-      <div className="login-panel">
+      {/* Portada: lo primero que se ve. Al revelar se desvanece hacia la izquierda. */}
+      <div className="login-portada" {...(isRevealed ? { inert: '' } : {})}>
+        <div className="login-portada__marca">
+          <MarcaAtlas />
+          Atlas <span>ONE</span>
+        </div>
+        <p className="login-portada__cejilla">Punto de venta · Inventario · Caja</p>
+        <p className="login-portada__titular">
+          Tu negocio, <em>al día.</em>
+        </p>
+        <p className="login-portada__bajada">
+          Cobra rápido, lleva tu inventario y cierra el día con las cuentas claras.
+        </p>
+        <button type="button" className="login-portada__boton" onClick={(e) => { e.stopPropagation(); revelar() }} autoFocus>
+          Iniciar sesión
+        </button>
+      </div>
+
+      <div className="login-panel" ref={panelRef} {...(isRevealed ? {} : { inert: '' })}>
         {/* Va primero en el DOM (lleva el h1) y a la derecha en escritorio (grid-area). */}
         <section className="login-vista">
           <TerminalEncendida />
@@ -148,6 +182,7 @@ export function LoginPage() {
                 <label htmlFor="login-user">Usuario</label>
                 <input
                   id="login-user"
+                  ref={usuarioRef}
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
