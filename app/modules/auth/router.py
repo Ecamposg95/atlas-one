@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
+from app.core.security.cookies import cookie_segura
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import timedelta
@@ -15,6 +16,7 @@ router = APIRouter()
 # Eliminamos LoginRequest y usamos el estándar OAuth2PasswordRequestForm
 @router.post("/login", response_model=TokenWithUser)
 async def login_for_access_token(
+    request: Request,
     response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(), # <--- ESTO CAMBIA TODO
     db: Session = Depends(get_db)
@@ -67,11 +69,13 @@ async def login_for_access_token(
         httponly=True, # Prevent JS access for security
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         samesite="lax",
-        secure=False # Set True in Prod with HTTPS
+        secure=cookie_segura(request),  # COOKIE_SECURE: auto = solo por https
     )
 
     # 5. Resolver organización del usuario via UserOrganization
-    user_org = db.query(UserOrganization).filter(UserOrganization.user_id == user.id).first()
+    # Solo membresías activas y en orden fijo (misma regla que el contexto).
+    from app.core.tenant_context import membresia_principal
+    user_org = membresia_principal(db, user.id)
     org = None
     org_id = None
     if user_org:
@@ -112,6 +116,7 @@ async def login_for_access_token(
 
 @router.post("/context/switch")
 async def switch_context(
+    request: Request,
     response: Response,
     branch_id: Optional[int] = None, # None means HQ
     current_user: User = Depends(get_current_user),
@@ -128,7 +133,8 @@ async def switch_context(
         # Check if user has explicit Admin role in an org
         is_org_admin = db.query(UserOrganization).filter(
             UserOrganization.user_id == current_user.id,
-            UserOrganization.org_role == "ADMIN"
+            UserOrganization.org_role == "ADMIN",
+            UserOrganization.is_active == True,  # noqa: E712
         ).first()
         if not is_org_admin:
             raise HTTPException(status_code=403, detail="No tienes permisos para cambiar de contexto")
@@ -141,8 +147,17 @@ async def switch_context(
         branch = db.query(Branch).filter(Branch.id == branch_id).first()
         if not branch:
             raise HTTPException(status_code=404, detail="Sucursal no encontrada")
-        # In a real multi-tenant system, verify user has access to this branch's org
-        # For now, we assume simple validation.
+        # La sucursal debe ser de una organización donde el usuario tiene
+        # membresía activa (el SUPERADMIN entra a cualquiera). Se responde 404,
+        # igual que si no existiera, para no confirmar ids de otras empresas.
+        if current_user.platform_role != PlatformRole.SUPERADMIN:
+            tiene_acceso = db.query(UserOrganization).filter(
+                UserOrganization.user_id == current_user.id,
+                UserOrganization.organization_id == branch.organization_id,
+                UserOrganization.is_active == True,  # noqa: E712
+            ).first()
+            if not tiene_acceso:
+                raise HTTPException(status_code=404, detail="Sucursal no encontrada")
         ctx_id = branch.id
         ctx_type = branch.branch_type.value if hasattr(branch.branch_type, 'value') else str(branch.branch_type)
 
@@ -164,7 +179,7 @@ async def switch_context(
         httponly=True,
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         samesite="lax",
-        secure=False
+        secure=cookie_segura(request),
     )
 
     return {"message": "Context switched successfully", "ctx_id": ctx_id, "ctx_type": ctx_type, "access_token": access_token}

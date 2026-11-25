@@ -108,6 +108,10 @@ class OrganizationUpdate(BaseModel):
     ticket_show_vendor: Optional[bool] = None
     # Conteo ciego del corte: fuera de la whitelist de no-admins del router.
     conteo_ciego: Optional[bool] = None
+    # Plazo de ventas/devoluciones de la caja y monto que devuelve sin
+    # autorizacion: fuera de la whitelist de no-admins.
+    dias_ventas_caja: Optional[int] = Field(default=None, ge=0, le=3650)
+    devolucion_libre_hasta: Optional[Decimal] = Field(default=None, ge=0, le=Decimal("99999999.99"))
     # Precio por sucursal: tambien fuera de la whitelist de no-admins.
     precio_por_sucursal: Optional[bool] = None
     # Cae FUERA de la whitelist de no-admins del router: solo
@@ -171,6 +175,9 @@ class OrganizationRead(OrganizationBase):
 
     # Conteo ciego del corte de caja; el panel de Empresa pinta el interruptor.
     conteo_ciego: bool = True
+    # Caja: plazo de ventas pasadas y monto de devolucion sin autorizacion.
+    dias_ventas_caja: int = 30
+    devolucion_libre_hasta: Decimal = Decimal("0")
     # Precio por sucursal; el panel de Empresa pinta el interruptor.
     precio_por_sucursal: bool = False
 

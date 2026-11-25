@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { platformApi, IndustryPreset, Module, PlatformOrg } from '../../api/platform'
 import { toast } from '../../store/toastStore'
+import { rotuloNoDisponible } from '../../utils/estadoModulos'
 import { PlatformPageShell } from '../../components/platform/PlatformPageShell'
 import { KPICard } from '../../components/platform/KPICard'
 import { SideDrawer } from '../../components/platform/SideDrawer'
@@ -762,6 +763,19 @@ export function PlatformPresets() {
                         }}>
                           {m.status}
                         </span>
+                        {rotuloNoDisponible(m.key, m.estado) && (
+                          <span style={{
+                            background: 'rgba(245,158,11,0.18)',
+                            color: 'var(--p-warning)',
+                            padding: '1px 6px',
+                            borderRadius: 3,
+                            fontSize: 9,
+                            fontWeight: 600,
+                            letterSpacing: '0.04em',
+                          }}>
+                            {rotuloNoDisponible(m.key, m.estado)}
+                          </span>
+                        )}
                       </div>
                       {(m.name || m.description) && (
                         <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--p-muted)', lineHeight: 1.3 }}>

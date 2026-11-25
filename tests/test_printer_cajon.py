@@ -13,6 +13,14 @@ def _h(auth, org):
 
 
 def _corte(client, h, sesion, **extra):
+    # El corte de la cajera se imprime con el turno ya cerrado (con el turno
+    # abierto el servidor da 409 por el conteo ciego, 2026-11-17).
+    if sesion.closed_at is None:
+        from datetime import datetime, timezone
+        from sqlalchemy.orm import object_session
+        sesion.status = "CLOSED"
+        sesion.closed_at = datetime.now(timezone.utc)
+        object_session(sesion).commit()
     r = client.post("/api/printer/print-cash-cut", json={"session_id": sesion.id, **extra}, headers=h)
     assert r.status_code == 200, r.text
     return base64.b64decode(r.json()["content_base64"])

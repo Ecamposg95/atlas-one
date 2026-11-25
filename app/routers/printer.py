@@ -586,6 +586,78 @@ def print_abono_endpoint(
     }
 
 
+@router.post("/print-return/{return_id}")
+def print_return_endpoint(
+    return_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    org_id: int = Depends(get_current_active_organization),
+):
+    """Comprobante de una devolución. Mismo contrato que el ticket (bytes
+    ESC/POS en base64 para el agente local). No pide PIN: lo imprime quien la
+    registró, quien la autorizó, un rol de oficina o alguien de la misma
+    sucursal; no es un ticket de venta que sirva de comprobante de compra."""
+    from sqlalchemy.orm import joinedload, selectinload
+    from app.services.metricas_ventas import HQ_ROLES
+
+    dev = db.query(SaleReturn).options(
+        joinedload(SaleReturn.sale), joinedload(SaleReturn.user), joinedload(SaleReturn.supervisor),
+        joinedload(SaleReturn.branch),
+        selectinload(SaleReturn.items).joinedload(SaleReturnItem.variant).joinedload(ProductVariant.product),
+    ).filter(SaleReturn.id == return_id, SaleReturn.organization_id == org_id).first()
+    if not dev:
+        raise HTTPException(status_code=404, detail="Devolución no encontrada")
+    rol = str(getattr(current_user.role, "value", current_user.role))
+    if rol not in HQ_ROLES and dev.branch_id != current_user.branch_id:
+        raise HTTPException(status_code=404, detail="Devolución no encontrada")
+    if dev.status == "REJECTED":
+        raise HTTPException(status_code=400, detail="La devolución fue rechazada: no hay comprobante que imprimir.")
+
+    from app.models.organization import Organization
+    organization = db.query(Organization).filter(Organization.id == org_id).first()
+    printer, target_printer_name = _resolve_printer(current_user, organization)
+
+    # La descripción congelada del ticket, no el nombre vivo del producto.
+    descripciones = {}
+    if dev.sale is not None:
+        for l in dev.sale.lines:
+            descripciones.setdefault(l.variant_id, l.description)
+    piezas = [{
+        "qty": i.quantity,
+        "descripcion": descripciones.get(i.variant_id) or (
+            i.variant.product.name if i.variant is not None and i.variant.product is not None else ""),
+        "importe": i.refund_amount,
+        "a_stock": bool(i.is_inventory_reentry),
+    } for i in dev.items]
+    autorizo = None
+    if dev.status == "APPROVED" and dev.supervisor is not None and dev.supervisor_id != dev.user_id:
+        autorizo = dev.supervisor.username
+    venta = dev.sale
+    try:
+        raw_bytes = printer.build_devolucion_bytes(
+            organization=organization, branch=dev.branch,
+            cashier=dev.user.username if dev.user is not None else current_user.username,
+            folio_venta=f"{venta.series}-{venta.folio}" if venta is not None else "",
+            folio_devolucion=f"DEV-{dev.id[-6:].upper()}", fecha=dev.created_at,
+            motivo=dev.reason or "", metodo=str(getattr(dev.refund_method, "value", dev.refund_method)),
+            piezas=piezas, total=float(dev.total_refunded or 0), autorizo=autorizo,
+            vale=({"code": dev.vale.code, "balance": dev.vale.balance} if dev.vale is not None else None),
+            estado=dev.status, customer_name=venta.customer_name if venta is not None else None,
+        )
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+    job = _record_print_job(db, raw_bytes=raw_bytes, printer_name=printer.printer_name,
+                            org_id=org_id, request=request)
+    return {
+        "status": "ready_to_print",
+        "job_id": job.id,
+        "content_base64": base64.b64encode(raw_bytes).decode("utf-8"),
+        "printer_target": target_printer_name,
+    }
+
+
 class DrawerOpenedRequest(BaseModel):
     printer_name: Optional[str] = None
 
@@ -636,8 +708,9 @@ def print_cash_cut_endpoint(
     org_id: int = Depends(get_current_active_organization)
 ):
     """Track 4: corte de caja siempre en base64."""
-    from app.routers.cash import get_session_audit_data, _verify_session_access
+    from app.routers.cash import get_session_audit_data, _verify_session_access, _corte_impreso_solo_al_cerrar
     session = _verify_session_access(db, req.session_id, current_user)
+    _corte_impreso_solo_al_cerrar(db, session, current_user)
     audit_data = get_session_audit_data(db, req.session_id)
     if not audit_data:
         raise HTTPException(404, "Sesión no encontrada")

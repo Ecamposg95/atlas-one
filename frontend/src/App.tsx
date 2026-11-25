@@ -12,6 +12,7 @@ const _savedTheme = localStorage.getItem('atlas_theme') ?? 'dark'
 document.documentElement.classList.add(_savedTheme)
 import { Layout } from './components/layout/Layout'
 import { RequireRole, RutaPorRol } from './components/layout/RequireRole'
+import { SoloMovil } from './components/layout/SoloMovil'
 import { RedirigirConQuery, RedirigirASucursal } from './components/layout/RedirigirConQuery'
 
 import { LoginPage } from './pages/Login'
@@ -93,13 +94,6 @@ const MobileOwnerDashboard = lazy(() => import('./pages/mobile/MobileOwnerDashbo
 // Atlas One preset-aware home (2026-05-14)
 const PresetHome = lazy(() => import('./pages/home/PresetHome').then(m => ({ default: m.PresetHome })))
 
-// Atlas One stub modules (Beta — Coming Soon pages, 2026-05-14)
-const AppointmentsComingSoon = lazy(() => import('./pages/coming-soon').then(m => ({ default: m.AppointmentsComingSoon })))
-const CommissionsComingSoon  = lazy(() => import('./pages/coming-soon').then(m => ({ default: m.CommissionsComingSoon })))
-const MembershipsComingSoon  = lazy(() => import('./pages/coming-soon').then(m => ({ default: m.MembershipsComingSoon })))
-const AIComingSoon           = lazy(() => import('./pages/coming-soon').then(m => ({ default: m.AIComingSoon })))
-const PurchasingComingSoon   = lazy(() => import('./pages/coming-soon').then(m => ({ default: m.PurchasingComingSoon })))
-
 // Gastro modules (2026-06-22) — Mesas, Cocina/KDS, Recetas
 const FloorPlan       = lazy(() => import('./pages/tables/FloorPlan').then(m => ({ default: m.FloorPlan })))
 const KDS             = lazy(() => import('./pages/kitchen/KDS').then(m => ({ default: m.KDS })))
@@ -123,6 +117,7 @@ const PlatformMetrics      = lazy(() => import('./pages/platform/PlatformMetrics
 const PlatformHealth       = lazy(() => import('./pages/platform/PlatformHealth').then(m => ({ default: m.PlatformHealth })))
 const PlatformOrganizations= lazy(() => import('./pages/platform/PlatformOrganizations').then(m => ({ default: m.PlatformOrganizations })))
 const PlatformOrgDetail    = lazy(() => import('./pages/platform/PlatformOrgDetail').then(m => ({ default: m.PlatformOrgDetail })))
+const PlatformSuscripciones = lazy(() => import('./pages/platform/PlatformSuscripciones').then(m => ({ default: m.PlatformSuscripciones })))
 const PlatformUsers        = lazy(() => import('./pages/platform/PlatformUsers').then(m => ({ default: m.PlatformUsers })))
 const PlatformBranches     = lazy(() => import('./pages/platform/PlatformBranches').then(m => ({ default: m.PlatformBranches })))
 const PlatformAuditLog     = lazy(() => import('./pages/platform/PlatformAuditLog').then(m => ({ default: m.PlatformAuditLog })))
@@ -351,11 +346,13 @@ export default function App() {
           <Route path="hr"         element={<RutaPorRol url="/hr"><Suspense fallback={<PageLoader />}><HR /></Suspense></RutaPorRol>} />
           <Route path="hr/me"      element={<RutaPorRol url="/hr/me"><Suspense fallback={<PageLoader />}><HRMe /></Suspense></RutaPorRol>} />
 
-          {/* Atlas One preset home + stub modules */}
+          {/* Atlas One preset home */}
           <Route path="home"         element={<Suspense fallback={<PageLoader />}><PresetHome /></Suspense>} />
-          <Route path="appointments" element={<RutaPorRol url="/appointments"><Suspense fallback={<PageLoader />}><AppointmentsComingSoon /></Suspense></RutaPorRol>} />
-          <Route path="commissions"  element={<RutaPorRol url="/commissions"><Suspense fallback={<PageLoader />}><CommissionsComingSoon /></Suspense></RutaPorRol>} />
-          <Route path="memberships"  element={<RutaPorRol url="/memberships"><Suspense fallback={<PageLoader />}><MembershipsComingSoon /></Suspense></RutaPorRol>} />
+          {/* Módulos sin construir (utils/estadoModulos.ts): la URL manda al inicio de cada rol
+              en vez de pintar "Próximamente". Al terminarlos, aquí va su pantalla real. */}
+          <Route path="appointments" element={<Navigate to="/" replace />} />
+          <Route path="commissions"  element={<Navigate to="/" replace />} />
+          <Route path="memberships"  element={<Navigate to="/" replace />} />
           {/* Gastro — Recetas (real), Mesas, Cocina/KDS */}
           <Route path="recipes"      element={<RutaPorRol url="/recipes"><Suspense fallback={<PageLoader />}><Recipes /></Suspense></RutaPorRol>} />
           <Route path="recipes/new"  element={<RutaPorRol url="/recipes"><Suspense fallback={<PageLoader />}><RecipeForm /></Suspense></RutaPorRol>} />
@@ -365,8 +362,9 @@ export default function App() {
           <Route path="meseros"      element={<RutaPorRol url="/meseros"><Suspense fallback={<PageLoader />}><Meseros /></Suspense></RutaPorRol>} />
           <Route path="bar/bottles"  element={<RutaPorRol url="/bar/bottles"><Suspense fallback={<PageLoader />}><Botellas /></Suspense></RutaPorRol>} />
           <Route path="menu"         element={<RutaPorRol url="/menu"><Suspense fallback={<PageLoader />}><MenuVisual /></Suspense></RutaPorRol>} />
-          <Route path="ai"           element={<RutaPorRol url="/ai"><Suspense fallback={<PageLoader />}><AIComingSoon /></Suspense></RutaPorRol>} />
-          <Route path="purchasing"   element={<RutaPorRol url="/purchasing"><Suspense fallback={<PageLoader />}><PurchasingComingSoon /></Suspense></RutaPorRol>} />
+          <Route path="ai"           element={<Navigate to="/" replace />} />
+          {/* Compras es una sola pantalla (/purchases); la de "Pedidos compras" nunca existió. */}
+          <Route path="purchasing"   element={<RedirigirConQuery a="/purchases" />} />
 
           {/* POS */}
           <Route path="pos"             element={<RutaPorRol url="/pos"><Suspense fallback={<PageLoader />}><POS /></Suspense></RutaPorRol>} />
@@ -386,7 +384,7 @@ export default function App() {
           }
         >
           <Route path="dashboard" element={<Suspense fallback={<PageLoader />}><MobileDashboard /></Suspense>} />
-          <Route path="query"     element={<Suspense fallback={<PageLoader />}><MobileQuery /></Suspense>} />
+          <Route path="query"     element={<SoloMovil enEscritorio="/products"><Suspense fallback={<PageLoader />}><MobileQuery /></Suspense></SoloMovil>} />
           <Route path="sales"     element={<Suspense fallback={<PageLoader />}><MobileSales /></Suspense>} />
           <Route path="profile"   element={<Suspense fallback={<PageLoader />}><MobileProfile /></Suspense>} />
           <Route path="comanda"          element={<Suspense fallback={<PageLoader />}><ComandaTables /></Suspense>} />
@@ -431,6 +429,7 @@ export default function App() {
           <Route path="alerts"        element={<Suspense fallback={<PageLoader />}><PlatformAlerts /></Suspense>} />
           <Route path="organizations" element={<Suspense fallback={<PageLoader />}><PlatformOrganizations /></Suspense>} />
           <Route path="organizations/:orgId" element={<Suspense fallback={<PageLoader />}><PlatformOrgDetail /></Suspense>} />
+          <Route path="suscripciones" element={<Suspense fallback={<PageLoader />}><PlatformSuscripciones /></Suspense>} />
           <Route path="users"         element={<Suspense fallback={<PageLoader />}><PlatformUsers /></Suspense>} />
           <Route path="branches"      element={<Suspense fallback={<PageLoader />}><PlatformBranches /></Suspense>} />
           <Route path="presets"       element={<Suspense fallback={<PageLoader />}><PlatformPresets /></Suspense>} />

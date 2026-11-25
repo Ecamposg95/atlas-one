@@ -20,7 +20,9 @@ import { PlatformPageShell } from '../../components/platform/PlatformPageShell'
 import { StatusBadge } from '../../components/platform/StatusBadge'
 import { SideDrawer } from '../../components/platform/SideDrawer'
 import { ConfirmModal } from '../../components/platform/ConfirmModal'
+import { SeccionSuscripcion } from './org/SeccionSuscripcion'
 import { errorDetailText } from '../../utils/errorDetail'
+import { rotuloNoDisponible } from '../../utils/estadoModulos'
 import { SelectorPerfilUi, PerfilEfectivoHint } from './SelectorPerfilUi'
 import { TablaDesplazable } from '../../components/ui/TablaDesplazable'
 
@@ -732,6 +734,18 @@ export function PlatformOrgDetail() {
             <div style={{ color: planUso.plan.max_sucursales_venta != null && planUso.sucursales_venta > planUso.plan.max_sucursales_venta ? 'var(--p-danger)' : undefined }}>
               Sucursales que venden <strong>{planUso.sucursales_venta}</strong> de {planUso.plan.max_sucursales_venta ?? 'sin tope'}
             </div>
+            {planUso.plan.modulos_crecimiento.length > 0 && (() => {
+              const sinConstruir = new Set(planUso.plan.modulos_no_disponibles ?? [])
+              const ofrece = planUso.plan.modulos_crecimiento.filter(k => !sinConstruir.has(k))
+              return (
+                <div style={{ fontSize: 12, color: 'var(--p-muted)' }}>
+                  El plan ofrece hoy: {ofrece.length > 0 ? ofrece.join(', ') : 'solo los módulos base'}
+                  {sinConstruir.size > 0 && (
+                    <> · Sin construir (no se ofrece ni se muestra a la tienda): {[...sinConstruir].join(', ')}</>
+                  )}
+                </div>
+              )
+            })()}
             {planUso.modulos_fuera_de_plan.length > 0 && (
               <div style={{ fontSize: 12, color: 'var(--p-muted)' }}>
                 Fuera de plan (heredados, siguen activos): {planUso.modulos_fuera_de_plan.join(', ')}
@@ -740,6 +754,9 @@ export function PlatformOrgDetail() {
           </div>
         )}
       </section>
+
+      {/* ── Sección Suscripción (cobro de la mensualidad, megaplan F3) ── */}
+      <SeccionSuscripcion orgId={id} plans={plans} onPlanCambiado={load} />
 
       {/* ── Sección Módulos ───────────────────────────────────────────── */}
       <section style={card}>
@@ -765,6 +782,8 @@ export function PlatformOrgDetail() {
               const isBeta = moduleStatus === 'BETA'
               const isStable = moduleStatus === 'STABLE'
               const busy = togglingModule === m.key
+              // Sin construir: la tienda no lo ve aunque se encienda; aquí se marca.
+              const sinConstruir = rotuloNoDisponible(m.key, m.estado)
               return (
                 <div
                   key={m.key}
@@ -778,15 +797,18 @@ export function PlatformOrgDetail() {
                     justifyContent: 'space-between',
                     gap: 10,
                   }}
-                  title={isBeta ? 'Módulo en beta: úsalo bajo tu responsabilidad' : undefined}
+                  title={sinConstruir
+                    ? `${sinConstruir}: se puede encender, pero la tienda no verá ninguna pantalla`
+                    : isBeta ? 'Módulo en beta: úsalo bajo tu responsabilidad' : undefined}
                 >
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                       <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--p-text)' }}>
                         {cat?.name || m.name || m.key}
                       </span>
-                      {isBeta && <StatusBadge status="beta" />}
-                      {isStable && <StatusBadge status="stable" />}
+                      {sinConstruir && <StatusBadge status="inactive" label={sinConstruir} />}
+                      {!sinConstruir && isBeta && <StatusBadge status="beta" />}
+                      {!sinConstruir && isStable && <StatusBadge status="stable" />}
                       {!m.permitido_por_plan && !m.is_enabled && m.plan_minimo && (
                         <StatusBadge status="beta" label={`Requiere ${nombrePlan(m.plan_minimo)}`} />
                       )}

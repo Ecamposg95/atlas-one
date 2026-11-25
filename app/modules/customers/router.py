@@ -259,6 +259,15 @@ def create_customer(
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization)
 ):
+    from app.modules.customers import crm
+    from app.services.ventas_cajero import es_cajero
+    if es_cajero(current_user):
+        # Alta rápida del mostrador: nombre y teléfono (más correo y nota). El
+        # crédito, lo fiscal, el tipo y los campos propios son de la gerencia.
+        customer_in = CustomerCreate(**{k: getattr(customer_in, k) for k in crm.CAMPOS_DE_CAJA})
+    tipo_cliente = crm.normalizar_tipo(customer_in.tipo)
+    campos_propios = crm.limpiar_valores(db, org_id, customer_in.campos)
+
     # Validar RFC único (si no es nulo y no es el genérico XAXX010101000)
     if customer_in.tax_id and len(customer_in.tax_id) > 10: 
         exists = db.query(Customer).filter(
@@ -301,6 +310,10 @@ def create_customer(
         credit_limit=customer_in.credit_limit,
         credit_days=customer_in.credit_days,
         notes=customer_in.notes,
+        tipo=tipo_cliente,
+        birthday=customer_in.birthday,
+        company=customer_in.company,
+        campos=campos_propios or None,
         current_balance=0, # Empieza en cero
         organization_id=org_id
     )
@@ -363,6 +376,22 @@ def update_customer(
     
     # Actualizamos campos dinámicamente
     update_data = customer_in.dict(exclude_unset=True)
+    from app.modules.customers import crm
+    from app.services.ventas_cajero import es_cajero
+    if es_cajero(current_user):
+        # La caja corrige nombre, teléfono, correo y nota; lo demás (crédito,
+        # fiscal, tipo, campos propios, portal) es de la gerencia.
+        fuera = [k for k in update_data if k not in crm.CAMPOS_DE_CAJA]
+        if fuera:
+            raise HTTPException(
+                status_code=403,
+                detail="Desde la caja solo se corrigen nombre, teléfono, correo y nota. Lo demás lo edita el gerente.",
+            )
+    if "tipo" in update_data:
+        update_data["tipo"] = crm.normalizar_tipo(update_data["tipo"])
+    if "campos" in update_data:
+        # Se mezclan sobre lo guardado: un campo retirado conserva su valor.
+        update_data["campos"] = {**(customer.campos or {}), **crm.limpiar_valores(db, org_id, update_data["campos"])}
     for field, value in update_data.items():
         if hasattr(customer, field):
             setattr(customer, field, value)
@@ -371,7 +400,7 @@ def update_customer(
     db.refresh(customer)
 
     # PORTAL ACCESS LOGIC (Update/Enable)
-    if (customer_in.enable_portal or customer_in.password) and customer.email:
+    if (customer_in.enable_portal or customer_in.password) and customer.email and not es_cajero(current_user):
         from app.models.users import User, Role
         from app.core.security import get_password_hash
         
@@ -531,6 +560,7 @@ def register_customer_payment(
     antes/después (spec 2026-10-29 §4.2).
     """
     from app.models import SalesDocument
+    from app.models.sales import DocumentStatus
     
     customer = db.query(Customer).filter(Customer.id == customer_id, Customer.organization_id == org_id).first()
     if not customer:
@@ -539,8 +569,13 @@ def register_customer_payment(
     if payment_in.amount <= 0:
         raise HTTPException(400, "El monto del pago debe ser mayor a cero")
 
-    from app.modules.customers.services import aplicar_abono, saldo_documento
+    from app.modules.customers.services import aplicar_abono, cliente_con_candado, saldo_documento
 
+    # Candados (auditoría 2026-09-22, M12). Sin ellos, dos abonos simultáneos
+    # al mismo ticket leían el mismo saldo, pasaban los dos el guard de
+    # sobrepago y el ticket se cobraba dos veces. Se toman en el orden global
+    # (documento de venta → cliente, el mismo de cobrar y cancelar una venta)
+    # para no interbloquearse con esas rutas. No-op en SQLite.
     # Validate document if provided
     doc = None
     if payment_in.sales_document_id:
@@ -548,11 +583,27 @@ def register_customer_payment(
             SalesDocument.id == payment_in.sales_document_id,
             SalesDocument.customer_id == customer_id,
             SalesDocument.organization_id == org_id
-        ).first()
+        ).with_for_update(of=SalesDocument).first()
 
         if not doc:
             raise HTTPException(404, "Documento de venta no encontrado o no pertenece al cliente")
+    else:
+        # Abono libre: se reparte entre los tickets PENDING del cliente y los
+        # va cerrando; se bloquean todos, en orden de id, antes que al cliente.
+        db.query(SalesDocument.id).filter(
+            SalesDocument.customer_id == customer_id,
+            SalesDocument.organization_id == org_id,
+            SalesDocument.status == DocumentStatus.PENDING,
+        ).order_by(SalesDocument.id).with_for_update().all()
 
+    # La fila del cliente: a partir de aquí el saldo y el ledger que se leen
+    # ya no los puede mover otra petición hasta el commit. El segundo abono
+    # espera aquí y, al entrar, ve lo que asentó el primero.
+    customer = cliente_con_candado(db, org_id=org_id, customer_id=customer_id)
+    if customer is None:
+        raise HTTPException(404, "Cliente no encontrado")
+
+    if doc is not None:
         # ATS-37: el abono a un ticket no puede exceder lo que ESE ticket debe.
         # Antes se comparaba contra el saldo total del cliente, así que con dos
         # tickets fiados se podía "abonar" a uno más de lo que valía. Los
@@ -714,7 +765,8 @@ def cargar_deuda_anterior_endpoint(
     from app.modules.customers.services import DeudaAnteriorInvalida, cargar_deuda_anterior
     from app.services.audit_service import write_audit
 
-    customer = db.query(Customer).filter(Customer.id == customer_id, Customer.organization_id == org_id).first()
+    from app.modules.customers.services import cliente_con_candado
+    customer = cliente_con_candado(db, org_id=org_id, customer_id=customer_id)
     if not customer:
         raise HTTPException(404, "Cliente no encontrado")
     try:
@@ -744,7 +796,8 @@ def quitar_deuda_anterior_endpoint(
     from app.modules.customers.services import DeudaAnteriorConAbonos, quitar_deuda_anterior
     from app.services.audit_service import write_audit
 
-    customer = db.query(Customer).filter(Customer.id == customer_id, Customer.organization_id == org_id).first()
+    from app.modules.customers.services import cliente_con_candado
+    customer = cliente_con_candado(db, org_id=org_id, customer_id=customer_id)
     if not customer:
         raise HTTPException(404, "Cliente no encontrado")
     try:

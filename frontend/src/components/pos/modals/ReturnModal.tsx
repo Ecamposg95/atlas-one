@@ -1,6 +1,13 @@
 import { useState, useEffect } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { useValeStore } from '../../../store/valeStore'
 import { salesApi } from '../../../api/sales'
-import { returnsApi } from '../../../api/returns'
+import { returnsApi, returnLabel, MOTIVOS_DEVOLUCION } from '../../../api/returns'
+import type { PiezasDelTicket, ReturnDocument } from '../../../api/returns'
+import { printerApi } from '../../../api/printer'
+import { usePOSStore } from '../../../store/posStore'
+import { useEnabledModulesStore } from '../../../store/enabledModulesStore'
+import { pinBloqueado } from '../../../utils/reimpresion'
 import type { SalesDocument } from '../../../types/sales'
 import { saleLabel } from '../../../types/sales'
 import { formatCurrency } from '../../../utils/currency'
@@ -13,6 +20,8 @@ interface ReturnLine {
   variant_id: string
   product_name: string
   max_qty: number
+  /** Piezas de este producto ya devueltas (o en una solicitud pendiente). */
+  ya_devuelto?: number
   quantity: number
   unit_price: number
   restock: boolean
@@ -28,6 +37,25 @@ interface Props {
 // Mismos valores que `PaymentMethod` en app/models/sales.py (refund_method de
 // app/routers/returns.py). Reusa el patrón de MixedPaymentModal.tsx.
 type RefundMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'OTHER'
+
+/** Resultado de registrar: lo mínimo para autorizar con PIN e imprimir. */
+interface Registrada { id: string; status: string; total: number; destino: Destino; vale?: { code: string; balance: number } | null }
+
+/** Qué recibe el cliente: su dinero, un vale para después, o un vale que se usa ya en el cambio. */
+type Destino = 'DINERO' | 'VALE' | 'CAMBIO'
+const DESTINOS: { clave: Destino; label: string; icon: string }[] = [
+  { clave: 'DINERO', label: 'Dinero', icon: 'fa-money-bill' },
+  { clave: 'VALE', label: 'Vale de tienda', icon: 'fa-ticket' },
+  { clave: 'CAMBIO', label: 'Cambio de producto', icon: 'fa-right-left' },
+]
+
+function registrada(r: ReturnDocument, destino: Destino): Registrada {
+  return {
+    id: r.id, status: r.status, total: Number(r.total_refunded),
+    destino: (r.destino as Destino | null | undefined) ?? destino,
+    vale: r.vale ? { code: r.vale.code, balance: Number(r.vale.balance) } : null,
+  }
+}
 
 const REFUND_METHOD_LABELS: Record<RefundMethod, { label: string; icon: string }> = {
   CASH: { label: 'Efectivo', icon: 'fa-money-bill' },
@@ -69,6 +97,19 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
     initialSale ? defaultRefundMethod(initialSale) : 'CASH'
   )
   const [reason, setReason] = useState('')
+  const [destino, setDestino] = useState<Destino>('DINERO')
+  const usarVale = useValeStore((st) => st.usar)
+  // Motivo de catálogo (obligatorio); `reason` queda como nota opcional.
+  const [motivo, setMotivo] = useState('')
+  // Qué queda por devolver del ticket y con qué reglas (servidor).
+  const [info, setInfo] = useState<PiezasDelTicket | null>(null)
+  // Ya registrada: pendiente (pide PIN del gerente) o aprobada (comprobante).
+  const [hecha, setHecha] = useState<Registrada | null>(null)
+  const [pin, setPin] = useState('')
+  const [autorizando, setAutorizando] = useState(false)
+  const [imprimiendo, setImprimiendo] = useState(false)
+  const printerName = usePOSStore((st) => st.printerName)
+  const diasCaja = useEnabledModulesStore((st) => st.diasVentasCaja)
   const [searching, setSearching] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -106,6 +147,60 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
     return () => { cancelled = true }
   }, [initialSale, sale])
 
+  // Con el ticket elegido se pregunta al servidor qué queda por devolver: las
+  // piezas ya devueltas no se ofrecen y el importe es lo que se pagó por pieza.
+  useEffect(() => {
+    if (!sale) { setInfo(null); return }
+    let vivo = true
+    returnsApi.piezas(sale.id)
+      .then((d) => {
+        if (!vivo) return
+        setInfo(d)
+        setLines(d.piezas.map((pz) => ({
+          variant_id: pz.variant_id,
+          product_name: pz.descripcion ?? pz.sku ?? 'Producto',
+          max_qty: Number(pz.disponible),
+          ya_devuelto: Number(pz.devuelto) + Number(pz.en_tramite),
+          quantity: 0,
+          unit_price: Number(pz.precio_pagado),
+          restock: true,
+        })))
+        // La caja reembolsa por donde se pagó el ticket.
+        if (d.es_caja && d.metodos.length > 0) {
+          setRefundMethod((m) => (d.metodos.includes(m) ? m : d.metodos[0] as RefundMethod))
+        }
+      })
+      .catch((err: any) => {
+        if (!vivo) return
+        const estado = err?.response?.status
+        // Fuera de plazo o de otra sucursal: no hay nada que devolver aquí.
+        if (estado === 403 || estado === 404) {
+          setError(errorDetailText(err?.response?.data?.detail, 'Este ticket no se puede devolver desde aquí.'))
+          if (!initialSale) setSale(null)
+          setLines([])
+        }
+        // Cualquier otro fallo: se sigue con las líneas del ticket; el servidor valida al registrar.
+      })
+    return () => { vivo = false }
+  }, [sale?.id])
+
+  const motivos = info?.motivos?.length ? info.motivos : MOTIVOS_DEVOLUCION
+  const elegirMotivo = (code: string) => {
+    setMotivo(code)
+    const m = motivos.find((x) => x.code === code)
+    // Un defecto por omisión va a merma; lo demás regresa a stock. Se puede cambiar por pieza.
+    if (m) setLines((l) => l.map((line) => ({ ...line, restock: m.regresa_a_stock })))
+  }
+  const metodosVisibles: string[] = info?.es_caja && info.metodos.length > 0
+    ? info.metodos
+    : Object.keys(REFUND_METHOD_LABELS)
+  const montoLibre = info?.es_caja ? Number(info.monto_libre ?? 0) : null
+  // Ticket pagado por completo con vale: a la caja solo le queda devolver en vale.
+  const soloVale = !!info?.es_caja && info.metodos.length === 0
+  useEffect(() => { if (soloVale) setDestino((d) => (d === 'DINERO' ? 'VALE' : d)) }, [soloVale])
+  const navigate = useNavigate()
+  const enCobro = useLocation().pathname.startsWith('/pos')
+
   const pickSale = (s: SalesDocument) => {
     setSale(s)
     setLines(buildLines(s))
@@ -125,9 +220,11 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
       const res = await salesApi.list({ folio_search: folio.trim(), limit: 5 })
       const found = res.items[0]
       if (!found) {
-        // La cajera solo ve ventas de hoy: un folio viejo llega vacío, no "inexistente".
+        // La cajera solo ve su plazo: un folio más viejo llega vacío, no "inexistente".
         setError(esCajera
-          ? 'Ticket no encontrado. Solo aparecen ventas de hoy; para días anteriores pide al gerente.'
+          ? (diasCaja > 0
+            ? `Ticket no encontrado. Solo aparecen ventas de tu sucursal de los últimos ${diasCaja} días; para más antiguas pide al gerente.`
+            : 'Ticket no encontrado. Solo aparecen ventas de hoy; para días anteriores pide al gerente.')
           : 'Ticket no encontrado')
         return
       }
@@ -161,14 +258,17 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
   const totalRefund = selectedLines.reduce((s, l) => s + l.quantity * l.unit_price, 0)
 
   const submit = async () => {
-    if (!sale || selectedLines.length === 0 || !reason.trim()) return
+    if (!sale || selectedLines.length === 0 || !motivo) return
     setSubmitting(true)
+    setError(null)
     try {
-      await returnsApi.create({
+      const creada = await returnsApi.create({
         sale_id: sale.id,
-        reason,
+        reason: reason.trim(),
+        reason_code: motivo,
         total_refunded: totalRefund,
         refund_method: refundMethod,
+        destino,
         cash_session_id: activeSessionId ?? null,
         items: selectedLines.map((l) => ({
           variant_id: l.variant_id,
@@ -177,13 +277,48 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
           is_inventory_reentry: l.restock,
         })),
       })
-      onSuccess()
+      // La caja se queda en el modal: aprobada → comprobante; pendiente → PIN del
+      // gerente aquí mismo. Los demás roles la aprueban desde Devoluciones, como siempre.
+      if (esCajera && creada?.id) {
+        setHecha(registrada(creada, destino))
+      } else {
+        onSuccess()
+      }
     } catch (err: any) {
       // Surface FastAPI `detail` (e.g. "Cantidad excede lo disponible…",
       // "Ya existe una devolución pendiente…") so the cashier can act.
       const detail = err?.response?.data?.detail
       setError(errorDetailText(detail, 'Error al registrar devolución'))
     } finally { setSubmitting(false) }
+  }
+
+  const autorizar = async () => {
+    if (!hecha || !pin.trim() || autorizando) return
+    setAutorizando(true)
+    setError(null)
+    try {
+      const r = await returnsApi.autorizar(hecha.id, pin)
+      setHecha(registrada(r, hecha.destino))
+    } catch (err: any) {
+      setError(pinBloqueado(err)
+        ? errorDetailText(err?.response?.data?.detail, 'Demasiados intentos. Espera unos minutos.')
+        : errorDetailText(err?.response?.data?.detail?.message ?? err?.response?.data?.detail, 'No se pudo autorizar la devolución.'))
+    } finally {
+      setPin('')
+      setAutorizando(false)
+    }
+  }
+
+  const imprimir = async () => {
+    if (!hecha || !printerName || imprimiendo) return
+    setImprimiendo(true)
+    setError(null)
+    try {
+      const b64 = await printerApi.getDevolucionBase64(hecha.id)
+      if (b64) await printerApi.printViaAgent(printerName, b64)
+    } catch (err: any) {
+      setError(errorDetailText(err?.response?.data?.detail, 'No se pudo imprimir el comprobante.'))
+    } finally { setImprimiendo(false) }
   }
 
   return (
@@ -200,8 +335,89 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
           </button>
         </div>
 
+        {hecha && (
+          <div data-testid="devolucion-hecha">
+            <div className="rounded-xl p-4 mb-4 text-sm" style={{ background: 'var(--dax-elevated)', border: '1px solid var(--dax-border-dim)' }}>
+              <div className="flex justify-between mb-1" style={{ color: 'var(--dax-text-muted)' }}>
+                <span>Devolución</span><span className="font-mono">{returnLabel({ id: hecha.id, sale_id: '' })}</span>
+              </div>
+              <div className="flex justify-between font-bold" style={{ color: 'var(--dax-text)' }}>
+                <span>{hecha.status === 'APPROVED' ? 'Devuelto' : 'Por devolver'}</span>
+                <span>{formatCurrency(hecha.total)}</span>
+              </div>
+            </div>
+            {hecha.status === 'APPROVED' ? (
+              hecha.vale ? (
+                <div className="mb-4" data-testid="vale-emitido">
+                  <div className="rounded-xl p-3 mb-2 text-center" style={{ background: 'var(--dax-elevated)', border: '1px solid var(--dax-border-dim)' }}>
+                    <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--dax-text-muted)' }}>Vale de tienda</p>
+                    <p className="font-mono text-xl font-black tracking-widest" style={{ color: 'var(--dax-text)' }}>{hecha.vale.code}</p>
+                    <p className="text-sm" style={{ color: 'var(--dax-text)' }}>Saldo {formatCurrency(hecha.vale.balance)}</p>
+                  </div>
+                  <p className="text-sm" style={{ color: 'var(--dax-success)' }}>
+                    <i className="fa-solid fa-circle-check mr-1.5" aria-hidden="true" />
+                    {hecha.destino === 'CAMBIO'
+                      ? 'Devolución aprobada. Usa el vale para cobrar los productos del cambio.'
+                      : 'Devolución aprobada. Imprime el comprobante: trae el código del vale.'}
+                  </p>
+                </div>
+              ) : (
+              <p className="text-sm mb-4" style={{ color: 'var(--dax-success)' }}>
+                <i className="fa-solid fa-circle-check mr-1.5" aria-hidden="true" />
+                {hecha.destino === 'DINERO'
+                  ? 'Devolución aprobada. Entrega el reembolso al cliente.'
+                  : 'Devolución aprobada. Lo devuelto bajó la deuda del cliente; no quedó saldo para un vale.'}
+              </p>
+              )
+            ) : (
+              <div className="mb-4">
+                <p className="text-sm mb-3" style={{ color: 'var(--dax-text)' }}>
+                  Falta la autorización de un gerente. Puede teclear su PIN aquí, o aprobarla después desde Devoluciones.
+                </p>
+                <label htmlFor="devolucion-pin" className="block text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--dax-text-muted)' }}>
+                  PIN del gerente
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    id="devolucion-pin" type="password" inputMode="numeric" autoComplete="off" autoFocus
+                    value={pin}
+                    onChange={(e) => setPin(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') autorizar() }}
+                    className="dax-input flex-1"
+                  />
+                  <button type="button" onClick={autorizar} disabled={autorizando || !pin.trim()} className="dax-btn-primary disabled:opacity-50">
+                    {autorizando ? <i className="fa-solid fa-spinner fa-spin" /> : 'Autorizar'}
+                  </button>
+                </div>
+              </div>
+            )}
+            {error && <p className="text-red-400 text-sm mb-3" role="alert">{error}</p>}
+            <div className={`flex gap-2 ${esTelefono ? 'dax-modal-footer -mx-6 px-6' : ''}`}>
+              <button
+                type="button" onClick={imprimir} disabled={imprimiendo || !printerName}
+                className="dax-btn-secondary flex-1 justify-center disabled:opacity-40"
+                title={printerName ? 'Imprimir comprobante' : 'Configura una impresora'}
+              >
+                {imprimiendo ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-print" /> Comprobante</>}
+              </button>
+              {hecha.status === 'APPROVED' && hecha.destino === 'CAMBIO' && hecha.vale ? (
+                <button
+                  type="button" className="dax-btn-primary flex-1 justify-center"
+                  onClick={() => { usarVale(hecha.vale!); onSuccess(); if (!enCobro) navigate('/pos') }}
+                >
+                  <i className="fa-solid fa-right-left" aria-hidden="true" /> Cobrar el cambio
+                </button>
+              ) : (
+              <button type="button" onClick={onSuccess} className="dax-btn-primary flex-1 justify-center">
+                {hecha.status === 'APPROVED' ? 'Listo' : 'Dejar pendiente'}
+              </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Selector de venta — solo cuando no viene pre-cargado y aún no se eligió */}
-        {!initialSale && !sale && (
+        {!hecha && !initialSale && !sale && (
           <div className="mb-4">
             <div className="flex gap-1 mb-3 text-xs font-bold">
               <button
@@ -285,9 +501,25 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
           </div>
         )}
 
-        {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
+        {!hecha && error && <p className="text-red-400 text-sm mb-3">{error}</p>}
 
-        {sale && (
+        {!hecha && sale && info?.pendiente && (
+          <div className="rounded-xl p-3 mb-4 text-sm" style={{ background: 'var(--dax-elevated)', border: '1px solid var(--dax-border-dim)', color: 'var(--dax-text)' }}>
+            <p className="mb-2">
+              Este ticket ya tiene una devolución pendiente por {formatCurrency(Number(info.pendiente.total))}.
+              Hay que autorizarla o rechazarla antes de registrar otra.
+            </p>
+            <button
+              type="button"
+              onClick={() => setHecha({ id: info.pendiente!.id, status: 'PENDING', total: Number(info.pendiente!.total), destino: 'DINERO' })}
+              className="dax-btn-secondary text-xs"
+            >
+              <i className="fa-solid fa-key" /> Autorizar con PIN del gerente
+            </button>
+          </div>
+        )}
+
+        {!hecha && sale && !info?.pendiente && (
           <>
             {/* Info del ticket */}
             <div className="rounded-xl p-3 mb-4 text-sm" style={{ background: 'var(--dax-elevated)', border: '1px solid var(--dax-border-dim)' }}>
@@ -299,7 +531,31 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
               </div>
             </div>
 
+            {/* Qué recibe el cliente */}
+            <div className="mb-4">
+              <p className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">El cliente recibe</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2" role="radiogroup" aria-label="El cliente recibe">
+                {DESTINOS.filter((d) => d.clave !== 'DINERO' || !soloVale).map((d) => (
+                  <button
+                    key={d.clave} type="button" role="radio" aria-checked={destino === d.clave}
+                    onClick={() => setDestino(d.clave)}
+                    className={`${destino === d.clave ? 'dax-btn-primary' : 'dax-btn-secondary'} justify-center text-xs`}
+                  >
+                    <i className={`fa-solid ${d.icon}`} aria-hidden="true" /> {d.label}
+                  </button>
+                ))}
+              </div>
+              {destino !== 'DINERO' && (
+                <p className="text-[10px] mt-1" style={{ color: 'var(--dax-text-muted)' }}>
+                  {destino === 'VALE'
+                    ? 'No sale dinero de la caja: se entrega un vale con código para otra compra.'
+                    : 'No sale dinero de la caja: el valor de lo devuelto se usa enseguida para cobrar los productos del cambio. Si sobra, queda en el vale.'}
+                </p>
+              )}
+            </div>
+
             {/* Método de reembolso — por defecto el mismo con el que pagó el cliente */}
+            {destino === 'DINERO' && (
             <div className="mb-4">
               <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                 Método de reembolso
@@ -309,11 +565,17 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
                 onChange={(e) => setRefundMethod(e.target.value as RefundMethod)}
                 className="dax-input text-sm w-full"
               >
-                {(Object.keys(REFUND_METHOD_LABELS) as RefundMethod[]).map((m) => (
-                  <option key={m} value={m}>{REFUND_METHOD_LABELS[m].label}</option>
+                {metodosVisibles.map((m) => (
+                  <option key={m} value={m}>{REFUND_METHOD_LABELS[m as RefundMethod]?.label ?? m}</option>
                 ))}
               </select>
+              {info?.es_caja && (
+                <p className="text-[10px] mt-1" style={{ color: 'var(--dax-text-muted)' }}>
+                  El reembolso va por donde se pagó el ticket.
+                </p>
+              )}
             </div>
+            )}
 
             {/* Items */}
             <div className="flex items-center justify-between mb-2">
@@ -340,7 +602,14 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
               {lines.map((line, i) => (
                 <div key={i} className="rounded-lg p-3" style={{ background: 'var(--dax-elevated)' }}>
                   <div className="flex items-center justify-between gap-2 mb-2">
-                    <span className="text-sm text-white flex-1">{line.product_name}</span>
+                    <span className="text-sm text-white flex-1">
+                      {line.product_name}
+                      {!!line.ya_devuelto && (
+                        <span className="block text-[10px] text-amber-400">
+                          {line.max_qty > 0 ? `Ya se devolvieron ${line.ya_devuelto}; quedan ${line.max_qty}` : 'Ya se devolvió completo'}
+                        </span>
+                      )}
+                    </span>
                     <button
                       onClick={() => updateLine(i, { quantity: line.max_qty })}
                       type="button"
@@ -395,12 +664,22 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
               <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                 Motivo <span className="text-red-400">*</span>
               </label>
+              <select
+                aria-label="Motivo"
+                value={motivo}
+                onChange={(e) => elegirMotivo(e.target.value)}
+                className="dax-input text-sm w-full mb-2"
+              >
+                <option value="">Elige el motivo…</option>
+                {motivos.map((m) => <option key={m.code} value={m.code}>{m.label}</option>)}
+              </select>
               <input
                 type="text"
+                aria-label="Nota del motivo"
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 className="dax-input"
-                placeholder="Ej: Producto defectuoso, cambio de talla..."
+                placeholder="Nota (opcional): cierre roto, pidió talla M..."
               />
             </div>
 
@@ -409,6 +688,13 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
                 <span>Total a reembolsar</span>
                 <span className="text-red-400">{formatCurrency(totalRefund)}</span>
               </div>
+            )}
+            {selectedLines.length > 0 && montoLibre !== null && (
+              <p className="text-[11px] -mt-2 mb-4" style={{ color: 'var(--dax-text-muted)' }}>
+                {montoLibre > 0 && totalRefund <= montoLibre
+                  ? 'Dentro de tu monto: se aprueba al registrar.'
+                  : 'Va a pedir el PIN de un gerente.'}
+              </p>
             )}
 
             {/* Este modal es compartido con el POS de la cajera, que no debe cambiar en
@@ -420,7 +706,7 @@ export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }
               <button onClick={onClose} className="dax-btn-secondary flex-1">Cancelar</button>
               <button
                 onClick={submit}
-                disabled={submitting || selectedLines.length === 0 || !reason.trim()}
+                disabled={submitting || selectedLines.length === 0 || !motivo}
                 className="dax-btn-danger flex-1 justify-center disabled:opacity-50"
               >
                 {submitting ? <i className="fa-solid fa-spinner fa-spin" /> : <><i className="fa-solid fa-undo" /> Registrar</>}

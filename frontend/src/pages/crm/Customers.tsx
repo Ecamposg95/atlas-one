@@ -13,6 +13,10 @@ import { useEsTelefono } from '../../hooks/useIsMobile'
 import { formatCurrency } from '../../utils/currency'
 import { toWaPhone } from '../../utils/phone'
 import { CustomerFormModal } from './CustomerFormModal'
+import { FichaCliente } from './FichaCliente'
+import { CamposPropiosModal } from './CamposPropiosModal'
+import { SeguimientoModal } from './SeguimientoModal'
+import { esRolDeCaja, hoyIso } from './crmUtil'
 import { toast } from '../../store/toastStore'
 import { confirm as confirmDialog } from '../../components/ui/ConfirmDialog'
 import { ErrorState } from '../../components/ui/ErrorState'
@@ -52,6 +56,16 @@ export function Customers() {
   const [soloDeuda, setSoloDeuda] = useState(false)
   const [formModal, setFormModal] = useState<{ open: boolean; customer: Customer | null }>({ open: false, customer: null })
   const [deleting, setDeleting] = useState(false)
+  // CRM: campos propios (admin/dueño), seguimiento del equipo y versión de la ficha abierta.
+  const [camposModal, setCamposModal] = useState(false)
+  const [seguimientoModal, setSeguimientoModal] = useState(false)
+  const [pendientesHoy, setPendientesHoy] = useState(0)
+  const [versionFicha, setVersionFicha] = useState(0)
+  const contarPendientes = useCallback(() => {
+    customersApi.seguimiento({ estado: 'PENDIENTE', hasta: hoyIso() })
+      .then((r) => setPendientesHoy(r.items.length)).catch(() => {})
+  }, [])
+  useEffect(() => { contarPendientes() }, [contarPendientes])
 
   // El detalle es un overlay propio (cabecera con editar/eliminar): no pasa por ui/Modal, así que Escape se escucha aquí.
   useEffect(() => {
@@ -174,9 +188,20 @@ export function Customers() {
     <div className="space-y-5">
       <CabeceraPagina
         titulo={<div className="flex items-center gap-3"><i className="fa-solid fa-address-book text-indigo-400 text-xl" /><h1 className="text-2xl font-black text-white">Clientes</h1></div>}
-        acciones={(esRolHq(user?.role) || user?.role === 'GERENTE') ? (
-          <Link to="/customers/cobranza" className="dax-btn-secondary text-xs"><i className="fa-solid fa-hand-holding-dollar" aria-hidden="true" /> Cuentas por cobrar</Link>
-        ) : undefined}
+        acciones={<>
+          <button type="button" onClick={() => setSeguimientoModal(true)} className="dax-btn-secondary text-xs">
+            <i className="fa-solid fa-list-check" aria-hidden="true" /> Seguimiento
+            {pendientesHoy > 0 && <span className="ml-1 rounded-full px-1.5 bg-dax-warning text-dax-on-accent font-bold">{pendientesHoy}</span>}
+          </button>
+          {esRolHq(user?.role) && (
+            <button type="button" onClick={() => setCamposModal(true)} className="dax-btn-secondary text-xs">
+              <i className="fa-solid fa-sliders" aria-hidden="true" /> Campos propios
+            </button>
+          )}
+          {(esRolHq(user?.role) || user?.role === 'GERENTE') && (
+            <Link to="/customers/cobranza" className="dax-btn-secondary text-xs"><i className="fa-solid fa-hand-holding-dollar" aria-hidden="true" /> Cuentas por cobrar</Link>
+          )}
+        </>}
       />
 
       {/* KPI Cards */}
@@ -298,7 +323,7 @@ export function Customers() {
       {/* Modal estado de cuenta */}
       {selected && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setSelected(null)}>
-          <div className="dax-card dax-modal p-6 w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
+          <div className="dax-card dax-modal p-6 w-full max-w-3xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <div>
                 <p className="text-[10px] text-slate-500 uppercase tracking-widest">Cliente</p>
@@ -349,6 +374,8 @@ export function Customers() {
                 <p className="font-mono text-sm text-slate-400 break-all">{selected.tax_id ?? '—'}</p>
               </div>
             </div>
+
+            <FichaCliente customerId={selected.id} version={versionFicha} />
 
             {selected.current_balance > 0 && (
               <button onClick={() => setPayModal({ id: selected.id, name: selected.name })}
@@ -428,15 +455,19 @@ export function Customers() {
       {formModal.open && (
         <CustomerFormModal
           customer={formModal.customer}
+          deCaja={esRolDeCaja(user?.role)}
           onClose={() => setFormModal({ open: false, customer: null })}
           onSaved={(saved) => {
             setFormModal({ open: false, customer: null })
             customersApi.getStats().then(setStats).catch(() => {})
             load(search, page)
             if (selected && selected.id === saved.id) setSelected(saved)
+            setVersionFicha((v) => v + 1)
           }}
         />
       )}
+      {camposModal && <CamposPropiosModal onClose={() => { setCamposModal(false); setVersionFicha((v) => v + 1) }} />}
+      {seguimientoModal && <SeguimientoModal onClose={() => { setSeguimientoModal(false); contarPendientes() }} />}
     </div>
   )
 }

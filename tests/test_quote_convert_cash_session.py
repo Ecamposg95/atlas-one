@@ -119,3 +119,86 @@ class TestConversionDeCotizacion:
 
         resp = client.post(f"/api/quotes/{qid}/convert-to-sale", headers=h)
         assert resp.status_code == 422, "sin payment_method explicito debe ser error de validacion"
+
+
+class TestConversionEmiteElEvento:
+    """Convertir un pedido en venta encola `SalesDocumentCreated` en la misma
+    transaccion, igual que `create_sale`. Sin el evento no se descontaban los
+    insumos de receta ni se revisaba el reabasto."""
+
+    @staticmethod
+    def _eventos(db, qid):
+        from app.models.event_outbox import EventOutbox
+        return [
+            e for e in db.query(EventOutbox).filter(
+                EventOutbox.event_type == "SalesDocumentCreated").all()
+            if e.payload.get("sales_document_id") == qid
+        ]
+
+    def test_la_conversion_encola_el_evento_con_sus_partidas(
+        self, client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup
+    ):
+        from app.models.event_outbox import OutboxStatus
+        _habilitar_modulo(db, org, "quotes")
+        _, variant = products_setup["product_a"]
+        h = {**auth_cajero_a, "X-Organization-ID": str(org.id)}
+        _abrir_caja(db, org, branch_a, cajero_a)
+        qid = _crear_cotizacion(client, h, variant.sku)
+        assert self._eventos(db, qid) == [], "cotizar no es vender: no emite"
+
+        resp = client.post(f"/api/quotes/{qid}/convert-to-sale?payment_method=CASH", headers=h)
+        assert resp.status_code in (200, 201), resp.text
+
+        eventos = self._eventos(db, qid)
+        assert len(eventos) == 1
+        assert eventos[0].status == OutboxStatus.PENDING
+        assert eventos[0].payload["items"] == [
+            {"variant_id": variant.id, "quantity": 1.0, "sku": variant.sku}]
+
+    def test_una_conversion_rechazada_no_deja_evento(
+        self, client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup
+    ):
+        _habilitar_modulo(db, org, "quotes")
+        _, variant = products_setup["product_a"]
+        h = {**auth_cajero_a, "X-Organization-ID": str(org.id)}
+        qid = _crear_cotizacion(client, h, variant.sku)
+
+        # Sin caja abierta: 409 y nada encolado.
+        resp = client.post(f"/api/quotes/{qid}/convert-to-sale?payment_method=CASH", headers=h)
+        assert resp.status_code == 409
+        assert self._eventos(db, qid) == []
+
+    def test_convertir_dos_veces_no_emite_dos_eventos(
+        self, client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup
+    ):
+        _habilitar_modulo(db, org, "quotes")
+        _, variant = products_setup["product_a"]
+        h = {**auth_cajero_a, "X-Organization-ID": str(org.id)}
+        _abrir_caja(db, org, branch_a, cajero_a)
+        qid = _crear_cotizacion(client, h, variant.sku)
+        url = f"/api/quotes/{qid}/convert-to-sale?payment_method=CASH"
+
+        assert client.post(url, headers=h).status_code in (200, 201)
+        assert client.post(url, headers=h).status_code == 400  # "Ya fue procesado"
+        assert len(self._eventos(db, qid)) == 1
+
+    def test_si_el_outbox_falla_la_conversion_no_se_bloquea(
+        self, client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup, monkeypatch
+    ):
+        from app.core.events import EventBus
+        _habilitar_modulo(db, org, "quotes")
+        _, variant = products_setup["product_a"]
+        h = {**auth_cajero_a, "X-Organization-ID": str(org.id)}
+        _abrir_caja(db, org, branch_a, cajero_a)
+        qid = _crear_cotizacion(client, h, variant.sku)
+
+        def _revienta(cls, *a, **k):
+            raise RuntimeError("outbox caido")
+        monkeypatch.setattr(EventBus, "enqueue", classmethod(_revienta))
+
+        resp = client.post(f"/api/quotes/{qid}/convert-to-sale?payment_method=CASH", headers=h)
+        assert resp.status_code in (200, 201), resp.text
+        db.expire_all()
+        venta = db.query(SalesDocument).filter(SalesDocument.id == qid).one()
+        assert venta.status == DocumentStatus.PAID
+        assert len(venta.payments) == 1

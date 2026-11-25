@@ -21,6 +21,7 @@ from app.core.security import get_current_user
 from app.models import User
 from app.models.users import Role
 from app.core.tenant_context import get_current_active_organization
+from app.services.ventas_cajero import cajera_a_ciegas, rango_hoy_mx
 
 router = APIRouter()
 
@@ -175,9 +176,40 @@ def read_cash_history(
     if not current_user.branch_id:
         # Usuarios HQ no operan caja; redirigir a reportes por sucursal
         raise HTTPException(403, "Los usuarios HQ no tienen historial de caja. Consulte los reportes por sucursal.")
-    return db.query(CashSession).filter(
-        CashSession.branch_id == current_user.branch_id
-    ).order_by(CashSession.opened_at.desc()).offset(skip).limit(limit).all()
+    q = db.query(CashSession).filter(CashSession.branch_id == current_user.branch_id)
+    if cajera_a_ciegas(db, current_user):
+        # Sin histórico: la cajera solo ve sus propios turnos de hoy (o el que
+        # siga abierto), nunca los cortes de otras ni de días anteriores.
+        # Con el conteo ciego apagado en la tienda, el historial va completo.
+        q = _turnos_propios_de_hoy(q, current_user)
+    return q.order_by(CashSession.opened_at.desc()).offset(skip).limit(limit).all()
+
+
+def _turnos_propios_de_hoy(q, user):
+    inicio = rango_hoy_mx()[0].astimezone(timezone.utc)   # UTC: compara bien también en SQLite
+    return q.filter(
+        CashSession.user_id == user.id,
+        (CashSession.status == CashSessionStatus.OPEN) | (CashSession.opened_at >= inicio)
+        | (CashSession.closed_at >= inicio),
+    )
+
+
+def _ciego_para_cajera(data: dict) -> dict:
+    """Arqueo de un turno abierto visto por la cajera: fuera todo lo que
+    permite despejar el efectivo esperado (esperado, ventas totales, efectivo,
+    reembolsos en efectivo, diferencia). Tarjeta, transferencia, la lista de
+    entradas y salidas y los conteos se quedan."""
+    data["expected"] = {"cash_physical": None, "total_system": None}
+    data["reconciliation"] = {"reported": None, "difference": None, "diff_percent": None}
+    for k in ("total_sales", "avg_ticket", "total_taxes", "subtotal"):
+        data["kpis"][k] = None
+    data["payments"]["cash"] = {**data["payments"]["cash"], "total": None}
+    data["movements"]["inflows"] = None
+    data["movements"]["outflows"] = None
+    data["returns"]["cash_refunds"] = None
+    data["returns"]["total"] = None
+    data["returns"]["by_method"] = None
+    return data
 
 @router.post("/open", response_model=CashSessionRead)
 def open_session(
@@ -1020,10 +1052,13 @@ def get_cash_summary(
     del turno cerrado del día sin reabrirlo.
     """
     if session_id is not None:
-        session = db.query(CashSession).filter(
+        q = db.query(CashSession).filter(
             CashSession.id == session_id,
             CashSession.branch_id == current_user.branch_id,
-        ).first()
+        )
+        if cajera_a_ciegas(db, current_user):
+            q = _turnos_propios_de_hoy(q, current_user)
+        session = q.first()
         if not session:
             raise HTTPException(404, "Sesión no encontrada en esta sucursal.")
     else:
@@ -1035,7 +1070,10 @@ def get_cash_summary(
         if not session:
             raise HTTPException(400, "No hay sesión abierta.")
 
-    return get_session_audit_data(db, session.id)
+    data = get_session_audit_data(db, session.id)
+    if session.closed_at is None and cajera_a_ciegas(db, current_user):
+        data = _ciego_para_cajera(data)
+    return data
 
 @router.post("/inflow")
 def register_inflow(
@@ -1144,16 +1182,36 @@ def _verify_session_access(db: Session, session_id: int, current_user: User) -> 
     session = db.query(CashSession).filter(CashSession.id == session_id).first()
     if not session:
         raise HTTPException(404, "Sesión no encontrada")
-    # Verificar organizacion via membership (User no tiene organization_id directo)
+    if cajera_a_ciegas(db, current_user):
+        # Misma regla que `/summary?session_id=`: la cajera solo abre sus
+        # propios turnos de hoy; de los demás ni confirma que existen.
+        propia = _turnos_propios_de_hoy(
+            db.query(CashSession.id).filter(CashSession.id == session.id), current_user
+        ).first()
+        if propia is None:
+            raise HTTPException(404, "Sesión no encontrada")
+    # Verificar organizacion via membership (User no tiene organization_id directo).
+    # Se busca la membresía ACTIVA en la organización de la sesión, no "la
+    # primera" del usuario: con dos membresías, esa primera no tenía orden y el
+    # acceso dependía de cuál devolviera la base.
     user_org = db.query(UserOrganization.organization_id).filter(
         UserOrganization.user_id == current_user.id,
-        UserOrganization.is_active == True
+        UserOrganization.organization_id == session.branch.organization_id,
+        UserOrganization.is_active == True,  # noqa: E712
     ).first()
-    if not user_org or session.branch.organization_id != user_org.organization_id:
+    if not user_org:
         raise HTTPException(403, "No tienes acceso a esta sesión")
     if current_user.branch_id and session.branch_id != current_user.branch_id:
         raise HTTPException(403, "No tienes acceso a esta sesión")
     return session
+
+
+def _corte_impreso_solo_al_cerrar(db: Session, session: CashSession, current_user: User) -> None:
+    """El corte (PDF/ticket) trae el esperado y la diferencia: con el turno
+    abierto la cajera no lo recibe mientras rija el conteo ciego. Se imprime
+    al cerrar."""
+    if session.closed_at is None and cajera_a_ciegas(db, current_user):
+        raise HTTPException(409, "El corte se imprime al cerrar el turno.")
 
 @router.get("/{session_id}/audit-log")
 def get_session_audit_log(
@@ -1203,7 +1261,7 @@ def get_cash_cut_pdf(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    _verify_session_access(db, session_id, current_user)
+    _corte_impreso_solo_al_cerrar(db, _verify_session_access(db, session_id, current_user), current_user)
     audit_data = get_session_audit_data(db, session_id)
     if not audit_data:
         raise HTTPException(404, "Sesión no encontrada")
@@ -1226,7 +1284,7 @@ def get_cash_cut_ticket(
     Retorna un JSON estructurado para que el Frontend (JS) lo formatee
     y lo mande a la impresora térmica (ESC/POS).
     """
-    _verify_session_access(db, session_id, current_user)
+    _corte_impreso_solo_al_cerrar(db, _verify_session_access(db, session_id, current_user), current_user)
     audit_data = get_session_audit_data(db, session_id)
     if not audit_data:
         raise HTTPException(404, "Sesión no encontrada")

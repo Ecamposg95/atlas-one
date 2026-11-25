@@ -6,6 +6,7 @@ import { useBranchCountStore, esTiendaUnica } from '../../store/branchCountStore
 import { returnsApi } from '../../api/returns'
 import { confirm } from '../ui/ConfirmDialog'
 import { useTheme } from '../../context/ThemeContext'
+import { useIsMobile } from '../../hooks/useIsMobile'
 import { AtlasMark } from '../atlas-one'
 import type { Role } from '../../types/auth'
 import { BRANCH_ROLES, urlActiva, visibleNavItems, type NavItem } from './navVisibility'
@@ -411,7 +412,7 @@ export function Sidebar({ collapsed = false, onToggle }: { collapsed?: boolean; 
 
   // Module gating: items with `module` declared only appear when the org has
   // that module enabled. Items without `module` are always shown.
-  const { enabledModules, preset, loaded, load, plan, perfilUi } = useEnabledModulesStore()
+  const { enabledModules, preset, loaded, load, plan, perfilUi, noDisponibles } = useEnabledModulesStore()
   useEffect(() => {
     if (isAuthenticated && !loaded) load()
   }, [isAuthenticated, loaded, load])
@@ -422,10 +423,12 @@ export function Sidebar({ collapsed = false, onToggle }: { collapsed?: boolean; 
     if (isAuthenticated) void cargarConteoSucursales()
   }, [isAuthenticated, cargarConteoSucursales])
 
+  const enMovil = useIsMobile()
   // El gating por módulo (y el fail-open mientras carga) vive en
   // `visibleNavItems`, que es pura y tiene pruebas.
   const isGastro = !!preset && GASTRO_PRESETS.has(preset)
-  const items = visibleNavItems(ALL_NAV, { role, allowed, enabledModules, isGastro, plan, perfilUi })
+  // Consultar (cámara y precio) solo sale en teléfono y tablet; en escritorio se consulta en Productos.
+  const items = visibleNavItems(ALL_NAV, { role, allowed, enabledModules, isGastro, plan, perfilUi, noDisponibles, escritorio: !enMovil })
 
   const handleLogout = async () => {
     const ok = await confirm({

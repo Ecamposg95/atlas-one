@@ -173,6 +173,35 @@ def _marcar_pagado_si_liquidado(db: Session, *, org_id: int, documento, customer
 
 
 # --------------------------------------------------------------------------
+# Candado del saldo
+# --------------------------------------------------------------------------
+def cliente_con_candado(db: Session, *, org_id: int, customer_id: int) -> Optional[Customer]:
+    """El cliente con su fila bloqueada (`FOR UPDATE`) y el saldo recién leído.
+
+    `current_balance` se actualiza leyendo y reescribiendo, y el saldo de cada
+    ticket se calcula del ledger antes de asentar: sin candado, dos abonos
+    simultáneos al mismo ticket pasaban los dos el guard anti-sobrepago y lo
+    cobraban dos veces (auditoría 2026-09-22, M12), y un abono simultáneo a
+    una venta fiada pisaba el saldo. La fila del cliente es el punto único de
+    serialización de todo lo que mueve su cuenta: quien vaya a escribir en su
+    ledger o en su saldo pasa primero por aquí.
+
+    `populate_existing` refresca el objeto si la sesión ya lo tenía cargado
+    sin candado; por eso se llama ANTES de modificar al cliente en la sesión.
+    Orden global de candados: documento de venta → existencias → cliente.
+    No-op en SQLite (regla de oro #7): se prueba contra Postgres con
+    `scripts/prueba_concurrencia_ventas.py`.
+    """
+    return (
+        db.query(Customer)
+        .filter(Customer.id == customer_id, Customer.organization_id == org_id)
+        .populate_existing()
+        .with_for_update(of=Customer)
+        .first()
+    )
+
+
+# --------------------------------------------------------------------------
 # Abonos
 # --------------------------------------------------------------------------
 def aplicar_abono(
@@ -398,10 +427,7 @@ def revertir_cargo_de_documento(
     monto revertido (0 si no había cargo vivo)."""
     if not documento.customer_id:
         return CERO
-    customer = db.query(Customer).filter(
-        Customer.id == documento.customer_id,
-        Customer.organization_id == org_id,
-    ).first()
+    customer = cliente_con_candado(db, org_id=org_id, customer_id=documento.customer_id)
     if customer is None:
         return CERO
     vivo = deuda_viva_del_documento(
@@ -427,10 +453,7 @@ def aplicar_devolucion_a_saldo(
     cuánto se aplicó al saldo (0 si la venta no debe nada)."""
     if not documento.customer_id:
         return CERO
-    customer = db.query(Customer).filter(
-        Customer.id == documento.customer_id,
-        Customer.organization_id == org_id,
-    ).first()
+    customer = cliente_con_candado(db, org_id=org_id, customer_id=documento.customer_id)
     if customer is None:
         return CERO
     vivo = deuda_viva_del_documento(

@@ -4,7 +4,7 @@ from sqlalchemy import func, cast, Date
 from typing import List, Dict, Any, Optional
 from datetime import date
 from app.core.database import get_db
-from app.schemas.returns import SaleReturn, SaleReturnCreate, SaleReturnSummary
+from app.schemas.returns import AutorizarConPin, SaleReturn, SaleReturnCreate, SaleReturnSummary
 from app.crud import returns as crud_returns
 from app.core.security import get_current_user
 from app.models.users import User
@@ -80,19 +80,54 @@ def create_new_return(
         raise HTTPException(status_code=404, detail="Venta no encontrada")
 
     # Roles de sucursal: solo devuelven ventas de la suya. La cajera, además,
-    # solo las de hoy. Se lanza antes del try (su except lo volvería 500).
-    from app.routers.sales import _is_hq_role
-    from app.services.ventas_cajero import es_cajero, venta_visible_para_cajero
-    if not _is_hq_role(current_user) and sale.branch_id != current_user.branch_id:
-        raise HTTPException(status_code=404, detail="Venta no encontrada")
-    if es_cajero(current_user) and not venta_visible_para_cajero(sale, current_user):
-        raise HTTPException(
-            status_code=403,
-            detail="Solo puedes devolver ventas de hoy. Para días anteriores pide al gerente.",
-        )
+    # solo dentro del plazo de la tienda. Se lanza antes del try (su except lo
+    # volvería 500).
+    from app.services import devoluciones as dev
+    from app.services.ventas_cajero import es_cajero
+    _assert_venta_devolvible(db, sale, current_user)
+    de_caja = es_cajero(current_user)
+
+    if return_in.reason_code is not None:
+        if return_in.reason_code not in dev.MOTIVOS:
+            raise HTTPException(status_code=400, detail="Motivo de devolución desconocido.")
+        return_in.reason = dev.texto_motivo(return_in.reason_code, return_in.reason)
+
+    mi_turno = dev.sesion_abierta_de(db, current_user.id, current_user.branch_id)
+    destino = (return_in.destino or dev.DESTINO_DINERO).upper()
+    if destino not in dev.DESTINOS:
+        raise HTTPException(status_code=400, detail="Destino de la devolución desconocido.")
+    return_in.destino = destino
+    if destino != dev.DESTINO_DINERO:
+        # Vale o cambio: no sale dinero de ninguna caja.
+        from app.models.sales import PaymentMethod
+        return_in.refund_method = PaymentMethod.OTHER
+        return_in.cash_session_id = mi_turno
+    elif de_caja:
+        # El dinero regresa por donde entró: efectivo solo si se pagó en efectivo.
+        permitidos = dev.metodos_de_reembolso(sale)
+        if not permitidos:
+            raise HTTPException(
+                status_code=400,
+                detail="Este ticket se pagó con vale de tienda: la devolución regresa como vale.",
+            )
+        if str(return_in.refund_method.value) not in permitidos:
+            raise HTTPException(
+                status_code=400,
+                detail="El reembolso va por el mismo método con que se pagó el ticket ("
+                       + ", ".join(permitidos) + "). Para otro método pide al gerente.",
+            )
+        if return_in.refund_method.value == "CASH" and mi_turno is None:
+            raise HTTPException(
+                status_code=409,
+                detail="Abre tu caja antes de devolver en efectivo: el dinero sale de tu turno.",
+            )
+        # El dinero sale del turno de quien devuelve, no del que mande la pantalla.
+        return_in.cash_session_id = mi_turno
+    elif return_in.cash_session_id is None:
+        return_in.cash_session_id = mi_turno
 
     try:
-        return crud_returns.create_return(
+        creada = crud_returns.create_return(
             db=db,
             return_in=return_in,
             user_id=current_user.id,
@@ -103,6 +138,142 @@ def create_new_return(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
+    # La caja devuelve sola hasta el monto que fije la tienda (0 = nunca).
+    # Arriba de eso queda PENDING: el gerente la autoriza con su PIN en la
+    # misma caja (`/{id}/autorizar`) o la aprueba después.
+    if de_caja:
+        libre = dev.monto_libre(db, org_id)
+        if libre > 0 and creada.total_refunded <= libre:
+            return_id = creada.id
+            try:
+                return crud_returns.approve_return(
+                    db, return_id, current_user.id, organization_id=org_id,
+                    autorizacion=dev.AUT_POLITICA,
+                )
+            except ValueError:
+                # No se pudo aprobar sola (p. ej. monto alto en efectivo):
+                # queda pendiente, como cualquier otra.
+                db.rollback()
+                from app.models.returns import SaleReturn as SRModel
+                return db.query(SRModel).filter(SRModel.id == return_id).first()
+    return creada
+
+
+def _assert_venta_devolvible(db: Session, sale, current_user: User) -> None:
+    """Ámbito de la devolución: roles de sucursal, solo ventas de la suya; la
+    caja, además, solo dentro del plazo de la tienda."""
+    from app.routers.sales import _is_hq_role
+    from app.services.ventas_cajero import dias_ventas_caja, es_cajero, venta_visible_para_cajero
+    if not _is_hq_role(current_user) and sale.branch_id != current_user.branch_id:
+        raise HTTPException(status_code=404, detail="Venta no encontrada")
+    if es_cajero(current_user) and not venta_visible_para_cajero(sale, current_user, db):
+        dias = dias_ventas_caja(db, current_user)
+        plazo = "Solo puedes devolver ventas de hoy." if dias == 0 else (
+            f"Esta venta tiene más de {dias} días: ya pasó el plazo de devolución en caja."
+        )
+        raise HTTPException(status_code=403, detail=f"{plazo} Pide al gerente.")
+
+
+@router.get("/motivos")
+def motivos_de_devolucion(current_user: User = Depends(get_current_user)):
+    """Catálogo de motivos (code, label y si por omisión la pieza regresa a stock)."""
+    from app.services.devoluciones import catalogo_motivos
+    return catalogo_motivos()
+
+
+@router.get("/sale/{sale_id}/piezas")
+def piezas_devolvibles(
+    sale_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    org_id: int = Depends(get_current_active_organization),
+):
+    """Lo que la caja necesita para devolver un ticket: por pieza, cuánto se
+    vendió, cuánto ya se devolvió y cuánto queda; los métodos de reembolso
+    permitidos; si hay una solicitud pendiente; y el monto que la caja puede
+    devolver sin gerente."""
+    from sqlalchemy.orm import joinedload
+    from app.models.returns import SaleReturn as SRModel
+    from app.models.sales import SalesDocument
+    from app.services import devoluciones as dev
+    from app.services.ventas_cajero import es_cajero
+
+    sale = db.query(SalesDocument).options(joinedload(SalesDocument.payments)).filter(
+        SalesDocument.id == sale_id, SalesDocument.organization_id == org_id,
+    ).first()
+    if not sale:
+        raise HTTPException(status_code=404, detail="Venta no encontrada")
+    _assert_venta_devolvible(db, sale, current_user)
+
+    pendiente = db.query(SRModel.id, SRModel.total_refunded).filter(
+        SRModel.sale_id == sale.id, SRModel.organization_id == org_id, SRModel.status == "PENDING",
+    ).first()
+    metodos = dev.metodos_de_reembolso(sale)
+    return {
+        "sale": {
+            "id": sale.id, "series": sale.series, "folio": sale.folio,
+            "created_at": sale.created_at, "customer_name": sale.customer_name,
+            "total_amount": sale.total_amount,
+            "status": str(getattr(sale.status, "value", sale.status)),
+        },
+        "piezas": dev.piezas_del_ticket(db, sale),
+        "metodos": metodos,
+        "pendiente": {"id": pendiente[0], "total": pendiente[1]} if pendiente else None,
+        "motivos": dev.catalogo_motivos(),
+        # Solo la caja tiene tope; a un rol gerencial no le aplica.
+        "monto_libre": dev.monto_libre(db, org_id) if es_cajero(current_user) else None,
+        "es_caja": es_cajero(current_user),
+    }
+
+
+@router.post("/{return_id}/autorizar", response_model=SaleReturn)
+def autorizar_con_pin(
+    return_id: str,
+    cuerpo: AutorizarConPin,
+    force: bool = Query(False),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    org_id: int = Depends(get_current_active_organization),
+):
+    """Autoriza una devolución pendiente EN LA CAJA con el PIN de un gerente
+    (el mismo PIN de supervisor de la reimpresión, con su mismo límite de
+    intentos). Queda aprobada a nombre del gerente; el efectivo sale del turno
+    de la caja que la registró."""
+    from app.models.returns import SaleReturn as SRModel
+    from app.routers.sales import _is_hq_role
+    from app.services import devoluciones as dev
+    from app.services.reprint_auth import (
+        bloqueo_restante, limpiar_intentos, registrar_intento_fallido, verificar_pin_supervisor,
+    )
+
+    existente = db.query(SRModel).filter(SRModel.id == return_id, SRModel.organization_id == org_id).first()
+    if not existente or (not _is_hq_role(current_user) and existente.branch_id != current_user.branch_id):
+        raise HTTPException(status_code=404, detail="Devolución no encontrada")
+    if existente.status != "PENDING":
+        raise HTTPException(status_code=400, detail="La devolución ya no está pendiente.")
+
+    restante = bloqueo_restante(org_id, current_user.id)
+    if restante is not None:
+        raise HTTPException(
+            status_code=423,
+            detail=f"Demasiados intentos fallidos. Intenta de nuevo en {restante} segundos.",
+        )
+    supervisor = verificar_pin_supervisor(db, org_id, cuerpo.pin, branch_id=existente.branch_id)
+    if not supervisor:
+        registrar_intento_fallido(org_id, current_user.id)
+        raise HTTPException(status_code=403, detail={"code": "PIN_INCORRECTO", "message": "PIN incorrecto"})
+    limpiar_intentos(org_id, current_user.id)
+
+    try:
+        return crud_returns.approve_return(
+            db, return_id, supervisor.id, organization_id=org_id, force=force,
+            autorizacion=dev.AUT_PIN,
+        )
+    except crud_returns.CashSessionClosedError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/sale/{sale_id}", response_model=List[SaleReturn])
 def get_returns_for_sale(
@@ -115,7 +286,13 @@ def get_returns_for_sale(
     Obtiene todas las devoluciones asociadas a un ticket específico.
     """
     from app.models.returns import SaleReturn as SRModel, SaleReturnItem
+    from app.models.sales import SalesDocument
     from sqlalchemy.orm import joinedload, selectinload
+    venta = db.query(SalesDocument).filter(
+        SalesDocument.id == sale_id, SalesDocument.organization_id == org_id,
+    ).first()
+    if venta is not None:      # sin venta la lista sale vacía, como antes
+        _assert_venta_devolvible(db, venta, current_user)
     return db.query(SRModel).options(
         joinedload(SRModel.sale),
         joinedload(SRModel.user),

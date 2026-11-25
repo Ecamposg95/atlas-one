@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuthStore } from '../../store/authStore'
 import { useModoBasico } from '../../store/enabledModulesStore'
-import { useEsTelefono } from '../../hooks/useIsMobile'
+import { useEsTelefono, useIsMobile } from '../../hooks/useIsMobile'
 import { productsApi } from '../../api/products'
 import { inventoryApi } from '../../api/inventory'
 import { toast } from '../../store/toastStore'
 import { ui, brand, fmtMoney } from './branchUI'
 import type { Product, CatalogKpis, UploadPreviewResponse } from '../../types/products'
 import { expandVariantRows } from '../../pages/inventory/variantRows'
+import { useVistaProductos } from '../../pages/inventory/useVistaProductos'
+import { ConmutadorVista } from '../../pages/inventory/ConmutadorVista'
+import { TarjetaProducto, REJILLA_PRODUCTOS } from '../../pages/inventory/TarjetaProducto'
 
 import { TablaDesplazable } from '../ui/TablaDesplazable'
 import { Modal as ModalFormulario } from '../ui/Modal'
@@ -109,7 +112,19 @@ export function ProductsBranchView() {
   const modoBasico = useModoBasico()
   // El vendedor consulta el catálogo: sin alta, edición, importación ni ajuste (el backend también lo niega).
   const soloLectura = useAuthStore((s) => s.user?.role) === 'VENDEDOR'
+  const rolActual = useAuthStore((s) => s.user?.role)
+  const esDeCaja = rolActual === 'CAJERO' || rolActual === 'VENDEDOR'
   const [fichaTarget, setFichaTarget] = useState<ProductRow | null>(null)
+  // Tarjetas por omisión; cada quien recuerda su elección en este navegador.
+  const [vista, setVista] = useVistaProductos(user?.id)
+  // Escritorio: la búsqueda toma el foco al entrar, para consultar precio con el
+  // lector USB sin dar clic. En teléfono/tablet no: abriría el teclado.
+  const esMovil = useIsMobile()
+  const busquedaRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (!esMovil) busquedaRef.current?.focus()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // ── Load ───────────────────────────────────────────────────────────────────
   const load = useCallback(async (q: string) => {
@@ -183,7 +198,8 @@ export function ProductsBranchView() {
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className={`${ui.page} py-6`}>
-      <div className={`${ui.container} space-y-5`}>
+      {/* A todo el ancho (sin el tope `max-w-7xl` de `ui.container`): la rejilla llega a 5–6 columnas. */}
+      <div className="w-full space-y-5">
 
         {/* Hero */}
         <div className={`${ui.hero} px-6 py-6 flex flex-wrap items-center justify-between gap-4`}>
@@ -265,8 +281,11 @@ export function ProductsBranchView() {
           <div className="relative flex-1 min-w-[220px]">
             <i className="fa-solid fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
             <input
+              ref={busquedaRef}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              // El lector termina con Enter: se selecciona lo escrito para que el siguiente escaneo lo reemplace.
+              onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.select() }}
               placeholder="Buscar por nombre, SKU o código de barras…"
               className={`${ui.input} pl-11`}
             />
@@ -286,9 +305,10 @@ export function ProductsBranchView() {
               </button>
             ))}
           </div>
+          <ConmutadorVista vista={vista} onCambiar={setVista} />
         </div>
 
-        {/* List */}
+        {/* Rejilla de tarjetas (por omisión) o lista */}
         {loading ? (
           <div className={`${ui.card} p-12 flex items-center justify-center`}>
             <i className="fa-solid fa-spinner fa-spin text-2xl text-purple-500" />
@@ -299,6 +319,18 @@ export function ProductsBranchView() {
             <p className={`text-sm ${ui.muted}`}>
               {search ? 'Sin resultados para tu búsqueda' : 'Todavía no hay productos en tu sucursal'}
             </p>
+          </div>
+        ) : vista === 'tarjetas' ? (
+          <div className={REJILLA_PRODUCTOS}>
+            {visible.map((p) => (
+              <TarjetaDeSucursal
+                key={p.variant_id ?? p.id}
+                product={p}
+                onView={() => setFichaTarget(p)}
+                onEdit={soloLectura ? undefined : () => openEdit(p)}
+                onStock={soloLectura ? undefined : () => setStockTarget(p)}
+              />
+            ))}
           </div>
         ) : (
           <div className={`${ui.card} overflow-hidden`}>
@@ -348,6 +380,7 @@ export function ProductsBranchView() {
       {fichaTarget && (
         <ProductFichaModal
           product={fichaTarget}
+          verCosto={!esDeCaja}
           onClose={() => setFichaTarget(null)}
           onEdit={soloLectura ? undefined : () => { const p = fichaTarget; setFichaTarget(null); openEdit(p) }}
           onAdjustStock={soloLectura ? undefined : () => { const p = fichaTarget; setFichaTarget(null); setStockTarget(p) }}
@@ -443,6 +476,48 @@ function ProductRow({ product: p, onView, onEdit, onStock }: RowProps) {
   )
 }
 
+// ─── Tarjeta (vista de rejilla) ───────────────────────────────────────────────
+
+/**
+ * Lo mismo que la fila, en tarjeta: foto, nombre, código, precio y existencia de
+ * la sucursal (el backend ya los resuelve por el usuario). Nunca el costo. Las
+ * acciones son las de la fila: el vendedor (sin `onEdit`/`onStock`) solo consulta.
+ */
+function TarjetaDeSucursal({ product: p, onView, onEdit, onStock }: RowProps) {
+  const stock = Number(p.stock_total ?? p.stock ?? 0)
+  const min = p.min_stock ?? 0
+  const lowStock = min > 0 && stock <= min
+  return (
+    <TarjetaProducto
+      nombre={p.label}
+      imagen={p.image_url}
+      codigo={p.sku}
+      codigoBarras={p.barcode}
+      detalle={p.brand_name}
+      onAbrir={onView}
+      precio={<span className="text-dax-text text-lg font-semibold tabular-nums tracking-tight">{fmtMoney(String(p.price))}</span>}
+      existencia={
+        <span className="flex flex-col items-end leading-tight">
+          <span className={`dax-badge ${stock > 0 && !lowStock ? 'dax-badge-green' : 'dax-badge-red'}`}>{stock}</span>
+          <span className="text-dax-faint text-[10px] mt-0.5">en existencia</span>
+        </span>
+      }
+      pie={onEdit && onStock ? (
+        <div className="ml-auto flex items-center gap-1">
+          <button type="button" onClick={onStock} title="Ajustar stock" aria-label={`Ajustar stock — ${p.label}`}
+            className="dax-btn-ghost dax-btn-icon !p-0 w-9 h-9 justify-center">
+            <i className="fa-solid fa-plus-minus text-sm" aria-hidden="true" />
+          </button>
+          <button type="button" onClick={onEdit} title="Editar" aria-label={`Editar — ${p.label}`}
+            className="dax-btn-ghost dax-btn-icon !p-0 w-9 h-9 justify-center">
+            <i className="fa-solid fa-pen text-sm" aria-hidden="true" />
+          </button>
+        </div>
+      ) : undefined}
+    />
+  )
+}
+
 // ─── Product ficha modal (read-only detail card) ──────────────────────────────
 
 interface FichaProps {
@@ -450,9 +525,11 @@ interface FichaProps {
   onClose: () => void
   onEdit?: () => void
   onAdjustStock?: () => void
+  /** La caja (cajera / vendedor) consulta precio y existencia, no el costo. */
+  verCosto?: boolean
 }
 
-function ProductFichaModal({ product: p, onClose, onEdit, onAdjustStock }: FichaProps) {
+function ProductFichaModal({ product: p, onClose, onEdit, onAdjustStock, verCosto = true }: FichaProps) {
   const stock = Number(p.stock_total ?? p.stock ?? 0)
   return (
     <Modal title="Detalle del producto" onClose={onClose} size="xl">
@@ -484,7 +561,7 @@ function ProductFichaModal({ product: p, onClose, onEdit, onAdjustStock }: Ficha
             <span className={ui.muted}>Base:</span>
             <span className="font-bold ml-2 tabular-nums">{fmtMoney(String(p.price ?? 0))}</span>
           </div>
-          {p.cost != null && (
+          {verCosto && p.cost != null && (
             <div className="text-sm">
               <span className={ui.muted}>Costo:</span>
               <span className="font-bold ml-2 tabular-nums">{fmtMoney(String(p.cost))}</span>

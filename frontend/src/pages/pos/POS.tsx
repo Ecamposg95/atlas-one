@@ -29,6 +29,9 @@ import { CardPaymentModal } from '../../components/pos/modals/CardPaymentModal'
 import { TransferPaymentModal } from '../../components/pos/modals/TransferPaymentModal'
 import { MixedPaymentModal } from '../../components/pos/modals/MixedPaymentModal'
 import { ReturnModal } from '../../components/pos/modals/ReturnModal'
+import { ValeModal } from '../../components/pos/modals/ValeModal'
+import { repartoConVale, useValeStore } from '../../store/valeStore'
+import { referenciaDeVale } from '../../api/vales'
 import { CashMovementModal } from '../../components/pos/modals/CashMovementModal'
 import { CloseSessionModal } from '../../components/pos/modals/CloseSessionModal'
 import { TicketWhatsappModal } from '../../components/pos/modals/TicketWhatsappModal'
@@ -95,6 +98,13 @@ export function POS() {
   const [checkingSession, setCheckingSession] = useState(true)
   const [showSessionModal, setShowSessionModal] = useState(false)
   const [payModal, setPayModal] = useState<PayMethod | null>(null)
+  // Vale de tienda cargado en esta venta (cambio de producto o código tecleado):
+  // cubre lo que alcance del total y el resto se cobra por el medio de siempre.
+  const vale = useValeStore((s) => s.vale)
+  const usarVale = useValeStore((s) => s.usar)
+  const quitarVale = useValeStore((s) => s.quitar)
+  const [valeModal, setValeModal] = useState(false)
+  const { aplica: valeAplica, porCobrar } = repartoConVale(total, vale)
   const [returnModal, setReturnModal] = useState(false)
   const [leftTab, setLeftTab] = useState<LeftTab>('products')
   const [toast, setToast] = useState<Toast | null>(null)
@@ -302,6 +312,12 @@ export function POS() {
     const shouldPrint = opts.print ?? true
     if (store.isProcessing || store.cart.length === 0) return
     store.setIsProcessing(true)
+    // El vale viaja como un pago OTHER con su código de referencia; el backend
+    // le baja el saldo en la misma transacción del cobro.
+    const valeUsado = vale && valeAplica > 0 ? { code: vale.code, monto: valeAplica, resto: vale.balance - valeAplica } : null
+    if (valeUsado) {
+      payments = [{ method: 'OTHER', amount: valeUsado.monto, reference: referenciaDeVale(valeUsado.code) }, ...payments]
+    }
     // Idempotencia: un identificador por INTENTO de cobro. La cola offline
     // reenvia este mismo payload, asi que un reintento llega con el mismo
     // valor y el backend devuelve la venta original en vez de duplicarla.
@@ -343,7 +359,11 @@ export function POS() {
       const changeStr = change > 0 ? ` · Cambio: ${formatCurrency(change)}` : ''
       const fiado = sale.credit_debt ?? 0
       const fiadoStr = fiado > 0 ? ` · Queda a crédito: ${formatCurrency(fiado)}` : ''
-      showToast(`Venta ${folio} registrada${changeStr}${fiadoStr}`)
+      const valeStr = valeUsado
+        ? ` · Vale ${valeUsado.code}: ${valeUsado.resto > 0.005 ? `le quedan ${formatCurrency(valeUsado.resto)}` : 'agotado'}`
+        : ''
+      if (valeUsado) quitarVale()
+      showToast(`Venta ${folio} registrada${changeStr}${fiadoStr}${valeStr}`)
       if (esTelefono && saleId) setAvisoVenta({ id: saleId, folio })
       // Auto-imprimir vía agente local si hay impresora configurada,
       // salvo que el cajero haya apagado "Imprimir Ticket" en el modal.
@@ -508,12 +528,12 @@ export function POS() {
     // El importe que pasa por la terminal incluye la comisión. El backend lo
     // recalcula y rechaza cualquier otro con un 422 en español: el cajero no
     // puede quitarla.
-    const { totalDue } = surchargeFor(total, 0, surchargePct)
+    const { totalDue } = surchargeFor(porCobrar, 0, surchargePct)
     await submitSale([{ method: 'CARD', amount: totalDue, reference }])
   }
 
   const handleTransferPay = async (reference: string) => {
-    await submitSale([{ method: 'TRANSFER', amount: total, reference }])
+    await submitSale([{ method: 'TRANSFER', amount: porCobrar, reference }])
   }
 
   const handleMixedPay = async (payments: { method: string; amount: number; reference?: string }[]) => {
@@ -578,7 +598,11 @@ export function POS() {
   // teléfono dentro de la hoja inferior.
   const carrito = (
     <CartPanel
-      onPay={(method) => setPayModal(method)}
+      onPay={(method) => {
+        // El vale cubre todo: no hay nada que cobrar por otro medio.
+        if (valeAplica > 0 && porCobrar <= 0.005) submitSale([])
+        else setPayModal(method)
+      }}
       onPark={parkSale}
       customerName={store.customerName}
       onClearCustomer={() => store.setCustomer(null, null)}
@@ -617,6 +641,22 @@ export function POS() {
               <i className="fa-solid fa-xmark" />
             </button>
           )}
+        </div>
+      )}
+
+      {vale && (
+        <div
+          data-testid="vale-en-cobro"
+          className="flex items-center gap-2 px-3 py-2 text-sm bg-dax-warning-soft text-dax-text border-b border-dax-border-dim"
+        >
+          <i className="fa-solid fa-ticket" aria-hidden="true" />
+          <span className="flex-1 min-w-0">
+            Vale <span className="font-mono font-bold">{vale.code}</span> · saldo {formatCurrency(vale.balance)}
+            {total > 0 && <> · cubre {formatCurrency(valeAplica)}{porCobrar > 0.005 ? `, faltan ${formatCurrency(porCobrar)}` : ''}</>}
+          </span>
+          <button type="button" onClick={quitarVale} className="dax-btn-ghost text-xs" aria-label="Quitar el vale de esta venta">
+            Quitar
+          </button>
         </div>
       )}
 
@@ -690,6 +730,15 @@ export function POS() {
             aria-label="Salida de efectivo"
           >
             <i className="fa-solid fa-arrow-up text-xs" aria-hidden="true" /> <span className={actionLabel}>Salida</span>
+          </button>
+          <button
+            onClick={() => setValeModal(true)}
+            className={actionBtn}
+            style={{ background: 'var(--dax-elevated)', borderColor: 'var(--dax-border)', color: 'var(--dax-text)' }}
+            title="Cobrar con vale de tienda"
+            aria-label="Vale de tienda"
+          >
+            <i className="fa-solid fa-ticket text-xs" aria-hidden="true" /> <span className={actionLabel}>Vale</span>
           </button>
           <button
             onClick={() => setReturnModal(true)}
@@ -919,14 +968,14 @@ export function POS() {
       {/* Payment modals */}
       {payModal === 'CASH' && (
         <CashPaymentModal
-          total={total}
+          total={porCobrar}
           onClose={() => setPayModal(null)}
           onConfirm={handleCashPay}
         />
       )}
       {payModal === 'CARD' && (
         <CardPaymentModal
-          total={total}
+          total={porCobrar}
           surchargePct={surchargePct}
           onClose={() => setPayModal(null)}
           onConfirm={handleCardPay}
@@ -934,14 +983,14 @@ export function POS() {
       )}
       {payModal === 'TRANSFER' && (
         <TransferPaymentModal
-          total={total}
+          total={porCobrar}
           onClose={() => setPayModal(null)}
           onConfirm={handleTransferPay}
         />
       )}
       {payModal === 'MIXED' && (
         <MixedPaymentModal
-          total={total}
+          total={porCobrar}
           surchargePct={surchargePct}
           customerId={store.customerId}
           customerName={store.customerName}
@@ -949,6 +998,7 @@ export function POS() {
           onConfirm={handleMixedPay}
         />
       )}
+      {valeModal && <ValeModal onClose={() => setValeModal(false)} onUsar={usarVale} />}
       {returnModal && (
         <ReturnModal
           onClose={() => setReturnModal(false)}

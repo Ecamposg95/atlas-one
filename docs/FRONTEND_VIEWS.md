@@ -23,6 +23,7 @@ Tres árboles bajo `<BrowserRouter>`:
 
 ### Gating en dos capas (defensa en profundidad; el backend siempre revalida)
 1. **Por rol** — `ROLE_ROUTES` en `components/layout/navConfig.ts` (`rolesConAcceso` deriva de la misma lista que dibuja el menú; `RutaPorRol` lo aplica) lista las URLs permitidas por rol tenant. El guard `RequireRole` (`components/layout/RequireRole.tsx`) protege rutas puntuales; es **solo UX** (evita redirecciones confusas), no seguridad. SUPERADMIN/SUPPORT saltan el RBAC tenant.
+   **Solo móvil (2026-11-24):** un ítem con `soloMovil` (hoy solo Consultar, `/mobile/query`) no sale en el menú de escritorio (≥ 1024 px, el corte del armazón; la tablet cuenta como móvil), y su ruta envuelta en `components/layout/SoloMovil.tsx` redirige en escritorio a `/products` conservando `?…` si el rol tiene esa pantalla (soporte operativo no la tiene y se queda en Consultar). `/scanner` sigue redirigiendo a Consultar.
 2. **Por módulo** — cada ítem de nav declara `module: 'pos'|'catalog'|...`; solo aparece si `enabledModulesStore.enabledModules` lo incluye (fail-open: si la lista está vacía porque `/me/context` no cargó, se muestran todos los permitidos por rol). El preset de la org define qué módulos están activos.
 
 **Roles tenant:** `ADMINISTRADOR`, `DUEÑO` (HQ, ven todo), `GERENTE`, `CAJERO` (sucursal), `VENDEDOR` (mostrador con menú corto desde 2026-11-20: Mi día, Cobrar, Ventas, Corte de caja, Clientes y Productos en solo consulta, más Fotos; misma regla de ventas que la cajera, `utils/rolesCaja.ts` y `app/services/ventas_cajero.py`), `SOPORTE_OPERATIVO` (móvil), `CLIENTE` (portal). **Platform:** `SUPERADMIN`, `SUPPORT` (via `platform_role`).
@@ -70,14 +71,15 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 | `/cash-history` | `finance/CashHistory` | Gerente, Cajero | cash_management |
 | `/expenses`, `/purchases` | `finance/Expenses`, `Purchases` | Admin, Dueño | payments |
 | `/reports` | `reports/Reportes` (fijado a la sucursal del usuario; el CAJERO no tiene la ruta en `ROLE_ROUTES` y, si entrara por API, el backend fija su sucursal) | Gerente | — |
-| `/customers` | `crm/Customers` | Admin, Dueño | crm |
+| `/customers` | `crm/Customers` (ficha 360 `crm/FichaCliente`, campos propios `crm/CamposPropiosModal`, seguimiento `crm/SeguimientoModal`; la caja da de alta con nombre y teléfono) | Admin, Dueño, Gerente, Cajero, Vendedor | crm |
 | `/customers/cobranza` | `crm/Cobranza` | Admin, Dueño, Gerente | crm |
 | `/hr`, `/hr/me` | `hr/HR`, `HRMe` | Admin / todos | — |
 | `/portal` | `portal/Portal` | Cliente | — |
 | `/users`, `/startup` | `core/Users`, `Startup` | Admin | — |
 | `/home`, `/tables`, `/kitchen`, `/meseros`, `/bar/bottles`, `/menu`, `/recipes` | ver §2 Gastro | según preset | tables/kitchen/bar/menu/recipes |
 | `/mobile/*` | `mobile/*` | Vendedor (owner: Dueño/Admin) | — |
-| `/appointments`, `/commissions`, `/memberships`, `/ai`, `/purchasing` | `coming-soon/index` | según módulo | (stubs) |
+| `/appointments`, `/commissions`, `/memberships`, `/ai` | — (`<Navigate to="/">`) | módulo sin construir | redirigen al inicio del rol |
+| `/purchasing` | — (`RedirigirConQuery` → `/purchases`) | — | relleno retirado; Compras es `/purchases` |
 | `/platform/*` | `platform/*` | SUPERADMIN | — |
 | `/__dev__/atlas-one-preview` | `__dev__/AtlasOnePreview` | solo dev | — |
 | `*` | `NotFound` | todos | — |
@@ -189,8 +191,9 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Notas:** Errores silenciados; reloj cada 10s. **Gotcha:** hooks tras early-return (`useIsBranchUser` antes del return) — patrón frágil.
 
 ### `/configuracion` — Configuración
+- **Disposición (2026-11-24):** en escritorio (≥ 1024 px) las pestañas van en una columna lateral fija y el contenido ocupa el resto, en dos columnas desde 1400 px (`REJILLA_AJUSTES` de `utils/vistaDeConfiguracion.ts`); teléfono y tablet conservan las pestañas horizontales.
 - **Archivo:** `pages/pos/Configuracion.tsx` elige por rol (`utils/vistaDeConfiguracion.ts`): administrador y dueño ven el **centro de ajustes** (`esCentroDeAjustes`), el gerente `PrinterSettings.tsx` y la caja `PrinterSettingsCajera.tsx`. `/printer-settings` redirige a `?tab=impresoras`; `/organization` y `/hq/branches` redirigen aquí.
-- **Centro de ajustes (admin/dueño), pestañas en `?tab=`:** `empresa` (datos y logo), `sucursales` (`core/Sucursales.tsx`), `ventas` (tipo de cambio, comisión de tarjeta, conteo ciego, precio por sucursal, aviso de poca existencia en básico), `ticket` (encabezado, pie, términos, redes), `impresoras` (`PrinterSettings incrustada`), `tienda` (si el canal está encendido) y `mas` (accesos a Usuarios, Departamentos y Marcas). Las de empresa/ventas/ticket son `core/Organization.tsx` con `seccion`.
+- **Centro de ajustes (admin/dueño), pestañas en `?tab=`:** `empresa` (datos y logo), `sucursales` (`core/Sucursales.tsx`), `ventas` (tipo de cambio, comisión de tarjeta, conteo ciego, precio por sucursal, aviso de poca existencia en básico), `ticket` (encabezado, pie, términos, redes), `impresoras` (`PrinterSettings incrustada`), `tienda` (si el canal está encendido), `plan` (`core/MiPlanYPagos.tsx`, «Mi plan y pagos») y `mas``impresoras` (`PrinterSettings incrustada`), `tienda` (si el canal está encendido) y `mas` (accesos a Usuarios, Departamentos y Marcas). Las de empresa/ventas/ticket son `core/Organization.tsx` con `seccion`.
 - **Propósito:** impresoras, cajón de dinero y ticket. Gerente, admin y dueño tienen pestañas **Impresoras** (agente por sistema, Bluetooth, instalar impresora), **Cajón** (`components/pos/CajonCard`: abrir ahora y si abre solo al cobrar, guarda al momento) y **Ticket** (papel, logo, editor con vista previa). La cajera elige la impresora de su PC, prueba y abre el cajón; nada de su pantalla escribe en la sucursal, y en teléfono solo se explica que eso se hace desde la PC.
 - **Quién la ve:** todos los roles de tienda — módulo `pos`.
 - **Datos/API:** `client.get/put('/branches/:id')`, logo `post/delete`, `client.get('/organization/')`, `printerApi.*` (`abrirCajonManual` abre por el agente y registra `DRAWER_OPENED_MANUAL` con `POST /printer/drawer-opened`), Web Bluetooth API.
@@ -221,8 +224,9 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Notas:** Carrito/dropdowns inline (debounce 300ms). **Gotcha:** `notes` se captura pero NO se envía; el payload solo manda `{sku, quantity}`.
 
 ### `/returns` — Devoluciones 📱
+- **Vale y cambio (2026-11-24):** `ReturnModal` pregunta qué recibe el cliente: dinero, vale de tienda o cambio de producto. Con cambio, el vale queda cargado en el cobro (`store/valeStore.ts`) y el POS lo aplica como pago (`repartoConVale`); el botón «Vale» del POS (`components/pos/modals/ValeModal`) carga uno por código.
 - **Archivo:** `pages/sales/Returns.tsx`. Sustituye también a `hq/HQReturns.tsx` (borrada 2026-10-25; `/hq/returns` redirige).
-- **Propósito:** cajera → `ReturnsBranchView` (asistente; busca por folio con `GET /sales/by-folio/...`, que a la cajera solo le encuentra tickets de hoy: ante un 404 lee «Ticket no encontrado. Solo aparecen ventas de hoy; para días anteriores pide al gerente.»). Gerente, admin y dueño → bandeja: Pendientes (siempre completos) e Historial acotado por periodo (`presetsReportes`, arranca en 30 días; ambas listas con `limit` 200); detalle en `ui/Modal` con Aprobar/Rechazar (motivo opcional); reembolso en efectivo alto confirmado con `confirm()` y `force=true` (R-3).
+- **Propósito:** cajera y vendedor → `ReturnsBranchView` (2026-11-24): buscador que acepta el folio escaneado o texto libre (cliente, producto) sobre las ventas de su sucursal dentro del plazo de la tienda, la lista «Esperan autorización», y la devolución en sí en `ReturnModal` (el mismo del POS y de Ventas): piezas que quedan por devolver (`GET /returns/sale/{id}/piezas`), motivo de catálogo, stock o merma por pieza, reembolso por el método del ticket, PIN del gerente en la misma caja si rebasa el monto libre, y comprobante impreso. Gerente, admin y dueño → bandeja: Pendientes (siempre completos) e Historial acotado por periodo (`presetsReportes`, arranca en 30 días; ambas listas con `limit` 200); detalle en `ui/Modal` con Aprobar/Rechazar (motivo opcional); reembolso en efectivo alto confirmado con `confirm()` y `force=true` (R-3).
 - **Quién la ve:** todos — módulo `returns`. `CAN_APPROVE` = Admin/Dueño/Gerente. Admin y dueño con más de una sucursal que vende ven el selector y la columna «Sucursal». El gerente no tiene selector pero sí la columna: `GET /returns/` lo trata como rol de oficina (`HQ_ROLES` de `metricas_ventas.py`) y le devuelve toda la organización, como antes de la fusión. El ítem de menú no lleva `module:` a propósito: un solo ítem para todos los roles.
 - **Datos/API:** `returnsApi.list/approve/reject`, `organizationApi.getBranches` (solo HQ).
 - **Notas:** estados con `estadoDevolucion` («Por aprobar», «Aprobada», «Rechazada»). **Gotcha:** hooks tras early-return (`Returns` → `ReturnsAdminView`).
@@ -267,6 +271,12 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Propósito:** rejilla de tarjetas (abierta/cerrada por `status === 'ONLINE'` del backend, ventas hoy, turnos abiertos, se está acabando) con lápiz y bote por sucursal y «Nueva sucursal»; al tocar una (o con `&sucursal=ID`), su detalle de hoy debajo. El modal de edición también cambia **Vende** y **Activa**; solo manda lo que cambió (`cambiosDeSucursal`): mandar el tipo de la matriz sin `can_sell` le apagaba la venta.
 - **Datos/API:** `organizationApi.getBranches/createBranch/updateBranch/deleteBranch`, `reportsApi.commandCenterStats`, `reportsApi.dashboard({ branch_id })`. Si las cifras de hoy fallan, la lista se sigue pudiendo administrar.
 
+### `/configuracion?tab=plan` — Mi plan y pagos 📱
+- **Archivo:** `pages/core/MiPlanYPagos.tsx` (pestaña del centro de ajustes; solo administrador y dueño).
+- **Propósito:** solo lectura de lo que Atlas le cobra a la tienda: plan, precio pactado, próxima renovación, estado (al corriente, por vencer, vencida, suspendida, cortesía), uso contra los topes del plan (usuarios activos, sucursales que venden), datos de facturación si los hay, e historial de cargos con sus pagos. No tiene botones ni campos. No es Cobranza (`/crm/cobranza`).
+- **Datos/API:** `suscripcionesApi.mia()` → `GET /api/suscripcion/mia`. Importes como cadena: `num()` de `api/suscripciones.ts`.
+- **Responsivo:** `useEsTelefono()` → `ListaTarjetas`/`TarjetaFila` en teléfono, `dax-table` en escritorio. Solo tokens `dax-*`.
+
 ---
 
 ## 5. Inventario, Productos & Catálogo
@@ -275,6 +285,7 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 
 ### `/products` — Productos 📱
 - **Archivo:** `pages/inventory/Products.tsx`. Desde la Fase 3 (2026-10-25) absorbe `core/AdminCatalog.tsx` (borrado; `/admin/catalog` redirige).
+- **Tarjetas (2026-11-24):** rejilla de tarjetas a todo el ancho por omisión (2 a 6 columnas; `inventory/TarjetaProducto`, `REJILLA_PRODUCTOS`), también en la vista de sucursal (`components/branch/ProductsBranchView`); el conmutador a lista (`inventory/ConmutadorVista`) se recuerda por usuario (`atlas:productos:vista:<userId>`, `inventory/useVistaProductos`). La tarjeta y la ficha de la caja (cajera, vendedor) no pintan costo. En escritorio la búsqueda toma el foco al entrar (lector USB). En modo básico la vista de oficina sigue en lista.
 - **Propósito:** vista central del catálogo: buscar/filtrar, lista o cuadrícula, crear/editar (`FormularioProducto` en `Modal`), importar Excel/CSV, etiquetas CSV, códigos de barras. Para admin y dueño **en perfil completo** (`catalogo = isHQ && !modoBasico`): cifras (`components/catalog/CatalogKpis`), filtro por marca y por aprobación, «Incluir archivados», «Exportar» (Excel con los filtros), distintivo de aprobación por fila y acciones por producto (`pages/core/catalogActions.ts`: matriz de sucursales —**siempre** para HQ en completo, sin importar cuántas sucursales haya: es la única vía para reactivar las filas de sucursal tras archivar/restaurar—, aprobar/rechazar pendientes, historial, editar, duplicar, archivar/restaurar).
 - **Quién la ve:** Admin, Dueño, Gerente, Cajero — módulo `catalog`. Roles de sucursal ven `ProductsBranchView`.
 - **Datos/API:** `productsApi.list/search/getDepartments/getBrands/catalogKpis/approve/reject/duplicate/archive/restore/downloadTemplate/uploadProducts/barcodesMissingCount/assignMissingBarcodes/downloadLabelsCsv`.
@@ -504,6 +515,12 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 - **Datos/API:** carga paralela `getOrg/getOrgModules/getUsers/getBranches/getPresets/getModulesCatalog/getUpsellRecommendations`; acciones `toggleModule/updateOrg/setIndustry/applyPreset/resetPreset/archiveOrg/deleteOrg/impersonate`. `useImpersonationStore`.
 - **Notas:** Toggle de módulos optimista con rollback. Impersonación registra en AuditLog → `/hq/operations`. "Reset config" es placeholder sin backend. Tema v1.
 
+### `/platform/suscripciones` — Suscripciones
+- **Archivo:** `pages/platform/PlatformSuscripciones.tsx`
+- **Propósito:** cartera de lo que Atlas le cobra a cada tienda (megaplan F3). KPIs arriba (ingreso mensual recurrente, cartera vencida, por vencer, organizaciones sin suscripción), filtro por estado con conteos y tabla (`DataTable`, CSV); la fila abre la ficha de la organización.
+- **Datos/API:** `suscripcionesApi.listar({ estado })` → `GET /api/platform/suscripciones`. Los totales son de toda la cartera aunque haya filtro.
+- **En la ficha de la organización** (`/platform/organizations/:orgId`): `pages/platform/org/SeccionSuscripcion.tsx`, debajo de «Plan y uso». Alta/edición (plan, precio pactado, periodicidad, día de corte, fechas, estado manual, datos fiscales, notas), «Generar cargo», y por cargo «Registrar pago» y «Cancelar», en `ui/Modal`. Cambiar el plan ahí recarga la ficha (mueve `organization.plan`). Los botones solo salen para SUPERADMIN.
+
 ### `/platform/users` — Usuarios cross-tenant
 - **Archivo:** `pages/platform/PlatformUsers.tsx` (910 líneas)
 - **Propósito:** Usuarios de todas las orgs: crear/editar, reset password (temporal), cambio de rol, soft-delete.
@@ -610,8 +627,10 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 ### `/__dev__/atlas-one-preview` — Preview del design system
 - **Archivo:** `pages/__dev__/AtlasOnePreview.tsx` (271 líneas). Solo dev. Renderiza todas las primitivas de `components/atlas-one` e itera por los 11 presets. Datos demo hardcodeados; único con `export default`.
 
-### `/appointments`, `/commissions`, `/memberships`, `/ai`, `/purchasing` — "Próximamente"
-- **Archivo:** `pages/coming-soon/index.tsx` (98 líneas). Un `ComingSoon` parametrizado por `ComingSoonMeta`; exporta un wrapper por módulo (Appointments/Commissions/Memberships/AI/Purchasing/Recipes). Estático, categoría por línea de producto.
+### `/appointments`, `/commissions`, `/memberships`, `/ai` — módulos sin construir (ocultos)
+- **Sin pantalla.** Desde el 2026-11-24 no existe la página «Próximamente» (`pages/coming-soon/` y `components/ComingSoon.tsx` se borraron): la ruta es `<Navigate to="/" replace />`, que cae en `RoleHomeRedirect` (el inicio de cada rol). `/purchasing` redirige a `/purchases` (Compras, la pantalla real).
+- **Por qué no se ven:** el estado de cada módulo (`disponible` | `en_construccion` | `oculto`) vive en `app/services/estado_modulos.py` y llega en `/users/me/context.modulos_no_disponibles`; el espejo local es `utils/estadoModulos.ts`. `visibleNavItems` no pinta un ítem cuyo `module` no esté disponible (aunque la organización lo tenga encendido, y también mientras el contexto carga), y `PresetHome` no pinta sus widgets. La plataforma sí los ve, marcados «En construcción» / «No construido».
+- **Guardia:** `__tests__/estadoModulos.test.ts` (espejo = Python; ningún rol ve un módulo no disponible; ninguna ruta sirve un `ComingSoon` para un módulo disponible). Evidencia y propuesta de planes/presets: `docs/presets/ESTADO-DE-MODULOS.md`. Receta para destapar: `CLAUDE.md` §5.
 
 ---
 

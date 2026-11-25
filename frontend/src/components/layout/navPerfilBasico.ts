@@ -27,7 +27,7 @@ export const OCULTAS_BASICO_HQ: readonly string[] = [
   '/returns',                          // Ventas (/sales) devuelve por ticket; Productos (/products) ya se ve en básico
   '/hq/valor-inventario',              // entra como tarjeta en el Inicio básico
   '/hr/me', '/ai',
-  '/quotes', '/quotes/new', '/seguimiento', '/purchases', '/expenses', '/purchasing',
+  '/quotes', '/quotes/new', '/seguimiento', '/purchases', '/expenses',
 ]
 
 export function urlsOcultasPorPerfil(perfil: PerfilUi | null | undefined, esSucursal: boolean): readonly string[] {

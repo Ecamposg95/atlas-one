@@ -28,6 +28,20 @@ class CashSessionClosedError(ValueError):
 # pathological cases (e.g. session 65: $104,400 single-line refund).
 LARGE_CASH_REFUND_THRESHOLD = Decimal("10000")
 
+def _lineas_por_variante(db: Session, sale_id: str) -> dict:
+    """Líneas de la venta agrupadas por variante (una variante puede ocupar
+    varias líneas), en orden estable."""
+    grupos: dict = {}
+    for linea in (
+        db.query(SalesLineItem)
+        .filter(SalesLineItem.document_id == sale_id)
+        .order_by(SalesLineItem.id)
+        .all()
+    ):
+        grupos.setdefault(linea.variant_id, []).append(linea)
+    return grupos
+
+
 def create_return(db: Session, return_in: SaleReturnCreate, user_id: int, branch_id: int, organization_id: int = None):
     # 1. Obtener la venta original — defense-in-depth: filtrar por org_id
     # aunque el router también lo verifique. Cualquier caller futuro del CRUD
@@ -51,6 +65,27 @@ def create_return(db: Session, return_in: SaleReturnCreate, user_id: int, branch
     if existing_pending:
         raise ValueError("Ya existe una devolución pendiente de aprobación para esta venta")
 
+    # 1c. Forma de la solicitud (auditoría 2026-09-22, M13). Una partida con
+    # cantidad <= 0 o la misma variante dos veces pasaba la validación de
+    # abajo (que compara partida por partida, sin acumular) y dejaba una
+    # devolución PENDING que no se podía aprobar y que, por el guard 1b,
+    # bloqueaba cualquier devolución legítima de esa venta.
+    if not return_in.items:
+        raise ValueError("La devolución no tiene productos: agrega al menos una partida.")
+    variantes_vistas = set()
+    for item_in in return_in.items:
+        if item_in.quantity is None or Decimal(str(item_in.quantity)) <= 0:
+            raise ValueError(
+                f"La cantidad a devolver debe ser mayor a cero (producto {item_in.variant_id}). "
+                "Corrige la cantidad o quita esa partida."
+            )
+        if item_in.variant_id in variantes_vistas:
+            raise ValueError(
+                f"El producto {item_in.variant_id} aparece más de una vez en la solicitud. "
+                "Déjalo en una sola partida con la cantidad total a devolver."
+            )
+        variantes_vistas.add(item_in.variant_id)
+
     # 2. Validar cantidades contra lo disponible
     # Obtener devoluciones previas que fueron aprobadas
     previous_returns = db.query(SaleReturnItem).join(SaleReturn).filter(
@@ -62,20 +97,24 @@ def create_return(db: Session, return_in: SaleReturnCreate, user_id: int, branch
     for pr in previous_returns:
         returned_totals[pr.variant_id] = returned_totals.get(pr.variant_id, 0) + pr.quantity
 
+    # La misma variante puede venir en VARIAS líneas de la venta (escaneada dos
+    # veces sin agrupar, o una con descuento y otra sin él). Antes se miraba
+    # solo la primera línea (`.first()`): de 2 + 3 piezas solo dejaba devolver
+    # 2. Lo vendido —y lo cobrado— de una variante es la suma de sus líneas.
+    lineas_por_variante = _lineas_por_variante(db, sale.id)
+
     for item_in in return_in.items:
-        sale_line = db.query(SalesLineItem).filter(
-            SalesLineItem.document_id == sale.id,
-            SalesLineItem.variant_id == item_in.variant_id
-        ).first()
-        
-        if not sale_line:
+        lineas = lineas_por_variante.get(item_in.variant_id)
+
+        if not lineas:
             raise ValueError(f"Producto {item_in.variant_id} no pertenece a esta venta")
-            
-        already_returned = returned_totals.get(item_in.variant_id, Decimal("0"))
-        available = Decimal(str(sale_line.quantity)) - already_returned
-        
+
+        vendido = sum((Decimal(str(l.quantity or 0)) for l in lineas), Decimal("0"))
+        already_returned = Decimal(str(returned_totals.get(item_in.variant_id, 0)))
+        available = vendido - already_returned
+
         if item_in.quantity > available:
-            raise ValueError(f"Cantidad a devolver ({item_in.quantity}) excede lo disponible ({available}) para el producto {sale_line.description}")
+            raise ValueError(f"Cantidad a devolver ({item_in.quantity}) excede lo disponible ({available}) para el producto {lineas[0].description}")
 
     # 3. Crear el registro de devolución
     db_return = SaleReturn(
@@ -86,6 +125,8 @@ def create_return(db: Session, return_in: SaleReturnCreate, user_id: int, branch
         total_refunded=return_in.total_refunded,
         refund_method=return_in.refund_method,
         reason=return_in.reason,
+        reason_code=getattr(return_in, "reason_code", None),
+        destino=getattr(return_in, "destino", None),
         status="PENDING",
         supervisor_id=return_in.supervisor_id,
         organization_id=organization_id,
@@ -97,18 +138,18 @@ def create_return(db: Session, return_in: SaleReturnCreate, user_id: int, branch
     db_items = []
     for item_in in return_in.items:
         # Recompute refund_amount from source line price (don't trust client)
-        line_item = db.query(SalesLineItem).filter(
-            SalesLineItem.variant_id == item_in.variant_id,
-            SalesLineItem.document_id == sale.id
-        ).first()
-        if line_item:
+        lineas = lineas_por_variante.get(item_in.variant_id)
+        if lineas:
             # Se prorratea `total_line` (lo que el cliente pagó de verdad por
             # esa partida), no `unit_price`, que es PRE-descuento: 2 piezas de
             # $100 con 50% de descuento se cobran $100 en total, y devolver
             # una reembolsaba $100 — el doble de lo pagado por esa pieza.
-            # Auditoría C-6.
-            qty_linea = Decimal(str(line_item.quantity or 0))
-            total_linea = Decimal(str(line_item.total_line or 0))
+            # Auditoría C-6. Con la variante en varias líneas se prorratea
+            # sobre la suma de todas (precio promedio pagado): devolverlas
+            # todas reembolsa exactamente lo cobrado por ellas.
+            line_item = lineas[0]
+            qty_linea = sum((Decimal(str(l.quantity or 0)) for l in lineas), Decimal("0"))
+            total_linea = sum((Decimal(str(l.total_line or 0)) for l in lineas), Decimal("0"))
             qty_dev = Decimal(str(item_in.quantity))
             if qty_linea > 0:
                 item_refund = (total_linea * qty_dev / qty_linea).quantize(Decimal("0.01"))
@@ -137,7 +178,8 @@ def create_return(db: Session, return_in: SaleReturnCreate, user_id: int, branch
     return db_return
 
 def approve_return(db: Session, return_id: str, supervisor_id: int,
-                   organization_id: int = None, force: bool = False):
+                   organization_id: int = None, force: bool = False,
+                   autorizacion: str = "SUPERVISOR"):
     """Approve a pending return.
 
     `force=True` overrides the fat-finger threshold for large CASH refunds.
@@ -153,7 +195,13 @@ def approve_return(db: Session, return_id: str, supervisor_id: int,
     q = db.query(SaleReturn).filter(SaleReturn.id == return_id)
     if organization_id is not None:
         q = q.filter(SaleReturn.organization_id == organization_id)
-    db_return = q.with_for_update().first()
+    # `populate_existing`: el router ya cargó esta devolución (sin candado)
+    # para validar la organización, y una fila que la sesión ya tiene NO se
+    # refresca al releerla con `FOR UPDATE`: la segunda aprobación esperaba el
+    # candado y luego seguía viendo su copia vieja en PENDING. En una
+    # devolución total la frenaba R-2 (ya no queda nada por devolver); en una
+    # PARCIAL se aprobaba dos veces — doble reingreso y doble salida de caja.
+    db_return = q.populate_existing().with_for_update().first()
     if not db_return:
         raise ValueError("Devolución no encontrada")
 
@@ -171,8 +219,18 @@ def approve_return(db: Session, return_id: str, supervisor_id: int,
     if refund_amount <= Decimal("0"):
         raise ValueError("El monto de la devolución debe ser mayor a cero.")
 
-    # 2. Get Sale (needed for R-2)
-    sale = db_return.sale  # Relationship
+    # 2. Get Sale (needed for R-2) — con candado y recién leída. Sin él, una
+    # cancelación simultánea de la venta pasaba el R-0 de abajo (las dos
+    # peticiones veían la venta sin cancelar) y el dinero salía dos veces.
+    # Orden global de candados: (devolución →) documento → existencias →
+    # cliente, el mismo de cobrar, cancelar y abonar.
+    sale = (
+        db.query(SalesDocument)
+        .filter(SalesDocument.id == db_return.sale_id)
+        .populate_existing()
+        .with_for_update(of=SalesDocument)
+        .first()
+    )
 
     # R-0: una venta cancelada ya devolvio su dinero por otra via. Aprobar una
     # devolucion encima sobrescribiria su estado CANCELLED y sacaria efectivo
@@ -210,9 +268,20 @@ def approve_return(db: Session, return_id: str, supervisor_id: int,
     # 3. Update Status
     db_return.status = "APPROVED"
     db_return.supervisor_id = supervisor_id
+    # POLITICA (la caja, dentro del monto libre), PIN (gerente en la caja) o
+    # SUPERVISOR (aprobada después). Ver `app/services/devoluciones.py`.
+    db_return.autorizacion = autorizacion
     db.flush()
 
     # 4. Inventory & Stock
+    # Existencias que reingresan: bloqueadas juntas y en orden de id, para que
+    # el reingreso no pise (ni lo pise) una venta simultánea de esa pieza. El
+    # `.first()` de abajo devuelve estas mismas filas ya bloqueadas.
+    db.query(StockOnHand).filter(
+        StockOnHand.branch_id == db_return.branch_id,
+        StockOnHand.variant_id.in_(
+            [i.variant_id for i in db_return.items if i.is_inventory_reentry]),
+    ).order_by(StockOnHand.id).with_for_update().all()
     for item in db_return.items:
         if item.is_inventory_reentry:
              # Actualizar StockOnHand
@@ -263,6 +332,16 @@ def approve_return(db: Session, return_id: str, supervisor_id: int,
     )
     a_entregar = refund_amount - aplicado_a_saldo
     db.flush()
+    # Vale de tienda / cambio de producto: lo que tocaría entregar no sale en
+    # dinero, queda como saldo a favor para otra compra.
+    if db_return.destino in ("VALE", "CAMBIO") and a_entregar > Decimal("0") and not db_return.vale_id:
+        from app.services.vales import emitir_vale
+        vale = emitir_vale(
+            db, org_id=db_return.organization_id, amount=a_entregar,
+            branch_id=db_return.branch_id, customer_id=sale.customer_id,
+            customer_name=sale.customer_name, return_id=db_return.id, user_id=supervisor_id,
+        )
+        db_return.vale_id = vale.id
     # Con el estado de ANTES de esta devolución: un ticket que ya estaba PAID
     # no vuelve a quedar por cobrar aunque su cargo no tenga abono enlazado.
     sigue_debiendo = bool(sale.customer_id) and deuda_viva_del_documento(
@@ -283,11 +362,19 @@ def approve_return(db: Session, return_id: str, supervisor_id: int,
     fully_refunded = True
     any_refunded = False
     
+    # Por variante, no por línea: con la misma variante en dos líneas (1 + 1),
+    # devolver UNA pieza igualaba la cantidad de cada línea y la venta quedaba
+    # como devuelta por completo.
+    vendido_por_variante = {}
     for line in sale.lines:
-        qty_returned = returned_totals.get(line.variant_id, Decimal("0"))
+        vendido_por_variante[line.variant_id] = (
+            vendido_por_variante.get(line.variant_id, Decimal("0")) + Decimal(str(line.quantity or 0))
+        )
+    for variant_id, qty_vendida in vendido_por_variante.items():
+        qty_returned = Decimal(str(returned_totals.get(variant_id, 0)))
         if qty_returned > 0:
             any_refunded = True
-        if qty_returned < Decimal(str(line.quantity)):
+        if qty_returned < qty_vendida:
             fully_refunded = False
             
     if fully_refunded:
@@ -442,6 +529,7 @@ def approve_return(db: Session, return_id: str, supervisor_id: int,
             ),
             "force_used": force,
             "supervisor_id": supervisor_id,
+            "autorizacion": autorizacion,
         },
     )
 

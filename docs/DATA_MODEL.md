@@ -45,7 +45,9 @@ ninguna organización existente cambia de comportamiento sin configurarlas):
 | `usd_rate_margin` | `Numeric(10,4)` | `0` | Se suma al FIX en modo `auto` |
 | `perfil_ui` | `String(12)` | `NULL` | Modo básico (2026-10): `NULL`/`auto` = se deriva del plan (solo `FREE` explícito → básico; NULL, vacío, desconocido o de paga → completo), `basico`/`completo` = forzado por la plataforma. Solo decide qué muestra la interfaz (`app/services/perfil_ui.py`) |
 | `umbral_poca_existencia` | `Integer` | `NULL` | Tope en piezas de "Se está acabando" del Inicio básico; `NULL` = 3. Lo guarda la dueña en Empresa |
-| `conteo_ciego` | `Boolean` | `true` | Corte de caja a ciegas: con el turno abierto la caja no ve el esperado ni su desglose. Solo de interfaz (viaja en `/users/me/context`; `frontend/src/utils/blindCash.ts`). Lo apaga ADMINISTRADOR/DUEÑO en Empresa → Corte de caja |
+| `conteo_ciego` | `Boolean` | `true` | Corte de caja a ciegas: con el turno abierto la caja no ve el esperado ni su desglose. Viaja en `/users/me/context` (`frontend/src/utils/blindCash.ts`) y, encendido, el servidor tampoco le manda a la cajera lo que la pantalla esconde (`app/services/ventas_cajero.py::cajera_a_ciegas`). Lo apaga ADMINISTRADOR/DUEÑO en Empresa → Corte de caja |
+| `dias_ventas_caja` | `Integer` | `30` | Días hacia atrás que la caja (cajera, vendedor) consulta, reimprime y devuelve ventas de su sucursal; 0 = solo hoy. Regla en `app/services/ventas_cajero.py`. Viaja en `/users/me/context`. Empresa → Ventas y devoluciones en caja |
+| `devolucion_libre_hasta` | `Numeric(10,2)` | `0` | Monto hasta el que la caja aprueba sola una devolución; 0 = toda devolución pide gerente (PIN en la caja o aprobación después). `app/services/devoluciones.py` |
 | `precio_por_sucursal` | `Boolean` | `false` | Cada sucursal con su precio: encendido, el precio que edita alguien con sucursal (ficha o talla) se guarda en `product_branch_status.price_override` de su sucursal y no toca el base; la ficha le muestra ese precio. ADMINISTRADOR/DUEÑO (y quien no tiene sucursal) editan el base y fijan el de cada sucursal en la matriz de la ficha; escalones y empaques no se tocan desde una sucursal. `app/modules/products/services/precio_sucursal.py`. Lo enciende ADMINISTRADOR/DUEÑO en Empresa → Precios |
 
 **Columnas en `branches`** (`app/modules/tenants/models.py`):
@@ -183,7 +185,7 @@ crédito con abono parcial no debe inflar "ventas totales" con la deuda aún no 
 | `purchase_recommendations` | UUID | Reorden por bajo stock (abasto) | `status`=RecommendationStatus |
 
 ## Devoluciones (`app/models/returns.py`, PK UUID)
-`sale_returns` (refund_method=PaymentMethod, status String), `sale_return_items` (reentrada a stock o merma).
+`sale_returns` (refund_method=PaymentMethod, status String; `reason_code` = motivo de catálogo y `autorizacion` = POLITICA \| PIN \| SUPERVISOR, ambos String NULL en filas anteriores al 2026-11-24; `destino` = DINERO \| VALE \| CAMBIO (NULL = dinero) y `vale_id` String(36) del vale emitido), `sale_return_items` (reentrada a stock o merma). `store_vouchers` (vale de tienda: `code` único por organización, `initial_amount`, `balance`, `status` ACTIVO \| AGOTADO \| CANCELADO, `return_id`, `customer_id`) y `store_voucher_movements` (EMISION, USO, RESTITUCION, CANCELACION; `sales_document_id` String(36)). CRM (2026-11-24): `customers.tipo` (MENUDEO \| MAYOREO), `birthday`, `company`, `campos` (JSON con los valores de los campos propios); `customer_field_defs` (campos propios por tienda, tope 10 activos) y `customer_followups` (seguimiento: tipo, nota, `due_date`, PENDIENTE \| HECHO).
 
 ## Logística (`app/models/logistics.py`, PK Int)
 `container_types`, `box_types`, `product_packagings`, `container_load_calcs`, `inbound_shipments` (status String), `shipment_items`, `transfer_orders` (`TransferStatus`), `transfer_order_lines`, `transfer_fulfillments` (`FulfillmentStatus`), `transfer_fulfillment_lines`.
@@ -198,6 +200,19 @@ crédito con abono parcial no debe inflar "ventas totales" con la deuda aún no 
 
 ## Platform / SaaS (`app/models/platform.py`, PK Int)
 `platform_audit_log`, `platform_alert`, `platform_announcement`, `feature_flag`, `org_feature_override` (UNIQUE org+flag), `platform_incident`, `api_key` (SHA-256 hash + prefix). Ver [`API_REFERENCE.md`](API_REFERENCE.md) §platform.
+
+## Suscripciones (`modules/suscripciones/models.py`, PK Int)
+Lo que Atlas le cobra a cada tienda (megaplan F3). No es el crédito de la tienda a sus clientes (`customer_ledger_entries`). Las tres llevan `organization_id` **NOT NULL**; dinero en `Numeric(12,2)`; estados y métodos como `String` con constantes Python. Las crea `create_all` (sin ALTER en `railway_init.py`).
+
+| Tabla | Columnas clave |
+|---|---|
+| `suscripciones` | Una por organización (`uq_suscripcion_org`): `plan` (espejo de `organization.plan`), `precio_mxn` (pactado, por periodo), `periodicidad` (`mensual`/`anual`), `dia_corte` (1–28), `fecha_inicio`, `proxima_renovacion`, `estado` (`al_corriente`/`por_vencer`/`vencida`/`suspendida`/`cortesia`), `notas` (internas), `rfc`, `razon_social`, `correo_facturacion` (para un CFDI futuro), `created_at`, `updated_at` |
+| `suscripcion_cargos` | Un cargo por organización y periodo (`uq_suscripcion_cargo_periodo` sobre `organization_id, periodo_desde`): `suscripcion_id`, `periodo_desde`, `periodo_hasta` (inclusive), `importe`, `vence_el`, `estado` (`pendiente`/`pagado`/`cancelado`), `pagado_at`, `cancelado_at`, `motivo_cancelacion` |
+| `suscripcion_pagos` | Pagos contra un cargo: `cargo_id`, `importe`, `fecha_pago`, `metodo` (`transferencia`/`deposito`/`efectivo`/`tarjeta`/`otro`), `referencia`, `notas`, `registrado_por_user_id` → `users.id`, `origen` (`manual`), `id_externo`; `uq_suscripcion_pago_externo` sobre `(origen, id_externo)` |
+
+- **`suscripciones.estado` es una foto**, no la verdad: se refresca en cada escritura, pero el paso del tiempo no la mueve. Lo que se muestra sale de `services.calcular_estado` al leer; lo guardado solo manda cuando es manual (`suspendida`, `cortesia`). No filtres por esa columna en SQL para saber quién está vencido.
+- `origen` e `id_externo` no se usan todavía: son para que el webhook de la pasarela (segunda versión) sea idempotente sin migrar.
+- El borrado forzado de la organización los elimina en orden pagos → cargos → suscripción.
 
 ## Outbox / Eventos
 `event_outbox` (UUID, `status` String OutboxStatus{PENDING,PROCESSED,FAILED}, ml de reintento/backoff). Índice `ix_event_outbox_due (status, available_at)`. Ver [`ARCHITECTURE.md`](ARCHITECTURE.md) §3.

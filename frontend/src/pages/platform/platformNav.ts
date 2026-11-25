@@ -11,6 +11,7 @@ export const NAV_PLATFORM: PlatformNavItem[] = [
   { label: 'Health',         icon: 'fa-heart-pulse',             to: '/platform/health' },
   { label: 'Alerts',         icon: 'fa-triangle-exclamation',    to: '/platform/alerts' },
   { label: 'Organizaciones', icon: 'fa-building',                to: '/platform/organizations' },
+  { label: 'Suscripciones',  icon: 'fa-file-invoice-dollar',     to: '/platform/suscripciones' },
   { label: 'Usuarios',       icon: 'fa-users',                   to: '/platform/users' },
   { label: 'Sucursales',     icon: 'fa-store',                   to: '/platform/branches' },
   { label: 'Reportes',       icon: 'fa-chart-line',              to: '/platform/reportes' },

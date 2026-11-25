@@ -1,14 +1,16 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Modal } from '../../components/ui/Modal'
-import { customersApi, type Customer, type CustomerPayload } from '../../api/customers'
+import { customersApi, type CampoPropio, type Customer, type CustomerPayload } from '../../api/customers'
 
 interface Props {
   customer: Customer | null // null = alta
   onClose: () => void
   onSaved: (c: Customer) => void
+  /** Cajera y vendedor: alta rápida (nombre, teléfono, correo y nota). Lo demás lo edita la gerencia. */
+  deCaja?: boolean
 }
 
-export function CustomerFormModal({ customer, onClose, onSaved }: Props) {
+export function CustomerFormModal({ customer, onClose, onSaved, deCaja = false }: Props) {
   const isEdit = customer !== null
   const [form, setForm] = useState<CustomerPayload>({
     name: customer?.name ?? '',
@@ -21,7 +23,17 @@ export function CustomerFormModal({ customer, onClose, onSaved }: Props) {
     has_credit: customer?.has_credit ?? false,
     credit_limit: customer?.credit_limit ?? 0,
     credit_days: customer?.credit_days ?? 0,
+    tipo: customer?.tipo ?? 'MENUDEO',
+    birthday: customer?.birthday ?? '',
+    company: customer?.company ?? '',
   })
+  // Campos propios de la tienda y sus valores para este cliente.
+  const [defs, setDefs] = useState<CampoPropio[]>([])
+  const [propios, setPropios] = useState<Record<string, unknown>>({ ...(customer?.campos ?? {}) })
+  useEffect(() => {
+    if (deCaja) return
+    customersApi.campos().then(setDefs).catch(() => {})
+  }, [deCaja])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -31,16 +43,22 @@ export function CustomerFormModal({ customer, onClose, onSaved }: Props) {
     if (!form.name.trim()) { setError('El nombre es obligatorio'); return }
     setSaving(true); setError(null)
     // Strings vacíos → null para no chocar con validaciones de unicidad/EmailStr
-    const payload: CustomerPayload = {
-      ...form,
-      name: form.name.trim(),
-      phone: form.phone || null,
-      email: form.email || null,
-      tax_id: form.tax_id || null,
-      address: form.address || null,
-      zip_code: form.zip_code || null,
-      notes: form.notes || null,
-    }
+    const payload: CustomerPayload = deCaja
+      // La caja solo manda lo que el servidor le acepta (403 con lo demás).
+      ? { name: form.name.trim(), phone: form.phone || null, email: form.email || null, notes: form.notes || null }
+      : {
+          ...form,
+          name: form.name.trim(),
+          phone: form.phone || null,
+          email: form.email || null,
+          tax_id: form.tax_id || null,
+          address: form.address || null,
+          zip_code: form.zip_code || null,
+          notes: form.notes || null,
+          birthday: form.birthday || null,
+          company: form.company || null,
+          campos: Object.fromEntries(defs.map((d) => [d.key, propios[d.key] ?? null])),
+        }
     try {
       const saved = isEdit
         ? await customersApi.update(customer.id, payload)
@@ -76,12 +94,58 @@ export function CustomerFormModal({ customer, onClose, onSaved }: Props) {
           {field('Teléfono', 'phone', 'tel', '10 dígitos')}
           {field('Email', 'email', 'email')}
         </div>
+        {field('Notas', 'notes')}
+        {deCaja && (
+          <p className="text-xs text-dax-muted">
+            <i className="fa-solid fa-circle-info mr-1" aria-hidden="true" />
+            Alta rápida. El crédito, los datos fiscales y el resto de la ficha los completa el gerente.
+          </p>
+        )}
+        {!deCaja && <>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label htmlFor="cliente-tipo" className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Tipo de cliente</label>
+            <select id="cliente-tipo" value={form.tipo ?? 'MENUDEO'} onChange={(e) => set('tipo', e.target.value)} className="dax-input w-full text-sm">
+              <option value="MENUDEO">Menudeo</option>
+              <option value="MAYOREO">Mayoreo</option>
+            </select>
+          </div>
+          {field('Cumpleaños', 'birthday', 'date')}
+          {field('Negocio', 'company', 'text', 'Nombre de su negocio')}
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {field('RFC', 'tax_id', 'text', 'XAXX010101000')}
           {field('C.P.', 'zip_code')}
         </div>
         {field('Dirección', 'address')}
-        {field('Notas', 'notes')}
+
+        {defs.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" data-testid="campos-propios">
+            {defs.map((d) => (
+              <div key={d.key}>
+                <label htmlFor={`campo-${d.key}`} className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">{d.label}</label>
+                {d.tipo === 'LISTA' ? (
+                  <select id={`campo-${d.key}`} value={String(propios[d.key] ?? '')} className="dax-input w-full text-sm"
+                    onChange={(e) => setPropios((p) => ({ ...p, [d.key]: e.target.value || null }))}>
+                    <option value="">—</option>
+                    {(d.opciones ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                ) : d.tipo === 'SI_NO' ? (
+                  <label className="flex items-center gap-2 text-sm text-slate-300 min-h-[38px]">
+                    <input id={`campo-${d.key}`} type="checkbox" checked={!!propios[d.key]}
+                      onChange={(e) => setPropios((p) => ({ ...p, [d.key]: e.target.checked }))} />
+                    Sí
+                  </label>
+                ) : (
+                  <input id={`campo-${d.key}`} className="dax-input w-full text-sm"
+                    type={d.tipo === 'NUMERO' ? 'number' : d.tipo === 'FECHA' ? 'date' : 'text'}
+                    value={String(propios[d.key] ?? '')}
+                    onChange={(e) => setPropios((p) => ({ ...p, [d.key]: e.target.value || null }))} />
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="dax-card p-3 space-y-3">
           <label className="flex items-center gap-2 text-sm text-slate-300">
@@ -106,6 +170,7 @@ export function CustomerFormModal({ customer, onClose, onSaved }: Props) {
             </div>
           )}
         </div>
+        </>}
 
         {error && (
           <p className="text-red-400 text-sm bg-red-500/10 border border-red-500/30 rounded px-3 py-2">

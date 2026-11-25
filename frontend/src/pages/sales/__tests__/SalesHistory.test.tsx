@@ -19,6 +19,7 @@ import { SalesHistory } from '../SalesHistory'
 import { useAuthStore } from '../../../store/authStore'
 import { rangoPreset } from '../../reports/presetsReportes'
 import { useToastStore } from '../../../store/toastStore'
+import { useEnabledModulesStore } from '../../../store/enabledModulesStore'
 
 const hoy = rangoPreset('hoy')
 const VENTA = {
@@ -42,7 +43,7 @@ beforeEach(() => {
   getStats.mockReset().mockResolvedValue(STATS)
   getBranches.mockReset().mockResolvedValue([SUC(1, 'Roma'), SUC(2, 'Condesa')])
 })
-afterEach(cleanup)
+afterEach(() => { cleanup(); useEnabledModulesStore.getState().reset() })
 
 describe('Ventas (/sales, fusión de HQSalesLog)', () => {
   it('la gerente arranca en Hoy, solo estados cerrados, sin pedir sucursales ni mandar branch_id; el título es Ventas', async () => {
@@ -99,7 +100,7 @@ describe('Ventas (/sales, fusión de HQSalesLog)', () => {
   })
 
   it('el buscador filtra por folio o cliente sin volver al servidor', async () => {
-    usuario('CAJERO', 1)
+    usuario('GERENTE', 1)
     list.mockResolvedValue({ items: [VENTA, { ...VENTA, id: 'venta-2', folio: 42, customer_name: 'Lupita' }], total: 2, page: 0, pages: 1 })
     pintar()
     await screen.findByText('A-0042')
@@ -219,6 +220,9 @@ describe('Ventas (/sales, fusión de HQSalesLog)', () => {
 })
 
 describe('Ventas de hoy (cajera)', () => {
+  // Plazo 0 = la regla original (solo hoy). El plazo de la tienda va en el bloque de abajo.
+  beforeEach(() => useEnabledModulesStore.setState({ diasVentasCaja: 0 }))
+
   it('cajera: no pide totales ni enseña KPIs', async () => {
     usuario('CAJERO', 1)
     pintar()
@@ -242,7 +246,7 @@ describe('Ventas de hoy (cajera)', () => {
     pintar()
     await screen.findByText('A-0041')
     expect(screen.getByRole('heading', { level: 1 }).textContent).toMatch(/^Ventas de hoy · /)
-    expect(screen.getByLabelText('Buscar folio o cliente')).toBeTruthy()
+    expect(screen.getByLabelText('Buscar folio, cliente o producto')).toBeTruthy()
   })
 
   it('cajera: list se llama sin fechas ni branch_id, solo estados cerrados', async () => {
@@ -276,5 +280,41 @@ describe('Ventas de hoy (cajera)', () => {
     await screen.findByText('A-0041')
     expect(screen.getByTestId('kpi-total')).toBeTruthy()
     expect(screen.getByRole('group', { name: 'Periodo' })).toBeTruthy()
+  })
+})
+
+describe('Ventas pasadas (cajera con plazo de la tienda)', () => {
+  beforeEach(() => useEnabledModulesStore.setState({ diasVentasCaja: 30 }))
+
+  it('arranca en hoy, dice su plazo y puede elegir fechas dentro de él; sigue sin totales ni periodo', async () => {
+    usuario('CAJERO', 1)
+    pintar()
+    await screen.findByText('A-0041')
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Ventas')
+    expect(screen.getByText(/últimos 30 días/)).toBeTruthy()
+    expect(list).toHaveBeenCalledWith({
+      start_date: hoy.inicio, end_date: hoy.fin, limit: 100, skip: 0, statuses: 'PAID,REFUNDED_PARTIAL,REFUNDED_TOTAL,CANCELLED',
+    })
+    const desde = screen.getByLabelText('Desde') as HTMLInputElement
+    expect(desde.max).toBe(hoy.fin)
+    expect(desde.min < hoy.inicio).toBe(true)
+    expect(getStats).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('kpi-total')).toBeNull()
+    expect(screen.queryByRole('group', { name: 'Periodo' })).toBeNull()
+    expect(screen.queryByLabelText('Sucursal')).toBeNull()
+  })
+
+  it('el buscador de la caja va al servidor: folio por folio_search, lo demás por search, sobre todo su plazo', async () => {
+    usuario('CAJERO', 1)
+    pintar()
+    await screen.findByText('A-0041')
+    const campo = screen.getByLabelText('Buscar folio, cliente o producto')
+    fireEvent.change(campo, { target: { value: 'lupita' } })
+    await waitFor(() => expect(list).toHaveBeenLastCalledWith({
+      search: 'lupita', limit: 100, skip: 0, statuses: 'PAID,REFUNDED_PARTIAL,REFUNDED_TOTAL,CANCELLED',
+    }))
+    fireEvent.change(campo, { target: { value: 'a-41' } })
+    await waitFor(() => expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ folio_search: 'a-41' })))
+    expect(list.mock.lastCall?.[0]).not.toHaveProperty('start_date')
   })
 })

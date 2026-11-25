@@ -59,6 +59,9 @@ def read_user_context(
         "perfil_ui": "completo",
         # Conteo ciego del corte: encendido salvo que la tienda lo apague.
         "conteo_ciego": True,
+        # Caja: días de ventas pasadas que consulta y monto que devuelve sola.
+        "dias_ventas_caja": 30,
+        "devolucion_libre_hasta": 0.0,
     }
 
     # 1. Resolve Organization
@@ -78,6 +81,9 @@ def read_user_context(
             from app.services.perfil_ui import perfil_efectivo
             ctx["perfil_ui"] = perfil_efectivo(org)
             ctx["conteo_ciego"] = getattr(org, "conteo_ciego", True) is not False
+            _dias = getattr(org, "dias_ventas_caja", None)
+            ctx["dias_ventas_caja"] = 30 if _dias is None else int(_dias)
+            ctx["devolucion_libre_hasta"] = float(getattr(org, "devolucion_libre_hasta", 0) or 0)
 
             # Preset info
             if org.industry_type:
@@ -137,6 +143,12 @@ def read_user_context(
     # cambia `resolver()` y ningún componente se entera.
     from app.capacidades import resolver
     ctx["capacidades"] = resolver(ctx["enabled_modules"])
+
+    # Módulos que la interfaz no debe mostrar aunque estén encendidos: no están
+    # construidos (decisión 2026-11-24). `enabled_modules` no se recorta: el
+    # servidor sigue permitiendo lo mismo; esto solo esconde menú y tarjetas.
+    from app.services.estado_modulos import no_disponibles
+    ctx["modulos_no_disponibles"] = no_disponibles()
 
     # Campos del formulario de producto según el giro (mega plan, principio 3).
     from app.modules.products.campos import campos_producto

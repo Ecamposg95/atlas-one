@@ -422,13 +422,24 @@ def convert_quote_to_sale(
         SalesDocument.id == quote_id,
         SalesDocument.organization_id == org_id,
         SalesDocument.doc_type.in_([DocumentType.QUOTE, DocumentType.ORDER])
-    ).first()
+    ).with_for_update(of=SalesDocument).first()
+    # Candado al documento (A1): un doble clic en "convertir" leia dos veces
+    # "no pagado" y descontaba stock y registraba el pago dos veces. La segunda
+    # peticion espera aqui y al releer ya ve PAID -> 400. No-op en SQLite.
 
     if not quote:
         raise HTTPException(404, "Documento no encontrado")
 
     if quote.status == DocumentStatus.PAID:
         raise HTTPException(400, "Ya fue procesado")
+
+    # Existencias bloqueadas juntas y en orden de id, igual que `create_sale`,
+    # para que dos cobros de la ultima pieza no pasen ambos la validacion. Los
+    # `.first()` de abajo devuelven estas mismas filas ya bloqueadas.
+    db.query(StockOnHand).filter(
+        StockOnHand.variant_id.in_([l.variant_id for l in quote.lines]),
+        StockOnHand.branch_id == current_user.branch_id,
+    ).order_by(StockOnHand.id).with_for_update().all()
 
     # Validar stock al momento de convertir
     for line in quote.lines:
@@ -485,12 +496,25 @@ def convert_quote_to_sale(
     quote.cash_session_id = sesion_activa.id if sesion_activa else None
     quote.seller_id = current_user.id
 
+    # La venta queda en la sucursal que la COBRA. Las existencias, la caja y
+    # el folio ya salían de la sucursal de quien cobra, pero el documento
+    # conservaba la de quien cotizó: los subscribers de `SalesDocumentCreated`
+    # (insumos de receta) y `cancel_sale` leen `branch_id` del documento, así
+    # que descontaban insumos y reponían existencias en la sucursal equivocada.
+    cambia_sucursal = bool(current_user.branch_id) and quote.branch_id != current_user.branch_id
+
     # Mantener serie P (o asignar si era cotización Q)
-    # Si ya era ORDER (P), conserva P. Si era QUOTE (Q), cambia a P.
-    if quote.series == "Q":
+    # Si ya era ORDER (P), conserva P. Si era QUOTE (Q), cambia a P. Si cambia
+    # de sucursal, toma folio de la nueva: el índice único es por
+    # (sucursal, serie, folio) y el folio viejo puede estar ocupado ahí. El
+    # folio se pide ANTES de mover el documento para que el autoflush no lo
+    # escriba en la sucursal nueva con su folio anterior.
+    if quote.series == "Q" or cambia_sucursal:
+        nuevo_folio = get_next_folio(db, branch_id=current_user.branch_id, series="P")
+        quote.branch_id = current_user.branch_id
         quote.series = "P"
-        quote.folio = get_next_folio(db, branch_id=current_user.branch_id, series="P")
-        # Si ya era P, mantenemos el folio actual, solo cambia estado a PAID.
+        quote.folio = nuevo_folio
+        # Si ya era P de esta sucursal, mantenemos el folio actual, solo cambia estado a PAID.
 
     # Registrar Pago y Movimientos de Stock
     # El pago nace atribuido a la caja de quien cobra, igual que en
@@ -531,7 +555,37 @@ def convert_quote_to_sale(
             organization_id=org_id,
         ))
 
+    # Outbox transaccional, igual que `create_sale` (app/routers/sales.py):
+    # convertir un pedido en venta tambien es una venta, y sin el evento no se
+    # descontaban los insumos de receta ni se revisaba el reabasto. Se encola
+    # DENTRO de la misma transaccion (se confirma o se revierte junto con el
+    # cobro); si el enqueue falla, la conversion NO se bloquea. Los
+    # subscribers son idempotentes por venta, asi que reprocesar despues este
+    # documento por el checkout no descuenta dos veces.
+    import logging
+    from app.core.events import EventBus, SalesDocumentCreated
+    from app.routers.sales import _safe_sale_items
+    outbox_id = None
+    try:
+        with db.begin_nested():
+            outbox_id = EventBus.enqueue(db, SalesDocumentCreated(
+                sales_document_id=str(quote.id),
+                items=_safe_sale_items(quote),
+            ))
+    except Exception:
+        logging.getLogger(__name__).exception("OUTBOX_ENQUEUE_FAILED quote=%s", quote.id)
+
     db.commit()
+
+    # Entrega inmediata del evento ya confirmado; el worker del outbox
+    # reintenta lo que quede pendiente. No lanza al request.
+    if outbox_id:
+        try:
+            from app.core.outbox import drain_now
+            drain_now([outbox_id])
+        except Exception:
+            logging.getLogger(__name__).exception("OUTBOX_DRAIN_FAILED quote=%s", quote.id)
+
     return {"status": "success", "new_folio": f"{quote.series}-{quote.folio}"}
 
 @router.get("/stats/kpi")

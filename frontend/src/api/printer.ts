@@ -418,6 +418,14 @@ export const printerApi = {
     return data.content_base64 ?? data.base64 ?? ''
   },
 
+  /** Comprobante de una devolución en base64 (no pide PIN). */
+  getDevolucionBase64: async (returnId: string): Promise<string> => {
+    const { data } = await client.post<{ content_base64?: string; base64?: string }>(
+      `/printer/print-return/${returnId}`, {}
+    )
+    return data.content_base64 ?? data.base64 ?? ''
+  },
+
   /** Corte de caja en base64. `openDrawer` solo al cerrar turno: reimprimir no abre el cajón. */
   getCashCutBase64: async (sessionId: number, openDrawer = false): Promise<string> => {
     const { data } = await client.post<{ content_base64?: string; base64?: string }>(

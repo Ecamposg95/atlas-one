@@ -10,7 +10,7 @@ from fastapi.templating import Jinja2Templates
 import csv
 import io
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func, case, false as sql_false
+from sqlalchemy import func, case, or_, false as sql_false
 from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
 from typing import Dict, Any, List, Optional
@@ -63,7 +63,7 @@ from app.services.tax import compute_line_tax, quantize_amount, quantize_totals,
 from app.services.card_surcharge import calcular_comision, pct_de_organizacion
 from app.models.users import Role
 from app.services import metricas_ventas as mv
-from app.services.ventas_cajero import es_cajero, rango_hoy_mx, venta_visible_para_cajero
+from app.services.ventas_cajero import es_cajero, rango_hoy_mx, rango_visible_cajero, venta_visible_para_cajero
 from app.crud.products import get_variant_if_visible
 try:
     from zoneinfo import ZoneInfo
@@ -196,6 +196,10 @@ def read_sales(
         None,
         description="Busca por folio exacto, tolerante al formato: '540', 'a-540', 'A-0540'.",
     ),
+    search: Optional[str] = Query(
+        None, max_length=80,
+        description="Texto libre: nombre del cliente, o descripción / SKU de un producto del ticket.",
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization)
@@ -228,10 +232,11 @@ def read_sales(
         query = query.filter(SalesDocument.doc_type.in_(doc_type))
 
     if es_cajero(current_user):
-        # La cajera solo ve las ventas de hoy (México) de su sucursal: se descartan las
-        # fechas del query. Los límites van en UTC para que también comparen bien en SQLite.
-        start_date = end_date = None
-        ini, fin = rango_hoy_mx()
+        # La cajera ve las ventas de su sucursal dentro del plazo de la tienda
+        # (`organization.dias_ventas_caja`; 0 = solo hoy). Sus fechas del query
+        # filtran DENTRO de ese plazo, nunca lo amplían. Los límites van en UTC
+        # para que también comparen bien en SQLite.
+        ini, fin = rango_visible_cajero(db, current_user)
         query = query.filter(SalesDocument.created_at >= ini.astimezone(timezone.utc),
                              SalesDocument.created_at <= fin.astimezone(timezone.utc))
     if start_date:
@@ -247,6 +252,22 @@ def read_sales(
         query = query.filter(SalesDocument.status == status)
     if customer_id is not None:
         query = query.filter(SalesDocument.customer_id == customer_id)
+
+    # Texto libre: cliente del ticket o un producto que lleve (descripción
+    # congelada de la línea o SKU de la variante).
+    if search is not None and search.strip():
+        patron = f"%{search.strip()}%"
+        from app.models.products import ProductVariant as _PV
+        en_lineas = (
+            db.query(SalesLineItem.id)
+            .outerjoin(_PV, _PV.id == SalesLineItem.variant_id)
+            .filter(
+                SalesLineItem.document_id == SalesDocument.id,
+                or_(SalesLineItem.description.ilike(patron), _PV.sku.ilike(patron)),
+            )
+            .exists()
+        )
+        query = query.filter(or_(SalesDocument.customer_name.ilike(patron), en_lineas))
 
     # Devoluciones buscan un ticket exacto por folio. El POS lo muestra como
     # "A-0540" (saleLabel hace padStart(4)), y muchas veces se teclea sólo el
@@ -473,10 +494,15 @@ def create_sale(
     pagos_previos = Decimal("0.00")
     deuda_previa = Decimal("0.00")
     if sale_in.id:
+        # Candado al documento (A1): dos cobros simultaneos del mismo PENDING
+        # leian ambos "PENDING" y revertian el stock dos veces. El segundo
+        # espera aqui y relee el estatus ya confirmado por el primero. No-op
+        # en SQLite. Orden global de candados: documento -> existencias (por
+        # id) -> cliente.
         existing_sale = db.query(SalesDocument).filter(
             SalesDocument.id == sale_in.id,
             SalesDocument.organization_id == org_id
-        ).first()
+        ).with_for_update(of=SalesDocument).first()
         
         if existing_sale:
             # El id de una venta PENDING no es una credencial: sin este guard
@@ -490,6 +516,14 @@ def create_sale(
                 raise HTTPException(status_code=400, detail="Solo se pueden modificar ventas con estatus PENDING")
             
             # --- REVERTIR STOCK EXISTENTE ---
+            # Las filas se bloquean juntas y en orden de id antes de tocarlas
+            # (A1); el `.first()` de abajo devuelve esas mismas filas ya
+            # bloqueadas desde el mapa de identidad de la sesion.
+            db.query(StockOnHand).filter(
+                StockOnHand.variant_id.in_([l.variant_id for l in existing_sale.lines]),
+                StockOnHand.branch_id == existing_sale.branch_id,
+                StockOnHand.organization_id == org_id,
+            ).order_by(StockOnHand.id).with_for_update().all()
             for old_line in existing_sale.lines:
                 stock_old = db.query(StockOnHand).filter(
                     StockOnHand.variant_id == old_line.variant_id,
@@ -604,11 +638,20 @@ def create_sale(
             raise HTTPException(status_code=404, detail=f"SKU '{item.sku}' no encontrado")
 
     _all_vids = [v.id for v in variants_list]
+    # Candado de existencias (A1). Sin `FOR UPDATE`, dos cajas leian la misma
+    # ultima pieza, las dos pasaban el guard de "Stock insuficiente" y la
+    # existencia quedaba en negativo. Con el candado la segunda espera a que la
+    # primera confirme y lee la existencia ya descontada. Siempre en orden de
+    # id: dos ventas con los mismos productos en distinto orden no se
+    # interbloquean. No-op en SQLite (regla de oro #7); la prueba real es
+    # `scripts/prueba_concurrencia_ventas.py` contra Postgres.
+    # Ojo: el candado solo garantiza dato fresco en filas que esta sesion no
+    # haya leido antes SIN candado (una fila ya cargada no se refresca).
     _stocks = db.query(StockOnHand).filter(
         StockOnHand.variant_id.in_(_all_vids),
         StockOnHand.branch_id == current_user.branch_id,
         or_(StockOnHand.organization_id == org_id, StockOnHand.organization_id == None),
-    ).all()
+    ).order_by(StockOnHand.id).with_for_update().all()
     stock_by_variant = {s.variant_id: s for s in _stocks}
 
     _pbs_rows = db.query(ProductBranchStatus).filter(
@@ -1008,7 +1051,10 @@ def create_sale(
     # refleje que ese cliente ya fió.
     ajuste_deuda = remaining_debt - deuda_previa
     if sale_in.customer_id and ajuste_deuda != Decimal("0.00"):
-        customer = db.query(Customer).filter(Customer.id == sale_in.customer_id, Customer.organization_id == org_id).first()
+        # Fila del cliente bloqueada (M12): el cargo de una venta fiada y un
+        # abono simultaneo leian el mismo saldo y uno pisaba al otro.
+        from app.modules.customers.services import cliente_con_candado
+        customer = cliente_con_candado(db, org_id=org_id, customer_id=sale_in.customer_id)
         if customer:
             if ajuste_deuda > 0 and not customer.has_credit:
                 customer.has_credit = True
@@ -1069,6 +1115,15 @@ def create_sale(
                 created_by_id=current_user.id, reference=p.reference, organization_id=org_id,
                 cash_session_id=cash_session_id_value,
             ))
+
+    # Vale de tienda (2026-11-24): un pago OTHER con referencia `VALE:<código>`
+    # baja el saldo del vale dentro de esta misma transacción. Sin pagos con
+    # vale no hace nada; si al vale no le alcanza, 400 y no se cobra.
+    from app.services.vales import aplicar_vales_en_venta
+    aplicar_vales_en_venta(
+        db, org_id=org_id, sales_document_id=sales_doc.id,
+        payments=sale_in.payments, user_id=current_user.id,
+    )
 
     # --- M-3: Mark parked ticket as CONVERTED (atómico con la venta) ---
     # Si la venta proviene de un ticket pausado, marcamos el parked CONVERTED y
@@ -1206,8 +1261,12 @@ def get_my_last_sale(
     )
     if current_user.branch_id is not None:
         q = q.filter(SalesDocument.branch_id == current_user.branch_id)
+    if es_cajero(current_user):   # la cajera solo reimprime tickets de hoy
+        inicio, fin = rango_hoy_mx()   # en UTC para que también compare bien en SQLite
+        q = q.filter(SalesDocument.created_at >= inicio.astimezone(timezone.utc),
+                     SalesDocument.created_at <= fin.astimezone(timezone.utc))
     sale = q.order_by(SalesDocument.created_at.desc()).first()
-    if sale is None:
+    if sale is None or (es_cajero(current_user) and not venta_visible_para_cajero(sale, current_user)):
         raise HTTPException(status_code=404, detail="No tienes ventas recientes.")
     return SaleRead.model_validate(sale)
 
@@ -1506,10 +1565,13 @@ def cancel_sale(
     2. Revertir Stock (Entrada por Cancelación).
     3. Si hubo crédito, revertir deuda del cliente.
     """
+    # Candado al documento (A1): dos cancelaciones simultaneas leian ambas un
+    # estatus distinto de CANCELLED y reponian el stock (y revertian la deuda)
+    # dos veces. La segunda espera aqui y al releer ya ve CANCELLED -> 400.
     sale = db.query(SalesDocument).filter(
         SalesDocument.id == sale_id,
         SalesDocument.organization_id == org_id
-    ).first()
+    ).with_for_update(of=SalesDocument).first()
     if not sale:
         raise HTTPException(status_code=404, detail="Venta no encontrada")
     # Cancelar repone stock y revierte deuda: pesa mas que leer el detalle, que
@@ -1520,7 +1582,38 @@ def cancel_sale(
     if sale.status == DocumentStatus.CANCELLED:
         raise HTTPException(status_code=400, detail="Esta venta ya está cancelada")
 
+    # Una venta con devolución APROBADA ya no se cancela: la devolución ya
+    # reingresó esas piezas, ya sacó el dinero (salida de caja o baja de la
+    # deuda) y ya neteó `total_amount`. Cancelar encima reponía TODAS las
+    # líneas otra vez (existencias dobles), sacaba la venta de la venta bruta
+    # mientras la devolución seguía restando (neta negativa) y dejaba la salida
+    # de efectivo sin el cobro que la respaldaba. Es el espejo del R-0 de
+    # `approve_return` (una venta cancelada no admite devolución): cancelación
+    # y devolución son vías excluyentes. Lo que falte se devuelve por
+    # Devoluciones, que sí lleva la cuenta de lo ya devuelto.
+    tiene_devolucion_aprobada = db.query(SaleReturn.id).filter(
+        SaleReturn.sale_id == sale.id,
+        SaleReturn.status == "APPROVED",
+    ).first()
+    if tiene_devolucion_aprobada:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Esta venta ya tiene una devolución aprobada y no se puede cancelar. "
+                "Para regresar el resto de los productos registra otra devolución "
+                "desde Devoluciones."
+            ),
+        )
+
     # 1. Revertir Stock
+    # Existencias bloqueadas juntas y en orden de id (mismo orden que el cobro)
+    # para que la reposicion no pise un descuento simultaneo; el `.first()` de
+    # abajo devuelve esas mismas filas ya bloqueadas.
+    db.query(StockOnHand).filter(
+        StockOnHand.variant_id.in_([l.variant_id for l in sale.lines]),
+        StockOnHand.branch_id == sale.branch_id,
+        StockOnHand.organization_id == org_id,
+    ).order_by(StockOnHand.id).with_for_update().all()
     for line in sale.lines:
         variant = db.query(ProductVariant).filter(
             ProductVariant.id == line.variant_id,
@@ -1567,6 +1660,10 @@ def cancel_sale(
         db, org_id=org_id, documento=sale,
         descripcion=f"Cancelación Venta #{sale.folio}",
     )
+
+    # Lo que esta venta se cobró con vale de tienda regresa al vale.
+    from app.services.vales import restituir_vales_de_venta
+    restituir_vales_de_venta(db, org_id=org_id, sales_document_id=sale.id, user_id=current_user.id)
 
     # 3. Marcar Cancelado
     prev_status = sale.status.value if hasattr(sale.status, "value") else str(sale.status)

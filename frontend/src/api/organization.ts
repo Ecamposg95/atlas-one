@@ -35,6 +35,10 @@ export interface Organization {
   // Conteo ciego del corte de caja (2026-11-21). true = la caja no ve el
   // esperado ni su desglose con el turno abierto. Solo admin/dueño lo cambia.
   conteo_ciego?: boolean
+  /** Días de ventas pasadas que la caja consulta y devuelve (0 = solo hoy). */
+  dias_ventas_caja?: number | string
+  /** Monto hasta el que la caja devuelve sin gerente (0 = siempre pide autorización). */
+  devolucion_libre_hasta?: number | string
   // Precio por sucursal (2026-11-23). true = el precio que edita alguien con
   // sucursal solo cambia el de su sucursal. Solo admin/dueño lo cambia.
   precio_por_sucursal?: boolean

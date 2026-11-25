@@ -208,7 +208,13 @@ app.include_router(sales.router,            prefix="/api/sales",            tags
 app.include_router(cash.router,             prefix="/api/cash",             tags=["Caja"])
 app.include_router(returns.router,          prefix="/api/returns",          tags=["Devoluciones"])
 app.include_router(quotes.router,           prefix="/api/quotes",           tags=["Cotizaciones"])
+# Antes del router de clientes: sus rutas fijas (`/campos`, `/seguimiento`) no
+# deben caer en `/{customer_id}`.
+from app.modules.customers.router_crm import router as customers_crm_router
+app.include_router(customers_crm_router,    prefix="/api/customers",        tags=["Clientes"])
 app.include_router(customers.router,        prefix="/api/customers",        tags=["Clientes"])
+from app.routers import vales as vales_router
+app.include_router(vales_router.router,     prefix="/api/vales",            tags=["Vales de tienda"])
 # documents.router eliminado en Sprint 4: estaba broken (template pdf/statement.html
 # nunca existió + import faltante de datetime). PDF de estados de cuenta se genera
 # via app/modules/customers/router.py (GET /{customer_id}/pdf-statement) →
@@ -277,6 +283,14 @@ app.include_router(kitchen_router,      prefix="/api/kitchen",      tags=["Cocin
 app.include_router(labels_router,       prefix="/api/labels",       tags=["Etiquetas"])
 app.include_router(conteos_router,      prefix="/api/inventory/counts", tags=["Conteos"])
 app.include_router(canal_config_router, prefix="/api/canal",        tags=["Canal tienda en línea"])
+# Cobro de suscripciones (megaplan F3): lo que Atlas le cobra a cada tienda.
+# Plataforma registra a mano; la tienda (admin/dueño) solo lee lo suyo.
+from app.modules.suscripciones.router import (
+    plataforma_router as suscripciones_plataforma_router,
+    tienda_router as suscripciones_tienda_router,
+)
+app.include_router(suscripciones_plataforma_router, prefix="/api/platform", tags=["Suscripciones (plataforma)"])
+app.include_router(suscripciones_tienda_router, prefix="/api/suscripcion", tags=["Suscripción"])
 # API de catálogo de solo lectura para la tienda externa (llave de servidor, sin CORS)
 from app.modules.canal.router import router as canal_api_router
 app.include_router(canal_api_router,    prefix="/api/channel/v1",   tags=["Canal API v1"])
@@ -344,15 +358,23 @@ async def boxes_redirect():
     return RedirectResponse(url="/brands?tab=empaques", status_code=302)
 
 # ── Platform support context cookies (usados por impersonation) ───────────────
+# Antes no pedían sesión: cualquiera podía plantarse la cookie. Ahora solo el
+# personal de plataforma (SUPERADMIN o SUPPORT), y el lector
+# (`app/core/tenant_context.py`) la ignora si quien la trae no lo es.
 @app.post("/api/platform/set-support-context")
-async def set_support_context(payload: dict):
-    org_id = payload.get("organization_id")
+async def set_support_context(request: Request, payload: dict, _staff=Depends(require_platform_admin)):
+    try:
+        org_id = int(payload.get("organization_id"))
+    except (TypeError, ValueError):
+        return JSONResponse(status_code=400, content={"detail": "organization_id debe ser un número"})
     response = JSONResponse({"status": "ok"})
-    response.set_cookie(key="support_org_id", value=str(org_id), httponly=True, max_age=14400)
+    from app.core.security.cookies import cookie_segura
+    response.set_cookie(key="support_org_id", value=str(org_id), httponly=True, max_age=14400,
+                        secure=cookie_segura(request))
     return response
 
 @app.post("/api/platform/clear-support-context")
-async def clear_support_context():
+async def clear_support_context(_staff=Depends(require_platform_admin)):
     response = JSONResponse({"status": "ok"})
     response.delete_cookie("support_org_id")
     return response

@@ -12,6 +12,7 @@ from app.models.users import User, UserOrganization, Role as AppRole
 from app.schemas.organization import OrganizationCreate, OrganizationRead, OrganizationUpdate
 from app.core.security import get_password_hash
 from app.services import plans
+from app.services.estado_modulos import esta_disponible, estado_de
 from app.modules.platform.dependencies import require_platform_admin, require_superadmin
 
 from ._shared import (
@@ -22,6 +23,10 @@ from ._shared import (
 )
 
 router = APIRouter()
+
+# Campos de `PUT /organizations/{id}` que solo cambia SUPERADMIN. `ai_modelos`
+# y `ai_tokens_dia` quedan reservados desde ya para cuando el schema los traiga.
+_SOLO_SUPERADMIN = {"plan", "ai_modelos", "ai_tokens_dia"}
 
 
 # --- Organizations CRUD ---
@@ -93,14 +98,32 @@ def update_organization(org_id: int, org_in: OrganizationUpdate, db: Session = D
         raise HTTPException(status_code=404, detail="Organization not found")
 
     update_data = org_in.model_dump(exclude_unset=True)
-    applied = {k: v for k, v in update_data.items() if k in _ORG_UPDATE_FIELDS}
-    if "plan" in applied and not plans.es_plan_valido(applied["plan"]):
+    # El plan es dinero: mueve topes, módulos de crecimiento y la suscripción.
+    # SUPPORT sigue editando lo demás; estos campos son solo de SUPERADMIN. Se
+    # rechaza la petición entera (no se descarta el campo en silencio) para
+    # que quien la mandó sepa que el plan no cambió.
+    from app.models.users import PlatformRole
+    reservados = sorted(_SOLO_SUPERADMIN & update_data.keys())
+    if reservados and current_user.platform_role != PlatformRole.SUPERADMIN:
         raise HTTPException(
-            status_code=400,
-            detail=f"Plan desconocido {applied['plan']!r}. Válidos: {', '.join(plans.claves_validas())}",
+            status_code=403,
+            detail=(
+                f"Solo SUPERADMIN puede cambiar: {', '.join(reservados)}. "
+                "Quita esos campos para guardar el resto o pídeselo a un SUPERADMIN."
+            ),
         )
+    applied = {k: v for k, v in update_data.items() if k in _ORG_UPDATE_FIELDS}
+    if "plan" in applied:
+        try:
+            plans.asignar_plan(db_org, applied["plan"])
+        except plans.PlanDesconocido as e:
+            raise HTTPException(status_code=400, detail=str(e))
     for field, value in applied.items():
         setattr(db_org, field, value)
+    if "plan" in applied:
+        # La suscripción (megaplan F3) guarda un espejo del plan: que lo siga.
+        from app.modules.suscripciones.services import reflejar_plan_de_org
+        reflejar_plan_de_org(db, db_org)
 
     _audit(db, current_user.id, "UPDATE_ORGANIZATION", "ORGANIZATION", org_id,
            _json.dumps({k: str(v) for k, v in applied.items()}))
@@ -179,6 +202,16 @@ def delete_organization(
             ).delete(synchronize_session=False)
         db.flush()
 
+        # Cobro de suscripciones (megaplan F3): pagos → cargos → suscripción.
+        # Apuntan a la organización y los pagos a users, así que van antes.
+        from app.modules.suscripciones.models import CargoSuscripcion, PagoSuscripcion, Suscripcion
+        for modelo in (PagoSuscripcion, CargoSuscripcion, Suscripcion):
+            if modelo.__tablename__ in existing_tables:
+                deleted[modelo.__tablename__] = db.query(modelo).filter(
+                    modelo.organization_id == org_id
+                ).delete(synchronize_session=False)
+                db.flush()
+
         user_ids_in_org = [r[0] for r in db.query(UserOrganization.user_id).filter(
             UserOrganization.organization_id == org_id
         ).all()]
@@ -220,6 +253,24 @@ def delete_organization(
                 Employee.id.in_(employee_ids)
             ).delete(synchronize_session=False)
             db.flush()
+
+        # Vales de tienda y CRM (2026-11-24): cuelgan de ventas, devoluciones y
+        # clientes, así que se van antes que ellos.
+        from app.models.vales import StoreVoucher, StoreVoucherMovement
+        from app.modules.customers.models import CustomerFieldDef, CustomerFollowUp
+        deleted["store_voucher_movements"] = db.query(StoreVoucherMovement).filter(
+            StoreVoucherMovement.organization_id == org_id
+        ).delete(synchronize_session=False)
+        deleted["store_vouchers"] = db.query(StoreVoucher).filter(
+            StoreVoucher.organization_id == org_id
+        ).delete(synchronize_session=False)
+        deleted["customer_followups"] = db.query(CustomerFollowUp).filter(
+            CustomerFollowUp.organization_id == org_id
+        ).delete(synchronize_session=False)
+        deleted["customer_field_defs"] = db.query(CustomerFieldDef).filter(
+            CustomerFieldDef.organization_id == org_id
+        ).delete(synchronize_session=False)
+        db.flush()
 
         sale_ids = [r[0] for r in db.query(SalesDocument.id).filter(
             SalesDocument.organization_id == org_id
@@ -462,7 +513,7 @@ def delete_organization(
         raise HTTPException(status_code=500, detail=f"Hard delete failed: {str(e)}")
 
 @router.post("/organizations/{org_id}/admins")
-def assign_org_admin(org_id: int, user_data: AdminAssign, db: Session = Depends(get_db), current_user: User = Depends(require_platform_admin)):
+def assign_org_admin(org_id: int, user_data: AdminAssign, db: Session = Depends(get_db), current_user: User = Depends(require_superadmin)):
     org = db.query(Organization).filter(Organization.id == org_id).first()
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -572,7 +623,7 @@ def activate_organization(org_id: int, db: Session = Depends(get_db), current_us
     return {"message": "Organization activated", "status": org.status}
 
 @router.post("/organizations/{org_id}/bootstrap")
-def bootstrap_organization(org_id: int, db: Session = Depends(get_db)):
+def bootstrap_organization(org_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_superadmin)):
     from app.models.organization import Branch, BranchType
     org = db.query(Organization).filter(Organization.id == org_id).first()
     if not org:
@@ -614,7 +665,7 @@ def bootstrap_organization(org_id: int, db: Session = Depends(get_db)):
     }
 
 @router.get("/organizations/{org_id}/export")
-def export_organization_data(org_id: int, db: Session = Depends(get_db)):
+def export_organization_data(org_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_superadmin)):
     """
     Generates a JSON dump of the organization's critical data.
     Focuses on Customers (Clients) as requested for backup.
@@ -748,6 +799,9 @@ def get_org_module_status(org_id: int, db: Session = Depends(get_db)):
             "is_enabled": is_enabled,
             "plan_minimo": minimo.clave if minimo else None,
             "permitido_por_plan": mod.key in permitidos,
+            # disponible | en_construccion | oculto: la plataforma sí lo ve y lo
+            # puede encender, pero marcado (app/services/estado_modulos.py).
+            "estado": estado_de(mod.key),
         })
     return result
 
@@ -852,6 +906,10 @@ def get_upsell_recommendations(
 
     for mod in candidates:
         if mod.key in active_modules:
+            continue
+        # Lo que no está construido no se recomienda (sí aparece, marcado, en
+        # la matriz de módulos de arriba).
+        if not esta_disponible(mod.key):
             continue
         meta = mod.upsell_metadata or {}
         recommended = meta.get("recommended_presets", []) or []

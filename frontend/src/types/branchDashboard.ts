@@ -17,10 +17,11 @@ export interface TopProduct {
 }
 
 export interface DashboardToday {
-  sales_total: string
+  /** null = la cajera con el turno abierto no recibe importes (conteo ciego). */
+  sales_total: string | null
   sales_count: number
-  avg_ticket: string
-  returns_total: string
+  avg_ticket: string | null
+  returns_total: string | null
   returns_count: number
   goal?: string | null
   goal_progress_pct?: number | null

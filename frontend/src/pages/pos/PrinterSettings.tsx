@@ -38,6 +38,7 @@ import { CajonCard } from '../../components/pos/CajonCard'
 import { PrinterInstallWizard } from '../../components/pos/PrinterInstallWizard'
 import client from '../../api/client'
 import { formatCurrency } from '../../utils/currency'
+import { REJILLA_AJUSTES } from '../../utils/vistaDeConfiguracion'
 
 interface BranchConfig {
   printer_name: string | null
@@ -539,7 +540,7 @@ export function PrinterSettings({ incrustada = false }: { incrustada?: boolean }
       )}
 
         {/* Agente */}
-        <div className="space-y-4 max-w-3xl">
+        <div className={REJILLA_AJUSTES}>
 
           {tab === 'windows' && (
             <>
@@ -987,7 +988,7 @@ export function PrinterSettings({ incrustada = false }: { incrustada?: boolean }
       )}
 
       {seccion === 'ticket' && (
-        <div className="space-y-4 max-w-3xl">
+        <div className={REJILLA_AJUSTES}>
 
           {/* Ancho de papel */}
           <DaxCard>

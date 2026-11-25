@@ -84,7 +84,7 @@ describe('los grupos del menú', () => {
     expect(grupo('Ventas')).toEqual(['/sales', '/returns', '/cash-history', '/quotes', '/quotes/new', '/seguimiento'])
     expect(grupo('Catálogo')).toEqual(['/products', '/fotos', '/departments', '/brands', '/labels'])
     expect(grupo('Inventario')).toEqual(['/inventory', '/inventory/conteos', '/mobile/query', '/logistics', '/boxes'])
-    expect(grupo('Compras')).toEqual(['/purchases', '/expenses', '/purchasing'])
+    expect(grupo('Compras')).toEqual(['/purchases', '/expenses'])
     expect(grupo('Clientes')).toEqual(['/customers', '/appointments', '/commissions', '/memberships'])
     expect(grupo('Restaurante')).toEqual(['/menu', '/tables', '/mobile/comanda', '/kitchen', '/recipes', '/meseros', '/bar/bottles'])
     expect(grupo('Organización')).toEqual(['/configuracion', '/users', '/hr'])

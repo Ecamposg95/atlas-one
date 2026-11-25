@@ -115,6 +115,9 @@ COLUMN_MIGRATIONS = [
     # Preset deprecation 2026-06-09 — hide legacy presets from selectors
     ("industry_presets", "is_deprecated", "ALTER TABLE industry_presets ADD COLUMN is_deprecated BOOLEAN NOT NULL DEFAULT FALSE;"),
     # Gastro 2026-07-09 — propina cobrada y atribución al mesero (ventas por mesero)
+    # Idempotencia del checkout. Hasta 2026-11-24 solo la creaba
+    # `scripts/migrate_add_sales_client_uuid.py`, a mano.
+    ("sales_documents", "client_uuid", "ALTER TABLE sales_documents ADD COLUMN client_uuid VARCHAR(64);"),
     ("sales_documents", "tip_amount",     "ALTER TABLE sales_documents ADD COLUMN tip_amount NUMERIC(10,2) DEFAULT 0;"),
     ("sales_documents", "server_user_id", "ALTER TABLE sales_documents ADD COLUMN server_user_id INTEGER REFERENCES users(id);"),
     # IVA — fuente única 2026-09-11 (auditoría Rmazh §3). Modo de precio por
@@ -156,6 +159,21 @@ COLUMN_MIGRATIONS = [
     # Conteo ciego opcional 2026-11-21. Nace TRUE: toda tienda viva conserva el
     # corte ciego de siempre; su dueño lo apaga desde Empresa.
     ("organization", "conteo_ciego", "ALTER TABLE organization ADD COLUMN conteo_ciego BOOLEAN NOT NULL DEFAULT TRUE;"),
+    # Ventas pasadas y devoluciones de la caja 2026-11-24. La caja consulta 30
+    # dias de su sucursal (antes solo hoy). El monto libre nace en 0: ninguna
+    # tienda viva empieza a devolver dinero sin gerente por un deploy.
+    ("organization", "dias_ventas_caja", "ALTER TABLE organization ADD COLUMN dias_ventas_caja INTEGER NOT NULL DEFAULT 30;"),
+    ("organization", "devolucion_libre_hasta", "ALTER TABLE organization ADD COLUMN devolucion_libre_hasta NUMERIC(10,2) NOT NULL DEFAULT 0;"),
+    # Motivo de catalogo y como se autorizo cada devolucion (POLITICA | PIN | SUPERVISOR).
+    ("sale_returns", "reason_code", "ALTER TABLE sale_returns ADD COLUMN reason_code VARCHAR;"),
+    ("sale_returns", "autorizacion", "ALTER TABLE sale_returns ADD COLUMN autorizacion VARCHAR;"),
+    ("sale_returns", "destino", "ALTER TABLE sale_returns ADD COLUMN destino VARCHAR;"),
+    ("sale_returns", "vale_id", "ALTER TABLE sale_returns ADD COLUMN vale_id VARCHAR(36);"),
+    # CRM (2026-11-24): tipo de cliente, cumpleaños, negocio y campos propios.
+    ("customers", "tipo", "ALTER TABLE customers ADD COLUMN tipo VARCHAR NOT NULL DEFAULT 'MENUDEO';"),
+    ("customers", "birthday", "ALTER TABLE customers ADD COLUMN birthday DATE;"),
+    ("customers", "company", "ALTER TABLE customers ADD COLUMN company VARCHAR;"),
+    ("customers", "campos", "ALTER TABLE customers ADD COLUMN campos JSON;"),
     # Precio por sucursal 2026-11-23. Nace FALSE: ninguna tienda cambia de
     # comportamiento hasta que se encienda (Eleven Fashion lo pidio).
     ("organization", "precio_por_sucursal", "ALTER TABLE organization ADD COLUMN precio_por_sucursal BOOLEAN NOT NULL DEFAULT FALSE;"),
@@ -288,6 +306,80 @@ INDEX_MIGRATIONS = [
         for t in ("products", "product_variants", "brands", "departments", "product_images")
     ],
 ]
+
+
+# Indices unicos que protegen dinero real. Hasta 2026-11-24 solo existian en
+# scripts manuales (`migrate_add_sales_client_uuid.py`,
+# `migrate_add_unique_pending_return.py`): produccion los tenia, pero una base
+# nueva o restaurada arrancaba sin ellos y nadie se enteraba.
+# (nombre, que protege, consulta de duplicados, ddl)
+INDICES_UNICOS_DE_DINERO = [
+    (
+        "uq_sales_org_client_uuid",
+        "el cobro doble (dos ventas con el mismo client_uuid)",
+        """
+        SELECT organization_id, client_uuid, COUNT(*) FROM sales_documents
+        WHERE client_uuid IS NOT NULL AND deleted_at IS NULL
+        GROUP BY organization_id, client_uuid HAVING COUNT(*) > 1
+        """,
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_sales_org_client_uuid
+            ON sales_documents (organization_id, client_uuid)
+            WHERE client_uuid IS NOT NULL AND deleted_at IS NULL
+        """,
+    ),
+    (
+        "uq_sale_return_pending_per_sale",
+        "la devolucion duplicada (dos PENDING de la misma venta)",
+        """
+        SELECT sale_id, COUNT(*) FROM sale_returns
+        WHERE status = 'PENDING' AND deleted_at IS NULL
+        GROUP BY sale_id HAVING COUNT(*) > 1
+        """,
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_sale_return_pending_per_sale
+            ON sale_returns (sale_id)
+            WHERE status = 'PENDING' AND deleted_at IS NULL
+        """,
+    ),
+]
+
+
+def asegurar_indices_unicos_de_dinero(motor, indices=None):
+    """Crea los indices unicos de dinero que falten. Nunca tumba el arranque.
+
+    Si la base ya trae duplicados, el `CREATE UNIQUE INDEX` no puede crearse:
+    en vez de dejar la tienda sin servicio por un dato viejo, se avisa fuerte
+    (print + log) con las filas que estorban y se sigue; el siguiente
+    despliegue lo reintenta. Cualquier otro fallo al crearlo se trata igual.
+    Cada indice va en su propia transaccion para que uno no arrastre al otro.
+
+    Devuelve los nombres de los indices que NO quedaron creados (para pruebas
+    y para el resumen del arranque).
+    """
+    if indices is None:
+        indices = INDICES_UNICOS_DE_DINERO
+    pendientes = []
+    for nombre, protege, sql_duplicados, ddl in indices:
+        try:
+            with motor.begin() as conn:
+                duplicados = conn.execute(text(sql_duplicados)).fetchall()
+                if duplicados:
+                    muestra = "; ".join(str(tuple(d)) for d in duplicados[:10])
+                    raise RuntimeError(
+                        f"{len(duplicados)} grupo(s) duplicados: {muestra}"
+                    )
+                conn.execute(text(ddl))
+            print(f"  ✓ index {nombre} ensured")
+        except Exception as exc:  # noqa: BLE001 — el arranque no se cae por esto
+            pendientes.append(nombre)
+            aviso = (
+                f"{nombre} NO se creo ({exc}). Sin el, la base no impide "
+                f"{protege}. Resuelve los duplicados y vuelve a desplegar."
+            )
+            print(f"  ⚠ {aviso}")
+            logging.getLogger(__name__).warning("RAILWAY_INIT: %s", aviso)
+    return pendientes
 
 
 def aplicar_migraciones_de_columna(conn, migraciones=None):
@@ -501,6 +593,11 @@ def run_migrations():
                 ))
                 conn.commit()
                 print("  ✓ index uq_cash_sessions_open_user_branch (partial) ensured")
+
+    # --- Indices unicos de dinero (cobro doble, devolucion duplicada) ---
+    # Avisa y sigue si hay duplicados preexistentes; no tumba el arranque.
+    print("\n  Indices unicos de dinero…")
+    asegurar_indices_unicos_de_dinero(engine)
 
     # --- Backfill: atribucion historica de payments.cash_session_id ---
     # Vive aqui, y no en un script suelto, porque un script suelto no lo corre

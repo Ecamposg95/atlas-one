@@ -1,6 +1,7 @@
 import type { PerfilUi, PlanOrg, Role } from '../../types/auth'
 import { recortarPorPlan } from './navPerfilPlan'
 import { recortarPorPerfil } from './navPerfilBasico'
+import { moduloDisponible, NO_DISPONIBLES, type ModulosNoDisponibles } from '../../utils/estadoModulos'
 
 /** Roles que operan desde una sucursal (ven BranchNav, no el árbol de HQ). */
 export const BRANCH_ROLES: Role[] = ['CAJERO', 'GERENTE', 'VENDEDOR']
@@ -19,6 +20,9 @@ export interface NavItem {
   branchModule?: string
   /** Hide this item for gastro presets (retail-only concept). See GASTRO_PRESETS. */
   hideForGastro?: boolean
+  /** Solo en teléfono y tablet (< 1024 px): en escritorio no sale en el menú.
+   *  Es para pantallas pensadas para la cámara y la mano, como Consultar. */
+  soloMovil?: boolean
 }
 
 /**
@@ -47,6 +51,10 @@ export interface NavVisibilityOptions {
   plan?: PlanOrg | null
   /** Perfil de interfaz. 'basico' esconde lo de navPerfilBasico; null/undefined/'completo' = nada. */
   perfilUi?: PerfilUi | null
+  /** Módulos sin construir (`/me/context`). Sin dato, el espejo local: esto NO falla abierto. */
+  noDisponibles?: ModulosNoDisponibles
+  /** `true` con el armazón de escritorio (≥ 1024 px): esconde lo `soloMovil`. Sin dato no esconde nada. */
+  escritorio?: boolean
 }
 
 /**
@@ -58,17 +66,23 @@ export interface NavVisibilityOptions {
  * se muestra todo lo permitido al rol, antes que dejar al usuario sin menú.
  * Con éxito el backend devuelve al menos ['core'], así que una lista no vacía
  * es autoritativa.
+ *
+ * Lo que no está construido es la excepción: un ítem cuyo módulo no está
+ * `disponible` no se pinta nunca, ni con el módulo encendido ni mientras carga
+ * (utils/estadoModulos.ts). Esconde el enlace; la base no se toca.
  */
 export function visibleNavItems(items: NavItem[], opts: NavVisibilityOptions): NavItem[] {
-  const { role, allowed, enabledModules, isGastro, plan, perfilUi } = opts
+  const { role, allowed, enabledModules, isGastro, plan, perfilUi, noDisponibles = NO_DISPONIBLES, escritorio = false } = opts
   const modulesLoaded = enabledModules.length > 0
   const hasModule = (key: string | undefined) => !key || !modulesLoaded || enabledModules.includes(key)
   const isBranchRole = BRANCH_ROLES.includes(role)
   const porModulo = items
     .filter((n) => allowed.includes(n.url))
+    .filter((n) => moduloDisponible(n.module, noDisponibles))
     .filter((n) => hasModule(n.module))
     .filter((n) => !isBranchRole || hasModule(n.branchModule))
     .filter((n) => !(n.hideForGastro && isGastro))
+    .filter((n) => !(n.soloMovil && escritorio))
   // Plan y perfil van al final: solo esconden entre lo que ya pasó rol y módulo.
   const porPlan = recortarPorPlan(porModulo, plan)
   return recortarPorPerfil(porPlan, perfilUi, isBranchRole).sort((a, b) => a.sort - b.sort)

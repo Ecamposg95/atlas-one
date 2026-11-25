@@ -1,10 +1,11 @@
 import { Children, isValidElement, useEffect, type ReactElement, type ReactNode } from 'react'
 import { Link, Navigate } from 'react-router-dom'
-import { useEnabledModulesStore } from '../../store/enabledModulesStore'
+import { useEnabledModulesStore, useModulosNoDisponibles } from '../../store/enabledModulesStore'
 import { useAuthStore } from '../../store/authStore'
 import { rolesConAcceso } from '../../components/layout/navConfig'
 import type { PlanOrg } from '../../types/auth'
-import { GastroHomeDay } from './GastroHomeDay'
+import { GastroHomeDay, type QuickAction } from './GastroHomeDay'
+import { moduloDisponible, type ModulosNoDisponibles } from '../../utils/estadoModulos'
 import { separarWidgets } from './widgetsPorPlan'
 
 /**
@@ -19,10 +20,15 @@ import { separarWidgets } from './widgetsPorPlan'
  *
  * Widgets are intentionally lightweight placeholders that CTA into the
  * relevant modules. Real KPIs land when each vertical builds its own widget.
+ *
+ * Un widget (o acción rápida) cuyo `module` no está construido no se pinta ni
+ * entra a la tarjeta de plan: no se anuncia lo que no existe
+ * (utils/estadoModulos.ts). Al terminar el módulo reaparece solo.
  */
 export function PresetHome() {
   const { user, org } = useAuthStore()
   const { preset, loaded, load, plan, enabledModules } = useEnabledModulesStore()
+  const noDisponibles = useModulosNoDisponibles()
 
   useEffect(() => {
     if (!loaded) load()
@@ -43,7 +49,7 @@ export function PresetHome() {
   // "Ir al POS" aquí lo mandaría a una ruta que su propia guarda le rebota.
   // Se deriva de ROLE_ROUTES para no tener una segunda lista que mantener.
   const puedeCobrar = !!user?.role && rolesConAcceso('/pos').includes(user.role)
-  const home = { greeting, orgName, puedeCobrar, plan, enabledModules }
+  const home = { greeting, orgName, puedeCobrar, plan, enabledModules, noDisponibles }
 
   switch (preset) {
     // Taxonomy v2 (2026-05-15)
@@ -86,6 +92,16 @@ interface HomeProps {
   puedeCobrar: boolean
   plan: PlanOrg | null
   enabledModules: string[]
+  noDisponibles: ModulosNoDisponibles
+}
+
+/** Acción rápida de un inicio gastro; con `module`, solo si ese módulo ya está construido. */
+type AccionConModulo = QuickAction & { module?: string }
+
+function accionesDisponibles(acciones: AccionConModulo[], noDisponibles: ModulosNoDisponibles): QuickAction[] {
+  return acciones
+    .filter((a) => moduloDisponible(a.module, noDisponibles))
+    .map(({ module: _modulo, ...accion }) => accion)
 }
 
 function HomeShell({
@@ -96,6 +112,7 @@ function HomeShell({
   accent,
   plan,
   enabledModules,
+  noDisponibles,
   children,
 }: Omit<HomeProps, 'puedeCobrar'> & {
   title: string
@@ -106,7 +123,8 @@ function HomeShell({
   // Los widgets llegan como hijos; se reparten aquí para que cada home siga
   // siendo una lista legible de tarjetas y no una tabla de datos.
   const hijos = Children.toArray(children)
-  const widgets = hijos.filter(esWidget)
+  // Lo no construido se cae antes del reparto: ni visible ni «no incluido en tu plan».
+  const widgets = hijos.filter(esWidget).filter((w) => moduloDisponible(w.props.module, noDisponibles))
   const otros = hijos.filter((h) => !esWidget(h))
   const { visibles, ocultos } = separarWidgets(
     widgets.map((w) => ({ module: w.props.module, title: w.props.title, nodo: w })),
@@ -259,15 +277,16 @@ function Widget({ icon, title, description, cta, ctaUrl, beta }: WidgetProps) {
 
 // ── Per-preset homes ────────────────────────────────────────────────────────
 
-function BarberHome({ greeting, orgName, puedeCobrar, plan, enabledModules }: HomeProps) {
+function BarberHome({ greeting, orgName, puedeCobrar, plan, enabledModules, noDisponibles }: HomeProps) {
   return (
     <HomeShell
       greeting={greeting}
       orgName={orgName}
       plan={plan}
       enabledModules={enabledModules}
+      noDisponibles={noDisponibles}
       title="Atlas One Barber"
-      subtitle="Agenda de cortes, paquetes prepagados y comisiones del equipo."
+      subtitle="Clientes, cobro y reportes de tu barbería."
       accent="#B24108"
     >
       <Widget module="appointments" icon="fa-calendar" title="Agenda de hoy" description="Cortes y barbas agendadas, sillas disponibles." cta="Abrir agenda" ctaUrl="/appointments" beta />
@@ -280,15 +299,16 @@ function BarberHome({ greeting, orgName, puedeCobrar, plan, enabledModules }: Ho
   )
 }
 
-function BeautyWellnessHome({ greeting, orgName, puedeCobrar, plan, enabledModules }: HomeProps) {
+function BeautyWellnessHome({ greeting, orgName, puedeCobrar, plan, enabledModules, noDisponibles }: HomeProps) {
   return (
     <HomeShell
       greeting={greeting}
       orgName={orgName}
       plan={plan}
       enabledModules={enabledModules}
+      noDisponibles={noDisponibles}
       title="Atlas One Beauty & Wellness"
-      subtitle="Agenda, servicios, comisiones y clientes en un solo lugar."
+      subtitle="Servicios, clientes y cobro en un solo lugar."
       accent="#ec4899"
     >
       <Widget module="appointments" icon="fa-calendar" title="Citas de hoy" description="Agenda del día por profesional y cabina." cta="Abrir agenda" ctaUrl="/appointments" beta />
@@ -301,15 +321,16 @@ function BeautyWellnessHome({ greeting, orgName, puedeCobrar, plan, enabledModul
   )
 }
 
-function HealthHome({ greeting, orgName, puedeCobrar, plan, enabledModules }: HomeProps) {
+function HealthHome({ greeting, orgName, puedeCobrar, plan, enabledModules, noDisponibles }: HomeProps) {
   return (
     <HomeShell
       greeting={greeting}
       orgName={orgName}
       plan={plan}
       enabledModules={enabledModules}
+      noDisponibles={noDisponibles}
       title="Atlas One Health"
-      subtitle="Pacientes, agenda, planes de tratamiento y cobros."
+      subtitle="Pacientes, cobros y reportes."
       accent="#D44B06"
     >
       <Widget module="appointments" icon="fa-calendar" title="Consultas de hoy" description="Agenda por consultorio y profesional." cta="Abrir agenda" ctaUrl="/appointments" beta />
@@ -322,7 +343,7 @@ function HealthHome({ greeting, orgName, puedeCobrar, plan, enabledModules }: Ho
   )
 }
 
-function RestaurantHome({ greeting, orgName, puedeCobrar }: HomeProps) {
+function RestaurantHome({ greeting, orgName, puedeCobrar, noDisponibles }: HomeProps) {
   return (
     <GastroHomeDay
       greeting={greeting}
@@ -331,19 +352,19 @@ function RestaurantHome({ greeting, orgName, puedeCobrar }: HomeProps) {
       subtitle="Cocina en vivo, mesas, recetas y meseros — el pulso del día."
       accent="#e2531b"
       topLabel="Platillos top"
-      actions={[
+      actions={accionesDisponibles([
         { icon: 'fa-utensils', label: 'Cocina · KDS', to: '/kitchen' },
         { icon: 'fa-chair', label: 'Plano de mesas', to: '/tables' },
         ...(puedeCobrar ? [{ icon: 'fa-cash-register', label: 'Cobrar mesa', to: '/pos' }] : []),
         { icon: 'fa-book', label: 'Recetas', to: '/recipes', beta: true },
-        { icon: 'fa-percent', label: 'Comisiones', to: '/commissions', beta: true },
+        { icon: 'fa-percent', label: 'Comisiones', to: '/commissions', beta: true, module: 'commissions' },
         { icon: 'fa-chart-pie', label: 'Reportes', to: '/reports' },
-      ]}
+      ], noDisponibles)}
     />
   )
 }
 
-function CafeHome({ greeting, orgName, puedeCobrar }: HomeProps) {
+function CafeHome({ greeting, orgName, puedeCobrar, noDisponibles }: HomeProps) {
   return (
     <GastroHomeDay
       greeting={greeting}
@@ -352,19 +373,19 @@ function CafeHome({ greeting, orgName, puedeCobrar }: HomeProps) {
       subtitle="Mostrador rápido, cocina y caja para café/bakery."
       accent="#8b4a2b"
       topLabel="Productos top"
-      actions={[
+      actions={accionesDisponibles([
         { icon: 'fa-coffee', label: 'Mostrador · KDS', to: '/kitchen' },
         ...(puedeCobrar ? [{ icon: 'fa-cash-register', label: 'Cobrar', to: '/pos' }] : []),
         { icon: 'fa-vault', label: 'Caja del día', to: '/cash-history' },
         { icon: 'fa-boxes', label: 'Inventario', to: '/inventory' },
         { icon: 'fa-address-book', label: 'Frecuentes', to: '/customers' },
         { icon: 'fa-chart-pie', label: 'Reportes', to: '/reports' },
-      ]}
+      ], noDisponibles)}
     />
   )
 }
 
-function BarHome({ greeting, orgName, puedeCobrar }: HomeProps) {
+function BarHome({ greeting, orgName, puedeCobrar, noDisponibles }: HomeProps) {
   return (
     <GastroHomeDay
       greeting={greeting}
@@ -373,31 +394,32 @@ function BarHome({ greeting, orgName, puedeCobrar }: HomeProps) {
       subtitle="Barra, mesas, turnos e inventario líquido — control de la noche."
       accent="#EA580C"
       topLabel="Bebidas top"
-      actions={[
+      actions={accionesDisponibles([
         { icon: 'fa-martini-glass', label: 'Barra · comandas', to: '/tables' },
         ...(puedeCobrar ? [{ icon: 'fa-cash-register', label: 'Cobrar tab', to: '/pos' }] : []),
         { icon: 'fa-boxes', label: 'Inventario líquido', to: '/inventory' },
         { icon: 'fa-book', label: 'Cocteles · recetas', to: '/recipes', beta: true },
-        { icon: 'fa-percent', label: 'Comisiones', to: '/commissions', beta: true },
+        { icon: 'fa-percent', label: 'Comisiones', to: '/commissions', beta: true, module: 'commissions' },
         { icon: 'fa-chart-pie', label: 'Reportes', to: '/reports' },
-      ]}
+      ], noDisponibles)}
     />
   )
 }
 
-function RetailHome({ greeting, orgName, plan, enabledModules }: HomeProps) {
+function RetailHome({ greeting, orgName, plan, enabledModules, noDisponibles }: HomeProps) {
   return (
     <HomeShell
       greeting={greeting}
       orgName={orgName}
       plan={plan}
       enabledModules={enabledModules}
+      noDisponibles={noDisponibles}
       title="Atlas One Retail"
       subtitle="Inventario, compras, sucursales y caja multi-tienda."
       accent="#FA7938"
     >
       <Widget module="inventory" icon="fa-boxes" title="Inventario" description="Stock por sucursal y movimientos del día." cta="Ver inventario" ctaUrl="/inventory" />
-      <Widget module="purchasing" icon="fa-truck" title="Compras" description="Órdenes a proveedores y recepciones." cta="Ver compras" ctaUrl="/purchasing" beta />
+      <Widget module="purchasing" icon="fa-truck" title="Compras" description="Órdenes a proveedores y recepciones." cta="Ver compras" ctaUrl="/purchases" />
       <Widget icon="fa-store" title="Sucursales" description="Resumen de cada sucursal y catálogo habilitado." cta="Ver sucursales" ctaUrl="/configuracion?tab=sucursales" />
       <Widget module="promotions" icon="fa-tag" title="Promociones" description="Promos activas, descuentos por temporada." cta="Ver promos" ctaUrl="/products" />
       <Widget module="quotes" icon="fa-file-invoice-dollar" title="Cotizaciones" description="Presupuestos abiertos y conversión a venta." cta="Ver cotizaciones" ctaUrl="/quotes" />
@@ -406,15 +428,16 @@ function RetailHome({ greeting, orgName, plan, enabledModules }: HomeProps) {
   )
 }
 
-function ServicesHome({ greeting, orgName, plan, enabledModules }: HomeProps) {
+function ServicesHome({ greeting, orgName, plan, enabledModules, noDisponibles }: HomeProps) {
   return (
     <HomeShell
       greeting={greeting}
       orgName={orgName}
       plan={plan}
       enabledModules={enabledModules}
+      noDisponibles={noDisponibles}
       title="Atlas One Services"
-      subtitle="Órdenes de trabajo, agenda, cotizaciones y técnicos."
+      subtitle="Órdenes de trabajo, cotizaciones y clientes."
       accent="#33cc99"
     >
       <Widget module="quotes" icon="fa-screwdriver-wrench" title="Órdenes de trabajo" description="OT abiertas, en proceso y entregadas." cta="Ver OT" ctaUrl="/seguimiento" />
@@ -427,21 +450,22 @@ function ServicesHome({ greeting, orgName, plan, enabledModules }: HomeProps) {
   )
 }
 
-function EnterpriseHome({ greeting, orgName, plan, enabledModules }: HomeProps) {
+function EnterpriseHome({ greeting, orgName, plan, enabledModules, noDisponibles }: HomeProps) {
   return (
     <HomeShell
       greeting={greeting}
       orgName={orgName}
       plan={plan}
       enabledModules={enabledModules}
+      noDisponibles={noDisponibles}
       title="Atlas One Enterprise"
-      subtitle="Toda la operación a la vista: multi-sucursal, IA, integraciones."
+      subtitle="Toda la operación a la vista: multi-sucursal, compras, personal y reportes."
       accent="#FA8449"
     >
       <Widget icon="fa-gauge-high" title="Control Tower" description="KPIs ejecutivos y salud de la plataforma." cta="Ir a operaciones" ctaUrl="/hq/operations" />
       <Widget module="ai" icon="fa-microchip" title="Copiloto IA" description="Predicciones, automatizaciones y resúmenes." cta="Abrir IA" ctaUrl="/ai" beta />
-      <Widget module="purchasing" icon="fa-truck" title="Compras" description="OC, proveedores y cuentas por pagar." cta="Ver compras" ctaUrl="/purchasing" beta />
-      <Widget module="inventory" icon="fa-industry" title="Manufactura" description="Producción y consumo de insumos." cta="Ver manufactura" ctaUrl="/inventory" />
+      <Widget module="purchasing" icon="fa-truck" title="Compras" description="OC, proveedores y cuentas por pagar." cta="Ver compras" ctaUrl="/purchases" />
+      <Widget module="manufacturing" icon="fa-industry" title="Manufactura" description="Producción y consumo de insumos." cta="Ver manufactura" ctaUrl="/inventory" />
       <Widget module="hr" icon="fa-users-gear" title="RRHH" description="Asistencia, nómina, vacaciones." cta="Ir a RRHH" ctaUrl="/hr" />
       <Widget module="reports" icon="fa-chart-line" title="Reportes ejecutivos" description="Vista global multi-sucursal." cta="Ver reportes" ctaUrl="/hq/reports-hub" />
     </HomeShell>

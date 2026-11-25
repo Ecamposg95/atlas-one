@@ -200,8 +200,18 @@ class Organization(Base):
 
     # Conteo ciego del corte de caja (2026-11-21). ENCENDIDO por omision: con el
     # turno abierto la caja no ve el esperado ni su desglose. El dueño puede
-    # apagarlo desde Empresa; es solo de interfaz (viaja en /me/context).
+    # apagarlo desde Empresa. Viaja en /me/context y, encendido, el servidor
+    # tampoco le manda esos importes a la cajera (`ventas_cajero.cajera_a_ciegas`).
     conteo_ciego = Column(Boolean, nullable=False, default=True, server_default="true")
+
+    # Caja y ventas pasadas (2026-11-24). Días hacia atrás que la cajera (y el
+    # vendedor) consultan y devuelven ventas de su sucursal; 0 = solo hoy. Es
+    # el plazo de devolución de la tienda. Regla: `ventas_cajero.dias_ventas_caja`.
+    dias_ventas_caja = Column(Integer, nullable=False, default=30, server_default="30")
+    # Monto hasta el que la caja devuelve SIN autorización. Nace en 0: toda
+    # devolución de la caja sigue pidiendo gerente (PIN en la misma caja o
+    # aprobación después), como antes; el dueño lo sube desde Empresa.
+    devolucion_libre_hasta = Column(Numeric(10, 2), nullable=False, default=0, server_default="0")
 
     # Precio por sucursal (2026-11-23). APAGADO por omision. Encendido, el precio
     # que alguien con sucursal edita (ficha o talla) se guarda como el precio de

@@ -84,7 +84,7 @@ describe('Productos: catálogo fusionado (HQ en perfil completo)', () => {
     await screen.findByText('Blusa nueva')
     // Por omisión se ven tarjetas; la columna de estado por sucursal es de la lista.
     expect(document.querySelector('table')).toBeNull()
-    fireEvent.click(screen.getByLabelText('Vista lista'))
+    fireEvent.click(screen.getByLabelText('Ver en lista'))
     expect(document.querySelector('table')).not.toBeNull()
     expect(screen.getByText('Pendiente')).toBeTruthy()
     expect(screen.getByText('Archivado')).toBeTruthy()

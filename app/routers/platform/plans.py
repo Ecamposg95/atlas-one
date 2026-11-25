@@ -13,6 +13,7 @@ from app.models.organization import Organization
 from app.modules.platform.dependencies import require_platform_admin
 from app.schemas.plans import PlanRead, PlanUsoRead
 from app.services import plans
+from app.services.estado_modulos import solo_no_disponibles
 
 # El paquete ya exige plataforma; se repite aqui para documentar la intencion.
 router = APIRouter(dependencies=[Depends(require_platform_admin)])
@@ -23,7 +24,9 @@ def _a_read(p: plans.Plan) -> PlanRead:
         clave=p.clave, nombre=p.nombre, lema=p.lema, precio_mxn=p.precio_mxn,
         precio_desde=p.precio_desde, max_usuarios=p.max_usuarios,
         max_sucursales_venta=p.max_sucursales_venta,
-        modulos_crecimiento=sorted(p.modulos_crecimiento), permite_todo=p.permite_todo,
+        modulos_crecimiento=sorted(p.modulos_crecimiento),
+        modulos_no_disponibles=solo_no_disponibles(p.modulos_crecimiento),
+        permite_todo=p.permite_todo,
     )
 
 

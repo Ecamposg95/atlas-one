@@ -46,6 +46,7 @@ from .crm import Customer, CustomerLedgerEntry
 # (Si cambiaste el nombre del archivo a 'customers.py', cambia '.crm' por '.customers')
 
 from .returns import SaleReturn, SaleReturnItem
+from .vales import StoreVoucher, StoreVoucherMovement
 
 # 7. Impresion
 from .print_job import PrintJob, PrintJobStatus
@@ -115,6 +116,10 @@ from app.modules.ai import models as _ai_models  # noqa: F401
 # 18. Canal «Tienda en línea»: galería de imágenes (product_images) y, en tareas
 #     siguientes, el resto de tablas del canal. Registradas para `create_all`.
 from app.modules.canal import models as _canal_models  # noqa: F401
+
+# 20. Cobro de suscripciones (megaplan F3): suscripciones, suscripcion_cargos
+#     y suscripcion_pagos. Registradas aqui para `create_all`.
+from app.modules.suscripciones import models as _suscripciones_models  # noqa: F401
 
 # 19. Disponibilidad web: el listener `before_flush` vive en la clase Session,
 #     así que registrarlo aquí lo deja activo en todo proceso que cargue los

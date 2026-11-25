@@ -120,6 +120,21 @@ capturan: hoy en el `env_file:` del `docker-compose.yml` del servidor, no en el 
 Railway). Igual que en Railway, `SECRET_KEY` es la que más importa asegurar — ver la
 nota de seguridad en `docs/infra/deployment-map.md`.
 
+### `COOKIE_SECURE` (opcional)
+
+Decide si las cookies de sesión (`access_token`, `support_org_id`) salen con el atributo
+`Secure`. La lee `app/core/security/cookies.py` en cada petición.
+
+| Valor | Efecto |
+|---|---|
+| `auto` (por omisión, o sin definir) | `Secure` solo si la petición llegó por https: mira `X-Forwarded-Proto` y, si no viene, el esquema de la petición. En producción Caddy termina el TLS y uvicorn corre con `--proxy-headers` (`Dockerfile`), así que la cookie sale `Secure` sin configurar nada; en desarrollo local por `http://localhost` sale sin `Secure` y el navegador la guarda. |
+| `true` | Siempre `Secure`. Úsalo si quieres forzarlo aunque el proxy dejara de mandar `X-Forwarded-Proto`. Ojo: por http plano el navegador descarta la cookie. |
+| `false` | Nunca `Secure` (el comportamiento anterior a 2026-11-24). |
+
+No hace falta añadirla al `env_file` del servidor: `auto` ya cubre producción. Para
+comprobarlo tras un deploy: `curl -si -X POST https://app.atlasone.com.mx/api/auth/login -d 'username=…&password=…' | grep -i set-cookie`
+debe mostrar `Secure`. `samesite` no cambió (`lax`).
+
 ## 7. Qué NO cambió
 
 - `scripts/railway_init.py` sigue siendo el único mecanismo de migraciones automáticas
