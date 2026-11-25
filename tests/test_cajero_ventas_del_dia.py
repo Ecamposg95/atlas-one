@@ -1,4 +1,7 @@
-"""La cajera solo ve las ventas de hoy (México) de su sucursal; el resto de roles no cambia."""
+"""La cajera ve las ventas de su sucursal dentro del plazo de la tienda
+(`organization.dias_ventas_caja`; aquí en 0 = solo hoy, la regla original). El
+plazo de 30 días por omisión se prueba en `test_cajera_ventas_pasadas.py`. El
+resto de roles no cambia."""
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 from itertools import count
@@ -45,6 +48,19 @@ def _pos(db, org):
     db.commit()
 
 
+def _solo_hoy(db, org):
+    org.dias_ventas_caja = 0
+    db.commit()
+
+
+def _abrir_caja(db, org, branch, user):
+    from app.models.cash import CashSession
+    s = CashSession(user_id=user.id, branch_id=branch.id, organization_id=org.id,
+                    opening_balance=Decimal("0"), status="OPEN")
+    db.add(s); db.commit(); db.refresh(s)
+    return s
+
+
 def _ayer():
     return mv.hoy_mx() - timedelta(days=1)
 
@@ -55,6 +71,7 @@ def _ids(resp):
 
 def test_cajero_solo_ve_ventas_de_hoy(client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup):
     _pos(db, org)
+    _solo_hoy(db, org)
     hoy = _venta(db, org, branch_a, cajero_a, _v(products_setup))
     _venta(db, org, branch_a, cajero_a, _v(products_setup), dia=_ayer())
     r = client.get("/api/sales/", headers=auth_cajero_a)
@@ -64,17 +81,22 @@ def test_cajero_solo_ve_ventas_de_hoy(client, db, org, branch_a, cajero_a, auth_
 
 def test_cajero_ignora_fechas_y_sucursal(client, db, org, branch_a, branch_b, cajero_a, auth_cajero_a, products_setup):
     _pos(db, org)
+    _solo_hoy(db, org)
     hoy = _venta(db, org, branch_a, cajero_a, _v(products_setup))
     _venta(db, org, branch_b, cajero_a, _v(products_setup))
     _venta(db, org, branch_a, cajero_a, _v(products_setup), dia=_ayer())
-    a = _ayer()
-    r = client.get(f"/api/sales/?start_date={a}&end_date={a}&branch_id={branch_b.id}", headers=auth_cajero_a)
+    # La sucursal del query se ignora; las fechas filtran DENTRO del plazo, no lo amplían.
+    r = client.get(f"/api/sales/?branch_id={branch_b.id}", headers=auth_cajero_a)
     assert _ids(r) == {hoy.id}
     assert r.json()["total"] == 1
+    a = _ayer()
+    r = client.get(f"/api/sales/?start_date={a}&end_date={a}", headers=auth_cajero_a)
+    assert r.json()["items"] == []
 
 
 def test_venta_de_ayer_noche_no_aparece(client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup):
     _pos(db, org)
+    _solo_hoy(db, org)
     _venta(db, org, branch_a, cajero_a, _v(products_setup), dia=_ayer(), hora=23)
     r = client.get("/api/sales/", headers=auth_cajero_a)
     assert r.json()["items"] == []
@@ -82,6 +104,7 @@ def test_venta_de_ayer_noche_no_aparece(client, db, org, branch_a, cajero_a, aut
 
 def test_folio_search_de_ayer_vacio(client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup):
     _pos(db, org)
+    _solo_hoy(db, org)
     v = _venta(db, org, branch_a, cajero_a, _v(products_setup), dia=_ayer())
     r = client.get(f"/api/sales/?folio_search={v.folio}", headers=auth_cajero_a)
     assert r.json()["items"] == []
@@ -89,6 +112,7 @@ def test_folio_search_de_ayer_vacio(client, db, org, branch_a, cajero_a, auth_ca
 
 def test_detalle_de_ayer_404(client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup):
     _pos(db, org)
+    _solo_hoy(db, org)
     ayer = _venta(db, org, branch_a, cajero_a, _v(products_setup), dia=_ayer())
     hoy = _venta(db, org, branch_a, cajero_a, _v(products_setup))
     assert client.get(f"/api/sales/{ayer.id}", headers=auth_cajero_a).status_code == 404
@@ -97,6 +121,7 @@ def test_detalle_de_ayer_404(client, db, org, branch_a, cajero_a, auth_cajero_a,
 
 def test_print_view_de_ayer_404(client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup):
     _pos(db, org)
+    _solo_hoy(db, org)
     ayer = _venta(db, org, branch_a, cajero_a, _v(products_setup), dia=_ayer())
     hoy = _venta(db, org, branch_a, cajero_a, _v(products_setup))
     assert client.get(f"/api/sales/{ayer.id}/print-view", headers=auth_cajero_a).status_code == 404
@@ -145,17 +170,19 @@ def _devolver(client, headers, venta, variante):
 def test_cajero_devuelve_venta_de_hoy(client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup):
     _pos(db, org)
     v = _venta(db, org, branch_a, cajero_a, _v(products_setup))
+    _abrir_caja(db, org, branch_a, cajero_a)
     r = _devolver(client, auth_cajero_a, v, _v(products_setup))
     assert r.status_code == 200, r.text
-    assert r.json()["status"] == "PENDING"
+    assert r.json()["status"] == "PENDING"      # el monto libre nace en 0: siempre pide gerente
 
 
 def test_cajero_no_devuelve_venta_de_ayer(client, db, org, branch_a, cajero_a, auth_cajero_a, products_setup):
     _pos(db, org)
+    _solo_hoy(db, org)
     v = _venta(db, org, branch_a, cajero_a, _v(products_setup), dia=_ayer())
     r = _devolver(client, auth_cajero_a, v, _v(products_setup))
     assert r.status_code == 403
-    assert r.json()["detail"] == "Solo puedes devolver ventas de hoy. Para días anteriores pide al gerente."
+    assert r.json()["detail"] == "Solo puedes devolver ventas de hoy. Pide al gerente."
 
 
 def test_cajero_no_devuelve_otra_sucursal(client, db, org, branch_a, branch_b, cajero_a, auth_cajero_a, products_setup):
@@ -189,6 +216,7 @@ def test_admin_devuelve_venta_de_otra_sucursal(client, db, org, branch_a, branch
 
 def test_por_folio_cajero_solo_hoy(client, db, org, branch_a, cajero_a, auth_cajero_a, auth_gerente_a, products_setup):
     _pos(db, org)
+    _solo_hoy(db, org)
     ayer = _venta(db, org, branch_a, cajero_a, _v(products_setup), dia=_ayer())
     hoy = _venta(db, org, branch_a, cajero_a, _v(products_setup))
     r = client.get(f"/api/sales/by-folio/A/{ayer.folio}", headers=auth_cajero_a)

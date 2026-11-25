@@ -159,6 +159,14 @@ COLUMN_MIGRATIONS = [
     # Conteo ciego opcional 2026-11-21. Nace TRUE: toda tienda viva conserva el
     # corte ciego de siempre; su dueño lo apaga desde Empresa.
     ("organization", "conteo_ciego", "ALTER TABLE organization ADD COLUMN conteo_ciego BOOLEAN NOT NULL DEFAULT TRUE;"),
+    # Ventas pasadas y devoluciones de la caja 2026-11-24. La caja consulta 30
+    # dias de su sucursal (antes solo hoy). El monto libre nace en 0: ninguna
+    # tienda viva empieza a devolver dinero sin gerente por un deploy.
+    ("organization", "dias_ventas_caja", "ALTER TABLE organization ADD COLUMN dias_ventas_caja INTEGER NOT NULL DEFAULT 30;"),
+    ("organization", "devolucion_libre_hasta", "ALTER TABLE organization ADD COLUMN devolucion_libre_hasta NUMERIC(10,2) NOT NULL DEFAULT 0;"),
+    # Motivo de catalogo y como se autorizo cada devolucion (POLITICA | PIN | SUPERVISOR).
+    ("sale_returns", "reason_code", "ALTER TABLE sale_returns ADD COLUMN reason_code VARCHAR;"),
+    ("sale_returns", "autorizacion", "ALTER TABLE sale_returns ADD COLUMN autorizacion VARCHAR;"),
     # Precio por sucursal 2026-11-23. Nace FALSE: ninguna tienda cambia de
     # comportamiento hasta que se encienda (Eleven Fashion lo pidio).
     ("organization", "precio_por_sucursal", "ALTER TABLE organization ADD COLUMN precio_por_sucursal BOOLEAN NOT NULL DEFAULT FALSE;"),

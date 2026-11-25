@@ -18,6 +18,12 @@ class SaleReturn(Base, UUIDMixin, AuditMixin, TenantMixin):
     reason = Column(String, nullable=False) # Ej: Defectuoso, Error de cliente
     status = Column(String, default="PENDING") # PENDING, APPROVED, REJECTED
     supervisor_id = Column(Integer, ForeignKey("users.id"), nullable=True) # If authorized by supervisor
+    # Motivo de catálogo (`app/services/devoluciones.py::MOTIVOS`); `reason` guarda
+    # el texto que se imprime. NULL en devoluciones anteriores al 2026-11-24.
+    reason_code = Column(String, nullable=True)
+    # Cómo se autorizó: POLITICA (la caja, dentro del monto libre de la tienda),
+    # PIN (un gerente tecleó su PIN en la caja) o SUPERVISOR (aprobada después).
+    autorizacion = Column(String, nullable=True)
     
     # Relaciones
     sale = relationship("SalesDocument")

@@ -1182,6 +1182,49 @@ class PosPrinter:
         raw += self.CMD["LF"] * 3 + self.CMD["CUT"]
         return raw
 
+    def build_devolucion_bytes(self, *, organization, branch, cashier: str, folio_venta: str,
+                               folio_devolucion: str, fecha: datetime, motivo: str, metodo: str,
+                               piezas: list, total: float, autorizo: Optional[str] = None,
+                               estado: str = "APPROVED", customer_name: Optional[str] = None) -> bytes:
+        """Comprobante de devolución (2026-11-24). Sin apertura de cajón: el
+        efectivo sale con el movimiento de caja, el papel solo lo documenta.
+        `piezas` = [{"qty", "descripcion", "importe", "a_stock"}]."""
+        sep = ("-" * self.cols + "\n").encode("latin-1", "replace")
+
+        def linea(texto: str) -> bytes:
+            return (self._truncate(texto, self.cols) + "\n").encode("latin-1", "replace")
+
+        raw = self.CMD["RESET"] + self._default_font + self.CMD["SIZE_NORMAL"] + self.CMD["CENTER"]
+        raw += self.CMD["BOLD_ON"] + linea((organization.name if organization else None) or "ATLAS POS") + self.CMD["BOLD_OFF"]
+        if branch is not None and getattr(branch, "name", None):
+            raw += linea(branch.name)
+        raw += self.CMD["SIZE_LARGE"] + self.CMD["BOLD_ON"] + b"DEVOLUCION\n" + self.CMD["BOLD_OFF"] + self.CMD["SIZE_NORMAL"]
+        if estado != "APPROVED":
+            raw += self.CMD["BOLD_ON"] + linea("PENDIENTE DE AUTORIZAR") + self.CMD["BOLD_OFF"]
+        dt = fecha if fecha.tzinfo else fecha.replace(tzinfo=timezone.utc)
+        raw += linea(f"{dt.astimezone(MX_TZ).strftime('%d/%m/%y %H:%M')} | {folio_devolucion}")
+        raw += self.CMD["LEFT"] + sep
+        raw += linea(f"Ticket: {folio_venta}")
+        if customer_name and not _es_publico_general(customer_name):
+            raw += linea(f"CLIENTE: {customer_name}")
+        raw += sep
+        for p in piezas:
+            raw += self._return_line(float(p["qty"]), p["descripcion"] or "", float(p["importe"]))
+            if not p.get("a_stock", True):
+                raw += linea("   (no regresa a stock)")
+        raw += sep
+        raw += self.CMD["BOLD_ON"] + self._rline("Total devuelto", float(total)) + self.CMD["BOLD_OFF"]
+        etiqueta = {"CASH": "Efectivo", "CARD": "Tarjeta", "TRANSFER": "Transferencia",
+                    "STORE_CREDIT": "Vale de tienda"}.get(str(metodo).upper(), str(metodo))
+        raw += linea(f"Reembolso: {etiqueta}")
+        raw += linea(f"Motivo: {motivo}")
+        raw += sep + linea(f"Le atendio: {cashier}")
+        if autorizo:
+            raw += linea(f"Autorizo: {autorizo}")
+        raw += self.CMD["LF"] + linea("Firma del cliente:") + self.CMD["LF"] * 2 + linea("_" * min(self.cols, 28))
+        raw += self.CMD["LF"] * 3 + self.CMD["CUT"]
+        return raw
+
     def _format_currency(self, val: float) -> str:
         return f"${val:.2f}"
 

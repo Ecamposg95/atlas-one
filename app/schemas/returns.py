@@ -52,9 +52,16 @@ class SaleReturnBase(BaseModel):
     refund_method: PaymentMethod = PaymentMethod.CASH
     cash_session_id: Optional[int] = None
     supervisor_id: Optional[int] = None
+    # Motivo de catálogo (`app/services/devoluciones.py::MOTIVOS`); opcional
+    # para las pantallas que todavía mandan solo texto.
+    reason_code: Optional[str] = None
 
 class SaleReturnCreate(SaleReturnBase):
     items: List[SaleReturnItemCreate]
+
+
+class AutorizarConPin(BaseModel):
+    pin: str = Field(min_length=1, max_length=128)
 
 class BranchInfo(BaseModel):
     id: int
@@ -70,6 +77,8 @@ class SaleReturn(SaleReturnBase):
     organization_id: Optional[int] = None
     created_at: datetime
     status: str
+    # POLITICA | PIN | SUPERVISOR; None en pendientes y en devoluciones viejas.
+    autorizacion: Optional[str] = None
     sale: Optional[SaleReturnSaleInfo] = None
     user: Optional[UserRead] = None
     supervisor: Optional[UserRead] = None

@@ -140,7 +140,8 @@ def update_organization(
 
     # Linea del proveedor y estilo del renglon: las dos columnas son NOT NULL,
     # asi que un `null` en el payload es "no tocar" y no un 500 al commitear.
-    for _campo_no_nulo in ("ticket_show_vendor", "ticket_line_style", "conteo_ciego", "precio_por_sucursal"):
+    for _campo_no_nulo in ("ticket_show_vendor", "ticket_line_style", "conteo_ciego", "precio_por_sucursal",
+                           "dias_ventas_caja", "devolucion_libre_hasta"):
         if _campo_no_nulo in data_to_update and data_to_update[_campo_no_nulo] is None:
             data_to_update.pop(_campo_no_nulo)
 

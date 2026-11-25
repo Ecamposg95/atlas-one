@@ -125,6 +125,7 @@ def create_return(db: Session, return_in: SaleReturnCreate, user_id: int, branch
         total_refunded=return_in.total_refunded,
         refund_method=return_in.refund_method,
         reason=return_in.reason,
+        reason_code=getattr(return_in, "reason_code", None),
         status="PENDING",
         supervisor_id=return_in.supervisor_id,
         organization_id=organization_id,
@@ -176,7 +177,8 @@ def create_return(db: Session, return_in: SaleReturnCreate, user_id: int, branch
     return db_return
 
 def approve_return(db: Session, return_id: str, supervisor_id: int,
-                   organization_id: int = None, force: bool = False):
+                   organization_id: int = None, force: bool = False,
+                   autorizacion: str = "SUPERVISOR"):
     """Approve a pending return.
 
     `force=True` overrides the fat-finger threshold for large CASH refunds.
@@ -265,6 +267,9 @@ def approve_return(db: Session, return_id: str, supervisor_id: int,
     # 3. Update Status
     db_return.status = "APPROVED"
     db_return.supervisor_id = supervisor_id
+    # POLITICA (la caja, dentro del monto libre), PIN (gerente en la caja) o
+    # SUPERVISOR (aprobada después). Ver `app/services/devoluciones.py`.
+    db_return.autorizacion = autorizacion
     db.flush()
 
     # 4. Inventory & Stock
@@ -513,6 +518,7 @@ def approve_return(db: Session, return_id: str, supervisor_id: int,
             ),
             "force_used": force,
             "supervisor_id": supervisor_id,
+            "autorizacion": autorizacion,
         },
     )
 

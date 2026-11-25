@@ -10,7 +10,7 @@ from fastapi.templating import Jinja2Templates
 import csv
 import io
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func, case, false as sql_false
+from sqlalchemy import func, case, or_, false as sql_false
 from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
 from typing import Dict, Any, List, Optional
@@ -63,7 +63,7 @@ from app.services.tax import compute_line_tax, quantize_amount, quantize_totals,
 from app.services.card_surcharge import calcular_comision, pct_de_organizacion
 from app.models.users import Role
 from app.services import metricas_ventas as mv
-from app.services.ventas_cajero import es_cajero, rango_hoy_mx, venta_visible_para_cajero
+from app.services.ventas_cajero import es_cajero, rango_hoy_mx, rango_visible_cajero, venta_visible_para_cajero
 from app.crud.products import get_variant_if_visible
 try:
     from zoneinfo import ZoneInfo
@@ -196,6 +196,10 @@ def read_sales(
         None,
         description="Busca por folio exacto, tolerante al formato: '540', 'a-540', 'A-0540'.",
     ),
+    search: Optional[str] = Query(
+        None, max_length=80,
+        description="Texto libre: nombre del cliente, o descripción / SKU de un producto del ticket.",
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization)
@@ -228,10 +232,11 @@ def read_sales(
         query = query.filter(SalesDocument.doc_type.in_(doc_type))
 
     if es_cajero(current_user):
-        # La cajera solo ve las ventas de hoy (México) de su sucursal: se descartan las
-        # fechas del query. Los límites van en UTC para que también comparen bien en SQLite.
-        start_date = end_date = None
-        ini, fin = rango_hoy_mx()
+        # La cajera ve las ventas de su sucursal dentro del plazo de la tienda
+        # (`organization.dias_ventas_caja`; 0 = solo hoy). Sus fechas del query
+        # filtran DENTRO de ese plazo, nunca lo amplían. Los límites van en UTC
+        # para que también comparen bien en SQLite.
+        ini, fin = rango_visible_cajero(db, current_user)
         query = query.filter(SalesDocument.created_at >= ini.astimezone(timezone.utc),
                              SalesDocument.created_at <= fin.astimezone(timezone.utc))
     if start_date:
@@ -247,6 +252,22 @@ def read_sales(
         query = query.filter(SalesDocument.status == status)
     if customer_id is not None:
         query = query.filter(SalesDocument.customer_id == customer_id)
+
+    # Texto libre: cliente del ticket o un producto que lleve (descripción
+    # congelada de la línea o SKU de la variante).
+    if search is not None and search.strip():
+        patron = f"%{search.strip()}%"
+        from app.models.products import ProductVariant as _PV
+        en_lineas = (
+            db.query(SalesLineItem.id)
+            .outerjoin(_PV, _PV.id == SalesLineItem.variant_id)
+            .filter(
+                SalesLineItem.document_id == SalesDocument.id,
+                or_(SalesLineItem.description.ilike(patron), _PV.sku.ilike(patron)),
+            )
+            .exists()
+        )
+        query = query.filter(or_(SalesDocument.customer_name.ilike(patron), en_lineas))
 
     # Devoluciones buscan un ticket exacto por folio. El POS lo muestra como
     # "A-0540" (saleLabel hace padStart(4)), y muchas veces se teclea sólo el
