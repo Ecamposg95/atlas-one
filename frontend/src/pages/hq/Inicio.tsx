@@ -12,6 +12,8 @@ import { TarjetaFila } from '../../components/ui/TarjetaFila'
 import { Spinner } from '../../components/ui/Spinner'
 import { useEsTelefono } from '../../hooks/useIsMobile'
 import { useEnabledModulesStore } from '../../store/enabledModulesStore'
+import { useAuthStore } from '../../store/authStore'
+import { esRolHq } from '../../utils/rolesHq'
 import { formatCurrency } from '../../utils/currency'
 import { errorDetailText } from '../../utils/errorDetail'
 import { variacion } from '../../utils/variacion'
@@ -352,6 +354,11 @@ export function Inicio() {
   const perfilUi = useEnabledModulesStore((s) => s.perfilUi)
   const [datos, setDatos] = useState<DatosInicio | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Sucursal elegida en «Cambiar sucursal» del menú: solo la manda un rol de
+  // oficina; a los demás el servidor les impone la suya.
+  const esHq = esRolHq(useAuthStore((s) => s.user?.role))
+  const sucursalActiva = useAuthStore((s) => s.branch)
+  const sucursalId = esHq ? sucursalActiva?.id : undefined
   const [valuacion, setValuacion] = useState<ValuacionInventario | null>(null)
   const [valuacionError, setValuacionError] = useState<string | null>(null)
 
@@ -364,18 +371,21 @@ export function Inicio() {
   useEffect(() => {
     if (!loaded) return
     let vivo = true
-    reportsApi.inicio({ completo: perfilUi !== 'basico' })
+    const deSucursal = sucursalId ? { branch_id: sucursalId } : {}
+    setDatos(null)
+    setError(null)
+    reportsApi.inicio({ completo: perfilUi !== 'basico', ...deSucursal })
       .then((d) => { if (vivo) setDatos(d) })
       .catch((e: any) => {
         if (vivo) setError(errorDetailText(e?.response?.data?.detail, 'No se pudo cargar el resumen. Vuelve a intentar en unos segundos.'))
       })
-    reportsApi.valorInventario({ agrupar: 'sucursal' })
+    reportsApi.valorInventario({ agrupar: 'sucursal', ...deSucursal })
       .then((v) => { if (vivo) setValuacion(v) })
       .catch((e: any) => {
         if (vivo) setValuacionError(errorDetailText(e?.response?.data?.detail, 'No se pudo calcular el valor de la tienda.'))
       })
     return () => { vivo = false }
-  }, [loaded, perfilUi])
+  }, [loaded, perfilUi, sucursalId])
 
   const metodos = datos
     ? [
@@ -407,7 +417,7 @@ export function Inicio() {
       <CabeceraPagina
         titulo={(
           <>
-            <p className="dax-section-title mb-2">{hoyLargo()}</p>
+            <p className="dax-section-title mb-2">{hoyLargo()}{sucursalId && sucursalActiva ? ` · ${sucursalActiva.name}` : ''}</p>
             <h1 className="dax-titulo-pagina">¿Cómo voy?</h1>
           </>
         )}

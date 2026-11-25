@@ -16,6 +16,7 @@ import { BarraFiltros, ParFechas } from '../../components/ui/BarraFiltros'
 import { CabeceraPagina } from '../../components/ui/CabeceraPagina'
 import { useEsTelefono } from '../../hooks/useIsMobile'
 import { useSucursalesVendibles } from '../../hooks/useSucursalesVendibles'
+import { esRolCaja } from '../../utils/rolesCaja'
 import { esRolHq } from '../../utils/rolesHq'
 import type { SalesDocument } from '../../types/sales'
 import { saleLabel } from '../../types/sales'
@@ -81,7 +82,7 @@ export function SalesHistory() {
   const rol = useAuthStore((s) => s.user?.role)
   const esHq = esRolHq(rol)
   // La cajera ve solo las ventas de hoy de su sucursal, sin totales (el backend lo impone).
-  const esCajera = rol === 'CAJERO'
+  const esCajera = esRolCaja(rol)
   // La cajera solo ve hoy: su lista vacía no es "del periodo".
   const textoSinVentas = esCajera ? 'Sin ventas hoy' : 'Sin ventas en este periodo'
   const esTelefono = useEsTelefono()

@@ -49,9 +49,9 @@ describe('perfil FREE', () => {
   it('las cuatro URLs móviles de vendedor/soporte quedan ocultas en FREE', () => {
     for (const u of ['/mobile/dashboard', '/mobile/query', '/mobile/sales', '/mobile/profile']) {
       expect(urlsOcultasPorPlan(FREE)).toContain(u)
-      expect(menu('VENDEDOR', FREE)).not.toContain(u)
+      expect(menu('SOPORTE_OPERATIVO', FREE)).not.toContain(u)
     }
-    expect(menu('VENDEDOR', ULTRA)).toContain('/mobile/dashboard')
+    expect(menu('SOPORTE_OPERATIVO', ULTRA)).toContain('/mobile/dashboard')
   })
 
   it('la cajera conserva Cobrar, Corte, Devoluciones, Productos y Configuración', () => {

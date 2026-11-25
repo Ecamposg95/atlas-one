@@ -17,7 +17,7 @@ describe('rutaInicioPorRol', () => {
   })
 
   it('los demas roles no cambian', () => {
-    expect(rutaInicioPorRol('VENDEDOR', true)).toBe('/mobile/dashboard')
+    expect(rutaInicioPorRol('VENDEDOR', true)).toBe('/atlas-pos')
     expect(rutaInicioPorRol('SOPORTE_OPERATIVO', false)).toBe('/mobile/dashboard')
     expect(rutaInicioPorRol('CLIENTE', true)).toBe('/portal')
     expect(rutaInicioPorRol('CAJERO', true)).toBe('/atlas-pos')

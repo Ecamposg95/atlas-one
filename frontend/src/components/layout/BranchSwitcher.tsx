@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import client from '../../api/client'
 import { useAuthStore } from '../../store/authStore'
 import type { BranchType } from '../../types/auth'
+import { useBranchCountStore, esTiendaUnica } from '../../store/branchCountStore'
 
 interface Branch {
   id: number
@@ -22,6 +23,8 @@ export function BranchSwitcher({ enMenu = false }: { enMenu?: boolean } = {}) {
   const navigate = useNavigate()
   const setBranch = useAuthStore(s => s.setBranch)
   const user = useAuthStore(s => s.user)
+  const activa = useAuthStore(s => s.branch)
+  const unaSola = esTiendaUnica(useBranchCountStore((s) => s.count))
 
   // Close on outside click
   useEffect(() => {
@@ -68,6 +71,25 @@ export function BranchSwitcher({ enMenu = false }: { enMenu?: boolean } = {}) {
     else if (isAdmin) navigate('/hq/operations')
     else navigate('/atlas-pos')
   }
+
+  // Volver a ver todo: sin esto, quien elegía una sucursal ya no podía regresar.
+  const verTodas = async () => {
+    try {
+      await client.post('/auth/context/switch')
+    } catch {
+      // No es fatal: la vista se actualiza igual
+    }
+    setBranch(null)
+    setOpen(false)
+    navigate('/hq/operations')
+  }
+
+  const palomita = <i className="fa-solid fa-check" style={{ marginLeft: 'auto', fontSize: '0.7rem', color: 'var(--dax-accent-text)' }} aria-hidden="true" />
+  const estiloOpcion = {
+    display: 'flex', alignItems: 'center', gap: '0.75rem', width: '100%',
+    padding: '0.625rem 0.75rem', borderRadius: '10px', background: 'transparent',
+    border: 'none', cursor: 'pointer', textAlign: 'left', transition: 'background 0.15s',
+  } as const
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
@@ -125,7 +147,7 @@ export function BranchSwitcher({ enMenu = false }: { enMenu?: boolean } = {}) {
         >
           <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid var(--dax-border-dim)' }}>
             <p style={{ fontSize: '0.6rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--dax-text-faint)', margin: 0 }}>
-              Nodos disponibles
+              Sucursales
             </p>
           </div>
           <div style={{ maxHeight: '240px', overflowY: 'auto', padding: '0.5rem' }}>
@@ -137,23 +159,33 @@ export function BranchSwitcher({ enMenu = false }: { enMenu?: boolean } = {}) {
               <div style={{ padding: '1rem', textAlign: 'center', color: 'rgba(251,113,133,0.7)', fontSize: '0.75rem' }}>
                 Sin sucursales
               </div>
-            ) : branches.map(b => (
+            ) : (<>
+              <button
+                onClick={verTodas}
+                aria-current={activa ? undefined : 'true'}
+                style={estiloOpcion}
+                onMouseEnter={e => ((e.currentTarget as HTMLElement).style.background = 'var(--dax-accent-soft)')}
+                onMouseLeave={e => ((e.currentTarget as HTMLElement).style.background = 'transparent')}
+              >
+                <div style={{
+                  width: '32px', height: '32px', borderRadius: '8px',
+                  background: 'var(--dax-elevated)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0,
+                }}>
+                  <i className="fa-solid fa-building" style={{ fontSize: '0.75rem', color: 'var(--dax-text-muted)' }} />
+                </div>
+                <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--dax-text)', margin: 0 }}>
+                  {unaSola ? 'Toda la tienda' : 'Todas las sucursales'}
+                </p>
+                {!activa && palomita}
+              </button>
+              {branches.map(b => (
               <button
                 key={b.id}
                 onClick={() => switchBranch(b.id, b.branch_type, b.name)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.75rem',
-                  width: '100%',
-                  padding: '0.625rem 0.75rem',
-                  borderRadius: '10px',
-                  background: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  transition: 'background 0.15s',
-                }}
+                aria-current={activa?.id === b.id ? 'true' : undefined}
+                style={estiloOpcion}
                 onMouseEnter={e => ((e.currentTarget as HTMLElement).style.background = 'var(--dax-accent-soft)')}
                 onMouseLeave={e => ((e.currentTarget as HTMLElement).style.background = 'transparent')}
               >
@@ -173,8 +205,10 @@ export function BranchSwitcher({ enMenu = false }: { enMenu?: boolean } = {}) {
                     {b.branch_type}
                   </p>
                 </div>
+                {activa?.id === b.id && palomita}
               </button>
-            ))}
+              ))}
+            </>)}
           </div>
         </div>
       )}

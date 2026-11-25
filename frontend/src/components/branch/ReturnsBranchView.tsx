@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import client from '../../api/client'
 import { BRANCH_COPY } from '../../copy/branchCopy'
+import { esRolCaja } from '../../utils/rolesCaja'
 import { useAuthStore } from '../../store/authStore'
 import { ui } from './branchUI'
 
@@ -58,7 +59,7 @@ function StepPills({ current }: { current: Step }) {
 }
 
 export function ReturnsBranchView() {
-  const esCajera = useAuthStore((s) => s.user?.role) === 'CAJERO'
+  const esCajera = esRolCaja(useAuthStore((s) => s.user?.role))
   const [step, setStep] = useState<Step>('find')
   const [query, setQuery] = useState('')
   const [sale, setSale] = useState<Sale | null>(null)

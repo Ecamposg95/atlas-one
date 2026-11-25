@@ -104,12 +104,12 @@ ATLAS_POS_ROLE_VIEWS = {
     ],
     
     Role.VENDEDOR: [
-        # Mobile Sales
-        "mobile_dashboard.html",
-        "mobile_query.html",
-        "mobile_sales.html",
-        "mobile_profile.html",
-        "hr_me.html",
+        # Mostrador con menú corto (2026-11-20): Mi día, Cobrar, Ventas, Corte, Clientes, Productos
+        "pos.html",
+        "sales.html",
+        "cash_history.html",
+        "customers.html",
+        "products.html",
         "atlas-pos.html",
         "index.html",
         "construction.html",
@@ -139,7 +139,7 @@ ROLE_CONTEXT_REQUIREMENTS = {
     Role.DUEÑO: "HQ",
     Role.GERENTE: "BRANCH",
     Role.CAJERO: "BRANCH",
-    Role.VENDEDOR: "MOBILE",  # or BRANCH with mobile UI
+    Role.VENDEDOR: "BRANCH",
     Role.SOPORTE_OPERATIVO: "MOBILE",
 }
 

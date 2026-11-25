@@ -6,6 +6,7 @@ import {
   returnLabel, returnRequestedBy, returnApprovedBy, returnBranchName,
 } from '../../api/returns'
 import { useAuthStore } from '../../store/authStore'
+import { esRolCaja } from '../../utils/rolesCaja'
 import { toast } from '../../store/toastStore'
 import { confirm } from '../../components/ui/ConfirmDialog'
 import { DaxCard } from '../../components/ui/DaxCard'
@@ -48,7 +49,7 @@ const detalle = (err: unknown, respaldo: string) =>
 
 export function Returns() {
   const role = useAuthStore((s) => s.user?.role)
-  if (role === 'CAJERO') return <ReturnsBranchView />
+  if (esRolCaja(role)) return <ReturnsBranchView />
   return <ReturnsAdminView />
 }
 

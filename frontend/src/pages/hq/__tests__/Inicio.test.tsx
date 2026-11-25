@@ -17,6 +17,7 @@ vi.mock('../InicioGraficas', () => ({
 
 import { Inicio } from '../Inicio'
 import { useEnabledModulesStore } from '../../../store/enabledModulesStore'
+import { useAuthStore } from '../../../store/authStore'
 
 const dia = (n: number) => `2026-10-${String(n).padStart(2, '0')}`
 // La forma exacta de GET /reports/inicio sin `completo` (modo básico).
@@ -67,7 +68,7 @@ beforeEach(() => {
   inicio.mockReset().mockResolvedValue(DATOS)
   valorInventario.mockReset().mockResolvedValue(VALUACION)
 })
-afterEach(() => { cleanup(); useEnabledModulesStore.getState().reset() })
+afterEach(() => { cleanup(); useEnabledModulesStore.getState().reset(); useAuthStore.setState({ user: null, branch: null }) })
 
 describe('Inicio', () => {
   it('los enlaces de las tarjetas miden 44px en teléfono', async () => {
@@ -316,5 +317,21 @@ describe('Inicio', () => {
     pintar()
     await screen.findByTestId('pendientes')
     expect(screen.queryByTestId('por-cobrar')).toBeNull()
+  })
+
+  it('con una sucursal elegida en el menú, el rol de oficina pide solo esa sucursal y lo dice', async () => {
+    useAuthStore.setState({ user: { id: 1, username: 'a', role: 'ADMINISTRADOR' } as any, branch: { id: 2, name: 'Condesa' } as any })
+    pintar()
+    await screen.findByTestId('cifra-hoy')
+    expect(inicio).toHaveBeenCalledWith({ completo: false, branch_id: 2 })
+    expect(valorInventario).toHaveBeenCalledWith({ agrupar: 'sucursal', branch_id: 2 })
+    expect(screen.getByText(/· Condesa/)).toBeTruthy()
+  })
+
+  it('a la cajera no le manda sucursal: se la impone el servidor', async () => {
+    useAuthStore.setState({ user: { id: 1, username: 'c', role: 'CAJERO' } as any, branch: { id: 2, name: 'Condesa' } as any })
+    pintar()
+    await screen.findByTestId('cifra-hoy')
+    expect(inicio).toHaveBeenCalledWith({ completo: false })
   })
 })

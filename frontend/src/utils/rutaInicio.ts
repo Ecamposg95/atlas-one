@@ -14,7 +14,7 @@ export function rutaInicioPorRol(
     if (preset && preset.startsWith('ATLAS_ONE_')) return '/home'
     return '/hq/operations'
   }
-  if (rol === 'VENDEDOR' || rol === 'SOPORTE_OPERATIVO') return '/mobile/dashboard'
+  if (rol === 'SOPORTE_OPERATIVO') return '/mobile/dashboard'
   if (rol === 'CLIENTE') return '/portal'
   return '/atlas-pos'
 }
