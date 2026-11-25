@@ -7,6 +7,7 @@ from typing import Optional
 from app.models.organization import IndustryType
 from app.services.perfil_ui import normalizar_perfil_ui
 from app.modules.cargas.reglas import ReglasCarga
+from app.services.desglose_fiscal import normalizar_codigo_postal
 
 # Tope de los terminos de compra. El mismo numero vive en el `maxLength` del
 # panel de Empresa: API y pantalla tienen que coincidir o el dueño escribe un
@@ -33,11 +34,18 @@ def _valida_estilo_de_linea(v):
     return limpio
 
 
+def _valida_codigo_postal(v):
+    return normalizar_codigo_postal(v)
+
+
 class OrganizationBase(BaseModel):
     name: str = "Mi Empresa"
     legal_name: Optional[str] = None
     tax_id: Optional[str] = None
     tax_regime: Optional[str] = None
+    # Codigo postal del domicilio fiscal (5 digitos); respaldo del lugar de
+    # expedicion cuando la sucursal no tiene CP.
+    codigo_postal_fiscal: Optional[str] = None
 
     address: Optional[str] = None
     phone: Optional[str] = None
@@ -73,6 +81,7 @@ class OrganizationBase(BaseModel):
 
 
     _estilo_valido = field_validator("ticket_line_style")(_valida_estilo_de_linea)
+    _cp_valido = field_validator("codigo_postal_fiscal")(_valida_codigo_postal)
 
 
 class OrganizationCreate(OrganizationBase):
@@ -87,6 +96,9 @@ class OrganizationUpdate(BaseModel):
     legal_name: Optional[str] = None
     tax_id: Optional[str] = None
     tax_regime: Optional[str] = None
+    # Codigo postal del domicilio fiscal (5 digitos); respaldo del lugar de
+    # expedicion cuando la sucursal no tiene CP.
+    codigo_postal_fiscal: Optional[str] = None
 
     address: Optional[str] = None
     phone: Optional[str] = None
@@ -166,6 +178,7 @@ class OrganizationUpdate(BaseModel):
         return validar_ai_modelos(v)
 
     _estilo_valido = field_validator("ticket_line_style")(_valida_estilo_de_linea)
+    _cp_valido = field_validator("codigo_postal_fiscal")(_valida_codigo_postal)
     _perfil_valido = field_validator("perfil_ui")(normalizar_perfil_ui)
 
     model_config = {"extra": "ignore"}

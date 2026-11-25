@@ -573,6 +573,9 @@ def create_sale(
     accumulated_subtotal = Decimal("0.00")
     accumulated_tax = Decimal("0.00")
     db_lines = []
+    # (renglón, variante, importe cobrado con IVA sin redondear) para el
+    # desglose fiscal de abajo (`aplicar_desglose`).
+    lineas_fiscales = []
 
     # Modo de precio de la organización (neto vs. precio con IVA incluido). Se
     # resuelve una sola vez y lo consume compute_line_tax por renglón.
@@ -766,6 +769,7 @@ def create_sale(
             organization_id=org_id
         )
         db_lines.append(new_line)
+        lineas_fiscales.append((new_line, variant, line_total_gross))
 
         # Resta de Stock y Kardex
         if stock_record:
@@ -1098,6 +1102,19 @@ def create_sale(
     for line in db_lines:
         line.document_id = sales_doc.id
         db.add(line)
+
+    # Desglose fiscal de TODA venta (pida factura o no): base e IVA por
+    # renglón, totales por tasa y lugar de expedición, congelados al cobrar.
+    # No cambia nada de lo cobrado (app/services/desglose_fiscal.py). Es
+    # aritmética pura más una lectura de la sucursal: si el cálculo fallara,
+    # la venta se cobra igual y queda sin desglose (NULL), como una venta
+    # anterior a la función.
+    try:
+        from app.services.desglose_fiscal import aplicar_desglose
+        _sucursal_fiscal = db.query(Branch).filter(Branch.id == sales_doc.branch_id).first()
+        aplicar_desglose(sales_doc, lineas_fiscales, branch=_sucursal_fiscal, organization=_org_venta)
+    except Exception:  # noqa: BLE001 — jamás impedir un cobro
+        logger.exception("DESGLOSE_FISCAL_FAILED sale=%s", sales_doc.id)
 
     for p in sale_in.payments:
         # ATS-9: rechazar montos negativos o cero explícito

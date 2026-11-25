@@ -133,6 +133,10 @@ def crear_producto(
         gender=datos.gender,   # ya normalizado por el schema
         model=(datos.model or "").strip() or None,
         material=(datos.material or "").strip() or None,
+        sat_clave_prod_serv=datos.sat_clave_prod_serv,
+        sat_clave_unidad=datos.sat_clave_unidad,
+        sat_objeto_imp=datos.sat_objeto_imp,
+        iva_tratamiento=datos.iva_tratamiento,
         has_variants=True,
         is_active=True,
         approval_status="APPROVED",
@@ -221,6 +225,11 @@ def _editar_ficha(producto: Product, datos: ProductUpdate, enviados: set[str]) -
         producto.model = (datos.model or "").strip() or None
     if "material" in enviados:
         producto.material = (datos.material or "").strip() or None
+    # Datos fiscales: mismo criterio (null explicito borra; ausente no toca).
+    # El schema ya los normalizo y valido el formato.
+    for campo in ("sat_clave_prod_serv", "sat_clave_unidad", "sat_objeto_imp", "iva_tratamiento"):
+        if campo in enviados:
+            setattr(producto, campo, getattr(datos, campo))
     if datos.is_active is not None:
         producto.is_active = datos.is_active
     if datos.approval_status is not None:

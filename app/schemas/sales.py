@@ -65,6 +65,15 @@ class SaleLineRead(BaseModel):
     total_line: Decimal
     has_iva: bool = False
     tax_rate: float = 0.0
+    # Fotografía fiscal del renglón al cobrar (NULL en ventas anteriores).
+    sat_clave_prod_serv: Optional[str] = None
+    sat_clave_unidad: Optional[str] = None
+    sat_objeto_imp: Optional[str] = None
+    iva_tipo_factor: Optional[str] = None
+    iva_tasa: Optional[Decimal] = None
+    iva_base: Optional[Decimal] = None
+    iva_importe: Optional[Decimal] = None
+    iva_inferido: Optional[bool] = None
 
     class Config:
         from_attributes = True
@@ -108,6 +117,16 @@ class SaleRead(BaseModel):
     card_surcharge_pct: Optional[Decimal] = None
     card_surcharge_amount: Decimal = Decimal("0")
     requires_invoice: Optional[bool] = False
+    # Desglose fiscal de toda venta (NULL = venta anterior a la función).
+    # Suma de las siete == total_amount - tip_amount.
+    iva_base_16: Optional[Decimal] = None
+    iva_16: Optional[Decimal] = None
+    iva_base_8: Optional[Decimal] = None
+    iva_8: Optional[Decimal] = None
+    iva_base_0: Optional[Decimal] = None
+    iva_base_exenta: Optional[Decimal] = None
+    iva_base_no_objeto: Optional[Decimal] = None
+    lugar_expedicion: Optional[str] = None
     created_at: datetime
     
     # We can include details if needed, but for list view usually lightweight is better.

@@ -155,6 +155,25 @@ se congelan al cobrar y una reimpresión/reenvío idempotente NUNCA las recalcul
   **sigue siendo la mercancía**; la comisión vive aparte para no mover ningún KPI
   histórico. Ver `app/services/card_surcharge.py`.
 
+**Columnas 2026-11 — desglose fiscal de toda venta** (megaplan CFDI de Atlas ONE
+Financials, fase 3; regla en `app/services/desglose_fiscal.py`). Todas nullable, sin
+default; `NULL` = venta anterior a la función (el histórico no se reescribe; relleno
+opcional y manual en `scripts/backfill_desglose_fiscal.py`). No sustituyen a
+`subtotal`/`tax_amount`, que siguen siendo el desglose del ticket (IVA solo con factura).
+
+- `sales_documents`: `iva_base_16`, `iva_16`, `iva_base_8`, `iva_8`, `iva_base_0`,
+  `iva_base_exenta`, `iva_base_no_objeto` `Numeric(12,2)` — su suma es exactamente
+  `total_amount - tip_amount`; `lugar_expedicion` `String(5)` (CP de la sucursal o, si no
+  tiene, `organization.codigo_postal_fiscal`). Una devolución aprobada NO los toca.
+- `sales_lines`: fotografía al cobrar — `sat_clave_prod_serv`, `sat_clave_unidad`,
+  `sat_objeto_imp`, `iva_tipo_factor` (`Tasa`|`Exento`|NULL = no objeto), `iva_tasa`
+  `Numeric(6,4)` (fracción), `iva_base`, `iva_importe` `Numeric(12,2)` (base + IVA = lo
+  cobrado por el renglón), `iva_inferido` (el producto no tenía tasa capturada).
+- `products`: `sat_clave_prod_serv` (8 dígitos), `sat_clave_unidad` (1-3), `sat_objeto_imp`
+  (`01`-`08`), `iva_tratamiento` (`16`|`8`|`0`|`EXENTO`). No mueven el cobro, que sigue
+  leyendo `has_iva`/`tax_rate` de la variante.
+- `organization.codigo_postal_fiscal` `String(5)`.
+
 **Columnas 2026-09-22 — atribución del efectivo por pago** (fusión
 `feat/pago-atribuido-a-caja`, `63ee8a2`; reporte de la fusión en
 `.superpowers/sdd/audit-funcional/pago-merge-report.md`, no versionado):
