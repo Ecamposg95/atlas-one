@@ -28,11 +28,21 @@ from app.models.sales import (
 
 @pytest.fixture()
 def auth_vendedor_a(db, org, branch_a):
-    """VENDEDOR de la Sucursal A: el rol de sucursal que abre `MobileDashboard`
-    (su Inicio). La cajera ya no recibe este resumen (403, spec 2026-11-14)."""
+    """SOPORTE_OPERATIVO de la Sucursal A: el rol de sucursal que abre
+    `MobileDashboard` (su Inicio). La cajera y el vendedor no reciben este
+    resumen (403, spec 2026-11-14; el vendedor es rol de mostrador desde 2026-11-20)."""
     from conftest import _auth_header, _make_user
     from app.models.users import Role
-    return _auth_header(_make_user(db, org, branch_a, "vendedor_a", Role.VENDEDOR))
+    return _auth_header(_make_user(db, org, branch_a, "soporte_a", Role.SOPORTE_OPERATIVO))
+
+
+@pytest.fixture()
+def vendedor_sin_sucursal(db, org):
+    """Pisa al de conftest: aqui hace falta un rol que SI recibe el resumen
+    (el vendedor responde 403 como la cajera desde 2026-11-20)."""
+    from conftest import _make_user
+    from app.models.users import Role
+    return _make_user(db, org, None, "soporte_sin_sucursal", Role.SOPORTE_OPERATIVO)
 
 
 def _v(products_setup):

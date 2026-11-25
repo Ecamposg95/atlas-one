@@ -118,7 +118,10 @@ export const ROLE_ROUTES: Record<Role, string[]> = {
   DUEÑO:            ['/mobile/query','/fotos','/pos','/sales','/returns','/products','/inventory','/configuracion','/labels','/mobile/owner','/cash-history','/hq/operations','/hq/reports-hub','/hq/valor-inventario','/inventory/conteos','/customers','/customers/cobranza','/hr/me','/logistics','/boxes','/quotes','/quotes/new','/seguimiento','/purchases','/expenses','/appointments','/commissions','/memberships','/recipes','/ai','/purchasing','/tables','/kitchen','/meseros','/bar/bottles','/menu','/mobile/comanda'],
   GERENTE:          ['/mobile/query','/fotos','/labels','/configuracion','/cash-history','/reports','/hq/valor-inventario','/hr/me','/products','/pos','/sales','/customers','/customers/cobranza','/returns','/atlas-pos','/tables','/kitchen','/recipes','/meseros','/bar/bottles','/menu','/mobile/comanda'],
   CAJERO:           ['/mobile/query','/fotos','/labels','/pos','/cash-history','/hr/me','/products','/configuracion','/sales','/customers','/returns','/atlas-pos','/tables','/kitchen','/bar/bottles','/menu','/mobile/comanda'],
-  VENDEDOR:         ['/mobile/dashboard','/mobile/query','/mobile/sales','/mobile/profile','/hr/me','/atlas-pos'],
+  // Vendedor (2026-11-20): rol de mostrador con menú corto. Usa el mismo armazón
+  // responsivo que la cajera, ya no el móvil de cotizaciones. No edita catálogo,
+  // pero sí toma fotos y publica producto por producto desde /fotos.
+  VENDEDOR:         ['/fotos','/atlas-pos','/pos','/sales','/cash-history','/customers','/products'],
   SOPORTE_OPERATIVO:['/mobile/dashboard','/mobile/query','/mobile/profile','/hr/me','/atlas-pos'],
   CLIENTE:          ['/portal'],
 }

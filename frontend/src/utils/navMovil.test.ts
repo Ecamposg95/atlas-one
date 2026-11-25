@@ -26,6 +26,9 @@ describe('navMovilPorRol', () => {
       '/', '/mobile/comanda', '/mobile/query', '/mobile/profile',
     ])
     expect(navMovilPorRol('VENDEDOR').map((i) => i.to)).toEqual([
+      '/', '/pos', '/mobile/profile',
+    ])
+    expect(navMovilPorRol('SOPORTE_OPERATIVO').map((i) => i.to)).toEqual([
       '/mobile/dashboard', '/mobile/sales', '/mobile/query', '/mobile/profile',
     ])
     expect(navMovilPorRol('CLIENTE').map((i) => i.to)).toEqual(['/portal'])

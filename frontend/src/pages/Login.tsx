@@ -100,8 +100,8 @@ export function LoginPage() {
       setTimeout(() => {
         if (data.user.platform_role === 'SUPERADMIN') { navigate('/platform/metrics'); return }
         const role = data.user.role
-        if (['VENDEDOR', 'SOPORTE_OPERATIVO'].includes(role)) navigate('/mobile/dashboard')
-        else if (['CAJERO', 'GERENTE'].includes(role)) navigate('/atlas-pos')
+        if (role === 'SOPORTE_OPERATIVO') navigate('/mobile/dashboard')
+        else if (['CAJERO', 'GERENTE', 'VENDEDOR'].includes(role)) navigate('/atlas-pos')
         else if (role === 'CLIENTE') navigate('/portal')
         // Admin/Dueño → raíz: RoleHomeRedirect enruta por preset (gastro → /home
         // con el Home del día; sin preset Atlas One → /hq/operations).

@@ -20,6 +20,10 @@ MANAGER_ROLES: frozenset = frozenset({"ADMINISTRADOR", "GERENTE", "DUEÑO"})
 # productos visibles en su sucursal.
 PRODUCT_ADVANCED_ROLES: frozenset = frozenset({"ADMINISTRADOR", "GERENTE", "DUEÑO", "CAJERO"})
 
+# Fotos de producto (subir, ordenar, borrar): además el vendedor, que las toma
+# con el teléfono desde /fotos. No le da el resto del CRUD de catálogo.
+ROLES_FOTOS: frozenset = PRODUCT_ADVANCED_ROLES | {"VENDEDOR"}
+
 
 def variantes_vivas(product: Product) -> list[ProductVariant]:
     """Variantes del producto que siguen vendibles (sin soft-delete)."""
