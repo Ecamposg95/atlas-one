@@ -380,3 +380,31 @@ def test_candidatos_traen_la_fecha_de_alta_de_la_talla(client, db, tienda, auth_
     r = client.get("/api/labels/candidates?search=Chamarra", headers=_h(auth_admin, org))
     fila = _por_sku(r.json()["items"])["LV-CHAM-SLI-NEG-M"]
     assert datetime.fromisoformat(fila["created_at"].replace("Z", "+00:00")) == variante.created_at.replace(tzinfo=timezone.utc)
+
+
+# ── Precio de la sucursal ────────────────────────────────────────────────────
+def test_la_etiqueta_lleva_el_precio_de_la_sucursal(client, db, tienda, auth_cajero_a, auth_admin, org, branch_a):
+    """Con precio propio en la sucursal, la cajera imprime lo que cobra su caja
+    (el `price_override`), no el precio base; el admin sigue viendo el base."""
+    _, variante = tienda["chamarra"]
+    estado = db.query(ProductBranchStatus).filter_by(
+        variant_id=variante.id, branch_id=branch_a.id).one()
+    estado.price_override = Decimal("4000.00")
+    db.commit()
+
+    h = _h(auth_cajero_a, org)
+    filas = _por_sku(client.get("/api/labels/candidates", headers=h).json()["items"])
+    assert filas["LV-CHAM-SLI-NEG-M"]["price"] == 4000.0
+
+    r = client.post("/api/labels/preview", headers=h, json={"variant_id": variante.id})
+    assert r.status_code == 200
+    textos = " ".join(e["text"] for e in r.json()["elements"] if e["type"] == "text")
+    assert "4,000" in textos and "1,800" not in textos
+
+    r = client.post("/api/labels/jobs", headers=h,
+                    json={"items": [{"variant_id": variante.id, "copies": 1}]})
+    zpl = base64.b64decode(r.json()["content_base64"]).decode("utf-8")
+    assert "4,000" in zpl and "1,800" not in zpl
+
+    admin = _por_sku(client.get("/api/labels/candidates", headers=_h(auth_admin, org)).json()["items"])
+    assert admin["LV-CHAM-SLI-NEG-M"]["price"] == 1800.0

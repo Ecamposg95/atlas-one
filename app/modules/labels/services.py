@@ -15,7 +15,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.crud.products import _is_admin, query_visible_products
-from app.models import Product, ProductVariant, StockOnHand, User
+from app.models import Product, ProductBranchStatus, ProductVariant, StockOnHand, User
 from app.modules.labels.schemas import MAX_COPIAS
 from app.modules.products.sale_name import sale_name, variant_sale_name
 from app.services.labels import DatosEtiqueta, detect
@@ -36,8 +36,39 @@ def _texto(valor: Optional[str]) -> str:
     return (valor or "").strip()
 
 
-def datos_de_variante(producto: Product, variante: ProductVariant) -> DatosEtiqueta:
+def precios_de_sucursal(
+    db: Session, current_user: User, org_id: int, variant_ids: Sequence[str]
+) -> Dict[str, Decimal]:
+    """Precio propio de la sucursal de quien imprime, por variante.
+
+    La etiqueta debe traer lo que cobra la caja: `create_sale` cobra el
+    `price_override` de la sucursal cuando existe y Productos pinta ese mismo.
+    Un admin/dueño no tiene tienda propia: su etiqueta lleva el precio base,
+    igual que su ficha. Las variantes sin precio propio no salen del diccionario.
+    """
+    ids = list(variant_ids)
+    if not ids or _is_admin(current_user) or not current_user.branch_id:
+        return {}
+    filas = (
+        db.query(ProductBranchStatus.variant_id, ProductBranchStatus.price_override)
+        .filter(
+            ProductBranchStatus.variant_id.in_(ids),
+            ProductBranchStatus.branch_id == current_user.branch_id,
+            ProductBranchStatus.organization_id == org_id,
+            ProductBranchStatus.price_override != None,  # noqa: E711
+        )
+        .all()
+    )
+    return {vid: Decimal(str(precio)) for vid, precio in filas}
+
+
+def datos_de_variante(
+    producto: Product, variante: ProductVariant, precio: Optional[Decimal] = None,
+) -> DatosEtiqueta:
     """Lo que va impreso en la etiqueta de esta variante.
+
+    `precio` es el de la sucursal de quien imprime (`precios_de_sucursal`);
+    sin él va el precio base de la variante.
 
     El renglón del nombre lleva prenda + modelo SIN la marca: la marca ya tiene
     su propio renglón arriba y repetirla se come el ancho útil (384 dots).
@@ -51,7 +82,7 @@ def datos_de_variante(producto: Product, variante: ProductVariant) -> DatosEtiqu
         name=sale_name(None, _texto(producto.name), producto.model),
         brand=_texto(marca),
         barcode=_texto(variante.barcode),
-        price=Decimal(str(variante.price or 0)),
+        price=precio if precio is not None else Decimal(str(variante.price or 0)),
         size=talla,
         color=_texto(variante.color),
         gender="" if talla else GENEROS.get(_texto(producto.gender), ""),
@@ -184,14 +215,16 @@ def candidatos(
     """Filas de la tabla de etiquetas. Las no imprimibles NO se esconden: van
     marcadas con su motivo para que se note el dato a medias."""
     pares = variantes_visibles(db, current_user, org_id, **filtros)
-    stock = existencias(db, current_user, org_id, [v.id for _, v in pares])
+    ids = [v.id for _, v in pares]
+    stock = existencias(db, current_user, org_id, ids)
+    precios = precios_de_sucursal(db, current_user, org_id, ids)
 
     filas: List[dict] = []
     for producto, variante in pares:
         existencia = stock.get(variante.id, Decimal(0))
         if only_with_stock and existencia <= 0:
             continue
-        datos = datos_de_variante(producto, variante)
+        datos = datos_de_variante(producto, variante, precios.get(variante.id))
         motivo = motivo_no_imprimible(datos)
         filas.append({
             "variant_id": variante.id,
@@ -209,7 +242,7 @@ def candidatos(
             "gender": _texto(producto.gender),
             "size": datos.size,
             "color": datos.color,
-            "price": float(variante.price or 0),
+            "price": float(datos.price),
             "stock": float(existencia),
             "copies_default": copias_por_omision(existencia),
             "printable": motivo is None,
