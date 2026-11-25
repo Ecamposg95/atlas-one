@@ -92,6 +92,12 @@ export interface Product {
   barcode?: string | null
   has_iva?: boolean
   tax_rate?: number
+  /** Datos fiscales del SAT (null = sin capturar). */
+  sat_clave_prod_serv?: string | null
+  sat_clave_unidad?: string | null
+  sat_objeto_imp?: string | null
+  /** '16' | '8' | '0' | 'EXENTO' */
+  iva_tratamiento?: string | null
   uses_inventory?: boolean
   approval_status?: string | null
 

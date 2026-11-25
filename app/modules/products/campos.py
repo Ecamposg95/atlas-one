@@ -12,6 +12,8 @@ CAMPOS_BASE = (
     "name", "sku", "barcode", "unit", "description", "image_url",
     "department_id", "brand_id", "price", "cost", "has_iva", "tax_rate",
     "initial_stock", "prices", "packaging_units",
+    # Claves del SAT y tasa de IVA para facturar (sección «Datos fiscales»).
+    "datos_sat",
 )
 # Ficha boutique: nombre de venta y etiqueta de ropa/calzado.
 CAMPOS_FICHA = ("gender", "model", "material")
@@ -22,7 +24,7 @@ PRESETS_CON_FICHA = frozenset({"ATLAS_POS_BOUTIQUE"})
 # se apaga; un producto que ya trae el dato lo sigue mostrando.
 OCULTOS_BASICO = (
     "brand_id", "description", "unit", "image_url", "tax_rate",
-    "packaging_units", "variants",
+    "packaging_units", "variants", "datos_sat",
 )
 
 

@@ -180,6 +180,11 @@ export function Organization({ seccion }: { seccion?: SeccionEmpresa } = {}) {
                 <input value={orgForm.tax_id ?? ''} onChange={(e) => of('tax_id', e.target.value)} className="dax-input w-full font-mono" placeholder="XAXX010101000" />
               </div>
               <div>
+                <label className="dax-label">Código postal fiscal</label>
+                <input value={orgForm.codigo_postal_fiscal ?? ''} onChange={(e) => of('codigo_postal_fiscal', e.target.value.replace(/\D/g, '').slice(0, 5))}
+                  className="dax-input w-full font-mono" inputMode="numeric" maxLength={5} placeholder="06600" />
+              </div>
+              <div>
                 <label className="dax-label">Teléfono</label>
                 <input value={orgForm.phone ?? ''} onChange={(e) => of('phone', e.target.value)} className="dax-input w-full" />
               </div>

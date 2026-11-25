@@ -25,6 +25,9 @@ CLAVES_PREVIAS = {
     'stock_total', 'tax_rate', 'unit', 'variants',
 }
 
+# Datos fiscales del producto (2026-11, megaplan CFDI): nacen en null.
+CLAVES_SAT = {'sat_clave_prod_serv', 'sat_clave_unidad', 'sat_objeto_imp', 'iva_tratamiento'}
+
 
 def test_defaults_no_cambian_listado(client, db, org, branch_a, auth_admin):
     _make_product(db, org, "Camisa", "CAM-1", 100, [(branch_a.id, True)])
@@ -33,8 +36,9 @@ def test_defaults_no_cambian_listado(client, db, org, branch_a, auth_admin):
     items = r.json()["items"] if isinstance(r.json(), dict) else r.json()
     assert items
     for it in items:
-        assert set(it) == CLAVES_PREVIAS | {"web_published"}
+        assert set(it) == CLAVES_PREVIAS | {"web_published"} | CLAVES_SAT
         assert it["web_published"] is False
+        assert all(it[c] is None for c in CLAVES_SAT)
 
 
 def test_backfill_imagen_primaria_idempotente(db, org):

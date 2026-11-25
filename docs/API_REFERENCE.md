@@ -116,6 +116,8 @@ CRUD productos + aprobar/rechazar/restore/duplicate/imagen; `search` (variants/p
 |---|---|---|---|
 | GET | /barcodes/missing-count | `{"missing": n}` de variantes visibles sin código | auth+org |
 | POST | /barcodes/assign-missing | Genera EAN-13 interno (`2`+org+secuencia+verificador) a las variantes sin código; body opcional `{product_id}` | [admin/dueño] |
+| GET | /revision-fiscal?branch_id=&problema=&limit=&offset= | Productos sin tasa de IVA del SAT (`SIN_CLASIFICACION`) o con discrepancia contra `has_iva`/`tax_rate` (`DISCREPANCIA`), por sucursal: `{resumen, items, total, limit, offset}`. Solo lectura | auth+org (admin/dueño: todas; resto: su sucursal) |
+| GET | /export/revision-fiscal.csv?branch_id= | La misma lista completa en CSV (UTF-8 con BOM) | auth+org (mismo alcance) |
 | GET | /export/labels.csv?product_id=&only_with_stock= | CSV de etiquetas (UTF-8 con BOM): `SKU,Codigo de barras,Producto,Marca,Talla,Color,Precio,Existencia,Genero,Modelo,Material,Nombre de venta` | auth+org (scope de `query_visible_products`) |
 
 ---

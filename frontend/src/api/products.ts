@@ -12,6 +12,29 @@ import type {
 import type { AdjustmentCreate, KardexMovement } from './inventory'
 import type { ExtraVariantPayload } from '../components/products/variantMatrix'
 
+/** Un producto sin tasa de IVA del SAT o con discrepancia, en una sucursal. */
+export interface HallazgoFiscal {
+  branch_id: number | null
+  branch_name: string
+  product_id: string
+  producto: string
+  sku: string
+  problema: 'SIN_CLASIFICACION' | 'DISCREPANCIA'
+  detalle: string
+  iva_tratamiento: string | null
+  sat_objeto_imp: string | null
+  has_iva: boolean
+  tax_rate: string | null
+}
+
+export interface RevisionFiscal {
+  resumen: { branch_id: number | null; branch_name: string; sin_clasificacion: number; con_discrepancia: number }[]
+  items: HallazgoFiscal[]
+  total: number
+  limit: number
+  offset: number
+}
+
 interface ProductsResponse {
   items: Product[]
   total: number
@@ -59,6 +82,11 @@ export interface ProductCreate {
   // Admin-only extensions — all optional to keep existing callers working
   has_iva?: boolean
   tax_rate?: number
+  // Datos fiscales del SAT (todos opcionales; null = sin capturar).
+  sat_clave_prod_serv?: string | null
+  sat_clave_unidad?: string | null
+  sat_objeto_imp?: string | null
+  iva_tratamiento?: string | null
   initial_stock?: number
   branch_id?: number | null
   target_branch_ids?: number[] | null
@@ -579,6 +607,26 @@ export const productsApi = {
     a.href = url
     const ts = new Date().toISOString().slice(0, 10)
     a.download = `etiquetas_${ts}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  },
+
+  /**
+   * GET /api/products/revision-fiscal — productos sin tasa de IVA del SAT o
+   * con discrepancia contra «Aplica IVA», por sucursal. Solo lectura.
+   */
+  revisionFiscal: async (params?: { problema?: 'SIN_CLASIFICACION' | 'DISCREPANCIA'; limit?: number }): Promise<RevisionFiscal> => {
+    const { data } = await client.get<RevisionFiscal>('/products/revision-fiscal', { params })
+    return data
+  },
+
+  /** GET /api/products/export/revision-fiscal.csv — la lista completa para Excel. */
+  downloadRevisionFiscalCsv: async (): Promise<void> => {
+    const res = await client.get('/products/export/revision-fiscal.csv', { responseType: 'blob' })
+    const url = URL.createObjectURL(new Blob([res.data], { type: 'text/csv;charset=utf-8' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `revision_fiscal_${new Date().toISOString().slice(0, 10)}.csv`
     a.click()
     URL.revokeObjectURL(url)
   },

@@ -100,6 +100,24 @@ class SalesDocument(Base, UUIDMixin, AuditMixin, TenantMixin):
     client_uuid = Column(String(64), nullable=True, index=True)
     notes = Column(String, nullable=True)
 
+    # Desglose fiscal de TODA venta (2026-11, megaplan CFDI fase 3), pida
+    # factura o no. Lo escribe app/services/desglose_fiscal.py al cobrar. NO
+    # reemplaza `subtotal`/`tax_amount` (esos siguen siendo el desglose del
+    # ticket y solo traen IVA con factura). Invariante: la suma de las siete
+    # columnas == total_amount - tip_amount. NULL = venta anterior a la
+    # funcion (no se reescribe el historico). No se tocan al aprobar una
+    # devolucion: describen la venta como se cobro.
+    iva_base_16 = Column(Numeric(12, 2), nullable=True)
+    iva_16 = Column(Numeric(12, 2), nullable=True)
+    iva_base_8 = Column(Numeric(12, 2), nullable=True)
+    iva_8 = Column(Numeric(12, 2), nullable=True)
+    iva_base_0 = Column(Numeric(12, 2), nullable=True)
+    iva_base_exenta = Column(Numeric(12, 2), nullable=True)
+    iva_base_no_objeto = Column(Numeric(12, 2), nullable=True)
+    # Codigo postal de expedicion congelado al cobrar: el de la sucursal o, si
+    # no lo tiene, el fiscal de la organizacion.
+    lugar_expedicion = Column(String(5), nullable=True)
+
     # Relaciones
     branch = relationship("Branch")
     seller = relationship("User", foreign_keys=[seller_id])
@@ -127,6 +145,20 @@ class SalesLineItem(Base, UUIDMixin, AuditMixin, TenantMixin):
     unit_cost = Column(Numeric(10, 2), nullable=True)
     discount_percent = Column(Numeric(5, 2), default=0.00, nullable=True)
     total_line = Column(Numeric(10, 2), nullable=False)
+
+    # Fotografia fiscal del renglon al cobrar (2026-11): claves del SAT y tasa
+    # del producto EN ESE MOMENTO, mas base e IVA del importe cobrado. Si luego
+    # cambia el catalogo, la venta conserva lo que se vendio. NULL = renglon
+    # anterior a la funcion, o de una cotizacion aun no cobrada.
+    sat_clave_prod_serv = Column(String(8), nullable=True)
+    sat_clave_unidad = Column(String(3), nullable=True)
+    sat_objeto_imp = Column(String(2), nullable=True)
+    iva_tipo_factor = Column(String(6), nullable=True)   # Tasa | Exento | NULL (no objeto)
+    iva_tasa = Column(Numeric(6, 4), nullable=True)      # fraccion: 0.1600
+    iva_base = Column(Numeric(12, 2), nullable=True)
+    iva_importe = Column(Numeric(12, 2), nullable=True)
+    # True = el producto no tenia tasa de IVA capturada y se dedujo.
+    iva_inferido = Column(Boolean, nullable=True)
 
     document = relationship("SalesDocument", back_populates="lines")
     variant = relationship("ProductVariant")

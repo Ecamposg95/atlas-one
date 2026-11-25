@@ -31,6 +31,7 @@ from app.models import (
 from app.modules.products.schemas import ProductCreate, ProductVariantCreate
 from app.modules.products.variant_label import COLOR_MAX, SIZE_MAX, clean_attr, variant_label
 from app.services.barcodes import AsignadorDeCodigos, barcode_en_uso
+from app.services.desglose_fiscal import discrepancia_iva
 
 from .comun import celda_decimal, celda_texto, celda_vacia, variante_principal
 from .productos import crear_producto
@@ -184,6 +185,17 @@ def _actualizar_desde_fila(db: Session, ctx: ContextoImportacion, variante: Prod
     """Celda vacía NO borra (descripción, unidad, código, color/talla): un
     archivo que viene del export trae las columnas pero no siempre el dato."""
     producto = variante.product
+    # Antes de escribir nada: si el producto ya tiene clasificación fiscal, el
+    # IVA del archivo debe cobrar igual que ella (misma regla que el alta).
+    discrepancia = discrepancia_iva(
+        producto.iva_tratamiento, producto.sat_objeto_imp, has_iva,
+        tasa_iva if tasa_iva is not None else variante.tax_rate,
+    )
+    if discrepancia:
+        raise FilaInvalida(
+            f"'{variante.sku}': «Incluye IVA» y «Tasa IVA» del archivo no coinciden con los datos "
+            f"fiscales del producto. {discrepancia}"
+        )
     if nombre:
         producto.name = nombre
     producto.department_id = dept_id
