@@ -19,6 +19,11 @@ export interface ProductFormValue {
   cost: string
   has_iva: boolean
   tax_rate: string
+  /** Datos fiscales del SAT; '' = sin capturar (se manda null). */
+  sat_clave_prod_serv: string
+  sat_clave_unidad: string
+  sat_objeto_imp: string
+  iva_tratamiento: string
   initial_stock: string
   initial_stock_branch_id: string
 }
@@ -46,6 +51,10 @@ export const EMPTY_PRODUCT_FORM: ProductFormValue = {
   cost: '',
   has_iva: false,
   tax_rate: '16',
+  sat_clave_prod_serv: '',
+  sat_clave_unidad: '',
+  sat_objeto_imp: '',
+  iva_tratamiento: '',
   initial_stock: '0',
   initial_stock_branch_id: '',
 }

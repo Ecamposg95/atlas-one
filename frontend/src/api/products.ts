@@ -59,6 +59,11 @@ export interface ProductCreate {
   // Admin-only extensions — all optional to keep existing callers working
   has_iva?: boolean
   tax_rate?: number
+  // Datos fiscales del SAT (todos opcionales; null = sin capturar).
+  sat_clave_prod_serv?: string | null
+  sat_clave_unidad?: string | null
+  sat_objeto_imp?: string | null
+  iva_tratamiento?: string | null
   initial_stock?: number
   branch_id?: number | null
   target_branch_ids?: number[] | null

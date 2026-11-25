@@ -223,3 +223,32 @@ describe('precioATodasPorDefecto', () => {
     expect(precioATodasPorDefecto(conPrecios(4000, 4000), 'v2', true)).toBe(false)
   })
 })
+
+describe('datos fiscales (SAT)', () => {
+  const conSat = (sat: Partial<EntradaFormulario['form']>) =>
+    base({ form: { ...base().form, ...sat } })
+
+  it('son opcionales y viajan en null si no se capturan', () => {
+    expect(validarProducto(base())).toEqual({})
+    const p = armarPayloadAlta(base())
+    expect(p.sat_clave_prod_serv).toBeNull()
+    expect(p.sat_clave_unidad).toBeNull()
+    expect(p.sat_objeto_imp).toBeNull()
+    expect(p.iva_tratamiento).toBeNull()
+  })
+
+  it('valida el formato de las claves', () => {
+    const e = validarProducto(conSat({ sat_clave_prod_serv: '123', sat_clave_unidad: 'H-87' }))
+    expect(e.sat_clave_prod_serv).toBeTruthy()
+    expect(e.sat_clave_unidad).toBeTruthy()
+  })
+
+  it('manda las claves capturadas, la unidad en mayúsculas', () => {
+    const p = armarPayloadAlta(conSat({
+      sat_clave_prod_serv: '01010101', sat_clave_unidad: 'h87', sat_objeto_imp: '02', iva_tratamiento: 'EXENTO',
+    }))
+    expect(p).toMatchObject({
+      sat_clave_prod_serv: '01010101', sat_clave_unidad: 'H87', sat_objeto_imp: '02', iva_tratamiento: 'EXENTO',
+    })
+  })
+})
