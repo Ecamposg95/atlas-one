@@ -26,6 +26,12 @@ export function navMovilPorRol(rol?: string | null, preset?: string | null, modu
   const CONSULTAR: ItemNavMovil = { label: 'Consultar', icon: 'fa-magnifying-glass', to: '/mobile/query' }
   switch (rol) {
     case 'VENDEDOR':
+      // Rol de mostrador: su trabajo vive en el armazón de escritorio (responsivo).
+      return [
+        { label: 'Inicio', icon: 'fa-house', to: '/', end: true },
+        { label: 'Vender', icon: 'fa-cash-register', to: '/pos' },
+        PERFIL,
+      ]
     case 'SOPORTE_OPERATIVO':
       return [
         { label: 'Inicio', icon: 'fa-house', to: '/mobile/dashboard' },

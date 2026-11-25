@@ -107,6 +107,8 @@ export function ProductsBranchView() {
   const [showImport, setShowImport] = useState(false)
   // Modo básico: sin plantilla ni importador de Excel (render condicional).
   const modoBasico = useModoBasico()
+  // El vendedor consulta el catálogo: sin alta, edición, importación ni ajuste (el backend también lo niega).
+  const soloLectura = useAuthStore((s) => s.user?.role) === 'VENDEDOR'
   const [fichaTarget, setFichaTarget] = useState<ProductRow | null>(null)
 
   // ── Load ───────────────────────────────────────────────────────────────────
@@ -192,7 +194,7 @@ export function ProductsBranchView() {
             <h1 className="text-2xl lg:text-3xl font-bold text-white">Inventario</h1>
             <p className="text-white/70 text-xs mt-1">{visible.length} productos</p>
           </div>
-          <div className="flex items-center gap-2">
+          {!soloLectura && <div className="flex items-center gap-2">
             {!modoBasico && (
             <>
             <button
@@ -220,7 +222,7 @@ export function ProductsBranchView() {
               <i className="fa-solid fa-plus" />
               Nuevo producto
             </button>
-          </div>
+          </div>}
         </div>
 
         {/* ── KPIs por sucursal — 4 cards ───────────────────────────── */}
@@ -306,8 +308,8 @@ export function ProductsBranchView() {
                   key={p.variant_id ?? p.id}
                   product={p}
                   onView={() => setFichaTarget(p)}
-                  onEdit={() => openEdit(p)}
-                  onStock={() => setStockTarget(p)}
+                  onEdit={soloLectura ? undefined : () => openEdit(p)}
+                  onStock={soloLectura ? undefined : () => setStockTarget(p)}
                 />
               ))}
             </ul>
@@ -347,8 +349,8 @@ export function ProductsBranchView() {
         <ProductFichaModal
           product={fichaTarget}
           onClose={() => setFichaTarget(null)}
-          onEdit={() => { const p = fichaTarget; setFichaTarget(null); openEdit(p) }}
-          onAdjustStock={() => { const p = fichaTarget; setFichaTarget(null); setStockTarget(p) }}
+          onEdit={soloLectura ? undefined : () => { const p = fichaTarget; setFichaTarget(null); openEdit(p) }}
+          onAdjustStock={soloLectura ? undefined : () => { const p = fichaTarget; setFichaTarget(null); setStockTarget(p) }}
         />
       )}
     </div>
@@ -360,8 +362,9 @@ export function ProductsBranchView() {
 interface RowProps {
   product: ProductRow
   onView: () => void
-  onEdit: () => void
-  onStock: () => void
+  /** Sin ellos (vendedor) la fila es solo de consulta. */
+  onEdit?: () => void
+  onStock?: () => void
 }
 
 function ProductRow({ product: p, onView, onEdit, onStock }: RowProps) {
@@ -420,7 +423,7 @@ function ProductRow({ product: p, onView, onEdit, onStock }: RowProps) {
       </div>}
 
       {/* Actions */}
-      <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+      {onEdit && onStock && <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
         <button
           onClick={onStock}
           title="Ajustar stock"
@@ -435,7 +438,7 @@ function ProductRow({ product: p, onView, onEdit, onStock }: RowProps) {
         >
           <i className="fa-solid fa-pen text-sm" />
         </button>
-      </div>
+      </div>}
     </li>
   )
 }
@@ -445,8 +448,8 @@ function ProductRow({ product: p, onView, onEdit, onStock }: RowProps) {
 interface FichaProps {
   product: ProductRow
   onClose: () => void
-  onEdit: () => void
-  onAdjustStock: () => void
+  onEdit?: () => void
+  onAdjustStock?: () => void
 }
 
 function ProductFichaModal({ product: p, onClose, onEdit, onAdjustStock }: FichaProps) {
@@ -523,12 +526,12 @@ function ProductFichaModal({ product: p, onClose, onEdit, onAdjustStock }: Ficha
 
       <div className="flex gap-2 mt-4">
         <button onClick={onClose} className={`${ui.btnSecondary} flex-1`}>Cerrar</button>
-        <button onClick={onAdjustStock} className={`${ui.btnSecondary} flex-1`}>
+        {onAdjustStock && <button onClick={onAdjustStock} className={`${ui.btnSecondary} flex-1`}>
           <i className="fa-solid fa-plus-minus" /> Ajustar stock
-        </button>
-        <button onClick={onEdit} className={`${ui.btnPrimary} flex-1`}>
+        </button>}
+        {onEdit && <button onClick={onEdit} className={`${ui.btnPrimary} flex-1`}>
           <i className="fa-solid fa-pen" /> Editar
-        </button>
+        </button>}
       </div>
     </Modal>
   )

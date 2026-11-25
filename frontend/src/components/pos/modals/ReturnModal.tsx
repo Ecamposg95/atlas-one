@@ -5,6 +5,7 @@ import type { SalesDocument } from '../../../types/sales'
 import { saleLabel } from '../../../types/sales'
 import { formatCurrency } from '../../../utils/currency'
 import { useEsTelefono } from '../../../hooks/useIsMobile'
+import { esRolCaja } from '../../../utils/rolesCaja'
 import { useAuthStore } from '../../../store/authStore'
 import { errorDetailText } from '../../../utils/errorDetail'
 
@@ -61,7 +62,7 @@ function buildLines(sale: SalesDocument): ReturnLine[] {
 export function ReturnModal({ onClose, onSuccess, activeSessionId, initialSale }: Props) {
   const [folio, setFolio] = useState('')
   const esTelefono = useEsTelefono()
-  const esCajera = useAuthStore((s) => s.user?.role) === 'CAJERO'
+  const esCajera = esRolCaja(useAuthStore((s) => s.user?.role))
   const [sale, setSale] = useState<SalesDocument | null>(initialSale ?? null)
   const [lines, setLines] = useState<ReturnLine[]>(initialSale ? buildLines(initialSale) : [])
   const [refundMethod, setRefundMethod] = useState<RefundMethod>(

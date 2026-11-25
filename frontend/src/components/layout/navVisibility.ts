@@ -4,7 +4,7 @@ import { recortarPorPerfil } from './navPerfilBasico'
 import { moduloDisponible, NO_DISPONIBLES, type ModulosNoDisponibles } from '../../utils/estadoModulos'
 
 /** Roles que operan desde una sucursal (ven BranchNav, no el árbol de HQ). */
-export const BRANCH_ROLES: Role[] = ['CAJERO', 'GERENTE']
+export const BRANCH_ROLES: Role[] = ['CAJERO', 'GERENTE', 'VENDEDOR']
 
 export interface NavItem {
   label: string; icon: string; url: string; group: string; sort: number; short: string
