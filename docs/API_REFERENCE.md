@@ -120,6 +120,19 @@ CRUD productos + aprobar/rechazar/restore/duplicate/imagen; `search` (variants/p
 | GET | /export/revision-fiscal.csv?branch_id= | La misma lista completa en CSV (UTF-8 con BOM) | auth+org (mismo alcance) |
 | GET | /export/labels.csv?product_id=&only_with_stock= | CSV de etiquetas (UTF-8 con BOM): `SKU,Codigo de barras,Producto,Marca,Talla,Color,Precio,Existencia,Genero,Modelo,Material,Nombre de venta` | auth+org (scope de `query_visible_products`) |
 
+**Filtros avanzados de la lista (2026-11-26, pantalla `/products`):** `GET /`, `GET /stats/catalog-kpis` y `GET /export/excel` aceptan además, todos opcionales y combinables (lógica en `app/modules/products/filtros_avanzados.py`):
+
+| Param | Qué filtra |
+|---|---|
+| `gender` | `products.gender` (HOMBRE\|MUJER\|UNISEX\|NINO; acepta "niño", "mujer"…); otro valor → 422 |
+| `size` / `color` | Productos con al menos una variante viva con esa talla / ese color (sin distinguir mayúsculas ni espacios de los bordes). Con los dos, la MISMA variante cumple ambos |
+| `only_with_stock` | Suma de existencias de sus variantes vivas > 0 en la sucursal cuya existencia pinta la lista (`branch_id` pedido o la del usuario); sin sucursal, la org entera |
+| `created_after` | ISO 8601. El producto o alguna de sus variantes vivas se dio de alta desde esa fecha (sin zona = UTC) |
+
+| Método | Ruta | Qué hace | Gating |
+|---|---|---|---|
+| GET | /facets | `{"sizes": [...], "colors": [...]}`: tallas (orden de escala: CH, M, G…, luego números) y colores de las variantes vivas del catálogo visible, cada uno una vez. Opciones de los filtros de `/products` | auth+org (scope de `query_visible_products`, con archivados para admin) |
+
 ---
 
 ## CRM / Clientes · `/api/customers`

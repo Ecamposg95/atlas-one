@@ -5,6 +5,7 @@ Sprint 5b split — extracted verbatim from the original ``products.py``.
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_, func
+from datetime import datetime
 from typing import Optional
 
 from app.core.database import get_db
@@ -16,6 +17,7 @@ from app.core.security import get_current_user
 from app.crud.products import query_visible_products, _is_admin
 
 from app.services.existencias import umbral_poca_existencia
+from app.modules.products.filtros_avanzados import aplicar_filtros_avanzados
 
 router = APIRouter()
 
@@ -27,6 +29,11 @@ def get_catalog_kpis(
     brand_id: Optional[str] = None,
     approval_status: Optional[str] = None,
     branch_id: Optional[int] = None,
+    gender: Optional[str] = None,
+    size: Optional[str] = None,
+    color: Optional[str] = None,
+    only_with_stock: bool = False,
+    created_after: Optional[datetime] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization),
@@ -68,6 +75,14 @@ def get_catalog_kpis(
         base_q = base_q.filter(Product.brand_id == brand_id)
     if approval_status and approval_status != 'ALL':
         base_q = base_q.filter(Product.approval_status == approval_status)
+    # Filtros avanzados: el mismo alcance de existencia que la lista
+    # (`branch_id` pedido o la sucursal del usuario; sin ella, la org).
+    base_q = aplicar_filtros_avanzados(
+        base_q, org_id,
+        gender=gender, size=size, color=color,
+        only_with_stock=only_with_stock, created_after=created_after,
+        stock_branch_id=branch_id if branch_id is not None else current_user.branch_id,
+    )
 
     # Subquery de IDs de productos en el scope — usada como filtro para las
     # métricas derivadas (variant/PBS/stock). Se materializa una vez.

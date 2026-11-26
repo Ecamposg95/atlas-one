@@ -34,6 +34,8 @@ import { ProductBranchMatrix } from '../../components/catalog/ProductBranchMatri
 import { ProductAuditDrawer } from '../../components/catalog/ProductAuditDrawer'
 import { confirm } from '../../components/ui/ConfirmDialog'
 import { ACCIONES_CATALOGO, accionesDeProducto, type ClaveAccionCatalogo } from '../core/catalogActions'
+import { FiltrosAvanzadosProductos } from '../../components/products/FiltrosAvanzadosProductos'
+import { AVANZADOS_VACIOS, contarAvanzados, paramsAvanzados, type FiltrosAvanzados } from '../../components/products/filtrosAvanzadosProductos'
 
 const SINGULAR_GRUPO = { tallas: 'talla', colores: 'color', variantes: 'variante' } as const
 
@@ -504,6 +506,12 @@ function ProductsHQView() {
   const [aprobacion, setAprobacion] = useState<FiltroAprobacion>('ALL')
   const [incluirArchivados, setIncluirArchivados] = useState(false)
   const [soloSinSucursal, setSoloSinSucursal] = useState(false)
+  // «Más filtros» (género, talla, color, existencia, fecha de alta; y la marca fuera del catálogo).
+  // Se filtran en el servidor: la lista es paginada. Las opciones de talla/color se piden al abrir el panel.
+  const [avanzados, setAvanzados] = useState<FiltrosAvanzados>(AVANZADOS_VACIOS)
+  const [verAvanzados, setVerAvanzados] = useState(false)
+  const [facetas, setFacetas] = useState<{ sizes: string[]; colors: string[] } | null>(null)
+  const [cargandoFacetas, setCargandoFacetas] = useState(false)
   const [kpis, setKpis] = useState<Awaited<ReturnType<typeof productsApi.catalogKpis>> | null>(null)
   const [kpisLoading, setKpisLoading] = useState(catalogo)   // esqueleto, no ceros, mientras llegan
   const [matrixProduct, setMatrixProduct] = useState<Product | null>(null)
@@ -555,9 +563,11 @@ function ProductsHQView() {
     try {
       const params: Record<string, unknown> = { search: q, skip: pg * LIMIT, limit: LIMIT }
       if (dept) params.department_id = dept
+      // La marca va en la barra (catálogo) o en «Más filtros» (fuera de él): si está puesta, viaja.
+      if (brandId) params.brand_id = brandId
+      Object.assign(params, paramsAvanzados(avanzados))
       // Filtros del catálogo (HQ en perfil completo). Fuera de él no viajan: la lista es la de siempre.
       if (catalogo) {
-        if (brandId) params.brand_id = brandId
         if (aprobacion !== 'ALL') params.approval_status = aprobacion
         if (incluirArchivados) params.include_inactive = true
       }
@@ -576,7 +586,7 @@ function ProductsHQView() {
     } finally {
       if (seq === seqLista.current) setLoading(false)
     }
-  }, [catalogo, brandId, aprobacion, incluirArchivados])
+  }, [catalogo, brandId, aprobacion, incluirArchivados, avanzados])
 
   // Cifras del catálogo con los mismos filtros que la lista (sin `include_inactive`: el endpoint no lo acepta).
   // Un fallo deja las cifras en blanco (`null`): la lista ya avisa de sus propios errores.
@@ -590,6 +600,7 @@ function ProductsHQView() {
         department_id: deptId || undefined,
         brand_id: brandId || undefined,
         approval_status: aprobacion === 'ALL' ? undefined : aprobacion,
+        ...paramsAvanzados(avanzados),
       })
       if (seq === seqKpis.current) setKpis(datos)
     } catch {
@@ -597,7 +608,7 @@ function ProductsHQView() {
     } finally {
       if (seq === seqKpis.current) setKpisLoading(false)
     }
-  }, [catalogo, search, deptId, brandId, aprobacion])
+  }, [catalogo, search, deptId, brandId, aprobacion, avanzados])
 
   useEffect(() => {
     productsApi.getDepartments()
@@ -626,6 +637,22 @@ function ProductsHQView() {
       .then((b) => setBrands(sortByName(b)))
       .catch(() => toast.error('No se pudieron cargar las marcas.'))
   }, [catalogo])
+
+  // Opciones de «Más filtros»: al abrir el panel por primera vez (lo que no se pinta no se consulta).
+  // La marca, fuera del catálogo, también se pide aquí: en el catálogo ya la trajo el efecto de arriba.
+  useEffect(() => {
+    if (!verAvanzados) return
+    if (!catalogo && brands.length === 0) {
+      productsApi.getBrands().then((b) => setBrands(sortByName(b))).catch(() => toast.error('No se pudieron cargar las marcas.'))
+    }
+    if (facetas) return
+    setCargandoFacetas(true)
+    productsApi.facets()
+      .then(setFacetas)
+      .catch(() => { setFacetas({ sizes: [], colors: [] }); toast.error('No se pudieron cargar las tallas y colores.') })
+      .finally(() => setCargandoFacetas(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [verAvanzados])
 
   useEffect(() => {
     // HQ espera a conocer el perfil: la identidad de `load` cambia al llegar (`catalogo`) y,
@@ -666,9 +693,13 @@ function ProductsHQView() {
     toast.error(typeof detail === 'string' ? detail : respaldo)
   }
   // La selección vale solo para lo que está en pantalla: cualquier cambio de filtro, página o vista la limpia.
-  useEffect(() => { setSeleccion(new Set()) }, [search, deptId, brandId, aprobacion, incluirArchivados, soloSinSucursal, page, viewMode])
-  // «Todo lo filtrado» solo cuando los filtros en pantalla caben exactos en el `filtro` del servidor.
-  const filtradoExacto = aprobacion === 'ALL' && !soloSinSucursal && !incluirArchivados
+  useEffect(() => { setSeleccion(new Set()) }, [search, deptId, brandId, aprobacion, incluirArchivados, soloSinSucursal, page, viewMode, avanzados])
+  // «Todo lo filtrado» solo cuando los filtros en pantalla caben exactos en el `filtro` del servidor
+  // (búsqueda, marca y departamento). Género, talla, color, existencia y fecha no caben: se apaga.
+  const numAvanzados = contarAvanzados(avanzados)
+  const filtradoExacto = aprobacion === 'ALL' && !soloSinSucursal && !incluirArchivados && numAvanzados === 0
+  // El contador del botón suma la marca cuando vive en el panel (fuera del catálogo).
+  const activosEnPanel = numAvanzados + (!catalogo && brandId ? 1 : 0)
   const alternarSeleccion = (id: string) => setSeleccion((prev) => {
     const sig = new Set(prev)
     if (sig.has(id)) sig.delete(id); else sig.add(id)
@@ -694,7 +725,7 @@ function ProductsHQView() {
     if (!si) return
     const filtro: { search?: string; brand_id?: string; department_id?: string } = {}
     if (search.trim()) filtro.search = search.trim()
-    if (catalogo && brandId) filtro.brand_id = brandId
+    if (brandId) filtro.brand_id = brandId
     if (deptId) filtro.department_id = deptId
     await publicarWeb({ filtro, published: true }, 'Publicados en la tienda web')
   }
@@ -742,6 +773,7 @@ function ProductsHQView() {
         brand_id: brandId || undefined,
         approval_status: aprobacion === 'ALL' ? undefined : aprobacion,
         include_inactive: incluirArchivados || undefined,
+        ...paramsAvanzados(avanzados),
       })
       toast.success('Descarga iniciada.')
     } catch (e) {
@@ -958,7 +990,32 @@ function ProductsHQView() {
             )}
           </>
         )}
+        <button
+          type="button"
+          onClick={() => setVerAvanzados((v) => !v)}
+          aria-expanded={verAvanzados}
+          aria-controls="productos-mas-filtros"
+          className={`${activosEnPanel > 0 ? 'dax-btn-primary' : 'dax-btn-secondary'} text-xs whitespace-nowrap max-md:min-h-[44px]`}
+          title="Género, talla, color, existencia y fecha de alta"
+        >
+          <i className="fa-solid fa-sliders" aria-hidden="true" /> Más filtros
+          {activosEnPanel > 0 && <span> ({activosEnPanel})</span>}
+          <i className={`fa-solid ${verAvanzados ? 'fa-chevron-up' : 'fa-chevron-down'} text-[10px]`} aria-hidden="true" />
+        </button>
       </BarraFiltros>
+
+      {verAvanzados && (
+        <FiltrosAvanzadosProductos
+          id="productos-mas-filtros"
+          valor={avanzados}
+          onChange={(f) => { setAvanzados(f); setPage(0) }}
+          tallas={facetas?.sizes ?? []}
+          colores={facetas?.colors ?? []}
+          cargandoOpciones={cargandoFacetas}
+          // En el catálogo la marca ya está en la barra; fuera de él vive aquí.
+          {...(catalogo ? {} : { marcas: brands, marca: brandId, onMarca: (id: string) => { setBrandId(id); setPage(0) } })}
+        />
+      )}
 
       {puedePublicar && (
         <BarraPublicacionWeb

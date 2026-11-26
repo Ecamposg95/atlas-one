@@ -29,7 +29,7 @@ export function BarraPublicacionWeb({ seleccionados, ocupado, onPublicarSeleccio
       </button>
       {!filtradoDisponible && (
         <span className="text-xs text-dax-muted">
-          Quita el filtro de aprobación, «Sin sucursal» o «Incluir archivados» para publicar todo lo filtrado; mientras tanto, selecciona filas.
+          Quita el filtro de aprobación, «Sin sucursal», «Incluir archivados» y los de «Más filtros» para publicar todo lo filtrado; mientras tanto, selecciona filas.
         </span>
       )}
     </div>
