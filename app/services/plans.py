@@ -36,11 +36,19 @@ MODULOS_BASE: FrozenSet[str] = frozenset({
     "core", "pos", "catalog", "inventory", "cash_management", "payments",
     "returns", "reports", "crm", "labels", "scanner", "variants", "pricing",
     "users", "branch_catalog_enablement",
+    # Limpieza de la promesa (2026-11-26, docs/presets/ESTADO-DE-MODULOS.md §4):
+    # el portal de cliente ya funcionaba en cualquier plan con CRM (no tiene
+    # candado), e `invoicing` hoy solo es la casilla de IVA del cobro (capacidad
+    # `factura`); la facturación CFDI no existe. Ninguno se vende por plan.
+    "customer_portal", "invoicing",
 })
 
-_START = frozenset({"quotes", "promotions"})
-_PRO = _START | {"purchasing", "warehouse", "logistics", "invoicing"}
-_BUSINESS = _PRO | {"finance", "hr", "commissions", "memberships", "customer_portal"}
+# Solo lo construido se vende por plan. Promociones, Comisiones y Membresías
+# salieron hasta que existan (vuelven aquí cuando se destapen), y `warehouse`
+# quedó como clave vieja de `logistics` (Cajas y contenedores aceptan las dos).
+_START = frozenset({"quotes"})
+_PRO = _START | {"purchasing", "logistics"}
+_BUSINESS = _PRO | {"finance", "hr"}
 _SCALE = _BUSINESS | {"ai"}
 
 # Todo lo que depende del plan. Lo que no esta aqui ni en MODULOS_BASE es

@@ -90,14 +90,26 @@ CUS(tom). ENT trae todo el catálogo de despliegue menos `tienda_en_linea`.
 
 Regla vigente (`app/services/plans.py`): permitido = base ∪ preset del giro ∪ crecimiento del plan.
 
-| Plan | Crecimiento que promete | Disponible hoy | Sin construir (oculto) |
-|---|---|---|---|
-| FREE | — | base completa | — |
-| START | `quotes`, `promotions` | `quotes` | `promotions` |
-| PRO | + `purchasing`, `warehouse`, `logistics`, `invoicing` | `purchasing`, `logistics` | `warehouse`, `invoicing` |
-| BUSINESS | + `finance`, `hr`, `commissions`, `memberships`, `customer_portal` | `finance` (gastos), `hr` (expedientes y asistencia), `customer_portal` | `commissions`, `memberships` |
-| SCALE | + `ai` | nada nuevo | `ai` |
-| ULTRA+ | todo el catálogo | lo anterior + verticales | lo anterior + `appointments`, `workshops`, `manufacturing` |
+Desde el 2026-11-26 (§4 aplicado) los planes solo venden lo construido:
+
+| Plan | Crecimiento | Sin construir |
+|---|---|---|
+| FREE | — (base completa) | — |
+| START | `quotes` | — |
+| PRO | + `purchasing`, `logistics` | — |
+| BUSINESS | + `finance` (gastos), `hr` (expedientes y asistencia) | — |
+| SCALE | + `ai` | `ai` (pendiente de decisión: ¿BUSINESS o SCALE?) |
+| ULTRA+ | todo el catálogo | lo no construido del catálogo |
+
+`customer_portal` e `invoicing` pasaron a la base (cualquier plan): el portal no tiene
+candado y funciona con CRM; `invoicing` hoy solo es la casilla de IVA (capacidad
+`factura`) y no se vende como facturación. Promociones, Comisiones y Membresías ya no
+están en ningún plan: vuelven a `_START`/`_BUSINESS` cuando se destapen. `warehouse`
+salió de PRO: Cajas y contenedores (`/api/logistics`) abre con `logistics` o con la
+clave vieja `warehouse` (`require_module("logistics", "warehouse")`).
+
+Antes de la limpieza: START prometía `promotions`; PRO `warehouse` e `invoicing`; BUSINESS
+`commissions`, `memberships` y `customer_portal`.
 
 `GET /api/platform/plans` ahora trae `modulos_no_disponibles` por plan, y «Plan y uso»
 (`/platform/organizations/{id}`) lo pinta: «El plan ofrece hoy: … · Sin construir: …».
@@ -137,7 +149,9 @@ taxonomía previa (`DISTRIBUTOR_POS`, `RESTAURANT_QSR`, `RESTAURANT_FULL`,
 
 ---
 
-## 4. Propuesta (requiere decisión del dueño; nada de esto se aplicó)
+## 4. Propuesta (aplicada el 2026-11-26; guardias en `tests/test_limpieza_promesa.py`)
+
+Aplicado: §4.1 completo (con las tres decisiones: claves unificadas aceptando las dos, portal regalado con CRM, `invoicing` fuera de los planes) y §4.2 completo (legacy migrados en cada deploy por `init_presets_v2._migrar_presets_legacy`, cuatro giros «en preparación», listas limpias, Enterprise = todo lo disponible). Pendiente: §4.3 (consultas a producción) y la decisión sobre `ai`.
 
 ### 4.1 Qué debería prometer cada plan mientras tanto
 

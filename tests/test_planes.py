@@ -56,12 +56,19 @@ class TestCatalogo:
     def test_modulos_de_crecimiento_del_spec(self):
         c = {p.clave: set(p.modulos_crecimiento) for p in plans.PLANES}
         assert c["FREE"] == set()
-        assert c["START"] == {"quotes", "promotions"}
-        assert c["PRO"] == c["START"] | {"purchasing", "warehouse", "logistics", "invoicing"}
-        assert c["BUSINESS"] == c["PRO"] | {"finance", "hr", "commissions", "memberships", "customer_portal"}
+        # Limpieza de la promesa (2026-11-26): solo lo construido se vende por plan.
+        assert c["START"] == {"quotes"}
+        assert c["PRO"] == c["START"] | {"purchasing", "logistics"}
+        assert c["BUSINESS"] == c["PRO"] | {"finance", "hr"}
         assert c["SCALE"] == c["BUSINESS"] | {"ai"}
         assert c["ULTRA_PLUS"] == c["SCALE"] and plans.PLANES_POR_CLAVE["ULTRA_PLUS"].permite_todo
         assert plans.MODULOS_CRECIMIENTO == frozenset(c["SCALE"])
+
+    def test_los_planes_solo_venden_lo_construido(self):
+        """ESTADO-DE-MODULOS §4.1. `ai` es la excepción pendiente de decisión
+        (megaplan §9: ¿BUSINESS o SCALE?); se destapa cuando salga F1."""
+        from app.services import estado_modulos as em
+        assert em.solo_no_disponibles(plans.MODULOS_CRECIMIENTO) == ["ai"]
 
     def test_base_y_crecimiento_no_se_pisan(self):
         assert not (plans.MODULOS_BASE & plans.MODULOS_CRECIMIENTO)

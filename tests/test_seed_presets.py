@@ -64,5 +64,9 @@ def test_seed_enterprise_includes_all_modules(db):
     from scripts.init_presets_v2 import MODULES_CATALOG
     # `tienda_en_linea` (canal web) es de contratación aparte: está en el
     # catálogo pero ningún preset, Enterprise incluido, lo trae.
-    catalog_keys = {k for k, *_ in MODULES_CATALOG if k != "tienda_en_linea"}
+    # Desde 2026-11-26 (ESTADO-DE-MODULOS §4.2): solo lo DISPONIBLE; lo que se
+    # destape en estado_modulos entra solo.
+    from app.services.estado_modulos import esta_disponible
+    catalog_keys = {k for k, *_ in MODULES_CATALOG if k != "tienda_en_linea" and esta_disponible(k)}
     assert set(enterprise.modules) == catalog_keys
+    assert "commissions" not in enterprise.modules and "pos" in enterprise.modules

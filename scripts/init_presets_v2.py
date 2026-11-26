@@ -18,6 +18,7 @@ sys.path.append(os.getcwd())
 from sqlalchemy.orm import Session
 from app.core.database import SessionLocal
 from app.models.modules import IndustryPreset, Module, ModuleScope, ModuleStatus
+from app.services.estado_modulos import esta_disponible
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -278,6 +279,12 @@ ATLAS_POS_MODS = [
     "returns", "pricing", "payments", "reports",
 ]
 
+# Giros cuyo módulo central (Agenda u órdenes de trabajo) aún no existe
+# (docs/presets/ESTADO-DE-MODULOS.md §4.2): `is_deprecated` los saca de los
+# selectores de altas nuevas y los conserva para las organizaciones que ya los
+# usan. Cuando exista Agenda, se quita la marca y el «(en preparación)».
+EN_PREPARACION = True
+
 PRESETS = [
     {
         "id": "ATLAS_POS",
@@ -302,7 +309,7 @@ PRESETS = [
         "id": "ATLAS_ONE_RETAIL",
         "name": "Atlas One Retail",
         "desc": "Retail multi-sucursal: ferreterías, abarrotes, farmacias, papelerías, refaccionarias.",
-        "mods": ATLAS_POS_MODS + ["crm", "branch_catalog_enablement", "purchasing", "promotions", "quotes"],
+        "mods": ATLAS_POS_MODS + ["crm", "branch_catalog_enablement", "purchasing", "quotes"],
     },
     # ── Legacy (taxonomy v1) — display marked so the operator migrates ────────
     {
@@ -333,7 +340,8 @@ PRESETS = [
     # ── Taxonomy v2 (2026-05-15) — vertical-specific presets ──────────────────
     {
         "id": "ATLAS_ONE_BARBER",
-        "name": "Atlas One Barber",
+        "name": "Atlas One Barber (en preparación)",
+        "deprecated": EN_PREPARACION,
         "desc": "Barberías masculinas: cortes, barba, diseño y paquetes para hombre.",
         "mods": [
             "core", "users", "catalog", "payments", "cash_management", "crm", "pos",
@@ -342,7 +350,8 @@ PRESETS = [
     },
     {
         "id": "ATLAS_ONE_BEAUTY_WELLNESS",
-        "name": "Atlas One Beauty & Wellness",
+        "name": "Atlas One Beauty & Wellness (en preparación)",
+        "deprecated": EN_PREPARACION,
         "desc": "Estéticas, uñas, depilación, maquillaje, spas y wellness no clínico.",
         "mods": [
             "core", "users", "catalog", "inventory", "payments",
@@ -353,8 +362,9 @@ PRESETS = [
     },
     {
         "id": "ATLAS_ONE_HEALTH",
-        "name": "Atlas One Health",
-        "desc": "Consultorios médicos, dentales, quiroprácticos, fisio y terapia. Agenda, pacientes, planes de tratamiento.",
+        "name": "Atlas One Health (en preparación)",
+        "deprecated": EN_PREPARACION,
+        "desc": "Consultorios médicos, dentales, quiroprácticos, fisio y terapia.",
         "mods": [
             "core", "users", "catalog", "payments", "cash_management", "crm", "pos",
             "appointments", "commissions", "memberships", "reports",
@@ -367,7 +377,7 @@ PRESETS = [
         "mods": [
             "core", "users", "catalog", "inventory", "payments",
             "cash_management", "crm", "pos",
-            "kitchen", "tables", "menu", "bar", "recipes", "commissions", "reports",
+            "kitchen", "tables", "menu", "bar", "recipes", "reports",
             "tips",
         ],
     },
@@ -384,16 +394,17 @@ PRESETS = [
     {
         "id": "ATLAS_ONE_BAR",
         "name": "Atlas One Bar",
-        "desc": "Bares y cantinas: cocteles, mesas, bartenders con comisión y control de inventario líquido.",
+        "desc": "Bares y cantinas: cocteles, mesas, bartenders y control de inventario líquido.",
         "mods": [
             "core", "users", "catalog", "inventory", "payments",
             "cash_management", "crm", "pos",
-            "tables", "menu", "bar", "recipes", "commissions", "reports", "tips",
+            "tables", "menu", "bar", "recipes", "reports", "tips",
         ],
     },
     {
         "id": "ATLAS_ONE_SERVICES",
-        "name": "Atlas One Services",
+        "name": "Atlas One Services (en preparación)",
+        "deprecated": EN_PREPARACION,
         "desc": "Talleres, consultorios, mantenimiento, soporte y operaciones con órdenes de trabajo.",
         "mods": [
             "core", "users", "catalog", "payments", "crm",
@@ -404,9 +415,10 @@ PRESETS = [
     {
         "id": "ATLAS_ONE_ENTERPRISE",
         "name": "Atlas One Enterprise",
-        "desc": "Implementación completa: multi-sucursal avanzado, IA, integraciones y todos los módulos.",
-        # `tienda_en_linea` es de contratación aparte: no entra ni en Enterprise.
-        "mods": [k for k, *_ in MODULES_CATALOG if k != "tienda_en_linea"],
+        "desc": "Implementación completa: multi-sucursal avanzado y todos los módulos disponibles.",
+        # Todo lo DISPONIBLE del catálogo (estado_modulos): lo que se destape entra
+        # solo. `tienda_en_linea` es de contratación aparte: no entra ni en Enterprise.
+        "mods": [k for k, *_ in MODULES_CATALOG if k != "tienda_en_linea" and esta_disponible(k)],
     },
     {
         "id": "CUSTOM",
@@ -463,9 +475,34 @@ def seed_modules_and_presets(db: Session) -> None:
     db.commit()
 
     _cleanup_legacy_dataxpos(db)
+    _migrar_presets_legacy(db)
     _backfill_gastro_modules(db)
     _backfill_labels_module(db)
     _backfill_crm_module(db)
+
+
+def _migrar_presets_legacy(db: Session) -> None:
+    """Mueve las organizaciones de los dos presets legacy a su sucesor v2.
+
+    ESTADO-DE-MODULOS §4.2: Beauty → Beauty & Wellness (misma lista de módulos) y
+    Gastro → Restaurant (misma lista desde que Restaurant ya no trae comisiones).
+    Solo cambia `organization.industry_type`: `organization_modules` no se toca,
+    así que nadie gana ni pierde un módulo encendido. Idempotente.
+    """
+    from app.models.organization import IndustryType, Organization
+
+    sucesor = {
+        IndustryType.ATLAS_ONE_BEAUTY: IndustryType.ATLAS_ONE_BEAUTY_WELLNESS,
+        IndustryType.ATLAS_ONE_GASTRO: IndustryType.ATLAS_ONE_RESTAURANT,
+    }
+    movidas = 0
+    for viejo, nuevo in sucesor.items():
+        for org in db.query(Organization).filter(Organization.industry_type == viejo).all():
+            org.industry_type = nuevo
+            movidas += 1
+    if movidas:
+        db.commit()
+    logger.info(f"--- Presets legacy: {movidas} organizaciones migradas ---")
 
 
 def _backfill_gastro_modules(db: Session) -> None:

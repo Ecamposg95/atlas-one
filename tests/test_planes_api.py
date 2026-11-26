@@ -27,7 +27,7 @@ class TestCatalogo:
         assert claves == ["FREE", "START", "PRO", "BUSINESS", "SCALE", "ULTRA_PLUS"]
         ultra = r.json()[-1]
         assert ultra["nombre"] == "ULTRA+" and ultra["max_usuarios"] is None and ultra["permite_todo"] is True
-        assert r.json()[1]["modulos_crecimiento"] == sorted(["quotes", "promotions"])
+        assert r.json()[1]["modulos_crecimiento"] == ["quotes"]
 
     def test_requiere_plataforma(self, client, auth_admin):
         r = client.get("/api/platform/plans", headers=auth_admin)

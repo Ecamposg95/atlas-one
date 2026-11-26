@@ -62,9 +62,13 @@ class TestDeclaracion:
         assert not raros
 
     def test_la_base_esta_toda_disponible(self):
-        """Lo que cualquier plan trae no puede ser una promesa sin construir."""
+        """Lo que cualquier plan trae no puede ser una promesa sin construir.
+
+        Excepción: `invoicing` está en la base solo porque es la casilla de IVA
+        del cobro (capacidad `factura`), que sí funciona; no tiene pantalla y la
+        facturación CFDI que su nombre sugiere sigue sin existir (§4.1)."""
         from app.services.plans import MODULOS_BASE
-        assert em.solo_no_disponibles(MODULOS_BASE) == []
+        assert em.solo_no_disponibles(MODULOS_BASE) == ["invoicing"]
 
     def test_el_formato_lo_puede_leer_el_frontend(self):
         """vitest (estadoModulos.test.ts) lee el archivo con esta misma expresión."""
@@ -120,9 +124,10 @@ class TestCanales:
     def test_planes_dicen_que_parte_de_la_promesa_no_esta_construida(self, client, auth_superadmin, _catalogo):
         planes = {p["clave"]: p for p in client.get("/api/platform/plans", headers=auth_superadmin).json()}
         assert planes["FREE"]["modulos_no_disponibles"] == []
-        assert planes["START"]["modulos_no_disponibles"] == ["promotions"]
-        # Lo prometido no cambia: solo se marca.
-        assert "promotions" in planes["START"]["modulos_crecimiento"]
+        # Desde la limpieza de la promesa (2026-11-26) los planes ya no venden lo
+        # no construido; solo queda `ai`, pendiente de decisión, marcado.
+        assert planes["START"]["modulos_no_disponibles"] == []
+        assert planes["SCALE"]["modulos_no_disponibles"] == ["ai"]
         for p in planes.values():
             assert set(p["modulos_no_disponibles"]) <= set(p["modulos_crecimiento"])
 

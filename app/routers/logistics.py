@@ -22,7 +22,10 @@ from app.models import User
 from app.core.tenant_context import get_current_active_organization
 from app.core.permissions import require_module
 
-router = APIRouter(dependencies=[Depends(require_module("warehouse"))])
+# El menú cuelga «Cajas y contenedores» de `logistics`; `warehouse` es la clave
+# vieja que pedía este backend (ESTADO-DE-MODULOS §4.1). Abren las dos para que
+# nadie pierda la pantalla; los planes ya solo venden `logistics`.
+router = APIRouter(dependencies=[Depends(require_module("logistics", "warehouse"))])
 
 # --- CRUD Container ---
 # Catálogo por organización (regla de oro 5): antes era global y sin usuario, y

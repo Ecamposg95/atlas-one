@@ -16,8 +16,12 @@ from app.models.users import Role, User, UserOrganization
 from app.core import role_permissions  # noqa: F401  (legacy DAXPOS_ROLE_VIEWS lives here)
 
 
-def require_module(module_key: str):
-    """FastAPI dependency factory: ensure `module_key` is enabled for the active org."""
+def require_module(module_key: str, *alternativas: str):
+    """FastAPI dependency factory: ensure `module_key` is enabled for the active org.
+
+    `alternativas`: otras claves que también abren la puerta (una clave vieja que
+    se está retirando, p.ej. `warehouse` → `logistics`). Basta una encendida."""
+    claves = (module_key, *alternativas)
 
     async def _enforce(
         request: Request,
@@ -41,7 +45,7 @@ def require_module(module_key: str):
 
         enabled = db.query(OrganizationModule).filter(
             OrganizationModule.organization_id == org_id,
-            OrganizationModule.module_key == module_key,
+            OrganizationModule.module_key.in_(claves),
             OrganizationModule.is_enabled == True,  # noqa: E712
         ).first()
         if not enabled:
