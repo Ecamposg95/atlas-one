@@ -57,7 +57,8 @@ describe('Sucursales (pestaña de Configuración)', () => {
     pintar('/configuracion?tab=sucursales&sucursal=2')
     const detalle = await screen.findByTestId('detalle-sucursal')
     expect(detalle.textContent).toContain('Condesa')
-    expect(dashboard).toHaveBeenCalledWith(expect.objectContaining({ branch_id: 2 }))
+    // La consulta del detalle sale después de pintar el panel: bajo carga (suite completa en CI) llega tarde.
+    await waitFor(() => expect(dashboard).toHaveBeenCalledWith(expect.objectContaining({ branch_id: 2 })))
     expect(await screen.findByText('Blusa')).toBeTruthy()
   })
 

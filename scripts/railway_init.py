@@ -67,6 +67,30 @@ INDICES_CASH_MOVEMENT_AUTHOR = [
 ]
 
 
+MIGRACIONES_DESGLOSE_FISCAL = [
+    ("products", "sat_clave_prod_serv", "ALTER TABLE products ADD COLUMN sat_clave_prod_serv VARCHAR(8);"),
+    ("products", "sat_clave_unidad", "ALTER TABLE products ADD COLUMN sat_clave_unidad VARCHAR(3);"),
+    ("products", "sat_objeto_imp", "ALTER TABLE products ADD COLUMN sat_objeto_imp VARCHAR(2);"),
+    ("products", "iva_tratamiento", "ALTER TABLE products ADD COLUMN iva_tratamiento VARCHAR(8);"),
+    ("sales_documents", "iva_base_16", "ALTER TABLE sales_documents ADD COLUMN iva_base_16 NUMERIC(12,2);"),
+    ("sales_documents", "iva_16", "ALTER TABLE sales_documents ADD COLUMN iva_16 NUMERIC(12,2);"),
+    ("sales_documents", "iva_base_8", "ALTER TABLE sales_documents ADD COLUMN iva_base_8 NUMERIC(12,2);"),
+    ("sales_documents", "iva_8", "ALTER TABLE sales_documents ADD COLUMN iva_8 NUMERIC(12,2);"),
+    ("sales_documents", "iva_base_0", "ALTER TABLE sales_documents ADD COLUMN iva_base_0 NUMERIC(12,2);"),
+    ("sales_documents", "iva_base_exenta", "ALTER TABLE sales_documents ADD COLUMN iva_base_exenta NUMERIC(12,2);"),
+    ("sales_documents", "iva_base_no_objeto", "ALTER TABLE sales_documents ADD COLUMN iva_base_no_objeto NUMERIC(12,2);"),
+    ("sales_documents", "lugar_expedicion", "ALTER TABLE sales_documents ADD COLUMN lugar_expedicion VARCHAR(5);"),
+    ("sales_lines", "sat_clave_prod_serv", "ALTER TABLE sales_lines ADD COLUMN sat_clave_prod_serv VARCHAR(8);"),
+    ("sales_lines", "sat_clave_unidad", "ALTER TABLE sales_lines ADD COLUMN sat_clave_unidad VARCHAR(3);"),
+    ("sales_lines", "sat_objeto_imp", "ALTER TABLE sales_lines ADD COLUMN sat_objeto_imp VARCHAR(2);"),
+    ("sales_lines", "iva_tipo_factor", "ALTER TABLE sales_lines ADD COLUMN iva_tipo_factor VARCHAR(6);"),
+    ("sales_lines", "iva_tasa", "ALTER TABLE sales_lines ADD COLUMN iva_tasa NUMERIC(6,4);"),
+    ("sales_lines", "iva_base", "ALTER TABLE sales_lines ADD COLUMN iva_base NUMERIC(12,2);"),
+    ("sales_lines", "iva_importe", "ALTER TABLE sales_lines ADD COLUMN iva_importe NUMERIC(12,2);"),
+    ("sales_lines", "iva_inferido", "ALTER TABLE sales_lines ADD COLUMN iva_inferido BOOLEAN;"),
+    ("organization", "codigo_postal_fiscal", "ALTER TABLE organization ADD COLUMN codigo_postal_fiscal VARCHAR(5);"),
+]
+
 COLUMN_MIGRATIONS = [
     # (table, column, ddl)
     ("products", "image_url",      "ALTER TABLE products ADD COLUMN image_url VARCHAR;"),
@@ -208,6 +232,12 @@ COLUMN_MIGRATIONS = [
     # tablas que la pantalla muestra junto a la respuesta. NULL en lo ya guardado.
     ("ai_messages", "nativo", "ALTER TABLE ai_messages ADD COLUMN nativo JSON;"),
     ("ai_messages", "tablas", "ALTER TABLE ai_messages ADD COLUMN tablas JSON;"),
+    # IVA de toda venta y claves del SAT (2026-11, megaplan CFDI fase 3).
+    # Todas nullable y sin DEFAULT: el ADD COLUMN no reescribe la tabla y el
+    # historico queda en NULL (= "sin desglose"); nada cambia en lo cobrado.
+    # El relleno del historico es opcional y aparte:
+    # scripts/backfill_desglose_fiscal.py (no corre en el deploy).
+    *MIGRACIONES_DESGLOSE_FISCAL,
     # Atribucion por pago (2026-09-02) — ver los bloques de arriba.
     *MIGRACIONES_PAYMENTS_CASH_SESSION,
     *MIGRACIONES_CASH_MOVEMENT_AUTHOR,

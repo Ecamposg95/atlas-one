@@ -555,6 +555,23 @@ def convert_quote_to_sale(
             organization_id=org_id,
         ))
 
+    # Desglose fiscal, igual que `create_sale`: la conversión también es una
+    # venta y su IVA hace falta pida factura o no. El importe cobrado de cada
+    # renglón es su `total_line`; el reparto de centavos lo cuadra contra
+    # `total_amount`, que es lo que se cobró. Nunca impide la conversión.
+    try:
+        from app.models.organization import Branch, Organization
+        from app.services.desglose_fiscal import aplicar_desglose
+        aplicar_desglose(
+            quote,
+            [(l, l.variant, l.total_line) for l in quote.lines],
+            branch=db.query(Branch).filter(Branch.id == quote.branch_id).first(),
+            organization=db.query(Organization).filter(Organization.id == org_id).first(),
+        )
+    except Exception:  # noqa: BLE001
+        import logging as _logging
+        _logging.getLogger(__name__).exception("DESGLOSE_FISCAL_FAILED quote=%s", quote.id)
+
     # Outbox transaccional, igual que `create_sale` (app/routers/sales.py):
     # convertir un pedido en venta tambien es una venta, y sin el evento no se
     # descontaban los insumos de receta ni se revisaba el reabasto. Se encola

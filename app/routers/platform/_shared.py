@@ -86,7 +86,7 @@ def _audit(db: Session, user_id: int, action: str, entity_type: str, entity_id, 
 # --- Whitelist constants for mass-assignment protection ---
 _ORG_UPDATE_FIELDS = {
     "name", "legal_name", "email", "phone", "address", "logo_url",
-    "tax_id", "tax_regime", "website", "timezone",
+    "tax_id", "tax_regime", "codigo_postal_fiscal", "website", "timezone",
     "ticket_header", "ticket_footer", "printer_name",
     "industry_type", "status", "plan", "branding_config", "is_active", "perfil_ui",
     "ai_modelos", "ai_tokens_dia",

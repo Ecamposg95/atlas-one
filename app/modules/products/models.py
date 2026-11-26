@@ -70,6 +70,19 @@ class Product(Base, UUIDMixin, AuditMixin, TenantMixin):
     web_published = Column(Boolean, nullable=False, default=False, server_default=false())
     web_published_at = Column(DateTime(timezone=True), nullable=True)
 
+    # Datos fiscales del SAT (2026-11, megaplan CFDI fase 3). Todos NULL por
+    # omision: ninguna tienda viva tiene que capturarlos para seguir vendiendo.
+    # Formato validado en app/services/desglose_fiscal.py; el catalogo completo
+    # lo carga y valida Atlas ONE Financials al facturar.
+    sat_clave_prod_serv = Column(String(8), nullable=True)   # c_ClaveProdServ
+    sat_clave_unidad = Column(String(3), nullable=True)      # c_ClaveUnidad
+    sat_objeto_imp = Column(String(2), nullable=True)        # c_ObjetoImp
+    # Tasa de IVA para el SAT: '16' | '8' | '0' | 'EXENTO'. NULL = sin
+    # clasificar (se infiere la tasa general y el renglon queda marcado).
+    # Capturada, manda tambien en el cobro (`desglose_fiscal.iva_efectivo`); el
+    # alta la rechaza si cobraria distinto que has_iva/tax_rate de la variante.
+    iva_tratamiento = Column(String(8), nullable=True)
+
     has_variants = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True) # "Global" soft-delete or active flag
 

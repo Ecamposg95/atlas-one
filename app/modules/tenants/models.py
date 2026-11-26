@@ -171,6 +171,9 @@ class Organization(Base):
     legal_name = Column(String, nullable=True)
     tax_id = Column(String, nullable=True)
     tax_regime = Column(String, nullable=True)
+    # Codigo postal del domicilio fiscal (2026-11, CFDI). Respaldo del lugar
+    # de expedicion cuando la sucursal no tiene `postal_code`. NULL por omision.
+    codigo_postal_fiscal = Column(String(5), nullable=True)
 
     # Contacto
     address = Column(String, nullable=True)

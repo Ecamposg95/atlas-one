@@ -34,6 +34,8 @@ export interface Organization {
   id: number
   name: string
   tax_id: string | null
+  /** CP del domicilio fiscal (5 dígitos); respaldo del lugar de expedición. */
+  codigo_postal_fiscal?: string | null
   address: string | null
   phone: string | null
   email: string | null

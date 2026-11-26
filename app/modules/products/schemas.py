@@ -11,6 +11,33 @@ from pydantic import BaseModel, field_validator
 from decimal import Decimal
 
 from app.modules.products.sale_name import normalizar_genero
+from app.services.desglose_fiscal import (
+    normalizar_clave_prod_serv,
+    normalizar_clave_unidad,
+    normalizar_objeto_imp,
+    normalizar_tratamiento_iva,
+)
+
+_NORMALIZADORES_SAT = {
+    "sat_clave_prod_serv": normalizar_clave_prod_serv,
+    "sat_clave_unidad": normalizar_clave_unidad,
+    "sat_objeto_imp": normalizar_objeto_imp,
+    "iva_tratamiento": normalizar_tratamiento_iva,
+}
+
+
+class _DatosSat(BaseModel):
+    """Claves del SAT del producto. Opcionales; vacio = sin capturar (None).
+    Solo se valida el formato: el catalogo lo valida Financials al facturar."""
+    sat_clave_prod_serv: Optional[str] = None
+    sat_clave_unidad: Optional[str] = None
+    sat_objeto_imp: Optional[str] = None
+    iva_tratamiento: Optional[str] = None
+
+    @field_validator("sat_clave_prod_serv", "sat_clave_unidad", "sat_objeto_imp", "iva_tratamiento")
+    @classmethod
+    def _formato_sat(cls, v, info):
+        return _NORMALIZADORES_SAT[info.field_name](v)
 
 # --- Deptos / Categorías ---
 class DepartmentRead(BaseModel):
@@ -113,7 +140,7 @@ class ProductVariantUpdate(BaseModel):
     cost: Optional[Decimal] = None
 
 
-class ProductCreate(BaseModel):
+class ProductCreate(_DatosSat):
     name: str
     description: Optional[str] = None
     unit: Optional[str] = "pza"
@@ -163,7 +190,7 @@ class ProductCreate(BaseModel):
     def _valida_genero(cls, v):
         return normalizar_genero(v)
 
-class ProductUpdate(BaseModel):
+class ProductUpdate(_DatosSat):
     name: Optional[str] = None
     description: Optional[str] = None
     unit: Optional[str] = None
@@ -255,6 +282,12 @@ class ProductRead(BaseModel):
     price: Decimal = Decimal(0) # Main variant price
     has_iva: bool = False
     tax_rate: Decimal = 16.0
+
+    # Datos fiscales del SAT (columnas de `products`).
+    sat_clave_prod_serv: Optional[str] = None
+    sat_clave_unidad: Optional[str] = None
+    sat_objeto_imp: Optional[str] = None
+    iva_tratamiento: Optional[str] = None
 
     stock_total: Decimal = Decimal(0) # Local branch stock (backward compat)
     global_stock: Decimal = Decimal(0) # NEW: Total across all branches

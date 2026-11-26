@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  armarPayloadAlta, armarPayloadEdicion, erroresDeApi, formDesdeProducto, precioATodasPorDefecto, principalCambio, totalInicial, validarProducto,
+  armarPayloadAlta, armarPayloadEdicion, discrepanciaIva, erroresDeApi, erroresFiscales, formDesdeProducto, precioATodasPorDefecto,
+  principalCambio, totalInicial, validarProducto,
   type EntradaFormulario,
 } from '../productoForm'
 import { EMPTY_PRODUCT_FORM } from '../types'
@@ -221,5 +222,58 @@ describe('precioATodasPorDefecto', () => {
   })
   it('fila no principal: desmarcada', () => {
     expect(precioATodasPorDefecto(conPrecios(4000, 4000), 'v2', true)).toBe(false)
+  })
+})
+
+describe('datos fiscales (SAT)', () => {
+  const conSat = (sat: Partial<EntradaFormulario['form']>) =>
+    base({ form: { ...base().form, ...sat } })
+
+  it('son opcionales y viajan en null si no se capturan', () => {
+    expect(validarProducto(base())).toEqual({})
+    const p = armarPayloadAlta(base())
+    expect(p.sat_clave_prod_serv).toBeNull()
+    expect(p.sat_clave_unidad).toBeNull()
+    expect(p.sat_objeto_imp).toBeNull()
+    expect(p.iva_tratamiento).toBeNull()
+  })
+
+  it('valida el formato de las claves', () => {
+    const e = validarProducto(conSat({ sat_clave_prod_serv: '123', sat_clave_unidad: 'H-87' }))
+    expect(e.sat_clave_prod_serv).toBeTruthy()
+    expect(e.sat_clave_unidad).toBeTruthy()
+  })
+
+  it('manda las claves capturadas, la unidad en mayúsculas', () => {
+    const p = armarPayloadAlta(conSat({
+      sat_clave_prod_serv: '01010101', sat_clave_unidad: 'h87', sat_objeto_imp: '02', iva_tratamiento: 'EXENTO',
+    }))
+    expect(p).toMatchObject({
+      sat_clave_prod_serv: '01010101', sat_clave_unidad: 'H87', sat_objeto_imp: '02', iva_tratamiento: 'EXENTO',
+    })
+  })
+})
+
+describe('tasa de IVA de los datos fiscales contra «Aplica IVA»', () => {
+  const base = { ...EMPTY_PRODUCT_FORM, name: 'Galletas', sku: 'GAL', price: '20', cost: '10' }
+
+  it('sin tasa capturada no compara nada', () => {
+    expect(discrepanciaIva({ ...base, has_iva: false })).toBeNull()
+  })
+
+  it('16 % pide «Aplica IVA» encendido con 16', () => {
+    expect(discrepanciaIva({ ...base, iva_tratamiento: '16', has_iva: false })).toMatch(/Enciende «Aplica IVA» con tasa 16/)
+    expect(discrepanciaIva({ ...base, iva_tratamiento: '16', has_iva: true, tax_rate: '8' })).toMatch(/Pon 16/)
+    expect(discrepanciaIva({ ...base, iva_tratamiento: '16', has_iva: true, tax_rate: '16' })).toBeNull()
+  })
+
+  it('0 %, exento y no objeto piden «Aplica IVA» apagado (o tasa 0)', () => {
+    expect(discrepanciaIva({ ...base, iva_tratamiento: 'EXENTO', has_iva: true, tax_rate: '16' })).toMatch(/apaga «Aplica IVA»/)
+    expect(discrepanciaIva({ ...base, iva_tratamiento: '0', has_iva: true, tax_rate: '0' })).toBeNull()
+    expect(discrepanciaIva({ ...base, sat_objeto_imp: '01', has_iva: true, tax_rate: '16' })).not.toBeNull()
+  })
+
+  it('el formulario no se manda con la discrepancia', () => {
+    expect(erroresFiscales({ ...base, iva_tratamiento: '8', has_iva: false }).iva_tratamiento).toBeTruthy()
   })
 })

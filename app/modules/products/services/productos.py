@@ -19,6 +19,7 @@ from app.models.platform import PlatformAuditLog
 from app.modules.products.schemas import ProductCreate, ProductUpdate
 from app.modules.products.variant_label import variant_label
 from app.services.barcodes import AsignadorDeCodigos
+from app.services.desglose_fiscal import discrepancia_de_producto, discrepancia_iva
 
 from .codigos import asignar_barcode_interno, sku_de_copia, validar_barcode_libre, validar_sku_unico
 from .comun import MANAGER_ROLES, variante_principal, variantes_vivas
@@ -34,6 +35,15 @@ from .validaciones import (
 )
 from .variantes import crear_variantes, pareja_repetida
 from .web import tocar_producto
+
+def _validar_iva_coherente(mensaje: Optional[str]) -> None:
+    """422 si la clasificación fiscal (`iva_tratamiento`, objeto de impuesto)
+    cobraría distinto de `has_iva`/`tax_rate`: `iva_efectivo` le da prioridad a
+    la clasificación, y un producto contradictorio cambiaría lo que se le
+    cobra al cliente sin que nadie lo decidiera."""
+    if mensaje:
+        raise HTTPException(status_code=422, detail=mensaje)
+
 
 _AMBIGUO = "Indica en qué sucursal entra la existencia inicial: no se reparte sola entre varias sucursales."
 
@@ -114,6 +124,10 @@ def crear_producto(
         exigir_campos_de_cajero(datos)
     validar_precio(datos.price)
     validar_escalones(datos.prices)
+    # Las hermanas heredan has_iva/tax_rate de la principal: basta con ella.
+    _validar_iva_coherente(discrepancia_iva(
+        datos.iva_tratamiento, datos.sat_objeto_imp, datos.has_iva, datos.tax_rate,
+    ))
     sku = validar_sku_unico(db, org_id, datos.sku)
     _validar_destinos_y_rol(db, org_id, user, datos, es_admin)
     destinos = resolver_sucursales_destino(db, org_id, user, datos.target_branch_ids)
@@ -133,6 +147,10 @@ def crear_producto(
         gender=datos.gender,   # ya normalizado por el schema
         model=(datos.model or "").strip() or None,
         material=(datos.material or "").strip() or None,
+        sat_clave_prod_serv=datos.sat_clave_prod_serv,
+        sat_clave_unidad=datos.sat_clave_unidad,
+        sat_objeto_imp=datos.sat_objeto_imp,
+        iva_tratamiento=datos.iva_tratamiento,
         has_variants=True,
         is_active=True,
         approval_status="APPROVED",
@@ -221,6 +239,11 @@ def _editar_ficha(producto: Product, datos: ProductUpdate, enviados: set[str]) -
         producto.model = (datos.model or "").strip() or None
     if "material" in enviados:
         producto.material = (datos.material or "").strip() or None
+    # Datos fiscales: mismo criterio (null explicito borra; ausente no toca).
+    # El schema ya los normalizo y valido el formato.
+    for campo in ("sat_clave_prod_serv", "sat_clave_unidad", "sat_objeto_imp", "iva_tratamiento"):
+        if campo in enviados:
+            setattr(producto, campo, getattr(datos, campo))
     if datos.is_active is not None:
         producto.is_active = datos.is_active
     if datos.approval_status is not None:
@@ -282,6 +305,10 @@ def actualizar_producto(db: Session, org_id: int, user: User, product_id: str, d
     if v is not None:
         sucursal_precio = sucursal_del_precio(db, org_id, user, v)
         _editar_principal(db, org_id, producto, v, datos, enviados, sucursal_precio)
+        # Ya con la ficha y la principal editadas: la clasificación fiscal debe
+        # cobrar igual que las banderas de TODAS las variantes vivas. El
+        # handler no confirma si esto truena, así que nada queda a medias.
+        _validar_iva_coherente(discrepancia_de_producto(producto, variantes_vivas(producto)))
         # Con precio de sucursal la ficha le llega SIN escalones (no aplican
         # ahí) y el formulario los devolvería vacíos: borraría los de todas las
         # sucursales. Escalones y empaques son del catálogo; se quedan como están.

@@ -38,6 +38,42 @@ export function totalInicial(form: ProductFormValue, variantRows: VariantRow[], 
   return (Number(form.initial_stock || '0') || 0) + stockHermanas(variantRows, hasVariantsModule)
 }
 
+/**
+ * Formato de las claves del SAT (mismas reglas que
+ * `app/services/desglose_fiscal.py`). No se valida contra el catálogo: eso lo
+ * hace Atlas ONE Financials al facturar. Todas son opcionales.
+ */
+export function erroresFiscales(form: ProductFormValue): ProductErrors {
+  const errores: ProductErrors = {}
+  const prod = form.sat_clave_prod_serv.trim()
+  if (prod && !/^\d{8}$/.test(prod)) errores.sat_clave_prod_serv = 'Son 8 dígitos, por ejemplo 01010101'
+  const unidad = form.sat_clave_unidad.trim()
+  if (unidad && !/^[A-Za-z0-9]{1,3}$/.test(unidad)) errores.sat_clave_unidad = 'De 1 a 3 letras o números, por ejemplo H87'
+  const iva = discrepanciaIva(form)
+  if (iva) errores.iva_tratamiento = iva
+  return errores
+}
+
+/**
+ * Espejo de `discrepancia_iva` (`app/services/desglose_fiscal.py`): la tasa de
+ * IVA de los datos fiscales manda en el cobro, así que debe cobrar lo mismo
+ * que «Aplica IVA» y «Tasa IVA (%)». El backend responde 422 si no; aquí se
+ * avisa antes de mandar. Sin tasa capturada (y sin «No objeto») no hay nada
+ * que comparar.
+ */
+export function discrepanciaIva(form: ProductFormValue): string | null {
+  const tratamiento = form.iva_tratamiento
+  const noObjeto = form.sat_objeto_imp === '01'
+  if (!tratamiento && !noObjeto) return null
+  const esperada = noObjeto ? 0 : tratamiento === '16' ? 16 : tratamiento === '8' ? 8 : 0
+  const tasa = Number(form.tax_rate)
+  const actual = form.has_iva && Number.isFinite(tasa) && tasa > 0 ? tasa : 0
+  if (esperada === actual) return null
+  if (esperada === 0) return 'Con esta tasa apaga «Aplica IVA»: con factura se le sumaría IVA al cliente'
+  if (actual === 0) return `Enciende «Aplica IVA» con tasa ${esperada} o cambia esta tasa`
+  return `Pon ${esperada} en «Tasa IVA (%)» o cambia esta tasa`
+}
+
 export function validarProducto(e: EntradaFormulario): ProductErrors {
   const { form, mode, isAdmin, userBranchId, enabledBranchIds, prices, packagings, variantRows, hasVariantsModule } = e
   const errores: ProductErrors = {}
@@ -75,6 +111,7 @@ export function validarProducto(e: EntradaFormulario): ProductErrors {
     if (!Number.isFinite(Number(u.package_price)) || Number(u.package_price) < 0)
       errores[`packaging.${i}.package_price`] = 'Número ≥ 0'
   })
+  Object.assign(errores, erroresFiscales(form))
   if (form.has_iva && (!form.tax_rate.trim() || !Number.isFinite(Number(form.tax_rate)))) errores.tax_rate = 'Escribe un número'
   if (mode === 'create' && hasVariantsModule) {
     // La primera fila es la principal: su SKU es el base, no se valida aparte.
@@ -117,6 +154,10 @@ function camposComunes(form: ProductFormValue) {
     cost: Number(form.cost),
     has_iva: form.has_iva,
     tax_rate: form.has_iva ? Number(form.tax_rate) : 0,
+    sat_clave_prod_serv: form.sat_clave_prod_serv.trim() || null,
+    sat_clave_unidad: form.sat_clave_unidad.trim().toUpperCase() || null,
+    sat_objeto_imp: form.sat_objeto_imp || null,
+    iva_tratamiento: form.iva_tratamiento || null,
   }
 }
 
@@ -221,6 +262,10 @@ export function formDesdeProducto(p: Product, variantId?: string): EstadoDesdePr
       cost: String(principal?.cost ?? p.cost ?? ''),
       has_iva: Boolean(principal?.has_iva ?? p.has_iva ?? false),
       tax_rate: String(principal?.tax_rate ?? p.tax_rate ?? '16'),
+      sat_clave_prod_serv: p.sat_clave_prod_serv ?? '',
+      sat_clave_unidad: p.sat_clave_unidad ?? '',
+      sat_objeto_imp: p.sat_objeto_imp ?? '',
+      iva_tratamiento: p.iva_tratamiento ?? '',
       initial_stock: '0',
       initial_stock_branch_id: '',
     },

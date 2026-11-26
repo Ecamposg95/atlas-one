@@ -10,6 +10,7 @@ import { toast } from '../../store/toastStore'
 import { confirm } from '../ui/ConfirmDialog'
 import { ProductBasicsSection } from './ProductBasicsSection'
 import { ProductCommercialSection } from './ProductCommercialSection'
+import { ProductFiscalSection } from './ProductFiscalSection'
 import { ProductTieredPricesSection } from './ProductTieredPricesSection'
 import { ProductPackagingSection } from './ProductPackagingSection'
 import { ProductVariantsSection } from './ProductVariantsSection'
@@ -263,6 +264,7 @@ export function FormularioProducto({ mode, productId, variantId, presentacion, o
         </div>
       )}
       <ProductCommercialSection value={form} onChange={setField} errors={errors} departments={departments} brands={brands} campos={campos} />
+      <ProductFiscalSection value={form} onChange={setField} errors={errors} campos={campos} />
       <ProductTieredPricesSection prices={prices} onChange={setPrices} errors={errors}
         titulo={modoBasico ? 'Precio por cantidad' : undefined}
         help={modoBasico
