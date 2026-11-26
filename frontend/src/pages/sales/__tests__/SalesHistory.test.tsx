@@ -8,6 +8,8 @@ const { list, getStats, getBranches, telefono } = vi.hoisted(() => ({ list: vi.f
 vi.mock('../../../hooks/useIsMobile', () => ({ useEsTelefono: () => telefono.valor }))
 vi.mock('../../../api/sales', () => ({ salesApi: { list, getStats } }))
 vi.mock('../../../api/organization', () => ({ organizationApi: { getBranches } }))
+const { posSearch } = vi.hoisted(() => ({ posSearch: vi.fn() }))
+vi.mock('../../../api/products', () => ({ productsApi: { posSearch } }))
 vi.mock('../../../api/printer', () => ({ printerApi: { getTicketBase64: vi.fn(), printViaAgent: vi.fn() } }))
 vi.mock('../../../store/posStore', () => ({
   usePOSStore: (sel: (s: { printerName: string | null }) => unknown) => sel({ printerName: null }),
@@ -316,5 +318,48 @@ describe('Ventas pasadas (cajera con plazo de la tienda)', () => {
     fireEvent.change(campo, { target: { value: 'a-41' } })
     await waitFor(() => expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ folio_search: 'a-41' })))
     expect(list.mock.lastCall?.[0]).not.toHaveProperty('start_date')
+  })
+})
+
+describe('Filtro por producto vendido', () => {
+  const BLUSA = {
+    id: 'prod-1', sku: 'BLU', name: 'Blusa', sale_name: 'Blusa lino',
+    variants: [{ id: 'var-ch', product_id: 'prod-1', sku: 'BLU-CH', size: 'CH', price: 250, cost: 0 },
+               { id: 'var-m', product_id: 'prod-1', sku: 'BLU-M', size: 'M', price: 250, cost: 0 }],
+  }
+
+  it('la gerente elige un producto: manda product_id con sus fechas y ve lo vendido de él', async () => {
+    usuario('GERENTE', 1)
+    posSearch.mockReset().mockResolvedValue([BLUSA])
+    pintar()
+    await screen.findByText('A-0041')
+    list.mockResolvedValue({ items: [VENTA], total: 1, page: 0, pages: 1, resumen_producto: { piezas: 3, piezas_devueltas: 1, importe: 750, tickets: 2 } })
+    fireEvent.click(screen.getByRole('button', { name: /Producto/ }))
+    fireEvent.change(await screen.findByLabelText('Buscar producto'), { target: { value: 'blusa' } })
+    fireEvent.click(await screen.findByRole('button', { name: /Blusa lino/ }))
+    await waitFor(() => expect(list).toHaveBeenLastCalledWith(expect.objectContaining({
+      product_id: 'prod-1', start_date: hoy.inicio, end_date: hoy.fin, skip: 0,
+    })))
+    expect(list.mock.lastCall?.[0]).not.toHaveProperty('variant_id')
+    const resumen = await screen.findByTestId('resumen-producto')
+    expect(resumen.textContent).toContain('3 piezas vendidas')
+    expect(resumen.textContent).toContain('2 tickets')
+    expect(resumen.textContent).toContain('1 devueltas')
+    // Quitar el filtro vuelve a pedir sin producto.
+    fireEvent.click(screen.getByRole('button', { name: 'Quitar filtro de producto' }))
+    await waitFor(() => expect(list.mock.lastCall?.[0]).not.toHaveProperty('product_id'))
+    expect(screen.queryByTestId('resumen-producto')).toBeNull()
+  })
+
+  it('una talla sola manda también variant_id', async () => {
+    usuario('ADMINISTRADOR')
+    posSearch.mockReset().mockResolvedValue([BLUSA])
+    pintar()
+    await screen.findByText('A-0041')
+    fireEvent.click(screen.getByRole('button', { name: /Producto/ }))
+    fireEvent.change(await screen.findByLabelText('Buscar producto'), { target: { value: 'blusa' } })
+    fireEvent.click(await screen.findByRole('button', { name: 'M' }))
+    await waitFor(() => expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ product_id: 'prod-1', variant_id: 'var-m' })))
+    expect(screen.getByTestId('filtro-producto').textContent).toContain('Blusa lino · M')
   })
 })

@@ -200,6 +200,14 @@ def read_sales(
         None, max_length=80,
         description="Texto libre: nombre del cliente, o descripción / SKU de un producto del ticket.",
     ),
+    product_id: Optional[str] = Query(
+        None, max_length=36,
+        description="Solo tickets que llevan este producto (cualquier variante).",
+    ),
+    variant_id: Optional[str] = Query(
+        None, max_length=36,
+        description="Solo tickets que llevan esta variante (talla/color).",
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization)
@@ -269,6 +277,20 @@ def read_sales(
         )
         query = query.filter(or_(SalesDocument.customer_name.ilike(patron), en_lineas))
 
+    # Producto vendido: tickets con al menos un renglón de ese producto (o de
+    # esa variante). Se combina con fechas, sucursal y estado.
+    lineas_del_producto = None
+    if (product_id and product_id.strip()) or (variant_id and variant_id.strip()):
+        from app.models.products import ProductVariant as _PV
+        lineas_del_producto = db.query(SalesLineItem).join(_PV, _PV.id == SalesLineItem.variant_id)
+        if variant_id and variant_id.strip():
+            lineas_del_producto = lineas_del_producto.filter(SalesLineItem.variant_id == variant_id.strip())
+        if product_id and product_id.strip():
+            lineas_del_producto = lineas_del_producto.filter(_PV.product_id == product_id.strip())
+        query = query.filter(
+            lineas_del_producto.filter(SalesLineItem.document_id == SalesDocument.id).exists()
+        )
+
     # Devoluciones buscan un ticket exacto por folio. El POS lo muestra como
     # "A-0540" (saleLabel hace padStart(4)), y muchas veces se teclea sólo el
     # número o sin los ceros a la izquierda ("540" o "a-540"). Se extraen los
@@ -303,7 +325,46 @@ def read_sales(
 
     pages = max(1, -(-total // limit)) if limit else 1
     items = [SaleRead.model_validate(s) for s in sales]
-    return {"items": items, "total": total, "page": skip // limit if limit else 0, "pages": pages}
+    respuesta = {"items": items, "total": total, "page": skip // limit if limit else 0, "pages": pages}
+    if lineas_del_producto is not None and not es_cajero(current_user):
+        respuesta["resumen_producto"] = _resumen_del_producto(db, query, lineas_del_producto)
+    return respuesta
+
+
+def _resumen_del_producto(db: Session, query, lineas) -> Dict[str, Any]:
+    """Cuánto se vendió del producto filtrado en los tickets de `query`.
+
+    Solo cuentan los tickets que son venta (`filtro_venta_reconocida`: sin
+    canceladas, cotizaciones ni borradores) y solo los renglones del producto,
+    no el ticket completo. Las piezas devueltas salen de devoluciones aprobadas
+    de esos mismos renglones. La caja no lo recibe (no ve importes)."""
+    from app.services.cash_reconciliation import filtro_venta_reconocida
+
+    ids = query.filter(filtro_venta_reconocida()).with_entities(SalesDocument.id).order_by(None).subquery()
+    base = lineas.filter(SalesLineItem.document_id.in_(db.query(ids.c.id)))
+    piezas, importe, tickets = base.with_entities(
+        func.coalesce(func.sum(SalesLineItem.quantity), 0),
+        func.coalesce(func.sum(SalesLineItem.total_line), 0),
+        func.count(func.distinct(SalesLineItem.document_id)),
+    ).one()
+    variantes = base.with_entities(SalesLineItem.variant_id).distinct().subquery()
+    devueltas = (
+        db.query(func.coalesce(func.sum(SaleReturnItem.quantity), 0))
+        .join(SaleReturn, SaleReturn.id == SaleReturnItem.return_id)
+        .filter(
+            SaleReturn.status == "APPROVED",
+            SaleReturn.sale_id.in_(db.query(ids.c.id)),
+            SaleReturnItem.variant_id.in_(db.query(variantes.c.variant_id)),
+        )
+        .scalar()
+    )
+    dos = Decimal("0.01")
+    return {
+        "piezas": float(Decimal(str(piezas or 0))),
+        "piezas_devueltas": float(Decimal(str(devueltas or 0))),
+        "importe": float(Decimal(str(importe or 0)).quantize(dos)),
+        "tickets": int(tickets or 0),
+    }
 
 def _line_description(variant, detallado: bool = False) -> str:
     """Descripcion que se CONGELA en `sales_lines.description`.

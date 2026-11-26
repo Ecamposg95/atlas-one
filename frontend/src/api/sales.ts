@@ -1,11 +1,20 @@
 import client from './client'
 import type { SalesDocument, CartItem } from '../types/sales'
 
+/** Cuánto se vendió del producto filtrado (solo oficina; la caja no lo recibe). */
+export interface ResumenProducto {
+  piezas: number
+  piezas_devueltas: number
+  importe: number
+  tickets: number
+}
+
 export interface SalesListResponse {
   items: SalesDocument[]
   total: number
   page: number
   pages: number
+  resumen_producto?: ResumenProducto
 }
 
 export interface SaleCreateResponse {
@@ -71,7 +80,10 @@ export const salesApi = {
   list: async (params?: Record<string, unknown>): Promise<SalesListResponse> => {
     const { data } = await client.get<SalesListResponse>('/sales/', { params })
     if (Array.isArray(data)) return { items: data, total: data.length, page: 0, pages: 1 }
-    return { items: data?.items ?? [], total: data?.total ?? 0, page: data?.page ?? 0, pages: data?.pages ?? 1 }
+    return {
+      items: data?.items ?? [], total: data?.total ?? 0, page: data?.page ?? 0, pages: data?.pages ?? 1,
+      ...(data?.resumen_producto ? { resumen_producto: data.resumen_producto } : {}),
+    }
   },
 
   getById: async (id: string): Promise<SalesDocument> => {

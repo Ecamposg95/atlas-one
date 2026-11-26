@@ -1,6 +1,6 @@
 // frontend/src/pages/sales/SalesHistory.tsx
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
-import { salesApi, type SalesStats } from '../../api/sales'
+import { salesApi, type ResumenProducto, type SalesStats } from '../../api/sales'
 import { printerApi } from '../../api/printer'
 import { usePOSStore } from '../../store/posStore'
 import { useAuthStore } from '../../store/authStore'
@@ -29,6 +29,7 @@ import { toast } from '../../store/toastStore'
 import { errorDetailText } from '../../utils/errorDetail'
 import { mensajeReimpresion, pinBloqueado, pinIncorrecto, requierePin } from '../../utils/reimpresion'
 import { formatPct } from '../pos/cardSurcharge'
+import { FiltroProducto, type ProductoFiltrado } from './FiltroProducto'
 import { PRESETS, presetActivo, rangoPreset, type ClavePreset, type Rango } from '../reports/presetsReportes'
 
 /**
@@ -94,7 +95,7 @@ export function SalesHistory() {
     d.setDate(d.getDate() - diasCaja)
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   }, [diasCaja])
-  const textoSinVentas = cajaSoloHoy ? 'Sin ventas hoy' : 'Sin ventas en este periodo'
+  const textoSinVentasBase = cajaSoloHoy ? 'Sin ventas hoy' : 'Sin ventas en este periodo'
   const esTelefono = useEsTelefono()
   // Solo los roles de oficina piden la lista; el selector sale con más de una sucursal que vende.
   const sucursales = useSucursalesVendibles(esHq)
@@ -125,6 +126,10 @@ export function SalesHistory() {
     return () => clearTimeout(t)
   }, [busqueda, esCajera])
   // HQ veía PENDING/DRAFT por defecto (HQSalesLog); la cajera no (SalesHistory). Cada rol conserva su costumbre.
+  // Producto vendido: deja solo los tickets que lo llevan; se combina con fechas y sucursal.
+  const [producto, setProducto] = useState<ProductoFiltrado | null>(null)
+  const [resumenProducto, setResumenProducto] = useState<ResumenProducto | null>(null)
+  const textoSinVentas = producto ? `Sin ventas de ${producto.nombre} en este periodo` : textoSinVentasBase
   const [includeOpenStates, setIncludeOpenStates] = useState(esHq && !esCajera)
   const [selected, setSel] = useState<SalesDocument | null>(null)
   const [returnSale, setReturnSale] = useState<SalesDocument | null>(null)
@@ -186,6 +191,10 @@ export function SalesHistory() {
       // `branch_id` solo cuando un rol de oficina eligió sucursal. Sin él, el backend
       // da toda la organización a HQ y su sucursal a cajera y gerente (regla de la Fase 1).
       if (bid !== '') params.branch_id = bid
+      if (producto) {
+        params.product_id = producto.productId
+        if (producto.variantId) params.variant_id = producto.variantId
+      }
       const [listRes, statsRes] = await Promise.allSettled([
         salesApi.list(params),
         esCajera ? Promise.resolve(null) : salesApi.getStats({ start_date: r.inicio, end_date: r.fin, ...(bid !== '' ? { branch_id: bid } : {}) }),
@@ -197,7 +206,9 @@ export function SalesHistory() {
         if (!includeOpenStates) items = items.filter((s) => !['PENDING', 'DRAFT'].includes(String(s.status)))
         setSales(items)
         setTotal(listRes.value?.total ?? items.length)
+        setResumenProducto(listRes.value?.resumen_producto ?? null)
       } else {
+        setResumenProducto(null)
         // Un fallo no se disfraza de "sin ventas".
         setSales([])
         setTotal(0)
@@ -208,7 +219,7 @@ export function SalesHistory() {
     } finally {
       if (mio === reqId.current) setLoading(false)
     }
-  }, [includeOpenStates, esCajera, cajaSoloHoy, busquedaServidor])
+  }, [includeOpenStates, esCajera, cajaSoloHoy, busquedaServidor, producto])
 
   useEffect(() => { load(rango, page, sucursal) }, [load, rango, page, sucursal])
 
@@ -364,11 +375,27 @@ export function SalesHistory() {
           onChange={(e) => setBusqueda(e.target.value)}
           className={`dax-input text-xs ${esCajera ? 'w-56' : 'w-44'}`}
         />
+        <FiltroProducto valor={producto} onCambio={(p) => { setProducto(p); setPage(0) }} />
         {!esCajera && <label className="flex items-center gap-1.5 text-[10px] text-dax-muted cursor-pointer max-md:min-h-[44px]">
           <input type="checkbox" checked={includeOpenStates} onChange={(e) => { setIncludeOpenStates(e.target.checked); setPage(0) }} className="rounded" />
           Incluir abiertas/borradores
         </label>}
       </BarraFiltros>
+
+      {producto && resumenProducto && (
+        <DaxCard>
+          <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2" data-testid="resumen-producto">
+            <p className="text-sm font-semibold text-dax-text w-full sm:w-auto">{producto.nombre}</p>
+            <p className="text-sm text-dax-muted"><span className="text-lg font-semibold text-dax-text">{resumenProducto.piezas}</span> piezas vendidas</p>
+            <p className="text-sm text-dax-muted"><span className="text-lg font-semibold text-dax-success">{formatCurrency(resumenProducto.importe)}</span> importe</p>
+            <p className="text-sm text-dax-muted"><span className="text-lg font-semibold text-dax-text">{resumenProducto.tickets}</span> tickets</p>
+            {resumenProducto.piezas_devueltas > 0 && (
+              <p className="text-sm text-dax-muted"><span className="text-lg font-semibold text-dax-danger">{resumenProducto.piezas_devueltas}</span> devueltas</p>
+            )}
+          </div>
+          <p className="mt-2 text-[11px] text-dax-faint">Solo los renglones de este producto en ventas del periodo; sin canceladas ni cotizaciones. Los totales de arriba son de todas las ventas.</p>
+        </DaxCard>
+      )}
 
       {/* Teléfono: tarjetas; escritorio: la tabla de siempre (nunca ambos) */}
       {esTelefono ? (

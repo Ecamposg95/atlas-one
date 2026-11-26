@@ -45,7 +45,7 @@ Catálogo de endpoints por dominio. Todos bajo `/api`. Swagger vivo en `/docs`. 
 | Método | Ruta | Qué hace |
 |---|---|---|
 | GET | /stats | **CAJERO → 403** («Los totales del día no están disponibles para la cajera.»). KPIs de ventas: neto de devoluciones aprobadas, sin pendientes ni borradores; trae `gross_sales` (`app/services/metricas_ventas.py`). Una sola fecha = ese día; rango invertido = 422. Ámbito: ADMINISTRADOR/DUEÑO sin `branch_id` = toda la org; GERENTE: siempre su sucursal (ignora `branch_id`, como la lista `GET /`); los demás roles, la suya |
-| GET · POST | / | Lista paginada (**CAJERO**: solo las ventas de hoy, día de México, de su sucursal; ignora `start_date`/`end_date`/`branch_id`) · **create_sale** (checkout) |
+| GET · POST | / | Lista paginada (**CAJERO**: solo las ventas de hoy, día de México, de su sucursal; ignora `start_date`/`end_date`/`branch_id`) · **create_sale** (checkout). Filtros del GET: `search`, `folio_search`, `customer_id`, `status`, `doc_type` y, desde 2026-11-25, **`product_id`/`variant_id`** (solo tickets que llevan ese producto o esa talla; se combinan con fechas y sucursal). Con producto, la respuesta trae `resumen_producto` `{piezas, piezas_devueltas, importe, tickets}` —solo renglones del producto en tickets que son venta (`filtro_venta_reconocida`)—, salvo a CAJERO/VENDEDOR |
 | GET | /by-folio/{series}/{folio} · /my-last · /{id} · /{id}/print-view | Detalle / última / ticket HTML (**CAJERO**: `/by-folio/...`, `/my-last`, `/{id}` y `/{id}/print-view` dan 404 si la venta no es de hoy y de su sucursal —`/by-folio` con «Venta no encontrada»—; regla en `app/services/ventas_cajero.py`) |
 | DELETE | /{id} | **cancel_sale** (revierte stock + deuda) |
 | POST | /{id}/refund | Stub (no-op) |

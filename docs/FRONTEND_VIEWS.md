@@ -202,7 +202,7 @@ Las vistas marcadas 📱 se adaptan a teléfono con el kit de `components/ui/` (
 
 ### `/sales` — Ventas 📱
 - **Archivo:** `pages/sales/SalesHistory.tsx`. Sustituye también a `hq/HQSalesLog.tsx` (borrada 2026-10-25, Fase 3 del admin; `/hq/sales` redirige con su consulta).
-- **Propósito:** ventas por periodo (`Hoy · Ayer · 7 días · 30 días · Este mes` + rango, `pages/reports/presetsReportes.ts`; arranca en **Hoy**) con cifras (`KpiCard`), buscador de folio/cliente, detalle en `ui/Modal`, reimprimir (PIN de supervisor si el backend lo pide) y devolver.
+- **Propósito:** ventas por periodo (`Hoy · Ayer · 7 días · 30 días · Este mes` + rango, `pages/reports/presetsReportes.ts`; arranca en **Hoy**) con cifras (`KpiCard`), buscador de folio/cliente, filtro **«Producto»** (`pages/sales/FiltroProducto.tsx`: busca con `productsApi.posSearch`, producto completo o una talla; manda `product_id`/`variant_id` y la oficina ve piezas, importe, tickets y devueltas de ese producto), detalle en `ui/Modal`, reimprimir (PIN de supervisor si el backend lo pide) y devolver.
 - **Quién la ve:** todos. Cajera y gerente ven su sucursal (el backend la impone); admin y dueño toda la organización y, con más de una sucursal que vende (`useSucursalesVendibles`), un selector y la columna «Sucursal». `branch_id` solo viaja cuando eligen una.
 - **Datos/API:** `salesApi.list/getStats`, `printerApi.getTicketBase64/printViaAgent`, `organizationApi.getBranches` (solo HQ).
 - **Versión cajera:** título «Ventas de hoy», sin KPIs, filtros ni selector de periodo (el backend solo le entrega las de hoy de su sucursal); lista vacía = «Sin ventas hoy»; `ReturnModal` le avisa que solo devuelve ventas de hoy y que lo anterior lo hace el gerente.
