@@ -180,8 +180,9 @@ autoarranque en `docs/superpowers/runbooks/print-agent-autostart.md`.
 
 ## Canal Tienda en línea (`/api/channel/v1`) `[module:tienda_en_linea]`
 
-API de **solo lectura** para que una tienda web externa (eleven.boutique) sincronice el catálogo
-publicado de una organización. No usa JWT: autentica con una llave de servidor con scope
+API para que una tienda web externa (eleven.boutique) sincronice el catálogo publicado de una
+organización (lectura, scope `catalog:read`) y devuelva clics y prospectos (`POST /leads`, scope
+`leads:write`, abajo). No usa JWT: autentica con una llave de servidor con scope
 `catalog:read` (`Authorization: Bearer atlas_xxxxxxxx_...` o `X-Api-Key`). Sin llave válida 401, sin
 scope 403, módulo apagado 404, más de 120 llamadas/min por llave 429. Sin CORS: se llama desde el
 servidor de la web, nunca desde el navegador. Nunca expone precios, costos, existencias, códigos de
@@ -234,6 +235,50 @@ curl -H "Authorization: Bearer $KEY" "https://app.atlasone.com.mx/api/channel/v1
     { "id": "c0de…", "updated_at": "2026-11-14T10:06:00Z", "deleted": true } ],
   "next_cursor": null, "server_time": "2026-11-14T10:07:00Z" }
 ```
+
+### `POST /api/channel/v1/leads` — clics y prospectos de la web (scope `leads:write`)
+
+Misma llave, mismo tope de 120/min y mismo 404 con el módulo apagado que la lectura; una llave sin
+`leads:write` → 403. La web lo llama desde su servidor (el cron `sync` de eleven.boutique manda hasta
+100 por corrida).
+
+- **Header `Idempotency-Key` obligatorio** (1..200 caracteres; falta → 422). Repetir la clave devuelve
+  la respuesta guardada sin volver a contar; las claves se guardan 7 días por organización. Dos
+  peticiones simultáneas con la misma clave: gana una y la otra recibe su misma respuesta.
+- **Cuerpo:**
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `source` | `web_whatsapp_click` \| `web_selection` \| `web_form` | obligatorio |
+| `product_ids` | `[uuid]`, máx. 50 | ids de `GET /products`; duplicados se cuentan una vez; los de otra org o inexistentes se ignoran en silencio (no reintentar) |
+| `line` | `general` \| `boutique` | opcional (casa premium vs línea Boutique) |
+| `name` | str ≤ 120 | opcional |
+| `phone` | str ≤ 30 | opcional; se normaliza a los últimos 10 dígitos; con menos de 10 dígitos cuenta como sin teléfono |
+| `email` | str ≤ 200 | opcional |
+| `utm` | `{source, medium, campaign}` ≤ 100 c/u | opcional; otra clave → 422 |
+| `occurred_at` | ISO 8601 | opcional (def. ahora); más de 7 días atrás o más de 1 día adelante → 422 |
+
+- **Respuesta:** sin teléfono válido → **202** `{"recorded": "metric"}` (solo suma la métrica anónima
+  por pieza y día de México en `channel_product_metrics`). Con teléfono → **201** `{"lead_id": uuid}`:
+  crea un prospecto en `channel_leads` (`status: "nuevo"`, ligado a un cliente existente de la org si
+  su teléfono normalizado coincide) y también suma la métrica.
+
+```bash
+curl -X POST -H "Authorization: Bearer $KEY" -H "Idempotency-Key: sel-2026-11-17-abc123" \
+  -H "Content-Type: application/json" https://app.atlasone.com.mx/api/channel/v1/leads \
+  -d '{"source":"web_selection","product_ids":["b1f0…"],"line":"boutique","name":"Ana","phone":"+52 55 1234 5678"}'
+# 201 {"lead_id":"…"}
+```
+
+### Lado Atlas ONE (JWT, solo admin/dueño)
+
+- `GET /api/canal/config` → `{activo, sucursales_web, sucursales:[{id, name, can_sell}]}`; con el
+  módulo apagado `{activo:false, …}`. `PUT /api/canal/config` `{sucursales_web: [ids] | null}`
+  (`null` = todas las que venden): fija qué sucursales cuentan para «disponible» y recalcula la
+  disponibilidad; sucursal ajena → 422, módulo apagado → 404.
+- `GET /api/reports/tienda-en-linea?desde=YYYY-MM-DD&hasta=YYYY-MM-DD` →
+  `{piezas: [{product_id, name, consultas}] (top 10), prospectos}` (días de México); 403 a quien no es
+  admin, 404 con el módulo apagado, `hasta < desde` → 422.
 
 ## Etiquetas · `/api/labels` `[module:labels]`
 `GET /candidates` (filtros `search`, `department_id`, `brand_id`, `gender`, `only_with_stock`, `product_id`, `created_after` ISO 8601 = solo tallas dadas de alta desde ese instante; la pantalla manda la medianoche local; `carga_id` = solo las variantes que recibieron piezas de esa carga —movimientos con `reference="carga:<id>"`— y `copies_default` y `piezas_carga` salen de lo que entró, no de la existencia) devuelve una fila por variante visible con sus campos de etiqueta, `created_at` (alta de la talla, UTC) y `copies_default` = existencia (admin/dueño suman la organización, el resto su sucursal; tope 99). Las no imprimibles NO se esconden: llegan con `printable:false` y su `reason`. `POST /preview` (`{variant_id}` o datos sueltos) devuelve el layout en dots sobre un lienzo 408×200 —`elements` con textos y el código de barras en `bits`— más el ZPL crudo, para que la pantalla dibuje exactamente lo que va a salir. `POST /jobs` (`{items:[{variant_id, copies}]}`, copias 1..99, tope de 500 etiquetas por lote) devuelve `{content_base64, labels, skipped}`; un renglón sin código de barras cae en `skipped` sin tumbar el trabajo. `GET /test` da la etiqueta de calibración. **El server no imprime**: entrega ZPL en base64 y el navegador lo manda al agente local (`POST https://localhost:9100/print`), igual que el ticket. El layout está portado byte a byte de `atlas_labels/` del repositorio del agente (51 × 25 mm a 203 dpi, Zebra GX420t) y un test lo congela contra un literal.
