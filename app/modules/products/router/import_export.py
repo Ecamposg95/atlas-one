@@ -21,6 +21,7 @@ from app.core.tenant_context import get_current_active_organization
 from app.crud.products import _is_admin, query_visible_products
 from app.models import Brand, Department, Product, ProductVariant, StockOnHand, User
 from app.models.organization import Branch, BranchType
+from app.modules.products.filtros_avanzados import aplicar_filtros_avanzados
 from app.modules.products.services.importacion import ContextoImportacion, FilaInvalida, importar_fila
 from app.modules.products.services.validaciones import validar_sucursales_de_la_org
 from app.services.barcodes import AsignadorDeCodigos
@@ -43,6 +44,11 @@ def export_products_template(
     brand_id: Optional[str] = None,
     approval_status: Optional[str] = None,
     include_inactive: bool = False,
+    gender: Optional[str] = None,
+    size: Optional[str] = None,
+    color: Optional[str] = None,
+    only_with_stock: bool = False,
+    created_after: Optional[datetime] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization)
@@ -86,6 +92,13 @@ def export_products_template(
         q = q.filter(Product.brand_id == brand_id)
     if approval_status and approval_status != 'ALL':
         q = q.filter(Product.approval_status == approval_status)
+    # Filtros avanzados con el mismo alcance de existencia que la lista.
+    q = aplicar_filtros_avanzados(
+        q, org_id,
+        gender=gender, size=size, color=color,
+        only_with_stock=only_with_stock, created_after=created_after,
+        stock_branch_id=branch_id if branch_id is not None else current_user.branch_id,
+    )
 
     query = q.all()
 

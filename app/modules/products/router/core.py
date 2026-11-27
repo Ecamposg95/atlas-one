@@ -16,6 +16,7 @@ Sprint 5b split — extracted verbatim from the original ``products.py``.
 from __future__ import annotations
 import logging
 import uuid
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
@@ -42,6 +43,7 @@ from app.modules.products.schemas import (
 from app.modules.products.sale_name import sku_sugerido
 from app.modules.products.services import actualizar_producto, crear_producto, duplicar_producto
 from app.modules.products.services import web as web_svc
+from app.modules.products.filtros_avanzados import aplicar_filtros_avanzados
 
 from ._shared import _PRODUCT_ADVANCED_ROLES, _ROLES_FOTOS, _compute_product_read
 
@@ -63,6 +65,12 @@ def read_products(
     approval_status: str = None, # NEW: Filter by status
     include_inactive: bool = False,  # Admin: incluir productos desactivados
     sin_foto: bool = False,  # Solo productos sin foto principal (pantalla Fotos)
+    # Filtros avanzados (los ejes de Etiquetas). Ver `filtros_avanzados.py`.
+    gender: Optional[str] = None,
+    size: Optional[str] = None,
+    color: Optional[str] = None,
+    only_with_stock: bool = False,
+    created_after: Optional[datetime] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     org_id: int = Depends(get_current_active_organization),
@@ -116,6 +124,16 @@ def read_products(
 
     # target_branch_id para enriquecimiento de stock (abajo) — fuera del filtro de visibilidad
     target_branch_id = branch_id if branch_id is not None else current_user.branch_id
+
+    # Talla, color, género, existencia y fecha de alta: en el servidor porque la
+    # lista es paginada. "Con existencia" usa la MISMA sucursal cuya existencia
+    # pinta la lista (`target_branch_id`); sin sucursal, la organización entera.
+    query = aplicar_filtros_avanzados(
+        query, org_id,
+        gender=gender, size=size, color=color,
+        only_with_stock=only_with_stock, created_after=created_after,
+        stock_branch_id=target_branch_id,
+    )
 
     # active_in_branch ya está cubierto para no-admins por el helper (INNER JOIN a PBS is_active_pos=True).
     # Para admin con override, el helper también hace INNER JOIN. Sin override queda como antes

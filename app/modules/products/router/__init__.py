@@ -44,6 +44,7 @@ from . import (
     audit,
     variants,
     revision_fiscal,
+    facetas,
 )
 
 router = APIRouter()
@@ -65,6 +66,7 @@ router.include_router(audit.router)
 router.include_router(variants.router)
 router.include_router(barcodes.router)
 router.include_router(revision_fiscal.router)
+router.include_router(facetas.router)
 router.include_router(core.router)
 
 

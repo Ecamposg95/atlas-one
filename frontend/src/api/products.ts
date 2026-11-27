@@ -271,6 +271,11 @@ export const productsApi = {
     brand_id?: string
     approval_status?: string
     branch_id?: number
+    gender?: string
+    size?: string
+    color?: string
+    only_with_stock?: boolean
+    created_after?: string
   }): Promise<{
     total_skus: number
     active_pos: number
@@ -282,6 +287,15 @@ export const productsApi = {
   }> => {
     const { data } = await client.get('/products/stats/catalog-kpis', { params })
     return data
+  },
+
+  /**
+   * GET /api/products/facets — tallas y colores del catálogo visible de la
+   * organización (opciones del panel «Más filtros» de Productos).
+   */
+  facets: async (): Promise<{ sizes: string[]; colors: string[] }> => {
+    const { data } = await client.get<{ sizes?: string[]; colors?: string[] }>('/products/facets')
+    return { sizes: data?.sizes ?? [], colors: data?.colors ?? [] }
   },
 
   create: async (payload: ProductCreate): Promise<Product> => {
@@ -560,6 +574,11 @@ export const productsApi = {
     approval_status?: string
     branch_id?: number
     include_inactive?: boolean
+    gender?: string
+    size?: string
+    color?: string
+    only_with_stock?: boolean
+    created_after?: string
   }): Promise<void> => {
     const res = await client.get('/products/export/excel', { params, responseType: 'blob' })
     const url = URL.createObjectURL(new Blob([res.data]))
