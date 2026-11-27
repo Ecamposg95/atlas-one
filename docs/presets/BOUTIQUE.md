@@ -176,7 +176,7 @@ normal, antes del corte de papel:
    si hay alguna red capturada — el sitio web nunca sale solo).
 3. **TERMINOS DE COMPRA** (o el texto de `ticket_terms_url` si se capturó, con el QR —
    ver 3.2) — párrafo largo envuelto a `cols` con `_wrap_text`.
-4. **Proveedor** — `"Sistema: Atlas One | Atlas Tech"` + `atlasone.com.mx`, solo si
+4. **Proveedor** — `"Sistema: Atlas One | Atlas Tech"` + `atlastech.mx`, solo si
    `ticket_show_vendor = true` (apagado por defecto: el dueño lo enciende si quiere).
 
 Todo en latin-1 con `replace` como el resto del ticket, sin exceder `self.cols` (32 a

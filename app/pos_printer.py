@@ -20,7 +20,7 @@ MX_TZ = ZoneInfo("America/Mexico_City")
 LEGACY_TICKET_HEADER = "ATLAS POS - Nota de Venta"
 
 # Linea del proveedor tecnologico, al pie del pie.
-VENDOR_LINES = ("Sistema: Atlas One | Atlas Tech", "atlasone.com.mx")
+VENDOR_LINES = ("Sistema: Atlas One | Atlas Tech", "atlastech.mx")
 from typing import List, Optional
 from decimal import Decimal
 
@@ -1365,7 +1365,7 @@ class PosPrinter:
         # Marca del proveedor
         raw += self.CMD["BOLD_ON"] + line("ATLAS TECH") + self.CMD["BOLD_OFF"]
         raw += line("Atlas One - Punto de venta")
-        raw += line("atlasone.com.mx")
+        raw += line("atlastech.mx")
         raw += sep
         raw += self.CMD["BOLD_ON"] + line("IMPRESION DE PRUEBA") + self.CMD["BOLD_OFF"]
         raw += line(datetime.now(timezone.utc).astimezone(MX_TZ).strftime("%d/%m/%Y %H:%M"))

@@ -241,7 +241,7 @@ def test_terminos_respetan_los_parrafos_del_usuario():
 def test_proveedor_se_imprime_cuando_esta_encendido():
     decoded = _decode(_build(_make_sale(), organization=_org(ticket_show_vendor=True)))
     assert "Sistema: Atlas One | Atlas Tech" in decoded
-    assert "atlasone.com.mx" in decoded
+    assert "atlastech.mx" in decoded
 
 
 def test_proveedor_apagado_no_imprime_nada_de_atlas():
@@ -323,14 +323,14 @@ def test_html_trae_redes_terminos_y_proveedor_cuando_estan_configurados():
     assert "Términos de compra" in html
     assert "Cambios y devoluciones" in html
     assert "Atlas One" in html
-    assert "atlasone.com.mx" in html
+    assert "atlastech.mx" in html
 
 
 def test_html_proveedor_apagado_no_muestra_atlas():
     html = _render_html(_org_redes(ticket_terms=TERMINOS, ticket_show_vendor=False))
     assert "Términos de compra" in html
     assert "Atlas One" not in html
-    assert "atlasone.com.mx" not in html
+    assert "atlastech.mx" not in html
 
 
 # ─── 9. Enlace a la política completa (QR nativo) ─────────────────────────
