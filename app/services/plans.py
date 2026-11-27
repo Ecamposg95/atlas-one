@@ -48,8 +48,9 @@ MODULOS_BASE: FrozenSet[str] = frozenset({
 # quedó como clave vieja de `logistics` (Cajas y contenedores aceptan las dos).
 _START = frozenset({"quotes"})
 _PRO = _START | {"purchasing", "logistics"}
-_BUSINESS = _PRO | {"finance", "hr"}
-_SCALE = _BUSINESS | {"ai"}
+# IA: decisión del dueño (2026-11-27), entra en BUSINESS y SCALE (y ULTRA+).
+_BUSINESS = _PRO | {"finance", "hr", "ai"}
+_SCALE = _BUSINESS
 
 # Todo lo que depende del plan. Lo que no esta aqui ni en MODULOS_BASE es
 # vertical: lo decide el preset (o ULTRA+, que permite todo el catalogo).

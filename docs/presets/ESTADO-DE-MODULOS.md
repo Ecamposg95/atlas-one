@@ -48,7 +48,7 @@ CUS(tom). ENT trae todo el catálogo de despliegue menos `tienda_en_linea`.
 | `warehouse` | **en_construccion** | Backend real `app/routers/logistics.py` (`require_module("warehouse")`: contenedores, cajas, cálculo de carga, embarques). Sin pantalla propia: embarques y cálculo de carga no tienen interfaz. La única pantalla que lo consume es «Cajas y contenedores» (`pages/inventory/Boxes.tsx`), que el menú cuelga de `logistics`. No está en el catálogo de despliegue. | PRO+ | ninguno v2 (fallback viejo `DISTRIBUTOR_POS`, `RETAIL_CHAIN`) |
 | `commissions` | **oculto** | Cascarón: `app/modules/commissions/router.py` (20 líneas, solo `/health` con `"ready": False`). La pantalla era «Próximamente». | BUSINESS+ | BEA\*, BAR, B&W, HEA, RES, BAR-B, SER, ENT |
 | `memberships` | **oculto** | Cascarón: `app/modules/memberships/router.py` (solo `/health`). Pantalla «Próximamente». | BUSINESS+ | BEA\*, BAR, B&W, HEA, ENT |
-| `ai` | **en_construccion** | `app/modules/ai/` existe (en construcción en otro frente, F1); la pantalla `/ai` era «Próximamente». | SCALE+ | ENT |
+| `ai` | **en_construccion** | `app/modules/ai/` existe (en construcción en otro frente, F1); la pantalla `/ai` era «Próximamente». | BUSINESS+ | ENT |
 | `appointments` | **en_construccion** | Backend real: `app/modules/appointments/` (1,744 líneas: router, services, `portal_router.py` de reserva pública en `/api/portal/booking`). Ninguna pantalla lo consume (`/appointments` era «Próximamente»). | — (vertical) | BEA\*, BAR, B&W, HEA, SER, ENT |
 | `workshops` | **oculto** | Cero código (ni router ni modelo de órdenes de trabajo). El widget «Órdenes de trabajo» de Services apunta a `/seguimiento` (pedidos de cotizaciones). | — (vertical) | SER, ENT |
 | `manufacturing` | **oculto** | Cero código. El widget «Manufactura» de Enterprise mandaba a `/inventory`. | — (vertical) | ENT |
@@ -97,8 +97,8 @@ Desde el 2026-11-26 (§4 aplicado) los planes solo venden lo construido:
 | FREE | — (base completa) | — |
 | START | `quotes` | — |
 | PRO | + `purchasing`, `logistics` | — |
-| BUSINESS | + `finance` (gastos), `hr` (expedientes y asistencia) | — |
-| SCALE | + `ai` | `ai` (pendiente de decisión: ¿BUSINESS o SCALE?) |
+| BUSINESS | + `finance` (gastos), `hr` (expedientes y asistencia), `ai` | `ai` (en construcción) |
+| SCALE | lo de BUSINESS; solo sube topes | `ai` (en construcción) |
 | ULTRA+ | todo el catálogo | lo no construido del catálogo |
 
 `customer_portal` e `invoicing` pasaron a la base (cualquier plan): el portal no tiene
@@ -151,7 +151,7 @@ taxonomía previa (`DISTRIBUTOR_POS`, `RESTAURANT_QSR`, `RESTAURANT_FULL`,
 
 ## 4. Propuesta (aplicada el 2026-11-26; guardias en `tests/test_limpieza_promesa.py`)
 
-Aplicado: §4.1 completo (con las tres decisiones: claves unificadas aceptando las dos, portal regalado con CRM, `invoicing` fuera de los planes) y §4.2 completo (legacy migrados en cada deploy por `init_presets_v2._migrar_presets_legacy`, cuatro giros «en preparación», listas limpias, Enterprise = todo lo disponible). Pendiente: §4.3 (consultas a producción) y la decisión sobre `ai`.
+Aplicado: §4.1 completo (con las tres decisiones: claves unificadas aceptando las dos, portal regalado con CRM, `invoicing` fuera de los planes) y §4.2 completo (legacy migrados en cada deploy por `init_presets_v2._migrar_presets_legacy`, cuatro giros «en preparación», listas limpias, Enterprise = todo lo disponible). Pendiente: §4.3 (consultas a producción). `ai` se decidió el 2026-11-27: entra en BUSINESS y SCALE.
 
 ### 4.1 Qué debería prometer cada plan mientras tanto
 

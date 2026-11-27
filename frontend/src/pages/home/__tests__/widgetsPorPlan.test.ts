@@ -17,8 +17,12 @@ describe('widgetVisible', () => {
   it('sin módulo declarado siempre se ve', () => {
     expect(widgetVisible({}, FREE, ['core'])).toBe(true)
   })
-  it('fuera de FREE se ve todo (el CTA lleva a la pantalla que avisa)', () => {
-    expect(widgetVisible({ module: 'quotes' }, PRO, ['core'])).toBe(true)
+  it('en cualquier plan se esconde el widget de un módulo apagado', () => {
+    expect(widgetVisible({ module: 'crm' }, PRO, ['core', 'pos'])).toBe(false)
+    expect(widgetVisible({ module: 'crm' }, PRO, ['core', 'crm'])).toBe(true)
+  })
+  it('sin módulos cargados no se esconde nada (fail-open)', () => {
+    expect(widgetVisible({ module: 'crm' }, PRO, [])).toBe(true)
   })
   it('sin plan cargado no se esconde nada', () => {
     expect(widgetVisible({ module: 'quotes' }, null, ['core'])).toBe(true)

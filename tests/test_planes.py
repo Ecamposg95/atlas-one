@@ -59,14 +59,14 @@ class TestCatalogo:
         # Limpieza de la promesa (2026-11-26): solo lo construido se vende por plan.
         assert c["START"] == {"quotes"}
         assert c["PRO"] == c["START"] | {"purchasing", "logistics"}
-        assert c["BUSINESS"] == c["PRO"] | {"finance", "hr"}
-        assert c["SCALE"] == c["BUSINESS"] | {"ai"}
+        assert c["BUSINESS"] == c["PRO"] | {"finance", "hr", "ai"}  # IA en BUSINESS y SCALE (2026-11-27)
+        assert c["SCALE"] == c["BUSINESS"]
         assert c["ULTRA_PLUS"] == c["SCALE"] and plans.PLANES_POR_CLAVE["ULTRA_PLUS"].permite_todo
         assert plans.MODULOS_CRECIMIENTO == frozenset(c["SCALE"])
 
     def test_los_planes_solo_venden_lo_construido(self):
         """ESTADO-DE-MODULOS §4.1. `ai` es la excepción pendiente de decisión
-        (megaplan §9: ¿BUSINESS o SCALE?); se destapa cuando salga F1."""
+        (decidido 2026-11-27: BUSINESS y SCALE); aún en construcción."""
         from app.services import estado_modulos as em
         assert em.solo_no_disponibles(plans.MODULOS_CRECIMIENTO) == ["ai"]
 
@@ -127,7 +127,7 @@ class TestModulosPermitidos:
         assert plans.plan_minimo_para("quotes").clave == "START"
         assert plans.plan_minimo_para("purchasing").clave == "PRO"
         assert plans.plan_minimo_para("hr").clave == "BUSINESS"
-        assert plans.plan_minimo_para("ai").clave == "SCALE"
+        assert plans.plan_minimo_para("ai").clave == "BUSINESS"
         assert plans.plan_minimo_para("pos") is None
         assert plans.plan_minimo_para("tables") is None
 

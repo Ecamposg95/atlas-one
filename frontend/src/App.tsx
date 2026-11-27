@@ -11,7 +11,7 @@ import { rutaInicioPorRol } from './utils/rutaInicio'
 const _savedTheme = localStorage.getItem('atlas_theme') ?? 'dark'
 document.documentElement.classList.add(_savedTheme)
 import { Layout } from './components/layout/Layout'
-import { RequireRole, RutaPorRol } from './components/layout/RequireRole'
+import { RequireRole, RequiereModulo, RutaPorRol } from './components/layout/RequireRole'
 import { SoloMovil } from './components/layout/SoloMovil'
 import { RedirigirConQuery, RedirigirASucursal } from './components/layout/RedirigirConQuery'
 
@@ -293,7 +293,7 @@ export default function App() {
             path="labels"
             element={
               <RequireRole roles={['ADMINISTRADOR', 'DUEÑO', 'GERENTE', 'CAJERO']}>
-                <Suspense fallback={<PageLoader />}><Labels /></Suspense>
+                <RequiereModulo modulo="labels"><Suspense fallback={<PageLoader />}><Labels /></Suspense></RequiereModulo>
               </RequireRole>
             }
           />
@@ -346,8 +346,8 @@ export default function App() {
           } />
 
           {/* CRM / HR */}
-          <Route path="customers"  element={<RutaPorRol url="/customers"><Suspense fallback={<PageLoader />}><Customers /></Suspense></RutaPorRol>} />
-          <Route path="customers/cobranza" element={<RutaPorRol url="/customers/cobranza"><Suspense fallback={<PageLoader />}><Cobranza /></Suspense></RutaPorRol>} />
+          <Route path="customers"  element={<RutaPorRol url="/customers"><RequiereModulo modulo="crm"><Suspense fallback={<PageLoader />}><Customers /></Suspense></RequiereModulo></RutaPorRol>} />
+          <Route path="customers/cobranza" element={<RutaPorRol url="/customers/cobranza"><RequiereModulo modulo="crm"><Suspense fallback={<PageLoader />}><Cobranza /></Suspense></RequiereModulo></RutaPorRol>} />
           <Route path="hr"         element={<RutaPorRol url="/hr"><Suspense fallback={<PageLoader />}><HR /></Suspense></RutaPorRol>} />
           <Route path="hr/me"      element={<RutaPorRol url="/hr/me"><Suspense fallback={<PageLoader />}><HRMe /></Suspense></RutaPorRol>} />
 

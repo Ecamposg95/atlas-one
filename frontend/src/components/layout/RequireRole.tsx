@@ -1,5 +1,6 @@
 import { Navigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
+import { useEnabledModulesStore } from '../../store/enabledModulesStore'
 import type { Role } from '../../types/auth'
 import { rolesConAcceso } from './navConfig'
 
@@ -54,4 +55,27 @@ export function RequireRole({
  */
 export function RutaPorRol({ url, children }: { url: string; children: React.ReactNode }) {
   return <RequireRole roles={rolesConAcceso(url)} redirectTo="/">{children}</RequireRole>
+}
+
+/** Decisión pura de `RequiereModulo` (con pruebas). Mismo criterio que el
+ *  backend (`require_module`): administrador y dueño pasan siempre; sin
+ *  módulos cargados no se decide nada (fail-open, como el menú). */
+export function moduloPermiteRuta(rol: Role | undefined, modulo: string, enabledModules: string[]): boolean {
+  if (rol === 'ADMINISTRADOR' || rol === 'DUEÑO') return true
+  if (enabledModules.length === 0) return true
+  return enabledModules.includes(modulo)
+}
+
+/**
+ * Guarda de interfaz por módulo: si la tienda lo tiene apagado, la cajera, el
+ * gerente o el vendedor vuelven a su inicio en vez de abrir una pantalla cuyas
+ * llamadas responden 403 (Kaory en Clientes, 2026-11-27). El menú ya lo
+ * escondía; esto cubre la URL escrita, el historial y cualquier otro enlace.
+ */
+export function RequiereModulo({ modulo, children }: { modulo: string; children: React.ReactNode }) {
+  const user = useAuthStore((s) => s.user)
+  const enabledModules = useEnabledModulesStore((s) => s.enabledModules)
+  if (user?.platform_role === 'SUPERADMIN' || user?.platform_role === 'SUPPORT') return <>{children}</>
+  if (!moduloPermiteRuta(user?.role, modulo, enabledModules)) return <Navigate to="/" replace />
+  return <>{children}</>
 }

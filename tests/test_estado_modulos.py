@@ -127,6 +127,7 @@ class TestCanales:
         # Desde la limpieza de la promesa (2026-11-26) los planes ya no venden lo
         # no construido; solo queda `ai`, pendiente de decisión, marcado.
         assert planes["START"]["modulos_no_disponibles"] == []
+        assert planes["BUSINESS"]["modulos_no_disponibles"] == ["ai"]
         assert planes["SCALE"]["modulos_no_disponibles"] == ["ai"]
         for p in planes.values():
             assert set(p["modulos_no_disponibles"]) <= set(p["modulos_crecimiento"])

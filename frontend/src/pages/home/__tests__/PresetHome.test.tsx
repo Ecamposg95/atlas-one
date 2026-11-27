@@ -16,8 +16,8 @@ const tienda = { id: 1, name: 'Tienda Demo', industry_type: 'ATLAS_ONE_RETAIL', 
 const FREE = { clave: 'FREE', nombre: 'ONE FREE' }
 const ULTRA = { clave: 'ULTRA_PLUS', nombre: 'ULTRA+' }
 
-function pintar(plan: typeof FREE | null, enabledModules: string[]) {
-  useEnabledModulesStore.setState({ loaded: true, loading: false, preset: 'ATLAS_ONE_RETAIL', enabledModules, plan, capacidades: [] })
+function pintar(plan: typeof FREE | null, enabledModules: string[], preset = 'ATLAS_ONE_RETAIL') {
+  useEnabledModulesStore.setState({ loaded: true, loading: false, preset, enabledModules, plan, capacidades: [] })
   return render(<MemoryRouter><PresetHome /></MemoryRouter>)
 }
 
@@ -51,10 +51,23 @@ describe('PresetHome en FREE (retail)', () => {
 })
 
 describe('PresetHome fuera de FREE', () => {
-  it('ULTRA+ ve todos los widgets y ninguna tarjeta', () => {
-    pintar(ULTRA, ['core'])
+  it('ULTRA+ con todo encendido ve todos los widgets y ninguna tarjeta', () => {
+    pintar(ULTRA, ['core', 'inventory', 'purchasing', 'quotes', 'reports'])
     expect(screen.getByText('Cotizaciones')).toBeTruthy()
     expect(screen.queryByTestId('tarjeta-plan')).toBeNull()
+  })
+  it('en cualquier plan esconde el widget de un módulo apagado (no manda a un 403)', () => {
+    pintar(ULTRA, ['core', 'inventory', 'reports'])
+    expect(screen.queryByText('Cotizaciones')).toBeNull()
+    expect(screen.getByTestId('tarjeta-plan').textContent).toContain('Cotizaciones')
+  })
+  it('Café sin Clientes no ofrece «Frecuentes» (Kapruy, 2026-11-27)', () => {
+    pintar(ULTRA, ['core', 'pos', 'kitchen', 'inventory', 'reports'], 'ATLAS_ONE_CAFE')
+    expect(screen.queryByText('Frecuentes')).toBeNull()
+    expect(screen.getByText('Inventario')).toBeTruthy()
+    cleanup()
+    pintar(ULTRA, ['core', 'pos', 'crm'], 'ATLAS_ONE_CAFE')
+    expect(screen.getByText('Frecuentes')).toBeTruthy()
   })
   it('sin plan cargado no se esconde nada', () => {
     pintar(null, ['core'])
@@ -78,7 +91,7 @@ describe('PresetHome no anuncia módulos sin construir', () => {
 
   it('cuando el servidor lo declara disponible, el widget vuelve solo', () => {
     useEnabledModulesStore.setState({ noDisponibles: {} })
-    pintar(ULTRA, ['core'])
+    pintar(ULTRA, ['core', 'promotions'])
     expect(screen.getByText('Promociones')).toBeTruthy()
     useEnabledModulesStore.getState().reset()
   })

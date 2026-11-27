@@ -1,10 +1,11 @@
 import type { PlanOrg } from '../../types/auth'
 
 /**
- * En FREE el inicio solo muestra widgets de módulos activos: una tienda que
- * no tiene cotizaciones no necesita una tarjeta que la mande a una pantalla
- * que le dirá "no disponible". El upsell se concentra en UNA tarjeta (la pinta
- * HomeShell), no en cada widget. Fuera de FREE, o sin plan cargado, se ve todo.
+ * El inicio solo muestra widgets de módulos activos, en cualquier plan: una
+ * tienda que no tiene Clientes no necesita una tarjeta que mande a su cajera a
+ * una pantalla que responde 403 (Kapruy, 2026-11-27; antes solo se recortaba en
+ * FREE). El upsell se concentra en UNA tarjeta (la pinta HomeShell), no en cada
+ * widget. Sin plan o sin módulos cargados (fail-open) se ve todo.
  */
 export function widgetVisible(
   w: { module?: string },
@@ -12,7 +13,7 @@ export function widgetVisible(
   enabledModules: string[],
 ): boolean {
   if (!w.module) return true
-  if (!plan || plan.clave !== 'FREE') return true
+  if (!plan || enabledModules.length === 0) return true
   return enabledModules.includes(w.module)
 }
 

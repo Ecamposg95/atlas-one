@@ -95,12 +95,19 @@ interface HomeProps {
   noDisponibles: ModulosNoDisponibles
 }
 
-/** Acción rápida de un inicio gastro; con `module`, solo si ese módulo ya está construido. */
+/** Acción rápida de un inicio gastro; con `module`, solo si ese módulo ya está
+ *  construido y la tienda lo tiene encendido (sin módulos cargados: fail-open). */
 type AccionConModulo = QuickAction & { module?: string }
 
-function accionesDisponibles(acciones: AccionConModulo[], noDisponibles: ModulosNoDisponibles): QuickAction[] {
+function accionesDisponibles(
+  acciones: AccionConModulo[],
+  noDisponibles: ModulosNoDisponibles,
+  enabledModules: string[],
+): QuickAction[] {
+  const encendido = (m?: string) => !m || enabledModules.length === 0 || enabledModules.includes(m)
   return acciones
     .filter((a) => moduloDisponible(a.module, noDisponibles))
+    .filter((a) => encendido(a.module))
     .map(({ module: _modulo, ...accion }) => accion)
 }
 
@@ -343,7 +350,7 @@ function HealthHome({ greeting, orgName, puedeCobrar, plan, enabledModules, noDi
   )
 }
 
-function RestaurantHome({ greeting, orgName, puedeCobrar, noDisponibles }: HomeProps) {
+function RestaurantHome({ greeting, orgName, puedeCobrar, enabledModules, noDisponibles }: HomeProps) {
   return (
     <GastroHomeDay
       greeting={greeting}
@@ -353,18 +360,18 @@ function RestaurantHome({ greeting, orgName, puedeCobrar, noDisponibles }: HomeP
       accent="#e2531b"
       topLabel="Platillos top"
       actions={accionesDisponibles([
-        { icon: 'fa-utensils', label: 'Cocina · KDS', to: '/kitchen' },
-        { icon: 'fa-chair', label: 'Plano de mesas', to: '/tables' },
+        { icon: 'fa-utensils', label: 'Cocina · KDS', to: '/kitchen', module: 'kitchen' },
+        { icon: 'fa-chair', label: 'Plano de mesas', to: '/tables', module: 'tables' },
         ...(puedeCobrar ? [{ icon: 'fa-cash-register', label: 'Cobrar mesa', to: '/pos' }] : []),
-        { icon: 'fa-book', label: 'Recetas', to: '/recipes', beta: true },
+        { icon: 'fa-book', label: 'Recetas', to: '/recipes', beta: true, module: 'recipes' },
         { icon: 'fa-percent', label: 'Comisiones', to: '/commissions', beta: true, module: 'commissions' },
-        { icon: 'fa-chart-pie', label: 'Reportes', to: '/reports' },
-      ], noDisponibles)}
+        { icon: 'fa-chart-pie', label: 'Reportes', to: '/reports', module: 'reports' },
+      ], noDisponibles, enabledModules)}
     />
   )
 }
 
-function CafeHome({ greeting, orgName, puedeCobrar, noDisponibles }: HomeProps) {
+function CafeHome({ greeting, orgName, puedeCobrar, enabledModules, noDisponibles }: HomeProps) {
   return (
     <GastroHomeDay
       greeting={greeting}
@@ -374,18 +381,18 @@ function CafeHome({ greeting, orgName, puedeCobrar, noDisponibles }: HomeProps) 
       accent="#8b4a2b"
       topLabel="Productos top"
       actions={accionesDisponibles([
-        { icon: 'fa-coffee', label: 'Mostrador · KDS', to: '/kitchen' },
+        { icon: 'fa-coffee', label: 'Mostrador · KDS', to: '/kitchen', module: 'kitchen' },
         ...(puedeCobrar ? [{ icon: 'fa-cash-register', label: 'Cobrar', to: '/pos' }] : []),
-        { icon: 'fa-vault', label: 'Caja del día', to: '/cash-history' },
-        { icon: 'fa-boxes', label: 'Inventario', to: '/inventory' },
-        { icon: 'fa-address-book', label: 'Frecuentes', to: '/customers' },
-        { icon: 'fa-chart-pie', label: 'Reportes', to: '/reports' },
-      ], noDisponibles)}
+        { icon: 'fa-vault', label: 'Caja del día', to: '/cash-history', module: 'cash_management' },
+        { icon: 'fa-boxes', label: 'Inventario', to: '/inventory', module: 'inventory' },
+        { icon: 'fa-address-book', label: 'Frecuentes', to: '/customers', module: 'crm' },
+        { icon: 'fa-chart-pie', label: 'Reportes', to: '/reports', module: 'reports' },
+      ], noDisponibles, enabledModules)}
     />
   )
 }
 
-function BarHome({ greeting, orgName, puedeCobrar, noDisponibles }: HomeProps) {
+function BarHome({ greeting, orgName, puedeCobrar, enabledModules, noDisponibles }: HomeProps) {
   return (
     <GastroHomeDay
       greeting={greeting}
@@ -395,13 +402,13 @@ function BarHome({ greeting, orgName, puedeCobrar, noDisponibles }: HomeProps) {
       accent="#EA580C"
       topLabel="Bebidas top"
       actions={accionesDisponibles([
-        { icon: 'fa-martini-glass', label: 'Barra · comandas', to: '/tables' },
+        { icon: 'fa-martini-glass', label: 'Barra · comandas', to: '/tables', module: 'tables' },
         ...(puedeCobrar ? [{ icon: 'fa-cash-register', label: 'Cobrar tab', to: '/pos' }] : []),
-        { icon: 'fa-boxes', label: 'Inventario líquido', to: '/inventory' },
-        { icon: 'fa-book', label: 'Cocteles · recetas', to: '/recipes', beta: true },
+        { icon: 'fa-boxes', label: 'Inventario líquido', to: '/inventory', module: 'inventory' },
+        { icon: 'fa-book', label: 'Cocteles · recetas', to: '/recipes', beta: true, module: 'recipes' },
         { icon: 'fa-percent', label: 'Comisiones', to: '/commissions', beta: true, module: 'commissions' },
-        { icon: 'fa-chart-pie', label: 'Reportes', to: '/reports' },
-      ], noDisponibles)}
+        { icon: 'fa-chart-pie', label: 'Reportes', to: '/reports', module: 'reports' },
+      ], noDisponibles, enabledModules)}
     />
   )
 }
